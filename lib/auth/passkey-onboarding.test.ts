@@ -1,5 +1,6 @@
 import { getTestInstance } from "better-auth/test";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import { PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED } from "./passkey-contract";
 import {
@@ -326,9 +327,8 @@ describe("passkey-first onboarding authority", () => {
     const response = await requestOnboardingContext(customFetchImpl);
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      context: expect.any(String),
-    });
+    const body = z.strictObject({ context: z.string() }).parse(await response.json());
+    expect(body.context).toEqual(expect.any(String));
     expect(now).toHaveBeenCalledTimes(1);
     const rows = await db.findMany<{
       id: string;
@@ -349,11 +349,12 @@ describe("passkey-first onboarding authority", () => {
 
   it("fails closed when expired-context cleanup fails", async () => {
     const cleanupFailure = new Error("cleanup failed");
-    const deleteMany = vi.fn().mockRejectedValue(cleanupFailure);
-    const create = vi.fn();
-    const adapter = { create, deleteMany } as unknown as Parameters<
-      typeof issuePasskeyOnboardingContext
-    >[0];
+    type Adapter = Parameters<typeof issuePasskeyOnboardingContext>[0];
+    const deleteMany = vi.fn<Adapter["deleteMany"]>().mockRejectedValue(cleanupFailure);
+    const create = vi.fn((): never => {
+      throw new Error("Unexpected onboarding context creation");
+    });
+    const adapter: Adapter = { create, deleteMany };
 
     await expect(issuePasskeyOnboardingContext(adapter, previewConfig, fixedNow)).rejects.toBe(
       cleanupFailure,
@@ -408,15 +409,22 @@ describe("passkey-first onboarding authority", () => {
     });
     expect(authenticatedPasskeyRegistration(undefined, "onboarding-context")).toBeNull();
 
-    expect(() => authenticatedPasskeyRegistration("user_1", "onboarding-context")).toThrowError(
-      expect.objectContaining({
-        body: expect.objectContaining({
-          code: PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED,
-        }),
-        status: "CONFLICT",
-        statusCode: 409,
-      }),
-    );
+    let thrown: unknown;
+    try {
+      authenticatedPasskeyRegistration("user_1", "onboarding-context");
+    } catch (error) {
+      thrown = error;
+    }
+    const failure = z
+      .looseObject({
+        body: z.looseObject({ code: z.unknown() }),
+        status: z.unknown(),
+        statusCode: z.unknown(),
+      })
+      .parse(thrown);
+    expect(failure.body.code).toBe(PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED);
+    expect(failure.status).toBe("CONFLICT");
+    expect(failure.statusCode).toBe(409);
   });
 
   it("rejects an onboarding verification race before Better Auth's user mismatch", async () => {

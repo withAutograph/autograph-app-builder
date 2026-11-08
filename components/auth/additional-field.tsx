@@ -88,7 +88,7 @@ const CopyButton = function CopyButton({
 
   const handleCopy = async function handleCopy() {
     const value = getValue();
-    if (!value) {
+    if (value === undefined || value === null || value === "") {
       return;
     }
 
@@ -144,7 +144,7 @@ const DateInput = function DateInput({ name, field, isPending }: AdditionalField
   }
 
   return (
-    <Field data-invalid={!!error}>
+    <Field data-invalid={error !== undefined && error !== null && error !== ""}>
       <FieldLabel htmlFor={`${name}-date`}>{field.label}</FieldLabel>
 
       <div className="relative flex gap-2">
@@ -173,7 +173,7 @@ const DateInput = function DateInput({ name, field, isPending }: AdditionalField
             type="button"
             id={`${name}-date`}
             data-empty={!date}
-            aria-invalid={!!error}
+            aria-invalid={error !== undefined && error !== null && error !== ""}
             disabled={isPending || field.readOnly}
             className={cn(
               buttonVariants({ variant: "outline" }),
@@ -216,7 +216,9 @@ const DateInput = function DateInput({ name, field, isPending }: AdditionalField
               id={`${name}-time`}
               step="1"
               value={time}
-              onChange={(e) => setTime(e.target.value)}
+              onChange={(e) => {
+                setTime(e.target.value);
+              }}
               disabled={isPending || field.readOnly}
               className="appearance-none bg-background [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
             />
@@ -262,7 +264,9 @@ const SliderField = function SliderField({ name, field, isPending }: AdditionalF
         id={name}
         name={name}
         value={[value]}
-        onValueChange={(v) => setValue((Array.isArray(v) ? v[0] : v) ?? min)}
+        onValueChange={(v) => {
+          setValue((Array.isArray(v) ? v[0] : v) ?? min);
+        }}
         min={min}
         max={max}
         step={step}

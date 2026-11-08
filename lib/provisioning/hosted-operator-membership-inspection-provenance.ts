@@ -14,6 +14,8 @@ import type {
 } from "./hosted-operator-contract";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 
+const createOwnedOrganizationKind = "create-owned-organization";
+
 export interface RetainedMembershipInspectionProvenance {
   approvedByCallId: string;
   operator: HostedOperatorRecordBase;
@@ -40,7 +42,7 @@ const membershipEffect = (
     plan.action !== "prepare" ||
     plan.stage !== "app" ||
     plan.normalActorProgram !== undefined ||
-    plan.authMembership?.kind !== "create-owned-organization"
+    plan.authMembership?.kind !== createOwnedOrganizationKind
   ) {
     return null;
   }
@@ -53,7 +55,7 @@ const selectedMembership = (plan: HostedOperatorPlan, organizationId: string) =>
     return null;
   }
   const organizations =
-    plan.authMembership.kind === "create-owned-organization"
+    plan.authMembership.kind === createOwnedOrganizationKind
       ? [plan.authMembership]
       : plan.authMembership.organizations;
   const spec = organizations.find((entry) => entry.organizationId === organizationId);
@@ -67,7 +69,7 @@ const selectedMembership = (plan: HostedOperatorPlan, organizationId: string) =>
   if (spec === undefined || effects.length !== 1 || effects[0] === undefined) {
     return null;
   }
-  return { spec, effect: effects[0] };
+  return { effect: effects[0], spec };
 };
 
 // A later approval may use a fresh signed owner capture. Its original capture
@@ -101,7 +103,7 @@ const selectedMembershipAuthority = (
 
 const originalOwnershipReadback = (operator: HostedOperatorRecordBase): string | null => {
   const membership = operator.plan.authMembership;
-  if (membership?.kind !== "create-owned-organization") {
+  if (membership?.kind !== createOwnedOrganizationKind) {
     return null;
   }
   // These fixed keys are in the worker's canonical alphabetical order. The
@@ -185,7 +187,7 @@ const retainedOperations = (operator: OperatorHistory): RetainedOperation[] => [
 export const retainedHostedOperatorOperations = (
   record: HostedRuntimeJournalRecord,
 ): RetainedOperation[] => {
-  const operator = record.operator;
+  const { operator } = record;
   return operator === undefined
     ? []
     : [
@@ -275,7 +277,7 @@ const inspectionOrganizationIds = (plan: HostedOperatorPlan): readonly (string |
   if (membership === undefined) {
     return [];
   }
-  if (membership.kind === "create-owned-organization") {
+  if (membership.kind === createOwnedOrganizationKind) {
     return [membership.organizationId];
   }
   return membership.organizations.map((entry) => entry.organizationId);
@@ -314,28 +316,26 @@ export const retainedMembershipInspectionProvenance = (
   for (const entry of retained) {
     const prior = entry.operator;
     const priorEffect = inspectionEffect(prior.plan, organizationId);
-    if (priorEffect === null || prior.approvalId === undefined) {
-      continue;
+    if (priorEffect !== null && prior.approvalId !== undefined) {
+      const identity = retainedMembershipIdentity(entry, organizationId);
+      const hasAuthority = [
+        entry.approvedByCallId.trim().length > 0,
+        entry.approvedByCallId !== "operator:unapproved-plan",
+        prior.approvalId.trim().length > 0,
+        prior.planDigest !== digest,
+        canonicalDigest(prior.plan) === prior.planDigest,
+        matchesMembershipAuthority(current, currentPlan, prior, organizationId),
+        !seen.has(identity),
+      ].every(Boolean);
+      if (hasAuthority) {
+        seen.add(identity);
+        candidates.push({
+          approvedByCallId: entry.approvedByCallId,
+          operator: prior,
+          effect: priorEffect,
+        });
+      }
     }
-    const identity = retainedMembershipIdentity(entry, organizationId);
-    const hasAuthority = [
-      entry.approvedByCallId.trim().length > 0,
-      entry.approvedByCallId !== "operator:unapproved-plan",
-      prior.approvalId.trim().length > 0,
-      prior.planDigest !== digest,
-      canonicalDigest(prior.plan) === prior.planDigest,
-      matchesMembershipAuthority(current, currentPlan, prior, organizationId),
-      !seen.has(identity),
-    ].every(Boolean);
-    if (!hasAuthority) {
-      continue;
-    }
-    seen.add(identity);
-    candidates.push({
-      approvedByCallId: entry.approvedByCallId,
-      operator: prior,
-      effect: priorEffect,
-    });
   }
   return candidates;
 };

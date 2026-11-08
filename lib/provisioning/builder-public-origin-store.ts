@@ -11,9 +11,11 @@ import {
 } from "./builder-public-origin-contract";
 import type { BuilderPublicOriginScope } from "./builder-public-origin-contract";
 
+const BUILDER_ORIGIN_CHOICE_KIND = "builder-public-origin-choice-v1";
+
 type Authority = z.infer<typeof hostedTenantAuthoritySchema>;
 const recordSchema = z.strictObject({
-  kind: z.literal("builder-public-origin-choice-v1"),
+  kind: z.literal(BUILDER_ORIGIN_CHOICE_KIND),
   selectionState: z.literal("selected"),
   scope: builderPublicOriginScopeSchema,
   publicOrigin: builderPublicOriginSchema,
@@ -35,7 +37,7 @@ const identity = (authority: Authority, scope: BuilderPublicOriginScope) => {
   const digest = createHash("sha256")
     .update(
       JSON.stringify([
-        "builder-public-origin-choice-v1",
+        BUILDER_ORIGIN_CHOICE_KIND,
         hostedTenantAuthoritySchema.parse(authority),
         builderPublicOriginScopeSchema.parse(scope),
       ]),
@@ -46,17 +48,17 @@ const identity = (authority: Authority, scope: BuilderPublicOriginScope) => {
     requestId: `${digest.slice(0, 8)}-${digest.slice(8, 12)}-5${digest.slice(13, 16)}-8${digest.slice(17, 20)}-${digest.slice(20, 32)}`,
   };
 };
+const predicate = (authority: Authority, requestId: string) =>
+  and(
+    eq(table.issuer, authority.issuer),
+    eq(table.audience, authority.audience),
+    eq(table.ownerUserId, authority.ownerUserId),
+    eq(table.workspaceId, authority.workspaceId),
+    eq(table.requestId, requestId),
+  );
 export const createBuilderPublicOriginStore = (
   database: ReturnType<typeof openHostedPostgresDatabase>,
 ): BuilderPublicOriginStore => {
-  const predicate = (authority: Authority, requestId: string) =>
-    and(
-      eq(table.issuer, authority.issuer),
-      eq(table.audience, authority.audience),
-      eq(table.ownerUserId, authority.ownerUserId),
-      eq(table.workspaceId, authority.workspaceId),
-      eq(table.requestId, requestId),
-    );
   const parse = (
     row: typeof table.$inferSelect | undefined,
     scope: BuilderPublicOriginScope,
@@ -107,7 +109,7 @@ export const createBuilderPublicOriginStore = (
               state: "settled",
               revision: 1,
               record: {
-                kind: "builder-public-origin-choice-v1",
+                kind: BUILDER_ORIGIN_CHOICE_KIND,
                 selectionState: "selected",
                 scope,
                 publicOrigin,
@@ -134,7 +136,7 @@ export const createBuilderPublicOriginStore = (
           .update(table)
           .set({
             record: {
-              kind: "builder-public-origin-choice-v1",
+              kind: BUILDER_ORIGIN_CHOICE_KIND,
               selectionState: "selected",
               scope,
               publicOrigin,

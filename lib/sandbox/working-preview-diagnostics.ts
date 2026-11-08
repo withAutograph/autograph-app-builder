@@ -32,7 +32,7 @@ const sanitize = (value: string): string =>
 
 /** Best-effort common-secret redaction; arbitrary application logging may still contain sensitive text. */
 export const workingPreviewDiagnosticExcerpt = (content: string | null): string => {
-  if (!content || content.length > 65_536) {
+  if (content === null || content === undefined || content === "" || content.length > 65_536) {
     return "";
   }
   let parsed: unknown;

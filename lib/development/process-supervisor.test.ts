@@ -1,5 +1,4 @@
-import { spawn } from "node:child_process";
-import type { ChildProcess } from "node:child_process";
+import { ChildProcess, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 
 import { describe, expect, it, vi } from "vitest";
@@ -67,20 +66,18 @@ describe("development process supervision", () => {
     if (process.platform === "win32") {
       return;
     }
-    // ChildProcess is an EventEmitter in Node, not an EventTarget.
-    // oxlint-disable-next-line unicorn/prefer-event-target
-    const child = new EventEmitter() as ChildProcess;
     const directSignals: (NodeJS.Signals | number | undefined)[] = [];
     const groupSignals: Parameters<typeof process.kill>[1][] = [];
+    const child = new ChildProcess();
     Object.defineProperties(child, {
       exitCode: { value: null, writable: true },
       pid: { value: 43_210 },
       signalCode: { value: null, writable: true },
     });
-    child.kill = ((signal?: NodeJS.Signals | number) => {
+    child.kill = (signal?: NodeJS.Signals | number) => {
       directSignals.push(signal);
       return true;
-    }) as ChildProcess["kill"];
+    };
     const kill = vi.spyOn(process, "kill").mockImplementation((_pid, signal) => {
       groupSignals.push(signal);
       if (signal === "SIGKILL") {

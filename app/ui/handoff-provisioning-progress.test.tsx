@@ -149,7 +149,9 @@ describe("HandoffProvisioningProgress", () => {
     );
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
-    await act(async () => stream.malformed("snapshot"));
+    await act(async () => {
+      stream.malformed("snapshot");
+    });
     for (const invalid of [
       { ...projection(99), provisioning: { ...projection(99).provisioning, status: "unexpected" } },
       { ...projection(99), provisioning: { ...projection(99).provisioning, requestId: handoffId } },
@@ -162,24 +164,36 @@ describe("HandoffProvisioningProgress", () => {
       { ...projection(99), revision: Number.MAX_SAFE_INTEGER + 1 },
     ]) {
       // oxlint-disable-next-line eslint/no-await-in-loop, eslint/require-await -- preserve intentional sequential control flow
-      await act(async () => stream.emit("snapshot", invalid));
+      await act(async () => {
+        stream.emit("snapshot", invalid);
+      });
     }
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
-    await act(async () => stream.emit("snapshot", projection(1)));
+    await act(async () => {
+      stream.emit("snapshot", projection(1));
+    });
     expect(container?.textContent).toContain("Preparing your selected providers");
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
-    await act(async () => stream.emit("snapshot", projection(2)));
+    await act(async () => {
+      stream.emit("snapshot", projection(2));
+    });
     expect(container?.textContent).toContain("Preparing your selected providers");
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
-    await act(async () => stream.emit("end", projection(3, "settled")));
+    await act(async () => {
+      stream.emit("end", projection(3, "settled"));
+    });
     expect(container?.textContent).toContain("Provider setup is complete");
     expect(navigation.refresh).toHaveBeenCalledOnce();
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
-    await act(async () => stream.emit("snapshot", projection(2)));
+    await act(async () => {
+      stream.emit("snapshot", projection(2));
+    });
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
-    await act(async () => stream.emit("end", projection(4, "settled")));
+    await act(async () => {
+      stream.emit("end", projection(4, "settled"));
+    });
     expect(navigation.refresh).toHaveBeenCalledOnce();
   });
 
@@ -189,11 +203,15 @@ describe("HandoffProvisioningProgress", () => {
     const stream = streamAt(0);
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
-    await act(async () => stream.emit("error"));
+    await act(async () => {
+      stream.emit("error");
+    });
     expect(TestEventSource.instances).toHaveLength(1);
     expect(container?.textContent).toContain("Reconnecting… Your handoff is saved.");
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
-    await act(async () => stream.emit("open"));
+    await act(async () => {
+      stream.emit("open");
+    });
     expect(container?.textContent).not.toContain("Reconnecting");
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
@@ -207,9 +225,13 @@ describe("HandoffProvisioningProgress", () => {
     await render();
     const oldStream = streamAt(0);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
-    await act(async () => oldStream.emit("snapshot", projection(7)));
+    await act(async () => {
+      oldStream.emit("snapshot", projection(7));
+    });
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
-    await act(async () => oldStream.emit("error"));
+    await act(async () => {
+      oldStream.emit("error");
+    });
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     await act(async () => container?.querySelector<HTMLButtonElement>("button")?.click());
     expect(oldStream.closed).toBe(true);
@@ -220,13 +242,19 @@ describe("HandoffProvisioningProgress", () => {
 
     // Queued events from the closed connection must not settle the new stream.
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
-    await act(async () => oldStream.emit("end", projection(20, "settled")));
+    await act(async () => {
+      oldStream.emit("end", projection(20, "settled"));
+    });
     expect(navigation.refresh).not.toHaveBeenCalled();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
-    await act(async () => newStream.emit("snapshot", projection(6, "settled")));
+    await act(async () => {
+      newStream.emit("snapshot", projection(6, "settled"));
+    });
     expect(navigation.refresh).not.toHaveBeenCalled();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
-    await act(async () => newStream.emit("end", projection(8, "settled")));
+    await act(async () => {
+      newStream.emit("end", projection(8, "settled"));
+    });
     expect(navigation.refresh).toHaveBeenCalledOnce();
     expect(newStream.closed).toBe(true);
   });

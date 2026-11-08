@@ -126,10 +126,10 @@ export const readManagedRuntimePublicProfile = async (input: {
     .strictObject({ keys: z.array(publicKey).min(1) })
     .parse(await input.readPublicJwks(jwksUrl));
   return managedRuntimePublicProfileSchema.parse({
-    version: 1,
     appId: input.appId,
-    publicOrigin,
     jwksUrl,
     keys: document.keys,
+    publicOrigin,
+    version: 1,
   });
 };

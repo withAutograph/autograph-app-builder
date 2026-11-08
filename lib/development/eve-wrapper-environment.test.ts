@@ -95,7 +95,7 @@ const fixture = async (providerTeam = "team_example") => {
     },
     signal: new AbortController().signal,
   };
-  return { input, argumentsFile, vercelExecutable };
+  return { argumentsFile, input, vercelExecutable };
 };
 
 it("carries the actual supervisor cycle/source and read-only observation through the real Eve invocation", async () => {

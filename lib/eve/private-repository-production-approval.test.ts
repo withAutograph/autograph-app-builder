@@ -87,14 +87,14 @@ describe("Production setup consent", () => {
       const projected = projectInstalledEveEvent(pending, 0);
       expect(projected).toMatchObject([
         {
-          type: "input.requested",
           request: {
             kind: "approval",
             requestId: "request",
           },
+          type: "input.requested",
         },
       ]);
-      const publicRequest = outstandingInstalledEveRequests([pending])[0];
+      const [publicRequest] = outstandingInstalledEveRequests([pending]);
       expect(publicRequest?.description).toContain(scope.appId);
       expect(publicRequest?.description).toContain(scope.repositoryFullName);
       expect(publicRequest?.description).toContain(
@@ -104,8 +104,8 @@ describe("Production setup consent", () => {
       expect(JSON.stringify(projected)).not.toContain(scope.authority.ownerUserId);
       expect(JSON.stringify(projected)).not.toContain(intent.sessionId);
       const capture = createPrivateRepositoryProductionApprovalCapture({
-        plan: setupPlan,
         callId: "call",
+        plan: setupPlan,
       });
       capture.observe(pending);
       expect(capture.read()).toBeNull();
@@ -123,24 +123,24 @@ describe("Production setup consent", () => {
     if (pending.type !== "input.requested") {
       throw new Error("Expected the approval request");
     }
-    const approval = pending.data.requests[0];
+    const [approval] = pending.data.requests;
     if (approval.kind !== "tool-approval") {
       throw new Error("Expected the tool approval");
     }
     approval.action.input = invalidPlan;
     expect(projectInstalledEveEvent(pending, 0)).toMatchObject([
-      { type: "error.public", code: "confirmation_unavailable" },
-      { type: "status", status: "failed" },
+      { code: "confirmation_unavailable", type: "error.public" },
+      { status: "failed", type: "status" },
     ]);
     expect(outstandingInstalledEveRequests([pending])).toEqual([]);
     expect(deriveInstalledEveStatus([pending])).toBe("failed");
-    const capture = createPrivateRepositoryProductionApprovalCapture({ plan, callId: "call" });
+    const capture = createPrivateRepositoryProductionApprovalCapture({ callId: "call", plan });
     capture.observe(pending);
     capture.observe(settle());
     expect(capture.read()).toBeNull();
   });
   it("accepts the actual creator settlement for the current setup call", () => {
-    const capture = createPrivateRepositoryProductionApprovalCapture({ plan, callId: "call" });
+    const capture = createPrivateRepositoryProductionApprovalCapture({ callId: "call", plan });
     capture.observe(request());
     expect(capture.read()).toBeNull();
     capture.observe(settle());
@@ -156,20 +156,16 @@ describe("Production setup consent", () => {
     "actor",
     "cancelled",
   ])("rejects changed or unauthorised %s", (variation) => {
-    const changedScope = {
-      ...scope,
-      ...(variation === "organization" ? { organizationId: "other" } : {}),
-    };
-    const changedIntent = {
-      ...intent,
-      ...(variation === "role" ? { creatorRoles: ["admin"] } : {}),
-      ...(variation === "session" ? { sessionId: "other" } : {}),
-      ...(variation === "storage" ? { storage: { kind: "none" as const } } : {}),
-      ...(variation === "schema" && intent.storage.kind === "postgres"
-        ? { storage: { ...intent.storage, manifestSha256: "c".repeat(64) } }
-        : {}),
-    };
-    const capture = createPrivateRepositoryProductionApprovalCapture({ plan, callId: "call" });
+    const changedScope = { ...scope };
+    if (variation === "organization") changedScope.organizationId = "other";
+    const changedIntent: RepositoryProductionIntent = { ...intent };
+    if (variation === "role") changedIntent.creatorRoles = ["admin"];
+    if (variation === "session") changedIntent.sessionId = "other";
+    if (variation === "storage") changedIntent.storage = { kind: "none" };
+    if (variation === "schema" && intent.storage.kind === "postgres") {
+      changedIntent.storage = { ...intent.storage, manifestSha256: "c".repeat(64) };
+    }
+    const capture = createPrivateRepositoryProductionApprovalCapture({ callId: "call", plan });
     capture.observe(
       request(
         repositoryProductionApprovalInput(changedScope, changedIntent),

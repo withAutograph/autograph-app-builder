@@ -5,6 +5,10 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { it } from "vitest";
 
+const HOOK_NOT_FOUND_MESSAGE = "hook-not-found";
+const REPLACEMENT_HOOK_ID = "replacement-hook";
+const REPLACEMENT_OWNER_ID = "replacement-owner";
+
 const require = createRequire(import.meta.url);
 const sdk = pathToFileURL(`${path.dirname(require.resolve("eve/package.json"))}/dist/src/`).href;
 const { closeNoncanonicalRecoveryInboxHolder } = await import(
@@ -16,6 +20,8 @@ const { recoverTerminalSession, terminalRecoveryActivationToken } = await import
 const { sessionCommandHookToken, sessionInboxHookToken } = await import(
   `${sdk}execution/session-inbox/address.js`
 );
+
+const noEffect = () => Promise.resolve();
 
 let sequence = 0;
 const fixture = () => {
@@ -48,10 +54,10 @@ const fixture = () => {
   let currentError = null;
   let status = "running";
   const commandHook = {
-    runId: holderOwnerRunId,
     hookId: holderHookId,
-    specVersion: 1,
     metadata: Promise.resolve({ sessionId: descriptor.logicalSessionId }),
+    runId: holderOwnerRunId,
+    specVersion: 1,
   };
   const hooksByToken = new Map([[token, commandHook]]);
   const hooksById = new Map([[holderHookId, commandHook]]);
@@ -64,11 +70,17 @@ const fixture = () => {
     },
   };
   let proof = { kind: "immutable-loser", winnerOwnerRunId };
-  let onProof = () => Promise.resolve();
-  let onCancel = () => Promise.resolve();
-  let onDispose = (_request) => Promise.resolve();
+  let onProof = noEffect;
+  let onCancel = noEffect;
+  let onDispose = noEffect;
   const input = {
     auth,
+    authorizeCurrent() {
+      if (currentError !== null) {
+        throw new Error(currentError);
+      }
+      return Promise.resolve();
+    },
     descriptor,
     ports: {
       async authorizeRecoveryHolderClosure(request) {
@@ -77,40 +89,8 @@ const fixture = () => {
         return proof;
       },
     },
-    authorizeCurrent() {
-      if (currentError !== null) {
-        throw new Error(currentError);
-      }
-      return Promise.resolve();
-    },
   };
   const deps = {
-    getHook(requestedToken) {
-      reads.push({ kind: "token", requestedToken });
-      const hook = hooksByToken.get(requestedToken);
-      if (hook === undefined) {
-        throw new Error("hook-not-found");
-      }
-      return Promise.resolve(hook);
-    },
-    getHookById(requestedHookId) {
-      reads.push({ kind: "id", requestedHookId });
-      const byId = hooksById.get(requestedHookId);
-      if (byId === undefined) {
-        throw new Error("hook-not-found");
-      }
-      return Promise.resolve(byId);
-    },
-    readRunEntry(runId) {
-      reads.push({ kind: "entry", runId });
-      assert.equal(runId, holderOwnerRunId);
-      return Promise.resolve({ runId, status, entry });
-    },
-    readRun(runId) {
-      reads.push({ kind: "run", runId });
-      assert.equal(runId, holderOwnerRunId);
-      return Promise.resolve({ runId, status });
-    },
     async cancelRun(runId) {
       effects.push({ kind: "cancel", runId });
       assert.equal(runId, holderOwnerRunId);
@@ -129,10 +109,42 @@ const fixture = () => {
       }
       await onDispose(request);
     },
-    isHookNotFound: (error) => error?.message === "hook-not-found",
+    getHook(requestedToken) {
+      reads.push({ kind: "token", requestedToken });
+      const hook = hooksByToken.get(requestedToken);
+      if (hook === undefined) {
+        throw new Error(HOOK_NOT_FOUND_MESSAGE);
+      }
+      return Promise.resolve(hook);
+    },
+    getHookById(requestedHookId) {
+      reads.push({ kind: "id", requestedHookId });
+      const byId = hooksById.get(requestedHookId);
+      if (byId === undefined) {
+        throw new Error(HOOK_NOT_FOUND_MESSAGE);
+      }
+      return Promise.resolve(byId);
+    },
+    isHookNotFound: (error) => error?.message === HOOK_NOT_FOUND_MESSAGE,
+    readRun(runId) {
+      reads.push({ kind: "run", runId });
+      assert.equal(runId, holderOwnerRunId);
+      return Promise.resolve({ runId, status });
+    },
+    readRunEntry(runId) {
+      reads.push({ kind: "entry", runId });
+      assert.equal(runId, holderOwnerRunId);
+      return Promise.resolve({ entry, runId, status });
+    },
   };
   return {
+    activationToken: terminalRecoveryActivationToken(auth, holderDescriptor),
+    addHook: (targetToken, next) => {
+      hooksByToken.set(targetToken, next);
+      hooksById.set(next.hookId, next);
+    },
     auth,
+    close: async () => await closeNoncanonicalRecoveryInboxHolder(input, deps),
     deps,
     descriptor,
     effects,
@@ -142,16 +154,8 @@ const fixture = () => {
     input,
     proofInputs,
     reads,
-    token,
-    activationToken: terminalRecoveryActivationToken(auth, holderDescriptor),
-    winnerOwnerRunId,
-    close: async () => await closeNoncanonicalRecoveryInboxHolder(input, deps),
-    setHook: (next, targetToken = token) => {
-      if (next === undefined) {
-        hooksByToken.delete(targetToken);
-      } else {
-        hooksByToken.set(targetToken, next);
-      }
+    rejectCurrent: (reason) => {
+      currentError = reason;
     },
     setById: (next, targetId = holderHookId) => {
       if (next === undefined) {
@@ -159,10 +163,6 @@ const fixture = () => {
       } else {
         hooksById.set(targetId, next);
       }
-    },
-    addHook: (targetToken, next) => {
-      hooksByToken.set(targetToken, next);
-      hooksById.set(next.hookId, next);
     },
     setCheckpointAliases: (aliases, continuationToken = "") => {
       entry = {
@@ -179,14 +179,12 @@ const fixture = () => {
     setEntry: (next) => {
       entry = next;
     },
-    setStatus: (next) => {
-      status = next;
-    },
-    setProof: (next) => {
-      proof = next;
-    },
-    setOnProof: (effect) => {
-      onProof = effect;
+    setHook: (next, targetToken = token) => {
+      if (next === undefined) {
+        hooksByToken.delete(targetToken);
+      } else {
+        hooksByToken.set(targetToken, next);
+      }
     },
     setOnCancel: (effect) => {
       onCancel = effect;
@@ -194,9 +192,17 @@ const fixture = () => {
     setOnDispose: (effect) => {
       onDispose = effect;
     },
-    rejectCurrent: (reason) => {
-      currentError = reason;
+    setOnProof: (effect) => {
+      onProof = effect;
     },
+    setProof: (next) => {
+      proof = next;
+    },
+    setStatus: (next) => {
+      status = next;
+    },
+    token,
+    winnerOwnerRunId,
   };
 };
 
@@ -275,17 +281,17 @@ it("closes only same-holder continuation aliases and preserves a foreign alias",
     const hookId = `${alias}-${f.holderHookId}`;
     sameHookIds.push(hookId);
     f.addHook(sessionInboxHookToken(alias), {
-      runId: f.holderOwnerRunId,
       hookId,
-      specVersion: 1,
       metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
+      runId: f.holderOwnerRunId,
+      specVersion: 1,
     });
   }
   const foreignHookId = `foreign-${f.holderHookId}`;
   f.addHook(sessionInboxHookToken(foreignAlias), {
-    runId: "foreign-physical-owner",
     hookId: foreignHookId,
     metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
+    runId: "foreign-physical-owner",
   });
   await f.close();
   const disposedIds = new Set(
@@ -340,9 +346,9 @@ it("refuses an unproved or canonical holder", async () => {
 it("never reads a foreign logical holder entry or closes it", async () => {
   const f = fixture();
   f.setHook({
-    runId: f.holderOwnerRunId,
     hookId: f.holderHookId,
     metadata: Promise.resolve({ sessionId: "foreign-logical" }),
+    runId: f.holderOwnerRunId,
   });
   await assert.rejects(f.close());
   assert.equal(
@@ -396,19 +402,20 @@ it("refuses a changed hook ID or owner without targeting its new holder", async 
       const f = fixture();
       f.setOnProof(() => {
         if (change === "id") {
-          f.setById({ runId: f.holderOwnerRunId, hookId: "replacement-hook" });
+          f.setById({ hookId: REPLACEMENT_HOOK_ID, runId: f.holderOwnerRunId });
         } else {
           f.setHook({
-            runId: "replacement-owner",
-            hookId: "replacement-hook",
+            hookId: REPLACEMENT_HOOK_ID,
             metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
+            runId: REPLACEMENT_OWNER_ID,
           });
         }
       });
       await assert.rejects(f.close());
       assert.equal(
         f.effects.some(
-          (effect) => effect.runId === "replacement-owner" || effect.hookId === "replacement-hook",
+          (effect) =>
+            effect.runId === REPLACEMENT_OWNER_ID || effect.hookId === REPLACEMENT_HOOK_ID,
         ),
         false,
       );
@@ -453,9 +460,9 @@ it("rechecks current authority before each captured alias release", async () => 
   const aliasHookId = `alias-${f.holderHookId}`;
   f.setCheckpointAliases([alias]);
   f.addHook(aliasToken, {
-    runId: f.holderOwnerRunId,
     hookId: aliasHookId,
     metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
+    runId: f.holderOwnerRunId,
   });
   f.setStatus("completed");
   f.setOnDispose((request) => {
@@ -476,9 +483,9 @@ it("preserves a replacement hook after the exact loser is cancelled", async () =
   const f = fixture();
   f.setOnCancel(() => {
     f.setHook({
-      runId: "replacement-owner",
-      hookId: "replacement-hook",
+      hookId: REPLACEMENT_HOOK_ID,
       metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
+      runId: REPLACEMENT_OWNER_ID,
     });
   });
   await f.close();
@@ -488,7 +495,7 @@ it("preserves a replacement hook after the exact loser is cancelled", async () =
   );
   assert.equal(
     f.effects.some(
-      (effect) => effect.runId === "replacement-owner" || effect.hookId === "replacement-hook",
+      (effect) => effect.runId === REPLACEMENT_OWNER_ID || effect.hookId === REPLACEMENT_HOOK_ID,
     ),
     false,
   );
@@ -502,17 +509,17 @@ it("does not retarget a continuation alias reassigned during cancellation", asyn
   const newAliasHookId = `new-alias-${f.holderHookId}`;
   f.setCheckpointAliases([alias]);
   f.addHook(aliasToken, {
-    runId: f.holderOwnerRunId,
     hookId: oldAliasHookId,
-    specVersion: 1,
     metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
+    runId: f.holderOwnerRunId,
+    specVersion: 1,
   });
   f.setOnCancel(() => {
     f.setHook(
       {
-        runId: "replacement-physical-owner",
         hookId: newAliasHookId,
         metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
+        runId: "replacement-physical-owner",
       },
       aliasToken,
     );
@@ -545,16 +552,12 @@ it("adopts an already committed receipt or a concurrent winner without entering 
       const invoked = [];
       const ports = {
         authorize: () => Promise.resolve(),
-        readReceipt: () => Promise.resolve(receipt),
         commitReceipt: () => {
           throw new Error("unexpected-commit");
         },
+        readReceipt: () => Promise.resolve(receipt),
       };
       const dependencies = {
-        getHook: () => {
-          throw new Error("hook-not-found");
-        },
-        isHookNotFound: (error) => error?.message === "hook-not-found",
         async closeHolder(input) {
           invoked.push("closure");
           await input.authorizeCurrent();
@@ -563,6 +566,10 @@ it("adopts an already committed receipt or a concurrent winner without entering 
         collect: () => {
           throw new Error("unexpected-collection");
         },
+        getHook: () => {
+          throw new Error(HOOK_NOT_FOUND_MESSAGE);
+        },
+        isHookNotFound: (error) => error?.message === HOOK_NOT_FOUND_MESSAGE,
       };
       const result = await recoverTerminalSession(
         { auth: f.auth, descriptor: f.descriptor, ports },

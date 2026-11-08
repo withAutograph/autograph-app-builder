@@ -108,7 +108,7 @@ export const observePrivateApplyRecoveryCandidate = (input: ObservationInput): C
   const candidates = payload.candidates.toSorted(
     (left, right) => right.origin.slot - left.origin.slot,
   );
-  const latest = candidates[0];
+  const [latest] = candidates;
   const latestContext = latest?.serializedContext;
   const latestSession = latest?.sessionState.snapshot.session;
   const latestWorkflow = workflowSchema.safeParse(latestContext?.[workflowKey]).data;
@@ -155,7 +155,7 @@ export const observePrivateApplyRecoveryCandidate = (input: ObservationInput): C
       : payload.nativeEvents.filter(
           (event) => event.data?.sequence === undefined || event.data.sequence >= sequence,
         );
-  const issues = payload.issues;
+  const { issues } = payload;
   const failedStepCount = issues.filter(
     (issue) => issue.reason === "failed-turn-effects-unreconciled",
   ).length;

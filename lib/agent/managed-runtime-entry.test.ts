@@ -141,8 +141,8 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
         ["scripts/build-managed-runtime-worker.mjs", selectedArrustedRoot, executable, target],
         {
           cwd: process.cwd(),
-          timeout: 30_000,
           encoding: "utf-8",
+          timeout: 30_000,
         },
       );
       const build: unknown = JSON.parse(built.stdout);
@@ -181,11 +181,11 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
         intentId: randomUUID(),
         approvalRef: "controlled-owner-approval",
         owner: {
-          issuer: "https://builder.example/api/auth",
           audience: "https://builder.example/mcp",
-          workspaceId: "workspace",
+          issuer: "https://builder.example/api/auth",
           ownerUserId: "owner",
           sessionId: "saved-session",
+          workspaceId: "workspace",
         },
         appId: "orchard",
         runtimeAttemptId: randomUUID(),
@@ -228,11 +228,11 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
             appId: "orchard",
             verification: { publicOrigin, jwksUrl: `${nativeOrigin}/_platform/jwks.json` },
             runtime: {
+              database: "orchard",
+              environment: "hosted",
               hostname: "controlled.invalid",
               port: 5432,
-              database: "orchard",
               runtimeRole: "orchard_runtime",
-              environment: "hosted",
             },
           }),
         },
@@ -243,7 +243,7 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       for (const bearer of Object.values(capabilities.private)) {
         expect(inputText).not.toContain(bearer);
       }
-      await writeFile(inputFile, inputText, { mode: 0o600, flag: "wx" });
+      await writeFile(inputFile, inputText, { flag: "wx", mode: 0o600 });
       owned = await createManagedOwnedChildLauncher({
         executable,
         args: ["protected-managed-app-runtime", "--input-file", inputFile],
@@ -305,7 +305,7 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
           organizationId: "fixture-organization",
           customerId: "fixture-organization",
           organizationRole: "member",
-          appActorGrants: [{ role: "fixture_operator", fenceGeneration: 1 }],
+          appActorGrants: [{ fenceGeneration: 1, role: "fixture_operator" }],
           method: "POST",
           path: "/orchard/action?view=one",
           bodySha256: createHash("sha256").update(body).digest("base64url"),
@@ -320,15 +320,15 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       expect(accepted.status).toBe(200);
       const first = observationSchema.parse(JSON.parse(accepted.body.toString()));
       expect(first).toMatchObject({
+        body: body.toString("base64"),
         generation: 1,
         method: "POST",
         target: "/orchard/action?view=one",
-        body: body.toString("base64"),
       });
       expect(first.verified).toEqual({
         actorId: "fixture-actor",
+        grants: [{ fenceGeneration: 1, role: "fixture_operator" }],
         organizationId: "fixture-organization",
-        grants: [{ role: "fixture_operator", fenceGeneration: 1 }],
       });
       const terminal = await readJson(
         path.join(directory, "terminal.json"),
@@ -378,8 +378,8 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       );
       expect(wrongTransport.status).toBe(403);
       const client = createManagedRuntimeIpcClient({
-        socketPath: ready.socketPath,
         lifecycleCapability: capabilities.private.lifecycle,
+        socketPath: ready.socketPath,
       });
       const stopped = await client.execute({ operation: "stop-and-wait", commandId: randomUUID() });
       expect(stopped.state).toBe("stopped");
@@ -421,7 +421,7 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       ).rejects.toThrow();
     } finally {
       await owned?.terminate();
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { force: true, recursive: true });
     }
   },
   60_000,
@@ -447,7 +447,7 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
           executable,
           `bun-${process.platform}-${process.arch === "arm64" ? "arm64" : "x64"}`,
         ],
-        { cwd: process.cwd(), timeout: 30_000, encoding: "utf-8" },
+        { cwd: process.cwd(), encoding: "utf-8", timeout: 30_000 },
       );
       await installRepositoryRuntimeShim(directory, selectedArrustedRoot);
       // The real entry's readiness HTTP request establishes this barrier. The
@@ -469,11 +469,11 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
           intentId: randomUUID(),
           approvalRef: "controlled-owner-approval",
           owner: {
-            issuer: "https://builder.example/api/auth",
             audience: "https://builder.example/mcp",
-            workspaceId: "workspace",
+            issuer: "https://builder.example/api/auth",
             ownerUserId: "owner",
             sessionId: "saved-session",
+            workspaceId: "workspace",
           },
           appId: "orchard",
           runtimeAttemptId: randomUUID(),
@@ -513,18 +513,18 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
             appId: "orchard",
             verification: { publicOrigin, jwksUrl: `${nativeOrigin}/_platform/jwks.json` },
             runtime: {
+              database: "orchard",
+              environment: "hosted",
               hostname: "controlled.invalid",
               port: 5432,
-              database: "orchard",
               runtimeRole: "orchard_runtime",
-              environment: "hosted",
             },
           }),
         },
         lifecycleSha256: capabilities.lifecycleSha256,
         transportSha256: capabilities.projection.transportSha256,
       });
-      await writeFile(inputFile, JSON.stringify(input), { mode: 0o600, flag: "wx" });
+      await writeFile(inputFile, JSON.stringify(input), { flag: "wx", mode: 0o600 });
       owned = await createManagedOwnedChildLauncher({
         executable,
         args: ["protected-managed-app-runtime", "--input-file", inputFile],
@@ -564,7 +564,7 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       // a PID, command, app effect or production restart API.
       await writeFile(path.join(directory, "cleanup-request"), "cleanup");
       await owned?.terminate();
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { force: true, recursive: true });
     }
   },
   60_000,

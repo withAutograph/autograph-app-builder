@@ -70,7 +70,7 @@ export const createLocalPrivateComputeJournal = async (input: {
         );
       }
       previous = hash(content);
-      record = entry.record;
+      ({ record } = entry);
       revision += 1;
     }
     await input.assertCurrent();

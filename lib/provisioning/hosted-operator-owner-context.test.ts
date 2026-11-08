@@ -157,7 +157,6 @@ const fixture = (
   const diagnosticSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
   const resolver = createHostedOperatorOwnerContextResolver({
     audience: authority.audience,
-    realmContinuation: overrides.realmContinuation,
     diagnosticSink,
     handoffs,
     isActiveMember: async () => {
@@ -165,6 +164,7 @@ const fixture = (
       return result;
     },
     issuer: authority.issuer,
+    realmContinuation: overrides.realmContinuation,
     sessions,
   });
   return { diagnosticSink, handoffs, resolver, sessions };
@@ -361,22 +361,22 @@ describe("hosted operator owner context", () => {
       parentSessionId: source.sessionId,
       sessionId: "public-child",
       nativeRecoveryBinding: {
-        version: 1,
-        operationId: "op_recovery",
-        sourcePublicSessionId: source.sessionId,
-        sourceOwnerRunId: source.adapterSessionId,
-        sourceAdapterGeneration: source.adapterGeneration,
         logicalSessionId: source.adapterSessionId,
+        operationId: "op_recovery",
         originalAuthoritySessionId: source.sessionId,
-        parentCancellationRevision: 0,
         ownerRunId: "adapter-child",
+        parentCancellationRevision: 0,
         provenance: {
+          checkpointVersion: 1,
           kind: "failed-turn-input",
-          sourceStepId: "step_1",
           sourceEventId: "event_1",
           sourceSlot: 1,
-          checkpointVersion: 1,
+          sourceStepId: "step_1",
         },
+        sourceAdapterGeneration: source.adapterGeneration,
+        sourceOwnerRunId: source.adapterSessionId,
+        sourcePublicSessionId: source.sessionId,
+        version: 1,
       },
     });
     const sessions = {
@@ -682,18 +682,18 @@ describe("Realm service continuation live owner checks", () => {
   const service = readRealmContinuationServiceIdentity({
     EVE_HOSTED_ADAPTER: "1",
     EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
-    VERCEL_ENV: "preview",
     EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
     EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
+    VERCEL_ENV: "preview",
   });
   const config = { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" };
   const realmContinuation = { config, service };
   const serviceAuth = (
     overrides: {
       adapterSessionId?: string;
-      ownerSessionId?: string;
       direct?: boolean;
       expired?: boolean;
+      ownerSessionId?: string;
     } = {},
   ) => {
     const original = realmContinuationInitiatorSchema.parse(
@@ -701,7 +701,7 @@ describe("Realm service continuation live owner checks", () => {
     );
     const reason: RealmContinuationAuthority["reason"] =
       overrides.expired === true
-        ? { kind: "expired-technical-wait", expiresAt: "2026-10-01T00:00:00.000Z" }
+        ? { expiresAt: "2026-10-01T00:00:00.000Z", kind: "expired-technical-wait" }
         : { kind: "consumed-proof", proofRef: "private-proof-ref", proofSha256: "c".repeat(64) };
     return createRealmContinuationServiceAuth({
       ...realmContinuation,
@@ -735,10 +735,10 @@ describe("Realm service continuation live owner checks", () => {
       const f = fixture({ realmContinuation });
       const result = await f.resolver(input(serviceAuth({ expired })));
       expect(result).toMatchObject({
+        adapterSessionId: "adapter-current",
         authority,
         principal,
         sessionId: "public-session-1",
-        adapterSessionId: "adapter-current",
       });
       expect(JSON.stringify(result)).not.toContain("private-proof-ref");
       expect(result.realmContinuation?.sealedAuthority).toBeDefined();
@@ -761,7 +761,7 @@ describe("Realm service continuation live owner checks", () => {
     const denials = [
       [fixture({ realmContinuation }), serviceAuth({ adapterSessionId: "foreign-adapter" })],
       [fixture({ realmContinuation }), serviceAuth({ ownerSessionId: "foreign-public-session" })],
-      [fixture({ realmContinuation, isActiveMember: false }), valid],
+      [fixture({ isActiveMember: false, realmContinuation }), valid],
       [
         fixture({
           realmContinuation,
@@ -791,9 +791,9 @@ describe("approval history for recovered public grant authority", () => {
   const recovered = (kind: "direct" | "handoff") => {
     const source = durableHostedSessionRecordSchema.parse({
       ...(kind === "direct" ? directSessionRecord() : session),
-      status: "failed",
       resumability: "terminal",
       stage: "needs_attention",
+      status: "failed",
     });
     const child = durableHostedSessionRecordSchema.parse({
       ...source,
@@ -805,24 +805,24 @@ describe("approval history for recovered public grant authority", () => {
       status: "waiting",
       resumability: "live",
       nativeRecoveryBinding: {
-        version: 1,
         operationId: "recovery-operation",
-        sourcePublicSessionId: source.sessionId,
-        sourceOwnerRunId: source.adapterSessionId,
         sourceAdapterGeneration: source.adapterGeneration,
+        sourceOwnerRunId: source.adapterSessionId,
+        sourcePublicSessionId: source.sessionId,
+        version: 1,
         ...(source.sourceHandoffId === undefined
           ? {}
           : { sourceHandoffId: source.sourceHandoffId }),
         logicalSessionId: source.adapterSessionId,
         originalAuthoritySessionId: source.sessionId,
-        parentCancellationRevision: 0,
         ownerRunId: "recovered-adapter",
+        parentCancellationRevision: 0,
         provenance: {
+          checkpointVersion: 1,
           kind: "failed-turn-input",
-          sourceStepId: "source-step",
           sourceEventId: "source-event",
           sourceSlot: 0,
-          checkpointVersion: 1,
+          sourceStepId: "source-step",
         },
       },
     });
@@ -837,27 +837,27 @@ describe("approval history for recovered public grant authority", () => {
     };
     const resolver = createHostedOperatorOwnerContextResolver({
       audience: authority.audience,
-      issuer: authority.issuer,
-      sessions,
       handoffs: {
         read: async () => await Promise.resolve(kind === "handoff" ? handoff : undefined),
       },
       isActiveMember: async () => await Promise.resolve(true),
+      issuer: authority.issuer,
+      sessions,
     });
     const verifyReadAuthority = createHostedOperatorApprovalReadAuthority({
-      sessions,
-      resolveOwnerContext: resolver,
       forwardSessionAuth: (_principal, sourceId) => sessionAuthFor(sourceId),
+      resolveOwnerContext: resolver,
+      sessions,
     });
-    return { source, child, sessions, verifyReadAuthority };
+    return { child, sessions, source, verifyReadAuthority };
   };
   it.each(["direct", "handoff"] as const)(
     "reads the original approval pair from its %s recovered worker without confusing the physical public ID",
     async (kind) => {
       const f = recovered(kind);
       const request = {
-        principal,
         adapterSessionId: f.child.adapterSessionId,
+        principal,
         sessionId: f.source.sessionId,
       };
       expect(f.child.sessionId === request.sessionId).toBe(false);
@@ -916,9 +916,9 @@ describe("approval history for recovered public grant authority", () => {
       );
       const observer = createHostedOperatorApprovalObserver({
         builderOrigin: "https://builder.example",
+        fetchImplementation,
         verifyReadAuthority: f.verifyReadAuthority,
         workloadIdentity: { token: () => Promise.resolve("controlled-workload") },
-        fetchImplementation,
       });
       const seen: string[] = [];
       const observed = await observer.privateHistoryForContext({
@@ -954,8 +954,8 @@ describe("approval history for recovered public grant authority", () => {
   ])("refuses %s before fetching private native history", async (change) => {
     const f = recovered("handoff");
     const request = {
-      principal,
       adapterSessionId: f.child.adapterSessionId,
+      principal,
       sessionId: f.source.sessionId,
     };
     if (change === "foreign-principal") {

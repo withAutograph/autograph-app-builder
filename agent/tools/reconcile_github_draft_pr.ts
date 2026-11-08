@@ -26,6 +26,7 @@ import {
   retainDraftReconciliationCompletion,
   updateExactDraftReconciliation,
 } from "@/lib/agent/draft-reconciliation-state";
+import type { DraftReconciliationCompletion } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { recordPublishedReconciliationForSession } from "@/lib/agent/published-app-source";
 import { assertReconciliationCompletionOwnerForSession } from "@/lib/agent/compiled-operator-artifacts";
@@ -56,10 +57,11 @@ export default defineTool({
           "Resume this exact approved repair through update_github_draft_pr; it records its retained repair release.",
         );
       }
+      const { expectedProposalDigest, approvalReceipt } = input;
       return await updatePublishedDraftRepair({
+        approvalReceipt,
         ctx,
-        expectedProposalDigest: input.expectedProposalDigest,
-        approvalReceipt: input.approvalReceipt,
+        expectedProposalDigest,
       });
     }
 
@@ -88,7 +90,7 @@ export default defineTool({
       ) {
         return missingCompletion();
       }
-      completion = {
+      const retained: DraftReconciliationCompletion = {
         preparation: "legacy-recording-only",
         proposal: candidate.proposal,
         review: candidate.review,
@@ -101,13 +103,14 @@ export default defineTool({
         root: candidate.root,
         githubSourceDigest: candidate.githubSourceDigest,
         compilation: candidate.validation.compilation,
-        ...(candidate.publishedOrigin === undefined
-          ? {}
-          : { publishedOrigin: candidate.publishedOrigin }),
-        ...(candidate.publicationScope === undefined
-          ? {}
-          : { publicationScope: candidate.publicationScope }),
       };
+      if (candidate.publishedOrigin !== undefined) {
+        retained.publishedOrigin = candidate.publishedOrigin;
+      }
+      if (candidate.publicationScope !== undefined) {
+        retained.publicationScope = candidate.publicationScope;
+      }
+      completion = retained;
     }
     const { proposal, review } = completion;
     assertApprovalReceipt({
@@ -141,20 +144,21 @@ export default defineTool({
     });
     const inspected = await runtime.inspectAppliedExistingDraftReconciliation({
       proposal,
-      review,
       recovery,
+      review,
     });
     const finish = async (
       publication: Parameters<typeof recordPublishedReconciliationForSession>[0]["publication"],
     ) => {
       try {
-        const recording = await recordPublishedReconciliationForSession({
+        const recordingInput: Parameters<typeof recordPublishedReconciliationForSession>[0] = {
           ...session,
           publication,
-          ...(input.recordCurrentEquivalentRelease === true
-            ? { recordCurrentEquivalentRelease: true as const }
-            : {}),
-        });
+        };
+        if (input.recordCurrentEquivalentRelease === true) {
+          recordingInput.recordCurrentEquivalentRelease = true;
+        }
+        const recording = await recordPublishedReconciliationForSession(recordingInput);
         if (recording.status === "selection-changed") {
           return {
             ...publication,
@@ -255,8 +259,8 @@ export default defineTool({
     const publication = await runtime.reconcileExistingDraft({
       contentSource,
       proposal,
-      review,
       recovery,
+      review,
     });
     updateExactDraftReconciliation({
       expected: candidate,

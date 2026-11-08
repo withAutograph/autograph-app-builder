@@ -46,7 +46,7 @@ export const createPublicReleaseDispatcher =
       const input = publicReleaseTransportRequestSchema.parse(await request.json());
       const appId =
         input.action === "public-release-plan" ? input.appId : input.input.plan.selection.appId;
-      const ownerContext = input.ownerContext;
+      const { ownerContext } = input;
       const assertCurrentOwner = async () => {
         request.signal.throwIfAborted();
         await dependencies.owner.assertCanonicalAppOwner({

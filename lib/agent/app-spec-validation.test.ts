@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { z } from "zod";
 
 import { HOSTED_MANAGED_SKILL_CONTENTS } from "../sandbox/hosted-managed-seeds.generated";
 
@@ -137,11 +138,9 @@ describe("build-ready AppSpec validation", () => {
       throw new Error("expected invalid AppSpec");
     }
     expect(result.issues).toEqual([expect.objectContaining({ code: "build_ready_intent" })]);
-    const diagnostic = JSON.parse(appSpecRepairDiagnostic(result)) as {
-      code: string;
-      instruction: string;
-      buildHandoffExample: unknown;
-    };
+    const diagnostic = z
+      .looseObject({ buildHandoffExample: z.unknown(), code: z.string(), instruction: z.string() })
+      .parse(JSON.parse(appSpecRepairDiagnostic(result)));
     expect(diagnostic).toMatchObject({
       buildHandoffExample: BUILD_READY_HANDOFF_EXAMPLE,
       code: "app_spec_invalid",

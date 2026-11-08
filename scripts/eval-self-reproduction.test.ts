@@ -4,8 +4,35 @@ import { tmpdir } from "node:os";
 import nodePath from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import { evidencePrefix } from "../evals/support/self-reproduction-evidence";
+
+const reportSchema = z.looseObject({
+  candidate: z.looseObject({ status: z.string() }),
+  candidateRuntime: z.looseObject({ status: z.string() }),
+  captures: z.array(z.unknown()),
+  diagnostics: z.looseObject({ note: z.string() }),
+  generation: z.looseObject({
+    elapsedMs: z.number().optional(),
+    reason: z.string().optional(),
+    status: z.string(),
+  }),
+  requirements: z.array(
+    z.looseObject({ requirementId: z.string(), side: z.string(), status: z.string() }),
+  ),
+  revisions: z.looseObject({
+    builder: z.looseObject({ commit: z.string().optional() }).optional(),
+  }),
+  settings: z.looseObject({
+    configuredModel: z.string().optional(),
+    publication: z.string().optional(),
+  }),
+  transcript: z.looseObject({ status: z.string() }),
+});
+
+const isReport = (value: unknown): value is z.infer<typeof reportSchema> =>
+  reportSchema.safeParse(value).success;
 
 const outputs: string[] = [];
 afterEach(() => {
@@ -45,7 +72,10 @@ function run(script: string, reportOnly = false) {
     },
   );
   expect(result.error).toBeUndefined();
-  const report = JSON.parse(readFileSync(nodePath.join(output, "report.json"), "utf-8"));
+  const report: unknown = JSON.parse(readFileSync(nodePath.join(output, "report.json"), "utf-8"));
+  if (!isReport(report)) {
+    throw new Error("The self-reproduction report is malformed.");
+  }
   // All failure modes must produce the same reviewable bundle.
   for (const path of [
     "report.md",
@@ -68,9 +98,9 @@ function run(script: string, reportOnly = false) {
     );
   }
   expect(existsSync(nodePath.join(output, "runtime-source"))).toBe(false);
-  expect(
-    JSON.parse(readFileSync(nodePath.join(output, "revisions.json"), "utf-8")).arrusted.status,
-  ).toBe("unavailable");
+  expect(JSON.parse(readFileSync(nodePath.join(output, "revisions.json"), "utf-8"))).toMatchObject({
+    arrusted: { status: "unavailable" },
+  });
   return { output, report, result };
 }
 
@@ -158,7 +188,7 @@ describe("native self-reproduction report orchestration", () => {
     expect(transcript).toContain("AppSpec invalid");
     expect(transcript).not.toContain("private-secret");
     expect(report.generation.elapsedMs).toBeGreaterThanOrEqual(0);
-    expect(report.revisions.builder.commit).toMatch(/^[a-f0-9]{40}$/u);
+    expect(report.revisions.builder?.commit).toMatch(/^[a-f0-9]{40}$/u);
   });
 
   it("keeps strict native failures failed even when the child returns zero", () => {

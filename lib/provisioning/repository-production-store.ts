@@ -1,11 +1,9 @@
 /* oxlint-disable sonarjs/expression-complexity -- Every persisted owner and resource identity is independently checked before accepting a journal row. */
-/* oxlint-disable sonarjs/no-wildcard-import -- Existing Drizzle table typing requires its schema namespace. */
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { and, eq, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import { builderProvisioningJournals } from "../db/schema";
 import { hostedRuntimePostgresOptions } from "../db/postgres-connection-policy";
 import { parseProtectedResourceLockDatabaseUrl } from "../db/protected-resource-lock-database-url";
@@ -26,7 +24,6 @@ import type {
   RepositoryProductionSetupPorts,
 } from "./repository-production-setup";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 const predicate = (scope: RepositoryProductionScope) =>
   and(
     eq(builderProvisioningJournals.issuer, scope.authority.issuer),

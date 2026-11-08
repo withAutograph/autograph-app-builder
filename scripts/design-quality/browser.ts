@@ -17,6 +17,13 @@ import { originalCssSource } from "./css-source-map";
 import type { CssSourceMap } from "./css-source-map";
 import { runSequentially } from "../../lib/async-sequential";
 
+const TOKEN_REFERENCE = "token-reference";
+const MATCHING_LITERAL = "matching-literal";
+const UNMATCHED_LITERAL = "unmatched-literal";
+const SEMANTIC_TOKEN_REFERENCE = "semantic-token-reference";
+const GENERATED_OVERRIDE = "generated-override";
+const INHERITED_SHARED = "inherited-shared";
+
 export const viewports = [
   { height: 900, name: "desktop", width: 1440 },
   { height: 1080, name: "desktop-wide", width: 1920 },
@@ -68,7 +75,10 @@ export const scenariosSchema = z.array(
           selector: z.string().optional(),
           value: z.string().optional(),
         })
-        .refine((s) => Boolean(s.selector || (s.role && s.name)), "Select a role/name or selector"),
+        .refine(
+          (s) => Boolean(s.selector) || (Boolean(s.role) && Boolean(s.name)),
+          "Select a role/name or selector",
+        ),
     ),
   }),
 );
@@ -106,7 +116,7 @@ export function classifyStyle(values: string[], computed: string, tokenValues: s
     return "unassessed" as const;
   }
   if (/var\(--/u.test(value)) {
-    return "token-reference" as const;
+    return TOKEN_REFERENCE;
   }
   if (
     /^(?<value>0(?:px|rem|em)?|auto|normal|none|inherit|initial|transparent)$/u.test(value) ||
@@ -114,9 +124,7 @@ export function classifyStyle(values: string[], computed: string, tokenValues: s
   ) {
     return "structural" as const;
   }
-  return tokenValues.includes(computed)
-    ? ("matching-literal" as const)
-    : ("unmatched-literal" as const);
+  return tokenValues.includes(computed) ? MATCHING_LITERAL : UNMATCHED_LITERAL;
 }
 
 type BrowserStyleObservation = Observation & {
@@ -171,7 +179,7 @@ function matchedSelector(match: {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function singleGapValue(value: string): string | undefined {
   const candidate = value.trim();
-  if (!candidate) {
+  if (candidate.length === 0) {
     return undefined;
   }
   let depth = 0;
@@ -191,7 +199,7 @@ function singleGapValue(value: string): string | undefined {
 }
 
 export const sourcePath = (value: string | undefined) => {
-  if (!value) {
+  if (value === undefined || value === null || value === "") {
     return;
   }
   try {
@@ -203,14 +211,16 @@ export const sourcePath = (value: string | undefined) => {
 };
 
 export const generatedSource = (path: string | undefined, generated: string[]) => {
-  if (!path) {
+  if (path === undefined || path === null || path === "") {
     return false;
   }
   const clean = path.replaceAll("\\", "/");
   return generated.some((candidate) => {
     const expected = sourcePath(candidate)?.replaceAll("\\", "/");
-    return Boolean(
-      expected && (clean === expected || clean.endsWith(`/${expected.replace(/^\/+/u, "")}`)),
+    return (
+      expected !== undefined &&
+      expected !== "" &&
+      (clean === expected || clean.endsWith(`/${expected.replace(/^\/+/u, "")}`))
     );
   });
 };
@@ -257,17 +267,16 @@ export function mappedSharedCssRule(input: {
     return;
   }
   const [file] = files;
-  if (!file) {
+  if (file === undefined) {
     return;
   }
-  const declarations = sharedCssRules.filter(
-    (candidate) =>
+  const declarations = sharedCssRules.filter((candidate) => {
+    const sourceMatches =
       candidate.source.path === file.path &&
       candidate.source.line === mapped.line &&
-      candidate.source.column === mapped.column &&
-      candidate.property === property &&
-      candidate.value === value,
-  );
+      candidate.source.column === mapped.column;
+    return sourceMatches && candidate.property === property && candidate.value === value;
+  });
   return declarations.length === 1 ? declarations[0] : undefined;
 }
 
@@ -319,8 +328,11 @@ export async function measurePage(page: Page) {
       return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none";
     };
     // oxlint-disable-next-line unicorn/consistent-function-scoping
-    const label = (el: Element) =>
-      (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().slice(0, 160);
+    const label = (el: Element) => {
+      const ariaLabel = el.getAttribute("aria-label");
+      const text = ariaLabel === null || ariaLabel === "" ? el.textContent : ariaLabel;
+      return (text === null || text === "" ? el.tagName : text).trim().slice(0, 160);
+    };
     const findings: {
       kind: string;
       description: string;
@@ -390,7 +402,7 @@ export async function measurePage(page: Page) {
         for (const [i, h] of headers.entries()) {
           const cell = cells[i];
           if (
-            cell &&
+            cell !== undefined &&
             Math.abs(h.getBoundingClientRect().left - cell.getBoundingClientRect().left) > 4
           ) {
             findings.push({
@@ -408,7 +420,7 @@ export async function measurePage(page: Page) {
       for (let j = i + 1; j < Math.min(controls.length, 150); j += 1) {
         const a = controls[i];
         const b = controls[j];
-        if (!a || !b) {
+        if (a === undefined || b === undefined) {
           continue;
         }
         if (a.parentElement !== b.parentElement || a.contains(b) || b.contains(a)) {
@@ -457,11 +469,16 @@ export async function measurePage(page: Page) {
           })),
         })),
       },
-      controls: controls.map((el) => ({
-        label: label(el),
-        region: rect(el),
-        role: el.getAttribute("role") || el.tagName.toLowerCase(),
-      })),
+      controls: controls.map((el) => {
+        const controlLabel = label(el);
+        const region = rect(el);
+        const role = el.getAttribute("role");
+        return {
+          label: controlLabel,
+          region,
+          role: role === null || role === "" ? el.tagName.toLowerCase() : role,
+        };
+      }),
       documentHeight: document.documentElement.scrollHeight,
       documentWidth: document.documentElement.scrollWidth,
       findings,
@@ -533,7 +550,7 @@ export async function measureStyles(
       // stylesheet's sourceMappingURL comment is the only usable evidence.
       const url = header?.sourceMapURL || declared;
       let text: string | undefined;
-      if (url?.startsWith("data:application/json")) {
+      if (url?.startsWith("data:application/json") === true) {
         try {
           const comma = url.indexOf(",");
           if (comma !== -1) {
@@ -718,12 +735,14 @@ export async function measureStyles(
       });
       for (const [property, category] of Object.entries(properties)) {
         const inline = (matched.inlineStyle?.cssProperties ?? []).filter(
-          (p) => p.name === property && !p.disabled && p.parsedOk !== false,
+          (p) => p.name === property && p.disabled !== true && p.parsedOk !== false,
         );
         const rules = (matched.matchedCSSRules ?? []).filter(
           (m) =>
             m.rule.origin !== "user-agent" &&
-            !(m.rule.media ?? []).some((media) => media.mediaList?.every((q) => !q.active)),
+            !(m.rule.media ?? []).some((media) =>
+              Boolean(media.mediaList?.every((q) => !q.active)),
+            ),
         );
         const inherited = /^(?<property>font-|line-height|letter-spacing|color$)/u.test(property)
           ? (matched.inherited ?? []).flatMap((i) =>
@@ -732,7 +751,7 @@ export async function measureStyles(
           : [];
         const own = rules.flatMap((m) =>
           m.rule.style.cssProperties
-            .filter((p) => p.name === property && !p.disabled && p.parsedOk !== false)
+            .filter((p) => p.name === property && p.disabled !== true && p.parsedOk !== false)
             .map((p) => ({ p, rule: m.rule, selector: matchedSelector(m) })),
         );
         const needsGapFallback =
@@ -741,12 +760,13 @@ export async function measureStyles(
         const gapShorthands = needsGapFallback
           ? rules.flatMap((m) =>
               m.rule.style.cssProperties.filter(
-                (p) => p.name === "gap" && !p.disabled && p.parsedOk !== false,
+                (p) => p.name === "gap" && p.disabled !== true && p.parsedOk !== false,
               ),
             )
           : [];
         const unsupportedGap = gapShorthands.some(
-          (declaration) => declaration.value.trim() && !singleGapValue(declaration.value),
+          (declaration) =>
+            Boolean(declaration.value.trim()) && singleGapValue(declaration.value) === undefined,
         );
         const gapFallback =
           needsGapFallback && !unsupportedGap
@@ -755,9 +775,9 @@ export async function measureStyles(
                   .filter(
                     (p) =>
                       p.name === "gap" &&
-                      !p.disabled &&
+                      p.disabled !== true &&
                       p.parsedOk !== false &&
-                      singleGapValue(p.value),
+                      Boolean(singleGapValue(p.value)),
                   )
                   .map((p) => ({
                     p,
@@ -769,7 +789,7 @@ export async function measureStyles(
         const ownEvidence = gapFallback.length ? gapFallback : own;
         let declarationEntries = inherited.flatMap((m) =>
           m.rule.style.cssProperties
-            .filter((p) => p.name === property && !p.disabled && p.parsedOk !== false)
+            .filter((p) => p.name === property && p.disabled !== true && p.parsedOk !== false)
             .map((p) => ({
               p,
               rule: m.rule as typeof m.rule | undefined,
@@ -808,7 +828,7 @@ export async function measureStyles(
           declaration?.range ??
           ((rule?.style.cssProperties ?? []).filter(
             (entry) =>
-              !entry.disabled && entry.parsedOk !== false && typeof entry.text === "string",
+              entry.disabled !== true && entry.parsedOk !== false && typeof entry.text === "string",
           ).length === 1
             ? rule?.style.range
             : undefined);
@@ -844,7 +864,9 @@ export async function measureStyles(
                   : undefined,
                 (rule?.style.cssProperties ?? []).filter(
                   (entry) =>
-                    !entry.disabled && entry.parsedOk !== false && typeof entry.text === "string",
+                    entry.disabled !== true &&
+                    entry.parsedOk !== false &&
+                    typeof entry.text === "string",
                 ),
               )
             : undefined;
@@ -855,14 +877,17 @@ export async function measureStyles(
         );
         const mappedGenerated = Boolean(
           mappedFile &&
-          generatedCssRules.filter(
-            (candidate) =>
+          generatedCssRules.filter((candidate) => {
+            const sourceMatches =
               candidate.source.path === mappedFile.path &&
               candidate.source.line === mapped?.line &&
-              candidate.source.column === mapped?.column &&
+              candidate.source.column === mapped?.column;
+            return (
+              sourceMatches &&
               candidate.property === property &&
-              candidate.value === declaration?.value,
-          ).length === 1,
+              candidate.value === declaration?.value
+            );
+          }).length === 1,
         );
         const mappedShared =
           uniqueDeclarationEntries.length === 1
@@ -887,29 +912,29 @@ export async function measureStyles(
           classification = "unknown";
         }
         if (
-          classification === "token-reference" &&
+          classification === TOKEN_REFERENCE &&
           declarations.some((v) =>
             [...v.matchAll(/var\((?<name>--[\w-]+)/gu)].some((m) => !(m[1] in tokens)),
           )
         ) {
           classification = "unassessed";
         }
-        if (classification === "token-reference") {
-          classification = "semantic-token-reference";
+        if (classification === TOKEN_REFERENCE) {
+          classification = SEMANTIC_TOKEN_REFERENCE;
         }
-        if (generated && classification === "unmatched-literal") {
-          classification = "generated-override";
+        if (generated && classification === UNMATCHED_LITERAL) {
+          classification = GENERATED_OVERRIDE;
         }
+        const sharedSource = !generated && (arrustedSharedSource(path) || Boolean(mappedShared));
         if (
-          !generated &&
-          (arrustedSharedSource(path) || Boolean(mappedShared)) &&
-          classification !== "semantic-token-reference" &&
-          classification !== "matching-literal" &&
+          sharedSource &&
+          classification !== SEMANTIC_TOKEN_REFERENCE &&
+          classification !== MATCHING_LITERAL &&
           classification !== "structural"
         ) {
-          classification = "inherited-shared";
+          classification = INHERITED_SHARED;
         }
-        if (classification === "unassessed" || classification === "unmatched-literal") {
+        if (classification === "unassessed" || classification === UNMATCHED_LITERAL) {
           classification = "unknown";
         }
         // Structural layout values are not adherence evidence, so exclude them
@@ -935,7 +960,7 @@ export async function measureStyles(
           ? generatedRule.source
           : (mappedShared?.source ??
             mapped ??
-            (path
+            (path !== undefined && path !== ""
               ? {
                   column: (rule?.style?.range?.startColumn ?? 0) + 1,
                   line: (rule?.style?.range?.startLine ?? 0) + 1,
@@ -967,7 +992,7 @@ export async function measureStyles(
           origin = "shared-rule";
         }
         if (provenance === "shared" && inheritedDeclaration) {
-          origin = "inherited-shared";
+          origin = INHERITED_SHARED;
         }
         if (generated) {
           origin = "generated-rule";
@@ -975,11 +1000,11 @@ export async function measureStyles(
         let verdict: BrowserStyleObservation["verdict"] = "unassessed";
         if (
           provenance === "generated" &&
-          (classification === "matching-literal" || classification === "generated-override")
+          (classification === MATCHING_LITERAL || classification === GENERATED_OVERRIDE)
         ) {
           verdict = "nonconforming";
         }
-        if (provenance === "generated" && classification === "semantic-token-reference") {
+        if (provenance === "generated" && classification === SEMANTIC_TOKEN_REFERENCE) {
           verdict = "conforming";
         }
         observations.push({
@@ -1013,10 +1038,10 @@ export async function measureStyles(
         );
         const counts = Object.fromEntries(
           [
-            "semantic-token-reference",
-            "matching-literal",
-            "generated-override",
-            "inherited-shared",
+            SEMANTIC_TOKEN_REFERENCE,
+            MATCHING_LITERAL,
+            GENERATED_OVERRIDE,
+            INHERITED_SHARED,
             "unknown",
           ].map((key) => [key, items.filter((o) => o.classification === key).length]),
         );
@@ -1032,7 +1057,7 @@ export async function measureStyles(
                   (items.filter(
                     (item) =>
                       item.provenance === "generated" &&
-                      item.classification === "semantic-token-reference",
+                      item.classification === SEMANTIC_TOKEN_REFERENCE,
                   ).length /
                     assessed) *
                     100,
@@ -1081,6 +1106,17 @@ export async function measureStyles(
   }
 }
 
+interface PreviewCapture {
+  height: number;
+  interaction: { status: string; expectedText?: string };
+  measurements: Awaited<ReturnType<typeof measurePage>>;
+  name: string;
+  path: string;
+  state: string;
+  styles: Awaited<ReturnType<typeof measureStyles>> | undefined;
+  width: number;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function capturePreview(input: {
   url: string;
@@ -1103,16 +1139,7 @@ export async function capturePreview(input: {
   preparePage?: (page: Page) => Promise<void>;
 }) {
   const browser = await chromium.launch();
-  const captures: {
-    height: number;
-    interaction: { status: string; expectedText?: string };
-    measurements: Awaited<ReturnType<typeof measurePage>>;
-    name: string;
-    path: string;
-    state: string;
-    styles: Awaited<ReturnType<typeof measureStyles>> | undefined;
-    width: number;
-  }[] = [];
+  const captures: PreviewCapture[] = [];
   try {
     await runSequentially(captureViewports(input.additionalDesktopSize), async (viewport) => {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -1144,7 +1171,7 @@ export async function capturePreview(input: {
         Array.from({ length: input.scenarios.length + 1 }, (_, index) => index),
         async (index) => {
           const scenario = index === 0 ? undefined : input.scenarios[index - 1];
-          let interaction: { status: string; expectedText?: string } = {
+          let interaction: PreviewCapture["interaction"] = {
             status: "not-run",
           };
           if (scenario) {

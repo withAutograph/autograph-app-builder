@@ -26,6 +26,7 @@ type BuilderIntegrationRequest = {
 );
 
 const databases = new Map<string, ReturnType<typeof openHostedPostgresDatabase>>();
+const CONFIGURATION_UNAVAILABLE = "configuration-unavailable";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function databaseFor(databaseUrl: string) {
@@ -73,9 +74,9 @@ export async function loadBuilderIntegrationState(
     database = databaseFor(preview.databaseUrl);
   } catch {
     return builderIntegrationStateSchema.parse({
-      github: unavailable("configuration-unavailable"),
+      github: unavailable(CONFIGURATION_UNAVAILABLE),
       models: await modelsPromise,
-      vercel: unavailable("configuration-unavailable"),
+      vercel: unavailable(CONFIGURATION_UNAVAILABLE),
     });
   }
 
@@ -104,7 +105,7 @@ export async function loadBuilderIntegrationState(
         }));
       return { scopes, status: scopes.length ? "connected" : "disconnected" };
     } catch {
-      return unavailable("configuration-unavailable");
+      return unavailable(CONFIGURATION_UNAVAILABLE);
     }
   })();
 
@@ -126,7 +127,7 @@ export async function loadBuilderIntegrationState(
         }));
       return { scopes, status: scopes.length ? "connected" : "disconnected" };
     } catch {
-      return unavailable("configuration-unavailable");
+      return unavailable(CONFIGURATION_UNAVAILABLE);
     }
   })();
 

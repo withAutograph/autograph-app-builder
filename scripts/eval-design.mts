@@ -35,12 +35,14 @@ const { values } = parseArgs({
     "source-dir": { type: "string" },
   },
 });
-if (values.help) {
+if (values.help === true) {
   console.log(
     "mise run eval:design -- --preview-url URL --arrusted-root PATH (--brief-file FILE | --case ID) [--source-dir PATH] [--scenario FILE --fixture-interactions] [--additional-desktop-size WIDTHxHEIGHT] [--measurements-only] [--output-dir PATH]\n\nmise run eval:design -- --list-cases",
   );
   process.exit(0);
 }
+const hasNonemptyOption = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value !== "";
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function sources(root: string, relative = ""): Promise<{ path: string; content: string }[]> {
   const entries = await readdir(path.join(root, relative), {
@@ -70,19 +72,19 @@ async function sources(root: string, relative = ""): Promise<{ path: string; con
 }
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function main() {
-  if (values["list-cases"]) {
+  if (values["list-cases"] === true) {
     for (const designCase of await listDesignCases()) {
       console.log(`${designCase.id}\t${designCase.status}\t${designCase.title}`);
     }
     return;
   }
-  if (values.case && values["brief-file"]) {
+  if (hasNonemptyOption(values.case) && hasNonemptyOption(values["brief-file"])) {
     throw new Error("Use either --case or --brief-file, not both");
   }
   if (
-    !values["preview-url"] ||
-    !values["arrusted-root"] ||
-    (!values["brief-file"] && !values.case)
+    !hasNonemptyOption(values["preview-url"]) ||
+    !hasNonemptyOption(values["arrusted-root"]) ||
+    (!hasNonemptyOption(values["brief-file"]) && !hasNonemptyOption(values.case))
   ) {
     throw new Error("Required: --preview-url, --arrusted-root, and --brief-file or --case");
   }
@@ -90,7 +92,7 @@ async function main() {
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
     throw new Error("Use a normal HTTP(S) preview URL without credentials");
   }
-  if (values.scenario && !values["fixture-interactions"]) {
+  if (hasNonemptyOption(values.scenario) && values["fixture-interactions"] !== true) {
     throw new Error(
       "Interaction steps require --fixture-interactions: use only previews with simulated effects",
     );
@@ -100,7 +102,9 @@ async function main() {
       path.join(".artifacts/design-quality", new Date().toISOString().replaceAll(/[:.]/gu, "-")),
   );
   await mkdir(output, { mode: 0o700, recursive: true });
-  const selectedCase = values.case ? await readDesignCase(values.case) : undefined;
+  const selectedCase = hasNonemptyOption(values.case)
+    ? await readDesignCase(values.case)
+    : undefined;
   const brief = selectedCase
     ? appendReviewQuestions(selectedCase.brief, selectedCase.reviewQuestions)
     : await readFile(values["brief-file"] ?? "", "utf-8");
@@ -118,7 +122,7 @@ async function main() {
   });
   const reference = await readReference(referenceRoot);
   limitations.push(...reference.limitations);
-  const sourceFiles = values["source-dir"]
+  const sourceFiles = hasNonemptyOption(values["source-dir"])
     ? await sources(path.resolve(values["source-dir"])).catch(() => {
         limitations.push("Generated source could not be read.");
         return [];
@@ -130,7 +134,7 @@ async function main() {
   );
   const generatedCssRules = collectCssRuleEvidence(sourceFiles);
   const sharedCssRules = sharedFiles ? collectCssRuleEvidence(sharedFiles) : [];
-  const source = values["source-dir"]
+  const source = hasNonemptyOption(values["source-dir"])
     ? {
         status: "available",
         ...analyzeSource({
@@ -148,12 +152,17 @@ async function main() {
   // fixture convenience and never run unless interactions were explicitly enabled.
   const scenarioPath =
     values.scenario ??
-    (selectedCase && values["fixture-interactions"] ? selectedCase.scenariosPath : undefined);
-  const scenarios = scenarioPath
+    (selectedCase && values["fixture-interactions"] === true
+      ? selectedCase.scenariosPath
+      : undefined);
+  const scenarios = hasNonemptyOption(scenarioPath)
     ? scenariosSchema.parse(
         JSON.parse(
           await readFile(scenarioPath, "utf-8").catch((error) => {
-            if (!values.scenario && (error as NodeJS.ErrnoException).code === "ENOENT") {
+            if (
+              !hasNonemptyOption(values.scenario) &&
+              (error as NodeJS.ErrnoException).code === "ENOENT"
+            ) {
               return "[]";
             }
             throw error;
@@ -161,7 +170,7 @@ async function main() {
         ),
       )
     : [];
-  const additionalDesktopSize = values["additional-desktop-size"]
+  const additionalDesktopSize = hasNonemptyOption(values["additional-desktop-size"])
     ? parseAdditionalDesktopSize(values["additional-desktop-size"])
     : undefined;
   console.log("Capturing existing preview across desktop window sizes…");
@@ -238,33 +247,34 @@ async function main() {
     mode: 0o600,
   });
   console.log("Browser measurements captured. Preparing advisory review…");
-  const judge = values["measurements-only"]
-    ? { reason: "Measurements-only requested", status: "not-run" }
-    : await judgeDesign({
-        brief,
-        evidence: {
-          adherence: {
-            dimensions: adherence.dimensions,
-            limitations: adherence.limitations,
+  const judge =
+    values["measurements-only"] === true
+      ? { reason: "Measurements-only requested", status: "not-run" }
+      : await judgeDesign({
+          brief,
+          evidence: {
+            adherence: {
+              dimensions: adherence.dimensions,
+              limitations: adherence.limitations,
+            },
+            arrustedCapabilities: catalog,
+            captures: captures.map((c) => ({
+              interaction: c.interaction,
+              measurements: c.measurements,
+              name: c.name,
+              state: c.state,
+            })),
+            sourceFindings: adherence.observations.filter(
+              (o) => o.evidence === "static" && o.verdict !== "conforming",
+            ),
           },
-          arrustedCapabilities: catalog,
-          captures: captures.map((c) => ({
-            interaction: c.interaction,
-            measurements: c.measurements,
-            name: c.name,
-            state: c.state,
+          images: captures.map(({ name, path: screenshotPath, width, height }) => ({
+            height,
+            name,
+            path: screenshotPath,
+            width,
           })),
-          sourceFindings: adherence.observations.filter(
-            (o) => o.evidence === "static" && o.verdict !== "conforming",
-          ),
-        },
-        images: captures.map(({ name, path: screenshotPath, width, height }) => ({
-          height,
-          name,
-          path: screenshotPath,
-          width,
-        })),
-      });
+        });
   const report = { ...measured, judge };
   await writeFile(path.join(output, "report.json"), JSON.stringify(report, null, 2), {
     mode: 0o600,

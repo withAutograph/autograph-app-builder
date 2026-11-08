@@ -5,12 +5,12 @@ interface PasskeyClientError {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function passkeyResultError(result: unknown): PasskeyClientError | null {
-  if (!result || typeof result !== "object" || !("error" in result)) {
+  if (result === null || typeof result !== "object" || !("error" in result)) {
     return null;
   }
 
-  const { error } = result as { error?: PasskeyClientError | null };
-  return error && typeof error === "object" ? error : null;
+  const { error } = result;
+  return error !== null && typeof error === "object" ? error : null;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

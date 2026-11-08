@@ -55,24 +55,29 @@ const fixture = (initial: GitHubPrDeliveryObservation, onClaim?: () => void) => 
     ),
   };
   const provider = {
-    inspect: vi.fn(() => Promise.resolve(initial)),
-    markReady: vi.fn(() => Promise.resolve(ready)),
-    merge: vi.fn(() => Promise.resolve(merged)),
+    inspect: vi.fn<() => Promise<GitHubPrDeliveryObservation>>().mockResolvedValue(initial),
+    markReady: vi.fn<() => Promise<GitHubPrDeliveryObservation>>().mockResolvedValue(ready),
+    merge: vi.fn<() => Promise<GitHubPrDeliveryObservation>>().mockResolvedValue(merged),
   };
   const execute = (
     intent: GitHubPrEffectIntent,
     approvedByCallId = "original-approval",
     abortSignal?: AbortSignal,
-  ) =>
-    executeApprovedGitHubPrEffect({
-      ...(abortSignal === undefined ? {} : { abortSignal }),
-      intent,
+  ) => {
+    const signal: Pick<Parameters<typeof executeApprovedGitHubPrEffect>[0], "abortSignal"> = {};
+    if (abortSignal !== undefined) {
+      signal.abortSignal = abortSignal;
+    }
+    return executeApprovedGitHubPrEffect({
+      ...signal,
       approvedByCallId,
-      store,
+      intent,
       provider,
+      store,
     });
+  };
   const reconcile = (intent: GitHubPrEffectIntent) =>
-    reconcileApprovedGitHubPrEffect({ intent, approvedByCallId: "recovery-call", store, provider });
+    reconcileApprovedGitHubPrEffect({ approvedByCallId: "recovery-call", intent, provider, store });
   return { execute, provider, reconcile, rows, store };
 };
 
@@ -91,8 +96,8 @@ it("uses the original ready journal to confirm a lost response without a second 
   provider.inspect.mockResolvedValueOnce(ready);
   await expect(reconcile(readyIntent)).resolves.toMatchObject({
     approvedByCallId: "original-approval",
-    status: "succeeded",
     evidence: { kind: "pr-ready", readyAt },
+    status: "succeeded",
   });
   expect(provider.markReady).toHaveBeenCalledTimes(1);
 });
@@ -106,7 +111,7 @@ it("claims a single pending intent before concurrent ready calls can write", asy
   await Promise.all([execute(readyIntent), execute(readyIntent, "concurrent-approval")]);
   expect(provider.markReady).toHaveBeenCalledTimes(1);
   expect([...rows.values()]).toMatchObject([
-    { status: "succeeded", evidence: { kind: "pr-ready", readyAt } },
+    { evidence: { kind: "pr-ready", readyAt }, status: "succeeded" },
   ]);
 });
 
@@ -122,8 +127,8 @@ it("reconciles a lost merge response by readback and preserves the original appr
   provider.inspect.mockResolvedValueOnce(merged);
   await expect(reconcile(mergeIntent)).resolves.toMatchObject({
     approvedByCallId: "original-approval",
-    status: "succeeded",
     evidence: { kind: "pr-merge", mergeCommitSha: merged.mergeCommitSha },
+    status: "succeeded",
   });
   expect(provider.merge).toHaveBeenCalledExactlyOnceWith(mergeIntent, readyAt, signal);
 });
@@ -163,8 +168,8 @@ it("records a definitive provider rejection without treating it as an uncertain 
   const { execute, provider, reconcile } = fixture(passed);
   provider.merge.mockRejectedValueOnce(new GitHubPrEffectRejectedError("provider-rejected"));
   await expect(execute(mergeIntent)).resolves.toMatchObject({
-    status: "failed",
     code: "provider-rejected",
+    status: "failed",
   });
   await expect(reconcile(mergeIntent)).resolves.toMatchObject({ status: "failed" });
   expect(provider.inspect).toHaveBeenCalledTimes(1);

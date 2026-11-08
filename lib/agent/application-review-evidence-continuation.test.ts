@@ -109,7 +109,7 @@ describe("durable review source citation windows", () => {
   });
 
   it("ignores mismatched or malformed references while keeping fresh source reads available", async () => {
-    const page = await fixture(longSource).evidence.readSource({ path: sourcePath, endLine: 1 });
+    const page = await fixture(longSource).evidence.readSource({ endLine: 1, path: sourcePath });
     const reference = sourceReference(page);
     const citation = {
       path: sourcePath,
@@ -134,14 +134,14 @@ describe("durable review source citation windows", () => {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Each independent malformed reference must preserve the same citation behavior.
       expect(await restored.evidence.verifySourceCitation(citation)).toBe(false);
       // oxlint-disable-next-line eslint/no-await-in-loop -- A bad restored reference must not prevent an ordinary correcting read.
-      await restored.evidence.readSource({ path: sourcePath, endLine: 1 });
+      await restored.evidence.readSource({ endLine: 1, path: sourcePath });
       // oxlint-disable-next-line eslint/no-await-in-loop -- Verify the concrete correcting read, not a source-shape assertion.
       expect(await restored.evidence.verifySourceCitation(citation)).toBe(true);
     }
   });
 
   it("does not load source for references until an actual read or citation needs that path", async () => {
-    const page = await fixture(longSource).evidence.readSource({ path: sourcePath, endLine: 1 });
+    const page = await fixture(longSource).evidence.readSource({ endLine: 1, path: sourcePath });
     const restored = fixture(longSource, [sourceReference(page)]);
     expect(
       await restored.evidence.verifyRequirementQuote({ documentId: "original", quote: "Keep" }),
@@ -163,7 +163,7 @@ describe("durable review source citation windows", () => {
   });
 
   it("retains current byte verification and Stop even when an exact old reference is supplied", async () => {
-    const page = await fixture(longSource).evidence.readSource({ path: sourcePath, endLine: 1 });
+    const page = await fixture(longSource).evidence.readSource({ endLine: 1, path: sourcePath });
     const citation = {
       path: sourcePath,
       startLine: 1,

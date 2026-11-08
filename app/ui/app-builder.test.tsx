@@ -14,6 +14,7 @@ import * as draftOutbox from "./builder-draft-outbox";
 import * as draftAutosave from "./use-builder-draft-autosave";
 import styles from "./app-builder.module.css";
 import type { BuilderDraftPageData } from "../../lib/builder-drafts/contracts";
+import type { continueBuilderHandoff } from "../actions/builder";
 
 const navigation = vi.hoisted(() => ({
   push: vi.fn(),
@@ -21,7 +22,7 @@ const navigation = vi.hoisted(() => ({
   replace: vi.fn(),
 }));
 const builderActions = vi.hoisted(() => ({
-  continueBuilderHandoff: vi.fn(),
+  continueBuilderHandoff: vi.fn<typeof continueBuilderHandoff>(),
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   loadActiveBuilderDraft: vi.fn(() =>
     Promise.resolve<BuilderDraftPageData | undefined>(globalThis.undefined),
@@ -36,12 +37,9 @@ const builderActions = vi.hoisted(() => ({
 
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 async function defaultContinuation(
-  _previous: unknown,
-  input: {
-    requestId: string;
-    provisioningEnabled: boolean;
-  },
-) {
+  _previous: Parameters<typeof continueBuilderHandoff>[0],
+  input: Parameters<typeof continueBuilderHandoff>[1],
+): ReturnType<typeof continueBuilderHandoff> {
   return {
     handoff: {
       expiresAt: "2026-09-08T12:00:00.000Z",
@@ -52,9 +50,7 @@ async function defaultContinuation(
       appId: "test-app",
       github: input.provisioningEnabled
         ? {
-            code: (input.provisioningEnabled ? "not_selected" : "feature_disabled") as
-              | "not_selected"
-              | "feature_disabled",
+            code: input.provisioningEnabled ? "not_selected" : "feature_disabled",
             retryable: false,
             status: "skipped" as const,
           }
@@ -69,9 +65,7 @@ async function defaultContinuation(
       updatedAt: "2026-08-30T12:00:00.000Z",
       vercel: input.provisioningEnabled
         ? {
-            code: (input.provisioningEnabled ? "not_selected" : "feature_disabled") as
-              | "not_selected"
-              | "feature_disabled",
+            code: input.provisioningEnabled ? "not_selected" : "feature_disabled",
             retryable: false,
             status: "skipped" as const,
           }
@@ -262,13 +256,17 @@ async function fill(control: HTMLInputElement | HTMLTextAreaElement, value: stri
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function click(element: HTMLElement) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  await act(async () => element.click());
+  await act(async () => {
+    element.click();
+  });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function focus(element: HTMLElement) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  await act(async () => element.focus());
+  await act(async () => {
+    element.focus();
+  });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -288,7 +286,9 @@ const requireElement = <T extends Element>(element: T | null | undefined) => {
 
 const waitForFrame = () => {
   const frame = Promise.withResolvers<null>();
-  requestAnimationFrame(() => frame.resolve(null));
+  requestAnimationFrame(() => {
+    frame.resolve(null);
+  });
   return frame.promise;
 };
 
@@ -368,7 +368,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
     builderActions.loadActiveBuilderDraft
       .mockImplementationOnce(() => pending.promise)
-      .mockResolvedValueOnce(remoteDraft(3, "Fresh remote brief.") as never);
+      .mockResolvedValueOnce(remoteDraft(3, "Fresh remote brief."));
     // oxlint-disable-next-line eslint/require-await -- Preserve the Server Action test interface.
     builderActions.saveActiveBuilderDraft.mockImplementation(async (input) => ({
       draftId: input.draftId,
@@ -389,7 +389,9 @@ describe("Vercel-faithful App Builder flow", () => {
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(1);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => pending.resolve(remoteDraft(2, "Stale remote brief.")));
+    await act(async () => {
+      pending.resolve(remoteDraft(2, "Stale remote brief."));
+    });
     expect(brief.value).toBe("Newer local edit.");
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
@@ -411,7 +413,9 @@ describe("Vercel-faithful App Builder flow", () => {
     await act(async () => vi.advanceTimersByTimeAsync(30_000));
     expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(1);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => pending.resolve(globalThis.undefined));
+    await act(async () => {
+      pending.resolve(globalThis.undefined);
+    });
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(2);
@@ -434,7 +438,7 @@ describe("Vercel-faithful App Builder flow", () => {
       return { ...autosave, discardSupersededByRemoteRevision: delayedDiscard };
     });
     builderActions.loadActiveBuilderDraft.mockResolvedValueOnce(
-      remoteDraft(2, "Remote brief before the local edit.") as never,
+      remoteDraft(2, "Remote brief before the local edit."),
     );
     const view = await render(<AppBuilder authenticated />);
     const brief = requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief"));
@@ -443,7 +447,9 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(enteredReconciliation).toHaveBeenCalledTimes(1);
     await fill(brief, "Local edit during outbox work.");
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => reconciliation.resolve(null));
+    await act(async () => {
+      reconciliation.resolve(null);
+    });
     expect(brief.value).toBe("Local edit during outbox work.");
   });
 
@@ -451,7 +457,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
     builderActions.loadActiveBuilderDraft
       .mockImplementationOnce(() => pending.promise)
-      .mockResolvedValueOnce(remoteDraft(3, "Newest remote brief.") as never);
+      .mockResolvedValueOnce(remoteDraft(3, "Newest remote brief."));
     const view = await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => {
@@ -464,13 +470,17 @@ describe("Vercel-faithful App Builder flow", () => {
     });
     expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(1);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => pending.resolve(remoteDraft(2, "Older remote brief.")));
+    await act(async () => {
+      pending.resolve(remoteDraft(2, "Older remote brief."));
+    });
     expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(2);
     expect(requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief")).value).toBe(
       "Newest remote brief.",
     );
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => changeVisibility("visible"));
+    await act(async () => {
+      changeVisibility("visible");
+    });
     expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(2);
   });
 
@@ -479,12 +489,14 @@ describe("Vercel-faithful App Builder flow", () => {
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
     builderActions.loadActiveBuilderDraft
       .mockImplementationOnce(() => pending.promise)
-      .mockResolvedValueOnce(remoteDraft(2, "Recovered remote brief.") as never);
+      .mockResolvedValueOnce(remoteDraft(2, "Recovered remote brief."));
     const view = await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => pending.reject(new Error("read-unavailable")));
+    await act(async () => {
+      pending.reject(new Error("read-unavailable"));
+    });
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(2);
@@ -508,7 +520,9 @@ describe("Vercel-faithful App Builder flow", () => {
       root = undefined;
     });
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => pending.resolve(remoteDraft(2, "Late remote brief.")));
+    await act(async () => {
+      pending.resolve(remoteDraft(2, "Late remote brief."));
+    });
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => vi.advanceTimersByTimeAsync(30_000));
     expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(1);
@@ -893,13 +907,13 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(sessionStorage.getItem("autograph-app-brief")).toBe("Claim this anonymous brief.");
     const [[request]] = builderActions.saveActiveBuilderDraft.mock.calls;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () =>
+    await act(async () => {
       saved.resolve({
         draftId: request.draftId,
         revision: 1,
         updatedAt: "2030-01-01T00:00:00.000Z",
-      }),
-    );
+      });
+    });
     expect(sessionStorage.getItem("autograph-app-brief")).toBeNull();
   });
 
@@ -1027,7 +1041,9 @@ describe("Vercel-faithful App Builder flow", () => {
       "Revision 3",
     );
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => delayedRead.resolve(undefined as undefined));
+    await act(async () => {
+      delayedRead.resolve(undefined as undefined);
+    });
     expect(requireElement(view.querySelector<HTMLInputElement>("#app-name")).value).toBe(
       "Revision 3",
     );
@@ -1325,7 +1341,9 @@ describe("Vercel-faithful App Builder flow", () => {
     });
     expect(builderActions.continueBuilderHandoff).toHaveBeenCalledOnce();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => continuation.resolve({ status: "error" }));
+    await act(async () => {
+      continuation.resolve({ status: "error" });
+    });
     expect(view.querySelector("#app-brief")).toBe(brief);
     expect(brief.value).toBe("Do not lose this saved intent.");
     expect(requireElement(view.querySelector("main")).hasAttribute("inert")).toBe(false);

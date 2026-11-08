@@ -81,7 +81,8 @@ export function BuilderAppDetails() {
       }}
       onBriefChange={updateBrief}
       onCycleBrief={() => {
-        const currentIndex = briefExamples.indexOf(form.brief as (typeof briefExamples)[number]);
+        const examples: readonly string[] = briefExamples;
+        const currentIndex = examples.indexOf(form.brief);
         const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % briefExamples.length;
         updateBrief(briefExamples[nextIndex]);
       }}
@@ -97,7 +98,9 @@ export function BuilderDestination() {
       bare
       comingSoonEnabled={comingSoonEnabled}
       selected={form.buildDestination}
-      onChange={(buildDestination) => setForm((current) => ({ ...current, buildDestination }))}
+      onChange={(buildDestination) => {
+        setForm((current) => ({ ...current, buildDestination }));
+      }}
     />
   );
 }
@@ -124,7 +127,9 @@ export function BuilderModel() {
           setModel("");
         }
       }}
-      onRetry={() => router.refresh()}
+      onRetry={() => {
+        router.refresh();
+      }}
     />
   ) : null;
 }
@@ -230,13 +235,15 @@ export function BuilderConnections() {
       onAdd={addConnection}
       onRemove={removeConnection}
       onSearchChange={setSearch}
-      onShowMore={() => setShowMoreConnections(true)}
-      onCustomize={(name) =>
+      onShowMore={() => {
+        setShowMoreConnections(true);
+      }}
+      onCustomize={(name) => {
         setConnectionFlow({
           name,
           stage: connectedConnections.includes(name) ? "configure" : "connect",
-        })
-      }
+        });
+      }}
     />
   );
 }

@@ -19,15 +19,15 @@ export const removal = appIntegrationRemovalSchema.parse({
 });
 export const retained = [
   {
-    key: "APP_INTEGRATIONS_CAPABILITY",
     acceptedEnvId: "prior-cap",
+    key: "APP_INTEGRATIONS_CAPABILITY",
     sha256: "a".repeat(64),
     sourceOperationRef: "11111111-1111-4111-a111-111111111111",
     sourcePlanDigest: "b".repeat(64),
   },
   {
-    key: "APP_INTEGRATIONS_RUNTIME_CONFIGURATION",
     acceptedEnvId: "prior-config",
+    key: "APP_INTEGRATIONS_RUNTIME_CONFIGURATION",
     sha256: "c".repeat(64),
     sourceOperationRef: "11111111-1111-4111-a111-111111111111",
     sourcePlanDigest: "b".repeat(64),

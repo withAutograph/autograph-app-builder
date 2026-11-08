@@ -17,7 +17,7 @@ import { builderProvisionRequestSchema } from "../../../../../lib/provisioning/c
 import { builderProvisionJournalRecordSchema } from "../../../../../lib/provisioning/journal";
 // An owned loopback cluster only. Never consumes DATABASE_URL or provider credentials.
 const repositoryRoot = path.resolve(import.meta.dirname, "../../../../..");
-const postgresBin = process.argv[2];
+const [, , postgresBin] = process.argv;
 assert.ok(
   postgresBin && path.isAbsolute(postgresBin),
   "Supply an absolute installed PostgreSQL bin directory",
@@ -111,9 +111,10 @@ try {
   const lookup = store.findSettledAppRepository;
   assert.ok(lookup, "Real repository lookup must be implemented");
   const now = new Date("2026-11-03T00:00:00Z");
+  const appId = "lookup-app";
   const input = {
     authority: principal,
-    appId: "lookup-app",
+    appId,
     repositoryId: "501",
     githubInstallationId: "101",
   };
@@ -133,7 +134,7 @@ try {
       version: 1,
       requestId: randomUUID(),
       providers: { githubInstallationId: "101", vercelInstallationId: "icfg_lookup" },
-      repository: { name: "lookup-app", private: true },
+      repository: { name: appId, private: true },
     });
     const reserved = await store.reserve({ authority, request, now });
     const record = builderProvisionJournalRecordSchema.parse({
@@ -151,7 +152,7 @@ try {
                 headSha: "a".repeat(40),
                 headTree: "b".repeat(40),
                 installationId: "101",
-                name: "lookup-app",
+                name: appId,
                 owner: "fixture",
                 repositoryId: "501",
                 scope: { id: "201", login: "fixture", type: "organization" },
@@ -265,5 +266,5 @@ try {
   if (started) {
     command("pg_ctl", ["-D", data, "-m", "immediate", "-w", "stop"]);
   }
-  await rm(scratch, { recursive: true, force: true });
+  await rm(scratch, { force: true, recursive: true });
 }

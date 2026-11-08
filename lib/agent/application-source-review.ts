@@ -26,6 +26,9 @@ import type {
 import { emptySourceReviewInvocation } from "./product-source-review-batches";
 import type { SourceReviewInvocation, SourceReviewRequest } from "./product-source-review-batches";
 
+const toolResultType = "tool-result";
+const reviewRedactionUnavailableMessage = "Primary review document redaction is unavailable.";
+
 export interface ApplicationSourceReadCursor {
   line: number;
   column: number;
@@ -225,7 +228,7 @@ const projectSourceReviewMessages = (
     return {
       ...message,
       content: message.content.map((part) => {
-        if (part.type === "tool-result" && part.output.type === "json") {
+        if (part.type === toolResultType && part.output.type === "json") {
           const read = reusableReads.get(part.toolCallId);
           if (read !== undefined && part.toolName === read.toolName) {
             const serialized = JSON.stringify(part.output.value);
@@ -254,18 +257,18 @@ const projectSourceReviewMessages = (
 };
 
 const emptyMessageMeasurements = (): ApplicationSourceReviewMessageMeasurements => ({
-  measurementAvailable: false,
-  messageCount: 0,
   groups: {
+    assistant: { partCount: 0, serializedUtf16Characters: 0 },
+    listing: { partCount: 0, serializedUtf16Characters: 0 },
+    other: { partCount: 0, serializedUtf16Characters: 0 },
     requirements: { partCount: 0, serializedUtf16Characters: 0 },
     source: { partCount: 0, serializedUtf16Characters: 0 },
-    listing: { partCount: 0, serializedUtf16Characters: 0 },
-    assistant: { partCount: 0, serializedUtf16Characters: 0 },
-    other: { partCount: 0, serializedUtf16Characters: 0 },
   },
+  instructionSerializedUtf16Characters: 0,
+  measurementAvailable: false,
+  messageCount: 0,
   sourceFullResultCount: 0,
   sourceReferenceResultCount: 0,
-  instructionSerializedUtf16Characters: 0,
   toolDefinitionSerializedUtf16Characters: 0,
 });
 type SerializedReviewContent =
@@ -290,7 +293,7 @@ const sourceReviewToolGroup = (
   part: SourceReviewToolPart,
   measurements: ApplicationSourceReviewMessageMeasurements,
 ): SourceReviewMessageGroup => {
-  if (part.type !== "tool-result") {
+  if (part.type !== toolResultType) {
     return "other";
   }
   if (part.toolName === "readRequirements") {
@@ -470,10 +473,11 @@ const reviewTools = (
                     (kind !== "changes" || changedPaths.has(path)),
                 );
           const page = items.slice(cursor, cursor + 200);
-          return Promise.resolve({
-            items: page,
-            ...(cursor + page.length < items.length ? { nextCursor: cursor + page.length } : {}),
-          });
+          const pageResult: Extract<ReusableEvidenceResult, { items: unknown }> = { items: page };
+          if (cursor + page.length < items.length) {
+            pageResult.nextCursor = cursor + page.length;
+          }
+          return Promise.resolve(pageResult);
         });
         if (!(result instanceof ApplicationReviewSelectionError)) {
           rememberEvidenceRead(
@@ -672,15 +676,23 @@ const restoreReviewRound = (
     continuation === undefined
       ? emptySourceReviewInvocation()
       : { ...continuation.invocation, freshUsage: { ...continuation.invocation.freshUsage } };
+  const findings = new Map(continuation?.findings);
+  const runtimeChecks = new Set(continuation?.runtimeChecks);
+  const references = new Map(continuation?.references);
+  const reusableReads = new Map(continuation?.reusableReads);
+  const completionRequested = continuation?.completionRequested === true;
+  const invalidEvidence = continuation?.invalidEvidence === true;
+  const evidenceFailed = continuation?.evidenceFailed === true;
+  const outputRejected = continuation?.outputRejected === true;
   const state: ReviewState = {
-    findings: new Map(continuation?.findings),
-    runtimeChecks: new Set(continuation?.runtimeChecks),
-    references: new Map(continuation?.references),
-    reusableReads: new Map(continuation?.reusableReads),
-    completionRequested: continuation?.completionRequested === true,
-    invalidEvidence: continuation?.invalidEvidence === true,
-    evidenceFailed: continuation?.evidenceFailed === true,
-    outputRejected: continuation?.outputRejected === true,
+    completionRequested,
+    evidenceFailed,
+    findings,
+    invalidEvidence,
+    outputRejected,
+    references,
+    reusableReads,
+    runtimeChecks,
   };
   const initial = {
     requirements: evidence.requirements,
@@ -691,14 +703,10 @@ const restoreReviewRound = (
   const messages: ModelMessage[] = continuation?.messages ?? [
     { role: "user", content: JSON.stringify(initial) },
   ];
-  return {
-    invocation,
-    state,
-    messages,
-    requestOrdinal: continuation?.requestOrdinal ?? 0,
-    stepNumber: continuation?.stepNumber ?? 0,
-    lastRecovery: continuation?.lastRecovery,
-  };
+  const requestOrdinal = continuation?.requestOrdinal ?? 0;
+  const stepNumber = continuation?.stepNumber ?? 0;
+  const lastRecovery = continuation?.lastRecovery;
+  return { invocation, lastRecovery, messages, requestOrdinal, state, stepNumber };
 };
 
 type ReviewRoundStep = Pick<StepResult<ReturnType<typeof reviewTools>>, "toolCalls" | "content">;
@@ -706,7 +714,7 @@ const canContinueReviewRound = (step?: ReviewRoundStep): boolean => {
   const calls = step?.toolCalls.filter((call) => call.providerExecuted !== true) ?? [];
   const returned = new Set(
     step?.content.flatMap((part) =>
-      part.type === "tool-result" || part.type === "tool-error" ? [part.toolCallId] : [],
+      part.type === toolResultType || part.type === "tool-error" ? [part.toolCallId] : [],
     ),
   );
   return calls.length > 0 && calls.every((call) => returned.has(call.toolCallId));
@@ -745,7 +753,7 @@ const settleIncompleteReviewRound = async (
   }
   const texts = await readRedactions();
   if (texts === undefined) {
-    return blocked("Primary review document redaction is unavailable.");
+    return blocked(reviewRedactionUnavailableMessage);
   }
   const recovery = JSON.stringify({
     sourceDigest: input.sourceDigest,
@@ -796,8 +804,8 @@ const resolveReviewPolicy = (
     (options.testModel === undefined
       ? sourceReviewPolicy()
       : {
-          id: "fixture-sol",
           fallback: { modelId: builderValidationModelId, reasoningEffort: null },
+          id: "fixture-sol",
           primary: { modelId: builderValidationModelId, reasoningEffort: null },
         });
   // A legacy checkpoint may contain Sol-generated messages; never resume those with a different model.
@@ -808,7 +816,7 @@ const resolveReviewPolicy = (
       : { modelId: builderValidationModelId, reasoningEffort: null });
   const policyId =
     continuation?.reviewPolicyId ?? (continuation === undefined ? policy.id : "legacy-sol");
-  return { policy, reviewer, policyId, fallbackUsed: continuation?.fallbackUsed === true };
+  return { fallbackUsed: continuation?.fallbackUsed === true, policy, policyId, reviewer };
 };
 
 const canFallback = ({
@@ -910,14 +918,16 @@ const selectApplicationReviewModel = async (
   options.testModel ??
   createGateway({ apiKey: await getVercelOidcToken() })(reviewer.modelId);
 
+type SourceReviewGatewayOptions = { only: string[] } & { sessionId?: string };
+
 const applicationProviderOptions = (
   options: ApplicationSourceReviewOptions,
   reviewer: SourceReviewer,
 ) => {
-  const gateway = {
-    only: ["openai"],
-    ...(options.cacheSessionId === undefined ? {} : { sessionId: options.cacheSessionId }),
-  };
+  const gateway: SourceReviewGatewayOptions = { only: ["openai"] };
+  if (options.cacheSessionId !== undefined) {
+    gateway.sessionId = options.cacheSessionId;
+  }
   const provider: Parameters<typeof withBuilderGatewayReporting>[0] = { gateway };
   if (reviewer.reasoningEffort !== null) {
     provider.openai = { reasoningEffort: reviewer.reasoningEffort };
@@ -949,20 +959,22 @@ const preserveVerifiedFindings = async (
   }
   const texts = await context.readRedactions();
   if (texts === undefined) {
-    return context.blocked("Primary review document redaction is unavailable.");
+    return context.blocked(reviewRedactionUnavailableMessage);
   }
-  const prior = context.prior;
+  const { prior } = context;
   const hasPrior =
     prior !== undefined && (prior.findings.length > 0 || prior.runtimeChecks.length > 0);
   const hasCurrent = context.state.findings.size > 0 || context.state.runtimeChecks.size > 0;
-  const combined = hasPrior
-    ? {
-        ...context.state,
-        findings: new Map([...prior.findings, ...context.state.findings]),
-        runtimeChecks: new Set([...prior.runtimeChecks, ...context.state.runtimeChecks]),
-        references: new Map([...prior.references, ...context.state.references]),
-      }
-    : context.state;
+  let combined: ReviewState;
+  if (hasPrior) {
+    const current = { ...context.state };
+    const findings = new Map([...prior.findings, ...context.state.findings]);
+    const runtimeChecks = new Set([...prior.runtimeChecks, ...context.state.runtimeChecks]);
+    const references = new Map([...prior.references, ...context.state.references]);
+    combined = { ...current, findings, references, runtimeChecks };
+  } else {
+    combined = context.state;
+  }
   const attribution = hasPrior && !hasCurrent ? prior.reviewer : context.reviewer;
   const partial = assessmentFor(
     context.input,
@@ -972,19 +984,21 @@ const preserveVerifiedFindings = async (
     attribution,
     context.policyId,
   );
-  return context.finish({
-    ...partial,
-    ...(hasPrior && hasCurrent
-      ? {
-          modelId: "multiple",
-          reasoningEffort: null,
-          evidenceNote: `${partial.evidenceNote} Review evidence includes independent contributions from ${prior.reviewer.modelId} and ${context.reviewer.modelId}.`,
-        }
-      : {}),
-    reason,
-    reviewCompleted: false,
-    status: combined.findings.size > 0 ? "failed" : "blocked",
-  });
+  const partialAssessment = (): ProductSourceAssessment => {
+    const assessment: ProductSourceAssessment = { ...partial };
+    if (hasPrior && hasCurrent) {
+      assessment.modelId = "multiple";
+      assessment.reasoningEffort = null;
+      assessment.evidenceNote = `${partial.evidenceNote} Review evidence includes independent contributions from ${prior.reviewer.modelId} and ${context.reviewer.modelId}.`;
+    }
+    return {
+      ...assessment,
+      reason,
+      reviewCompleted: false,
+      status: combined.findings.size > 0 ? "failed" : "blocked",
+    };
+  };
+  return context.finish(partialAssessment());
 };
 
 const settleReviewWithFallback = async (
@@ -1020,15 +1034,21 @@ export const assessApplicationSourceRound = async (
   const { invocation, state } = restored;
   let { messages, requestOrdinal, stepNumber, lastRecovery } = restored;
   let currentMessages = messages;
-  const finish = (assessment?: ProductSourceAssessment): ApplicationReviewRoundResult => ({
-    continuation: {
+  const finish = (assessment?: ProductSourceAssessment): ApplicationReviewRoundResult => {
+    const head: Pick<
+      ApplicationReviewContinuation,
+      "version" | "reviewer" | "reviewPolicyId" | "fallbackUsed" | "priorReviewerEvidence"
+    > = {
       version: 1,
       reviewer,
       reviewPolicyId: policyId,
       fallbackUsed,
-      ...(continuation?.priorReviewerEvidence === undefined
-        ? {}
-        : { priorReviewerEvidence: continuation.priorReviewerEvidence }),
+    };
+    if (continuation?.priorReviewerEvidence !== undefined) {
+      head.priorReviewerEvidence = continuation.priorReviewerEvidence;
+    }
+    const next: ApplicationReviewContinuation = {
+      ...head,
       messages,
       findings: [...state.findings],
       runtimeChecks: [...state.runtimeChecks],
@@ -1041,10 +1061,16 @@ export const assessApplicationSourceRound = async (
       invocation: { ...invocation, freshUsage: { ...invocation.freshUsage } },
       requestOrdinal,
       stepNumber,
-      ...(lastRecovery === undefined ? {} : { lastRecovery }),
-    },
-    ...(assessment === undefined ? {} : { assessment }),
-  });
+    };
+    if (lastRecovery !== undefined) {
+      next.lastRecovery = lastRecovery;
+    }
+    const result: ApplicationReviewRoundResult = { continuation: next };
+    if (assessment !== undefined) {
+      result.assessment = assessment;
+    }
+    return result;
+  };
   const blocked = (reason: string) =>
     finish({
       ...unavailableSourceAssessment(input, reason, "blocked", reviewer),
@@ -1089,22 +1115,22 @@ export const assessApplicationSourceRound = async (
     const blockedWithVerifiedFindings = async (reason: string) =>
       await preserveVerifiedFindings(
         {
+          blocked,
+          finish,
           input,
-          state,
           invocation,
-          reviewer,
           policyId,
           prior: continuation?.priorReviewerEvidence,
           readRedactions,
-          finish,
-          blocked,
+          reviewer,
+          state,
         },
         reason,
       );
     const completedReview = async () => {
       const texts = await readRedactions();
       if (texts === undefined) {
-        return blocked("Primary review document redaction is unavailable.");
+        return blocked(reviewRedactionUnavailableMessage);
       }
       if ((continuation?.priorReviewerEvidence?.findings.length ?? 0) > 0) {
         return await blockedWithVerifiedFindings(
@@ -1175,13 +1201,13 @@ export const assessApplicationSourceRound = async (
           }
           try {
             options.onRequestStart({
+              messageMeasurements,
               requestOrdinal,
               sdkCallId: z
                 .string()
                 .regex(/^[A-Za-z0-9_.:-]{1,256}$/u)
                 .safeParse(event.callId).data,
               stepNumber: preparedStepNumber,
-              messageMeasurements,
             });
           } catch {
             // Diagnostic measurement or logging must never alter the review.
@@ -1202,7 +1228,7 @@ export const assessApplicationSourceRound = async (
     let contextRejected = false;
     let result: Awaited<ReturnType<typeof agent.generate>> | undefined;
     try {
-      result = await agent.generate({ messages, abortSignal: options.abortSignal });
+      result = await agent.generate({ abortSignal: options.abortSignal, messages });
       // The supported SDK supplies the complete assistant/tool exchange, including errors.
       messages = [...currentMessages, ...result.finalStep.response.messages];
     } catch (error) {
@@ -1235,15 +1261,14 @@ export const assessApplicationSourceRound = async (
       return await completedReview();
     }
     const settled = await settleIncompleteReviewRound({
-      input,
-      state,
-      contextRejected,
+      blocked,
       canContinue: canContinueReviewRound(result?.finalStep),
+      contextRejected,
       currentMessages,
+      finish,
+      input,
       lastRecovery,
       readRedactions,
-      finish,
-      blocked,
       recover: (recovery) => {
         lastRecovery = recovery;
         state.outputRejected = false;
@@ -1251,6 +1276,7 @@ export const assessApplicationSourceRound = async (
         messages = [{ role: "user", content: recovery }];
         invocation.splits += 1;
       },
+      state,
     });
     return await settleReviewWithFallback(
       settled,
@@ -1287,7 +1313,7 @@ export const assessApplicationSource = async (
         roundOptions,
         continuation,
       );
-      continuation = result.continuation;
+      ({ continuation } = result);
       if (result.assessment !== undefined) {
         return result.assessment;
       }

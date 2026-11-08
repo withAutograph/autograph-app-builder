@@ -1,7 +1,10 @@
 /* oxlint-disable eslint/require-await -- Browser doubles preserve asynchronous Playwright operations. */
 import { runtimeReceiptSchema } from "./self-reproduction-parity-evidence";
-import type { Page } from "playwright";
 import { expect, it, vi } from "vitest";
+import type {
+  CandidateNavigationControl,
+  CandidateNavigationPage,
+} from "./self-reproduction-candidate-navigation";
 import {
   candidateNavigationReceipt,
   exerciseCandidateNavigation,
@@ -13,14 +16,14 @@ it.each(["history", "local-state", "inert", "unknown", "unavailable"])(
   async (mode) => {
     let view = "editor";
     const values = new Map<string, string>();
-    const control = (name: string) => ({
+    const control = (name: string): CandidateNavigationControl => ({
       evaluate: async () => view === "editor" && mode === "history",
       fill: async (value: string) => {
         values.set(name, value);
       },
       first: () => control(name),
-      focus: vi.fn(),
-      inputValue: async () => values.get(name),
+      focus: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      inputValue: async () => values.get(name) ?? "",
       isVisible: async () => (name === "back" ? view === "docs" : view === "editor"),
       press: async () => {
         if (mode !== "inert") {
@@ -40,15 +43,17 @@ it.each(["history", "local-state", "inert", "unknown", "unavailable"])(
         if (mode === "history") {
           view = "editor";
         }
+        return null;
       },
       goForward: async () => {
         view = "docs";
+        return null;
       },
       goto: async () => ({ ok: () => mode !== "unavailable" }),
       locator: () => ({ textContent: async () => view }),
       url: () =>
         mode === "history" && view === "docs" ? "https://candidate/docs" : "https://candidate/",
-    } as unknown as Page;
+    } satisfies CandidateNavigationPage;
     const capture = vi.fn(async () => {});
     // oxlint-disable-next-line eslint/no-new-func -- Verify serialized portable function has no module closure dependencies.
     const portable = new Function(

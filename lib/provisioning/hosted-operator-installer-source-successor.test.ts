@@ -10,8 +10,8 @@ import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
 
 const now = Date.parse("2028-01-01T00:00:00.000Z");
 const plan = hostedOperatorPlanSchema.parse({
-  action: "prepare",
   access: [{ actorId: "reviewer", organizationId: "org_fixture", roles: ["reviewer"] }],
+  action: "prepare",
   appDatabase: {
     database: "spend",
     migratorRole: "spend_owner",
@@ -162,7 +162,7 @@ const makeIdleRecord = (sourcePlan: HostedOperatorPlan = plan): HostedRuntimeJou
     planDigest: operator.planDigest,
     callId: record.approvedByCallId,
     approvalId: requireDefined(operator.approvalId),
-    outcome: { status: "blocked", code: "resource_mismatch" },
+    outcome: { code: "resource_mismatch", status: "blocked" },
   };
   return record;
 };
@@ -222,8 +222,8 @@ describe("hosted operator installer source successor", () => {
       case "nonblocked observation": {
         record.executionObservation = {
           ...observation,
-          state: "settled",
           outcome: { status: "prepared" },
+          state: "settled",
         };
         break;
       }
@@ -297,7 +297,7 @@ describe("hosted operator installer source successor", () => {
       ...plan,
       effects: [
         plan.effects[0],
-        { id: "auth-schema", kind: "install", description: "Prepare Auth" },
+        { description: "Prepare Auth", id: "auth-schema", kind: "install" },
         ...plan.effects.slice(1),
       ],
     });
@@ -316,7 +316,7 @@ describe("hosted operator installer source successor", () => {
       effects: plan.effects.flatMap((effect) =>
         effect.id === "app-install"
           ? [
-              { id: "auth-schema", kind: "install", description: "Prepare shared Auth schema" },
+              { description: "Prepare shared Auth schema", id: "auth-schema", kind: "install" },
               effect,
             ]
           : [effect],

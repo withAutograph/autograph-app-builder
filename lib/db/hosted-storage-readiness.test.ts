@@ -129,10 +129,10 @@ describe("hosted storage read-only readiness", () => {
   it("requires the nullable queued SEND sidecar, check and partial lookup index", async () => {
     const readBack = await exactReadBack();
     expect(readBack.columns).toContainEqual({
-      table: "agent_operation",
       column: "send_cancellation_revision_at_dispatch",
-      type: "integer",
       notNull: false,
+      table: "agent_operation",
+      type: "integer",
     });
     for (const [field, name] of [
       ["columns", "send_cancellation_revision_at_dispatch"],

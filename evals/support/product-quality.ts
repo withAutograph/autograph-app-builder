@@ -1,6 +1,8 @@
 import { validateBuildReadyAppSpec } from "../../lib/agent/app-spec-validation";
 import { isProductFacing, forbiddenPublicVocabulary } from "./public-conversation";
 
+const vendorOnboardingId = "vendor-onboarding";
+
 export interface ProductQualityScenario {
   id:
     | "vendor-onboarding"
@@ -24,9 +26,9 @@ export const PRODUCT_QUALITY_SCENARIOS: readonly ProductQualityScenario[] = [
     brief:
       "Build an internal vendor-onboarding workflow for operations to review new vendor submissions, resolve missing information, and involve Finance when tax verification is actually required.",
     expected: {
-      inferredChoices: ["vendor-onboarding", "operations review queue", "vendor detail panel"],
+      inferredChoices: [vendorOnboardingId, "operations review queue", "vendor detail panel"],
       prototype: {
-        appId: "vendor-onboarding",
+        appId: vendorOnboardingId,
         requiredText: [
           "Operations review queue",
           "Finance: verify tax information",
@@ -41,7 +43,7 @@ export const PRODUCT_QUALITY_SCENARIOS: readonly ProductQualityScenario[] = [
         "conditional Finance verification step",
       ],
     },
-    id: "vendor-onboarding",
+    id: vendorOnboardingId,
   },
   {
     brief:

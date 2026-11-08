@@ -83,13 +83,24 @@ export default defineTool({
       }
       const db = openHostedPostgresDatabase(process.env.DATABASE_URL ?? "");
       await assertPrototypeChunkSchemaReady(db);
-      const recorded = await recordDurablePrototypeChunk({
-        appId,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
+      type DurableChunkInput = Parameters<typeof recordDurablePrototypeChunk>[0];
+      const identity: Pick<DurableChunkInput, "appId" | "baseRevision"> = { appId };
+      if (baseRevision !== undefined) {
+        identity.baseRevision = baseRevision;
+      }
+      const chunk = {
+        ...identity,
         callId: ctx.callId,
         chunkIndex: chunkIndex ?? 0,
         content,
-        ...(existing && isPrototypeArtifactV2(existing) ? { current: existing } : {}),
+      };
+      const previous: Pick<DurableChunkInput, "current"> = {};
+      if (existing && isPrototypeArtifactV2(existing)) {
+        previous.current = existing;
+      }
+      const recorded = await recordDurablePrototypeChunk({
+        ...chunk,
+        ...previous,
         expectedDigest: expectedDigest ?? singleCallDigest ?? "",
         finalChunk: finalChunk ?? true,
         mediaType,
@@ -113,12 +124,23 @@ export default defineTool({
             if (preservesAcceptedWorkflow(current)) {
               return { ...current, artifacts };
             }
-            return {
+            type PreparedState = Extract<
+              ReturnType<typeof appBuilderWorkflowState.get>,
+              { phase: "prepared" }
+            >;
+            const prepared = {
               artifacts,
               phase: "prepared",
               preparedByCallId: current.preparedByCallId,
               sourceReceipt: current.sourceReceipt,
-              ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+            } as const;
+            const source: Pick<PreparedState, "githubSource"> = {};
+            if (current.githubSource !== undefined) {
+              source.githubSource = current.githubSource;
+            }
+            return {
+              ...prepared,
+              ...source,
               version: APP_BUILDER_WORKFLOW_VERSION,
               workspace: current.workspace,
             };
@@ -172,13 +194,16 @@ export default defineTool({
       if (chunkIndex === undefined || finalChunk === undefined) {
         throw new Error("Chunked prototype artifact writes require chunkIndex and finalChunk.");
       }
-      recorded = recordPrototypeArtifactChunk({
+      const chunkInput: Parameters<typeof recordPrototypeArtifactChunk>[0] = {
         ...artifactInput,
         chunkIndex,
         expectedDigest,
         finalChunk,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
-      });
+      };
+      if (baseRevision !== undefined) {
+        chunkInput.baseRevision = baseRevision;
+      }
+      recorded = recordPrototypeArtifactChunk(chunkInput);
       ({ complete } = recorded);
     }
     if (!recorded.reused) {
@@ -189,12 +214,23 @@ export default defineTool({
           if (preservesAcceptedWorkflow(current)) {
             return { ...current, artifacts: recorded.artifacts };
           }
-          return {
+          type PreparedState = Extract<
+            ReturnType<typeof appBuilderWorkflowState.get>,
+            { phase: "prepared" }
+          >;
+          const prepared = {
             artifacts: recorded.artifacts,
             phase: "prepared",
             preparedByCallId: current.preparedByCallId,
             sourceReceipt: current.sourceReceipt,
-            ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+          } as const;
+          const source: Pick<PreparedState, "githubSource"> = {};
+          if (current.githubSource !== undefined) {
+            source.githubSource = current.githubSource;
+          }
+          return {
+            ...prepared,
+            ...source,
             version: APP_BUILDER_WORKFLOW_VERSION,
             workspace: current.workspace,
           };
@@ -223,16 +259,23 @@ export default defineTool({
         );
       });
     }
-    return {
+    const receipt: ReturnType<typeof prototypeArtifactReceipt> & {
+      complete: boolean;
+      reused: boolean;
+      nextChunkIndex?: unknown;
+      invalidated?: boolean;
+    } = {
       ...prototypeArtifactReceipt(recorded.artifact),
       complete,
       reused: recorded.reused,
-      ...("nextChunkIndex" in recorded ? { nextChunkIndex: recorded.nextChunkIndex } : {}),
-      ...(recorded.reused
-        ? {}
-        : { invalidated: !preservesAcceptedWorkflow(current) && current.phase !== "prepared" }),
-      ...planning,
     };
+    if ("nextChunkIndex" in recorded) {
+      receipt.nextChunkIndex = recorded.nextChunkIndex;
+    }
+    if (!recorded.reused) {
+      receipt.invalidated = !preservesAcceptedWorkflow(current) && current.phase !== "prepared";
+    }
+    return { ...receipt, ...planning };
   },
   inputSchema: z
     .object({

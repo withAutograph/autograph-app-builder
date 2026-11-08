@@ -309,7 +309,10 @@ function guidanceForAnswers(canCallTools: boolean, unansweredCount: number) {
   if (!canCallTools) {
     guidance = "Answer in chat to continue.";
   } else if (unansweredCount > 0) {
-    guidance = `Answer ${unansweredCount === 1 ? "the remaining request" : `all ${unansweredCount} remaining requests`} to continue.`;
+    guidance =
+      unansweredCount === 1
+        ? "Answer the remaining request to continue."
+        : `Answer all ${unansweredCount} remaining requests to continue.`;
   }
   return guidance;
 }
@@ -328,9 +331,10 @@ function SessionOutcome({
 }) {
   if (decisionOutcome?.status === "failed") {
     const pullRequestNumber = draftPullRequestNumber(decisionOutcome.request.title);
-    const heading = pullRequestNumber
-      ? `Draft PR ${pullRequestNumber} could not be updated`
-      : "Your response could not be submitted";
+    const heading =
+      (pullRequestNumber ?? "") === ""
+        ? "Your response could not be submitted"
+        : `Draft PR ${pullRequestNumber} could not be updated`;
     return (
       <main className="mcpApp shell outcome outcome--failure" role="alert">
         <span aria-hidden="true">!</span>
@@ -377,7 +381,7 @@ function SessionOutcome({
     }
 
     const pullRequestNumber = draftPullRequestNumber(decisionOutcome.request.title);
-    if (pullRequestNumber) {
+    if ((pullRequestNumber ?? "") !== "") {
       return (
         <main className="mcpApp shell outcome outcome--success" role="status">
           <span aria-hidden="true">✓</span>
@@ -429,7 +433,7 @@ export function IdentityInvitation({
     return (
       <section aria-label="Connect your app account">
         <p role="status">Your sign-in link has expired. Your app and setup progress are saved.</p>
-        {accessUrl ? (
+        {accessUrl === undefined || accessUrl === null || accessUrl === "" ? null : (
           <a
             href={accessUrl}
             target="_blank"
@@ -445,7 +449,7 @@ export function IdentityInvitation({
           >
             Get a new sign-in link in Builder
           </a>
-        ) : null}
+        )}
       </section>
     );
   }
@@ -487,11 +491,15 @@ const useIdentityInvitationTime = (invitations: PublicIdentityInvitation[]) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     if (Number.isFinite(nextExpiry)) {
       timer = setTimeout(
-        () => setClock(Date.now()),
+        () => {
+          setClock(Date.now());
+        },
         Math.min(nextExpiry - Date.now() + 1, 2_147_483_647),
       );
     }
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+    };
   }, [nextExpiry]);
   return now;
 };
@@ -714,16 +722,16 @@ export function SessionAppView({
             type="button"
             className="primary"
             disabled={!complete || !canCallTools || state === "submitting"}
-            aria-describedby={continueGuidance ? "continue-guidance" : undefined}
+            aria-describedby={(continueGuidance ?? "") === "" ? undefined : "continue-guidance"}
             onClick={submit}
           >
             {state === "submitting" ? "Submitting…" : "Continue"}
           </button>
-          {continueGuidance ? (
+          {(continueGuidance ?? "") === "" ? null : (
             <p className="continue-guidance" id="continue-guidance">
               {continueGuidance}
             </p>
-          ) : null}
+          )}
           {submissionError ? (
             <p className="error" role="alert">
               {submissionError}

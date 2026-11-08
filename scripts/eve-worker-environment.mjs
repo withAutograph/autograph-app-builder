@@ -1,15 +1,25 @@
+/// <reference types="node" />
+/// <reference lib="es2023.array" />
+
 import { isIP } from "node:net";
+
+/** @typedef {{ appRoot: string, baseUrl: string, bodyTimeout: string | undefined, developmentSandboxRunId: string | undefined, evaluationRunId: string, headersTimeout: string | undefined, port: string, transportSecret: string, version: 1 }} EveWorkerEnvelope */
+/** @typedef {{ [key: string]: unknown }} UnknownRecord */
+
+/** @param {unknown} value @returns {value is UnknownRecord} */
+const isRecord = (value) => typeof value === "object" && value !== null;
 
 export const eveWorkerEnvelopeKey = "__appBuilderAuthorizedEveWorkerEnvironmentV1";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const transportSecretPattern = /^[A-Za-z0-9_-]{43}$/u;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function fail(field) {
+/** @param {string} field @returns {never} */
+const fail = (field) => {
   throw new Error(`The trusted Eve worker ${field} was invalid.`);
-}
+};
 
+/** @param {string} hostname - Hostname to check for a loopback address. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validLoopbackHostname(hostname) {
   const normalized = hostname.startsWith("[") ? hostname.slice(1, -1) : hostname;
@@ -22,6 +32,7 @@ function validLoopbackHostname(hostname) {
   return normalized.split(".")[0] === "127";
 }
 
+/** @param {unknown} value - Candidate local workflow URL. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateBaseUrl(value) {
   if (typeof value !== "string") {
@@ -33,17 +44,31 @@ function validateBaseUrl(value) {
   } catch {
     fail("base URL");
   }
-  if (
-    url.protocol !== "http:" ||
-    !validLoopbackHostname(url.hostname) ||
-    url.username !== "" ||
-    url.password !== "" ||
-    url.pathname !== "/" ||
-    url.search !== "" ||
-    url.hash !== "" ||
-    url.port === "" ||
-    url.origin !== value
-  ) {
+  if (url.protocol !== "http:") {
+    fail("base URL");
+  }
+  if (!validLoopbackHostname(url.hostname)) {
+    fail("base URL");
+  }
+  if (url.username !== "") {
+    fail("base URL");
+  }
+  if (url.password !== "") {
+    fail("base URL");
+  }
+  if (url.pathname !== "/") {
+    fail("base URL");
+  }
+  if (url.search !== "") {
+    fail("base URL");
+  }
+  if (url.hash !== "") {
+    fail("base URL");
+  }
+  if (url.port === "") {
+    fail("base URL");
+  }
+  if (url.origin !== value) {
     fail("base URL");
   }
   const port = Number(url.port);
@@ -53,17 +78,19 @@ function validateBaseUrl(value) {
   return { baseUrl: url.origin, port: String(port) };
 }
 
+/** @param {unknown} value @param {string} field @param {boolean} [optional] */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateUuid(value, field, optional = false) {
-  if (value === undefined && optional) {
-    return;
-  }
-  if (typeof value !== "string" || !uuidPattern.test(value)) {
+  if (
+    !(value === undefined && optional) &&
+    (typeof value !== "string" || !uuidPattern.test(value))
+  ) {
     fail(field);
   }
   return value;
 }
 
+/** @param {unknown} value - Candidate transport secret. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateTransportSecret(value) {
   if (
@@ -77,19 +104,18 @@ function validateTransportSecret(value) {
   return value;
 }
 
+/** @param {unknown} value @param {string} field */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateWorkflowTimeout(value, field) {
-  if (value === undefined) {
-    return;
-  }
   // Eve 0.68 explicitly sets zero for its default unbounded local delivery.
-  if (value !== "0" && value !== "360000") {
+  if (value !== undefined && value !== "0" && value !== "360000") {
     fail(field);
   }
   return value;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+/** @param {UnknownRecord | null | undefined} source @param {string} expectedAppRoot */
 export function captureEveWorkerEnvelope(source, expectedAppRoot) {
   if (source === undefined || source === null) {
     fail("explicit environment");
@@ -128,27 +154,29 @@ export function captureEveWorkerEnvelope(source, expectedAppRoot) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+/** @param {Record<string, string | undefined>} environment @param {unknown} value @param {string} expectedAppRoot */
 export function installEveWorkerEnvelope(environment, value, expectedAppRoot) {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Object.keys(value).toSorted().join(",") !==
-      [
-        "appRoot",
-        "baseUrl",
-        "bodyTimeout",
-        "developmentSandboxRunId",
-        "evaluationRunId",
-        "headersTimeout",
-        "port",
-        "transportSecret",
-        "version",
-      ]
-        .toSorted()
-        .join(",") ||
-    value.version !== 1 ||
-    value.appRoot !== expectedAppRoot
-  ) {
+  if (!isRecord(value)) {
+    fail("envelope");
+  }
+  const expectedKeys = [
+    "appRoot",
+    "baseUrl",
+    "bodyTimeout",
+    "developmentSandboxRunId",
+    "evaluationRunId",
+    "headersTimeout",
+    "port",
+    "transportSecret",
+    "version",
+  ];
+  if (Object.keys(value).toSorted().join(",") !== expectedKeys.toSorted().join(",")) {
+    fail("envelope");
+  }
+  if (value.version !== 1) {
+    fail("envelope");
+  }
+  if (value.appRoot !== expectedAppRoot) {
     fail("envelope");
   }
   const captured = captureEveWorkerEnvelope(

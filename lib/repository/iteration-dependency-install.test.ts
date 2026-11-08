@@ -133,8 +133,8 @@ const fixture = (
     execute,
     failure,
     policies,
-    sandbox,
     proposal,
+    sandbox,
   };
 };
 

@@ -198,7 +198,7 @@ const readManifestEnvelope = async (input: {
   ) {
     throw operatorArtifactUnavailable();
   }
-  return { manifest, bytes };
+  return { bytes, manifest };
 };
 
 export const readTenantExportManifest = async (
@@ -331,7 +331,7 @@ export const createTenantExportArtifacts = (dependencies: {
     }): Promise<TenantExportCompletion> {
       const worker = tenantExportWorkerInputSchema.parse(input.worker);
       assertScope(input.context, worker);
-      const assertCurrent = input.assertCurrent;
+      const { assertCurrent } = input;
       await assertCurrent();
       const existing = await inspect({ ...input, worker });
       if (existing.status === "unknown") {

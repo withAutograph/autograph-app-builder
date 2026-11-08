@@ -27,7 +27,7 @@ const scope = {
   provisioningRequestId: "8b22a6b1-33b9-4bdd-a152-f00e5fa373d9",
   provisioningDigest: "a".repeat(64),
 };
-const expected = { adapterSessionId: "native", adapterGeneration: 1, cancellationRevision: 0 };
+const expected = { adapterGeneration: 1, adapterSessionId: "native", cancellationRevision: 0 };
 const input = {
   sessionId: "saved",
   scope,
@@ -37,7 +37,7 @@ const input = {
 };
 const setup = () => {
   let choice: string | undefined;
-  const assertCurrent = vi.fn<() => Promise<void>>().mockImplementation(() => Promise.resolve());
+  const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
   const readOrigins = vi
     .fn<() => Promise<string[]>>()
     .mockResolvedValue(["https://first.example", "https://second.example"]);
@@ -75,9 +75,9 @@ describe("normal saved-app public origin choice", () => {
   it("lists eligible domains and saves an explicit verified choice without provisioning or transferring an approval", async () => {
     const f = setup();
     expect(await f.service.read(principal, "saved")).toMatchObject({
-      scope,
       expected,
       origins: ["https://first.example", "https://second.example"],
+      scope,
       selectedPublicOrigin: null,
     });
     await f.service.select(principal, input);
@@ -86,9 +86,9 @@ describe("normal saved-app public origin choice", () => {
     expect(f.store.select).toHaveBeenCalledWith(
       expect.objectContaining({
         authority,
-        scope,
         expectedPublicOrigin: null,
         publicOrigin: input.publicOrigin,
+        scope,
       }),
     );
   });
@@ -130,7 +130,7 @@ describe("public origin Server Action boundary", () => {
   it("uses current authenticated owner authority and rejects foreign origins before opening data", async () => {
     const select = vi
       .fn<ReturnType<typeof createBuilderPublicOriginService>["select"]>()
-      .mockImplementation(() => Promise.resolve());
+      .mockResolvedValue();
     const open = vi.fn().mockResolvedValue({ principal, publicOrigins: { select } });
     const refresh = vi.fn<() => void>();
     const action = createBuilderPublicOriginAction({

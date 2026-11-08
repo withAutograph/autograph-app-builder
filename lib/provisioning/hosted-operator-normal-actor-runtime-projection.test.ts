@@ -13,17 +13,17 @@ const program = () =>
     appId: "diverse-app",
     origin: "https://actual-preview.example.test",
     actors: ["owner", "second-owner", "shared", "no-access", "unassigned"].map((actorKey) => ({
+      account: "capture-existing",
       actorKey,
       email: `${actorKey}@example.test`,
       name: actorKey,
-      account: "capture-existing",
     })),
     organizations: [
-      { organizationId: "actual-first-org", ownerActorKey: "owner", name: "First", slug: "first" },
+      { name: "First", organizationId: "actual-first-org", ownerActorKey: "owner", slug: "first" },
       {
+        name: "Second",
         organizationId: "actual-second-org",
         ownerActorKey: "second-owner",
-        name: "Second",
         slug: "second",
       },
     ],
@@ -117,7 +117,7 @@ const completed = () => {
       ],
     },
   }));
-  return { program: approved, state, operationRef };
+  return { operationRef, program: approved, state };
 };
 
 describe("actual normal actor runtime projection", () => {
@@ -128,8 +128,8 @@ describe("actual normal actor runtime projection", () => {
     expect(rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          actorKey: "owner",
           actorId: "verified-owner-id",
+          actorKey: "owner",
           organizationId: "actual-first-org",
           roles: ["reviewer"],
         }),
@@ -184,7 +184,7 @@ describe("actual normal actor runtime projection", () => {
     const fixture = completed();
     const state = initialNormalActorState(approved, operationRef);
     state.actors = fixture.state.actors.filter((actor) => actor.actorKey === "unassigned");
-    const projection = projectNormalActorRuntime({ program: approved, state, operationRef });
+    const projection = projectNormalActorRuntime({ operationRef, program: approved, state });
     expect(projection.identities.actors).toEqual([
       expect.objectContaining({ actorKey: "unassigned", organizationId: null, roles: [] }),
     ]);
@@ -216,15 +216,21 @@ describe("actual normal actor runtime projection", () => {
     "rejects a scoped session with a changed actual %s",
     (kind) => {
       const fixture = completed();
-      fixture.state.organizationSessions = fixture.state.organizationSessions?.map((entry) => ({
-        ...entry,
-        session: {
-          ...entry.session,
-          ...(kind === "actor" ? { actorId: "other-real-user" } : {}),
-          ...(kind === "origin" ? { origin: "https://other.example.test" } : {}),
-          ...(kind === "active-organization" ? { activeOrganizationId: "other-real-org" } : {}),
-        },
-      }));
+      fixture.state.organizationSessions = fixture.state.organizationSessions?.map((entry) => {
+        const updated = { ...entry };
+        const session = { ...entry.session };
+        if (kind === "actor") {
+          session.actorId = "other-real-user";
+        }
+        if (kind === "origin") {
+          session.origin = "https://other.example.test";
+        }
+        if (kind === "active-organization") {
+          session.activeOrganizationId = "other-real-org";
+        }
+        updated.session = session;
+        return updated;
+      });
       expect(() => projectNormalActorRuntime(fixture)).toThrow("normal_actor_program_mismatch");
     },
   );

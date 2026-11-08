@@ -18,13 +18,10 @@ function git(repositoryRoot: string, args: string[]) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalTrackedPath(path: string) {
-  return (
-    path !== "" &&
-    !path.startsWith("/") &&
-    !path.includes("\\") &&
-    !path.includes("\0") &&
-    path.split("/").every((part) => part !== "" && part !== "." && part !== "..")
-  );
+  if (path === "" || path.startsWith("/") || path.includes("\\") || path.includes("\0")) {
+    return false;
+  }
+  return path.split("/").every((part) => part !== "" && part !== "." && part !== "..");
 }
 
 /** Reads one exact regular file from an immutable Git tree, never the checkout. */

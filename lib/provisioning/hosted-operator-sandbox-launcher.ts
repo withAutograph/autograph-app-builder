@@ -86,6 +86,20 @@ const VENDOR_COMMAND = "protected-materialize";
 const GENERATED_COMMAND = "protected-generated-app-install";
 const GENERATED_INSPECT_COMMAND = "protected-generated-app-install-readback";
 const AUTH_COMMAND = "auth-protected-schema";
+const APP_INTEGRATION_SCOPE = "app-integration-bootstrap-v1";
+const CENTRAL_INTEGRATION_SCOPE = "central-integration-bootstrap-v1";
+const AUTH_APP_ACCESS_SCOPE = "auth-app-access-v1";
+const INTEGRATION_FENCE_COMMAND = "integration-fence-app-authority";
+const INTEGRATION_FENCE_READBACK_COMMAND = "integration-fence-app-authority-readback";
+const CENTRAL_INTEGRATION_SCHEMA_COMMAND = "central-integration-schema";
+const GENERATED_APP_INSTALLER_ID = "generated-app-protected-installer-v1";
+const APPROVED_ACCESS_PLAN_FILE = "approved-access-plan.json";
+const ACCESS_CONNECTIONS_FILE = "access-connections.json";
+const OPERATOR_PLAN_FILE = "operator-plan.json";
+const MEMBERSHIP_EFFECT_FILE = "membership-effect.json";
+const AUTH_DATABASE_RESOURCE_FILE = "auth-database-resource.json";
+const REALM_IDENTITY_PROOF_FILE = "realm-identity-proof.json";
+const GATEWAY_READBACK_OIDC_FILE = "gateway-readback-oidc.json";
 export const GENERATED_RELEASE_MEMBERS = [
   "app-artifact.json",
   "cue-to-sql-source-map.json",
@@ -151,9 +165,9 @@ const workerScopeSchema = z.enum([
   MEMBERSHIP_SCOPE,
   RESOURCES_SCOPE,
   ACCESS_SCOPE,
-  "app-integration-bootstrap-v1",
-  "central-integration-bootstrap-v1",
-  "auth-app-access-v1",
+  APP_INTEGRATION_SCOPE,
+  CENTRAL_INTEGRATION_SCOPE,
+  AUTH_APP_ACCESS_SCOPE,
 ]);
 const workerSubcommandSchema = z.enum([
   HC_COMMAND,
@@ -172,13 +186,13 @@ const workerSubcommandSchema = z.enum([
   GENERATED_INSPECT_COMMAND,
   "integration-control-schema",
   "integration-control-schema-readback",
-  "integration-fence-app-authority",
-  "integration-fence-app-authority-readback",
+  INTEGRATION_FENCE_COMMAND,
+  INTEGRATION_FENCE_READBACK_COMMAND,
   "integration-service-memberships",
   "integration-service-memberships-readback",
   "integration-register-central-app",
   "integration-register-central-app-readback",
-  "central-integration-schema",
+  CENTRAL_INTEGRATION_SCHEMA_COMMAND,
   "central-integration-schema-readback",
   "central-integration-source-capture",
   "auth-protected-app-access",
@@ -812,7 +826,7 @@ const requestMatchesWorkerScope = (
   context: WorkerContext,
   worker: ProtectedInstallerWorkerDescriptor,
 ) => {
-  if (worker.operationScope === "auth-app-access-v1") {
+  if (worker.operationScope === AUTH_APP_ACCESS_SCOPE) {
     return effectId === "auth-app-invitation" && tenantId === null;
   }
   if (worker.operationScope === RESOURCES_SCOPE) {
@@ -826,18 +840,18 @@ const requestMatchesWorkerScope = (
         : ["resources:roles", "resources:database", "resources:acl"].includes(effectId))
     );
   }
-  if (worker.operationScope === "central-integration-bootstrap-v1") {
+  if (worker.operationScope === CENTRAL_INTEGRATION_SCOPE) {
     return (
       "kind" in context &&
       context.kind === "central_integration_schema" &&
       context.app_id === "integrations" &&
       context.tenant_targets.length === 0 &&
       tenantId === null &&
-      worker.subcommand === "central-integration-schema" &&
+      worker.subcommand === CENTRAL_INTEGRATION_SCHEMA_COMMAND &&
       effectId === "install-central-schema"
     );
   }
-  if (worker.operationScope === "app-integration-bootstrap-v1") {
+  if (worker.operationScope === APP_INTEGRATION_SCOPE) {
     const effects = {
       "integration-control-schema": "install-control-schema",
       "integration-service-memberships": "bind-service-memberships",
@@ -1106,7 +1120,7 @@ const runSandboxWorker = async (
     (access &&
       (worker.operationScope !== ACCESS_SCOPE ||
         input.database !== "appDatabase" ||
-        worker.id !== "generated-app-protected-installer-v1")) ||
+        worker.id !== GENERATED_APP_INSTALLER_ID)) ||
     (resources &&
       input.effect.kind === "retire" &&
       (input.plan.action !== "cleanup" || input.database !== "appDatabase")) ||
@@ -1580,7 +1594,7 @@ const runPinnedFileSpoolTransport = async (
         throw unknownSeen ? reconciliationRequired() : resourceMismatch();
       }
       await assertCurrent();
-      if (worker.subcommand === "integration-fence-app-authority") {
+      if (worker.subcommand === INTEGRATION_FENCE_COMMAND) {
         if (
           setup.authorizeAppIntegrationRemoval === undefined ||
           request.effect_id !== "fence-app-integration-authority" ||
@@ -1747,29 +1761,28 @@ const runPinnedFileSpoolTransport = async (
       const allowed = new Set([
         ...(input.repositoryProduction
           ? [
-              "approved-access-plan.json",
-              "access-connections.json",
-              "operator-plan.json",
-              "membership-effect.json",
-              "auth-database-resource.json",
-              "realm-identity-proof.json",
-              "gateway-readback-oidc.json",
+              APPROVED_ACCESS_PLAN_FILE,
+              ACCESS_CONNECTIONS_FILE,
+              OPERATOR_PLAN_FILE,
+              MEMBERSHIP_EFFECT_FILE,
+              AUTH_DATABASE_RESOURCE_FILE,
+              REALM_IDENTITY_PROOF_FILE,
+              GATEWAY_READBACK_OIDC_FILE,
             ]
           : []),
         "app-integration-approved-plan.json",
         "app-integration-connections.json",
         "app-integration-authority.json",
-        ...([
-          "integration-fence-app-authority",
-          "integration-fence-app-authority-readback",
-        ].includes(worker.subcommand)
+        ...([INTEGRATION_FENCE_COMMAND, INTEGRATION_FENCE_READBACK_COMMAND].includes(
+          worker.subcommand,
+        )
           ? [
               "app-integration-removal-approved-plan.json",
               "app-integration-removal-source-plan.json",
               "app-integration-removal-connections.json",
             ]
           : []),
-        ...(worker.operationScope === "central-integration-bootstrap-v1"
+        ...(worker.operationScope === CENTRAL_INTEGRATION_SCOPE
           ? ["central-integration-approved-plan.json", "central-integration-connections.json"]
           : []),
       ]);
@@ -1798,8 +1811,8 @@ const runPinnedFileSpoolTransport = async (
       );
     }
     if (membership && input.membershipProof !== undefined) {
-      const legacyPlan = input.legacyPlan;
-      const legacyEffect = input.legacyEffect;
+      const { legacyPlan } = input;
+      const { legacyEffect } = input;
       if (legacyPlan === undefined || legacyEffect === undefined) {
         throw resourceMismatch();
       }
@@ -1819,7 +1832,7 @@ const runPinnedFileSpoolTransport = async (
           {
             content: Buffer.from(JSON.stringify(legacyPlan)),
             mode: 0o600,
-            path: path.posix.join(startup, "operator-plan.json"),
+            path: path.posix.join(startup, OPERATOR_PLAN_FILE),
           },
           {
             content: Buffer.from(
@@ -1830,7 +1843,7 @@ const runPinnedFileSpoolTransport = async (
               }),
             ),
             mode: 0o600,
-            path: path.posix.join(startup, "membership-effect.json"),
+            path: path.posix.join(startup, MEMBERSHIP_EFFECT_FILE),
           },
           {
             content: Buffer.from(
@@ -1850,7 +1863,7 @@ const runPinnedFileSpoolTransport = async (
               }),
             ),
             mode: 0o600,
-            path: path.posix.join(startup, "auth-database-resource.json"),
+            path: path.posix.join(startup, AUTH_DATABASE_RESOURCE_FILE),
           },
           ...(input.membershipProof.proof === undefined
             ? []
@@ -1858,20 +1871,20 @@ const runPinnedFileSpoolTransport = async (
                 {
                   content: Buffer.from(JSON.stringify({ proof: input.membershipProof.proof })),
                   mode: 0o600,
-                  path: path.posix.join(startup, "realm-identity-proof.json"),
+                  path: path.posix.join(startup, REALM_IDENTITY_PROOF_FILE),
                 },
               ]),
           {
             content: Buffer.from(JSON.stringify({ token: input.membershipProof.oidcToken })),
             mode: 0o600,
-            path: path.posix.join(startup, "gateway-readback-oidc.json"),
+            path: path.posix.join(startup, GATEWAY_READBACK_OIDC_FILE),
           },
         ],
         { signal },
       );
     }
     if (authPlanBytes !== undefined) {
-      const legacyPlan = input.legacyPlan;
+      const { legacyPlan } = input;
       if (legacyPlan === undefined) {
         throw resourceMismatch();
       }
@@ -1880,7 +1893,7 @@ const runPinnedFileSpoolTransport = async (
           {
             content: Buffer.from(JSON.stringify(legacyPlan)),
             mode: 0o600,
-            path: path.posix.join(startup, "operator-plan.json"),
+            path: path.posix.join(startup, OPERATOR_PLAN_FILE),
           },
         ],
         { signal },
@@ -1902,13 +1915,13 @@ const runPinnedFileSpoolTransport = async (
       (worker.operationScope === GENERATED_APP_SCOPE || needsAccessConnections) &&
       !input.repositoryProduction
     ) {
-      const legacyPlan = input.legacyPlan;
+      const { legacyPlan } = input;
       if (legacyPlan === undefined) {
         throw resourceMismatch();
       }
       const files = [
         {
-          path: path.posix.join(startup, "approved-access-plan.json"),
+          path: path.posix.join(startup, APPROVED_ACCESS_PLAN_FILE),
           content: Buffer.from(JSON.stringify(legacyPlan)),
           mode: 0o600,
         },
@@ -1922,7 +1935,7 @@ const runPinnedFileSpoolTransport = async (
           throw resourceMismatch();
         }
         files.push({
-          path: path.posix.join(startup, "access-connections.json"),
+          path: path.posix.join(startup, ACCESS_CONNECTIONS_FILE),
           content: Buffer.from(JSON.stringify(input.accessConnections)),
           mode: 0o600,
         });
@@ -2003,25 +2016,23 @@ const runPinnedFileSpoolTransport = async (
     }
     execution.stage = "readback";
     if (
-      (input.readbackOnly === true || worker.operationScope === "auth-app-access-v1") &&
+      (input.readbackOnly === true || worker.operationScope === AUTH_APP_ACCESS_SCOPE) &&
       (access ||
         installReadback ||
         membership ||
-        worker.operationScope === "app-integration-bootstrap-v1" ||
-        worker.operationScope === "central-integration-bootstrap-v1" ||
-        worker.operationScope === "auth-app-access-v1")
+        worker.operationScope === APP_INTEGRATION_SCOPE ||
+        worker.operationScope === CENTRAL_INTEGRATION_SCOPE ||
+        worker.operationScope === AUTH_APP_ACCESS_SCOPE)
     ) {
       await assertCurrent();
       const raw = await readSpoolJson(sandbox, path.posix.join(spool, "readback.json"), signal);
       /* oxlint-disable eslint/no-nested-ternary, sonarjs/no-nested-conditional -- Preserve the existing three wire-protocol readback selections. */
       const schema =
-        worker.subcommand === "integration-fence-app-authority-readback"
+        worker.subcommand === INTEGRATION_FENCE_READBACK_COMMAND
           ? removalReadbackSchema
-          : ["app-integration-bootstrap-v1", "central-integration-bootstrap-v1"].includes(
-                worker.operationScope,
-              )
+          : [APP_INTEGRATION_SCOPE, CENTRAL_INTEGRATION_SCOPE].includes(worker.operationScope)
             ? accessReadbackSchema.extend({ receipt: z.unknown() })
-            : worker.operationScope === "auth-app-access-v1"
+            : worker.operationScope === AUTH_APP_ACCESS_SCOPE
               ? accessReadbackSchema.extend({ result: z.json() })
               : accessReadbackSchema;
       /* oxlint-enable eslint/no-nested-ternary, sonarjs/no-nested-conditional */
@@ -2142,8 +2153,8 @@ export const runAppIntegrationFileSpool = async (
     .parse(input.worker);
   if (
     !(
-      (worker.operationScope === "app-integration-bootstrap-v1" &&
-        worker.id === "app-integration-bootstrap-v1" &&
+      (worker.operationScope === APP_INTEGRATION_SCOPE &&
+        worker.id === APP_INTEGRATION_SCOPE &&
         !("kind" in input.context)) ||
       (worker.operationScope === RESOURCES_SCOPE &&
         "kind" in input.context &&
@@ -2152,13 +2163,13 @@ export const runAppIntegrationFileSpool = async (
         input.context.resource.scope === "integration_control_database" &&
         [RESOURCES_COMMAND, RESOURCES_INSPECT_COMMAND].includes(worker.subcommand) &&
         input.resourceCredentialBytes !== undefined) ||
-      (worker.operationScope === "central-integration-bootstrap-v1" &&
-        worker.id === "central-integration-bootstrap-v1" &&
+      (worker.operationScope === CENTRAL_INTEGRATION_SCOPE &&
+        worker.id === CENTRAL_INTEGRATION_SCOPE &&
         "kind" in input.context &&
         input.context.app_id === "integrations" &&
         input.context.tenant_targets.length === 0 &&
         ((input.context.kind === "central_integration_schema" &&
-          ["central-integration-schema", "central-integration-schema-readback"].includes(
+          [CENTRAL_INTEGRATION_SCHEMA_COMMAND, "central-integration-schema-readback"].includes(
             worker.subcommand,
           )) ||
           (input.context.kind === "central_source_capture" &&
@@ -2180,14 +2191,14 @@ export const runAppIntegrationFileSpool = async (
   ) {
     throw resourceMismatch();
   }
-  const removal = worker.subcommand === "integration-fence-app-authority";
+  const removal = worker.subcommand === INTEGRATION_FENCE_COMMAND;
   if (
     (removal && (!input.authorizeAppIntegrationRemoval || input.readOnly)) ||
     (!removal && input.authorizeAppIntegrationRemoval !== undefined)
   ) {
     throw resourceMismatch();
   }
-  const context = input.context;
+  const { context } = input;
   if (context.installer.id !== worker.id || context.installer.sha256 !== worker.sha256) {
     throw resourceMismatch();
   }
@@ -2279,7 +2290,7 @@ export const runCentralIntegrationFileSpool = async (
   dependencies: Parameters<typeof runAppIntegrationFileSpool>[2] = {},
 ) => {
   if (
-    input.worker.operationScope !== "central-integration-bootstrap-v1" ||
+    input.worker.operationScope !== CENTRAL_INTEGRATION_SCOPE ||
     !["central_integration_schema", "central_source_capture"].includes(input.context.kind)
   ) {
     throw resourceMismatch();
@@ -2321,13 +2332,13 @@ export const runRepositoryProductionFileSpool = async (
     },
     schema: {
       scope: GENERATED_APP_SCOPE,
-      id: "generated-app-protected-installer-v1",
+      id: GENERATED_APP_INSTALLER_ID,
       command: GENERATED_COMMAND,
       read: GENERATED_INSPECT_COMMAND,
     },
     access: {
       scope: ACCESS_SCOPE,
-      id: "generated-app-protected-installer-v1",
+      id: GENERATED_APP_INSTALLER_ID,
       command: ACCESS_COMMAND,
       read: ACCESS_INSPECT_COMMAND,
     },
@@ -2338,8 +2349,8 @@ export const runRepositoryProductionFileSpool = async (
       read: MEMBERSHIP_INSPECT_COMMAND,
     },
     "auth-management": {
-      scope: "auth-app-access-v1",
-      id: "auth-app-access-v1",
+      scope: AUTH_APP_ACCESS_SCOPE,
+      id: AUTH_APP_ACCESS_SCOPE,
       command: "auth-protected-app-access",
       read: "auth-protected-app-access-readback",
     },
@@ -2377,20 +2388,20 @@ export const runRepositoryProductionFileSpool = async (
   let required: string[];
   if (input.operation === "membership") {
     required = [
-      "operator-plan.json",
-      "membership-effect.json",
-      "auth-database-resource.json",
-      "realm-identity-proof.json",
-      "gateway-readback-oidc.json",
+      OPERATOR_PLAN_FILE,
+      MEMBERSHIP_EFFECT_FILE,
+      AUTH_DATABASE_RESOURCE_FILE,
+      REALM_IDENTITY_PROOF_FILE,
+      GATEWAY_READBACK_OIDC_FILE,
     ];
   } else if (input.operation === "auth-management") {
-    required = ["operator-plan.json", "auth-database-resource.json"];
+    required = [OPERATOR_PLAN_FILE, AUTH_DATABASE_RESOURCE_FILE];
   } else if (input.operation === "storage") {
     required = [];
   } else {
-    required = ["approved-access-plan.json"];
+    required = [APPROVED_ACCESS_PLAN_FILE];
     if (input.operation === "access" || input.readOnly) {
-      required.push("access-connections.json");
+      required.push(ACCESS_CONNECTIONS_FILE);
     }
   }
   const allowed = new Set(required);

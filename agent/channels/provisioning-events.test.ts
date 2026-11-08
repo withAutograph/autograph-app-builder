@@ -63,9 +63,9 @@ const auth: SessionAuthContext = {
 };
 const request = () =>
   new Request("https://builder.example.test/eve/v1/internal/hosted-operator/realm-continuation", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify({ authority, dispatchId, version: 1 }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
   });
 const fixture = () => {
   const delivered = new Set<string>();
@@ -73,7 +73,7 @@ const fixture = () => {
   const dependencies = {
     authorize: vi
       .fn<ProvisioningEventRouteDependencies["authorize"]>()
-      .mockResolvedValue({ claim, auth }),
+      .mockResolvedValue({ auth, claim }),
     findObsoleteAuthWait: vi
       .fn<ProvisioningEventRouteDependencies["findObsoleteAuthWait"]>()
       .mockResolvedValue({ requestId: "legacy-auth-wait" }),
@@ -120,7 +120,7 @@ const fixture = () => {
       .mockResolvedValue([{ requestId: "legacy-auth-wait" }]),
     respond: vi
       .fn<ProvisioningEventRouteDependencies["respond"]>()
-      .mockResolvedValue({ status: "accepted", sessionId: claim.adapterSessionId }),
+      .mockResolvedValue({ sessionId: claim.adapterSessionId, status: "accepted" }),
   } satisfies ProvisioningEventRouteDependencies;
   return { dependencies, handlers: createProvisioningEventHandlers(dependencies) };
 };
@@ -130,7 +130,7 @@ describe("authored identity hook delivery", () => {
     const { dependencies } = fixture();
     const readIdentityWait = vi
       .fn<NonNullable<ProvisioningEventRouteDependencies["readIdentityWait"]>>()
-      .mockResolvedValue({ token: "private-hook", eventId: dispatchId, observed: false });
+      .mockResolvedValue({ eventId: dispatchId, observed: false, token: "private-hook" });
     const resumeIdentityWait = vi
       .fn<NonNullable<ProvisioningEventRouteDependencies["resumeIdentityWait"]>>()
       .mockResolvedValue();
@@ -153,9 +153,9 @@ describe("authored identity hook delivery", () => {
     await handlers.dispatch(request(), attachSession);
     expect(resumeIdentityWait).toHaveBeenCalledTimes(1);
     readIdentityWait.mockResolvedValue({
-      token: "private-hook",
       eventId: dispatchId,
       observed: true,
+      token: "private-hook",
     });
     const reconciled = await handlers.reconcile(request(), attachSession);
     expect(await reconciled.json()).toMatchObject({ status: "accepted" });
@@ -166,7 +166,7 @@ describe("authored identity hook delivery", () => {
     const { dependencies } = fixture();
     const readIdentityWait = vi
       .fn<NonNullable<ProvisioningEventRouteDependencies["readIdentityWait"]>>()
-      .mockResolvedValue({ token: "private-hook", eventId: dispatchId, observed: false });
+      .mockResolvedValue({ eventId: dispatchId, observed: false, token: "private-hook" });
     const resumeIdentityWait = vi
       .fn<NonNullable<ProvisioningEventRouteDependencies["resumeIdentityWait"]>>()
       .mockRejectedValue(new Error("hook delivery outcome unknown"));
@@ -192,7 +192,7 @@ describe("authored identity hook delivery", () => {
       ...dependencies,
       readIdentityWait: vi
         .fn<NonNullable<ProvisioningEventRouteDependencies["readIdentityWait"]>>()
-        .mockResolvedValue({ token: "private-hook", eventId: "f".repeat(64), observed: false }),
+        .mockResolvedValue({ eventId: "f".repeat(64), observed: false, token: "private-hook" }),
       resumeIdentityWait,
     });
     const response = await handlers.dispatch(request(), attachSession);
@@ -207,23 +207,23 @@ describe("private Realm continuation event handlers", () => {
   it.each([
     new Request("https://builder.example.test/internal/hosted-operator/realm-continuation"),
     new Request("https://builder.example.test/internal/hosted-operator/realm-continuation", {
-      method: "POST",
       body: "{}",
+      method: "POST",
     }),
     new Request("https://builder.example.test/internal/hosted-operator/realm-continuation", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       body: "not-json",
+      headers: { "content-type": "application/json" },
+      method: "POST",
     }),
     new Request("https://builder.example.test/internal/hosted-operator/realm-continuation", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify({ authority, dispatchId: "invalid", version: 1 }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
     }),
     new Request("https://builder.example.test/internal/hosted-operator/realm-continuation", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify({ authority: "x".repeat(16_385), dispatchId, version: 1 }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
     }),
   ])("rejects malformed input before authorization", async (invalid) => {
     const { dependencies, handlers } = fixture();
@@ -273,11 +273,11 @@ describe("private Realm continuation event handlers", () => {
     const { dependencies, handlers } = fixture();
     dependencies.respond.mockRejectedValue(new Error("connection interrupted after dispatch"));
     const first = await handlers.dispatch(request(), attachSession);
-    expect(await first.json()).toMatchObject({ status: "unknown", dispatchId });
+    expect(await first.json()).toMatchObject({ dispatchId, status: "unknown" });
     const readback = await handlers.reconcile(request(), attachSession);
-    expect(await readback.json()).toMatchObject({ status: "unknown", dispatchId });
+    expect(await readback.json()).toMatchObject({ dispatchId, status: "unknown" });
     const duplicate = await handlers.dispatch(request(), attachSession);
-    expect(await duplicate.json()).toMatchObject({ status: "unknown", dispatchId });
+    expect(await duplicate.json()).toMatchObject({ dispatchId, status: "unknown" });
     expect(dependencies.respond).toHaveBeenCalledTimes(1);
   });
 
@@ -329,7 +329,7 @@ describe("private Realm continuation event handlers", () => {
       ...claim,
       reason: { kind: "expired-technical-wait" as const, expiresAt: "2026-10-15T00:00:00.000Z" },
     };
-    dependencies.authorize.mockResolvedValue({ claim: expiredClaim, auth });
+    dependencies.authorize.mockResolvedValue({ auth, claim: expiredClaim });
     const response = await handlers.dispatch(request(), attachSession);
     expect(response.status).toBe(200);
     const [[, event]] = dependencies.respond.mock.calls;
@@ -446,8 +446,8 @@ const streamSession = (events: NativeEvent[], live = false) => {
       ) => Promise<{ status: "accepted"; sessionId: string }>
     >()
     .mockResolvedValue({
-      status: "accepted",
       sessionId: claim.adapterSessionId,
+      status: "accepted",
     });
   const getStreamTailIndex = vi
     .fn<NativeSession["getStreamTailIndex"]>()
@@ -490,7 +490,7 @@ describe("exact legacy technical response and owner proof", () => {
           }),
         );
       }
-      return Promise.resolve({ status: "accepted", sessionId: claim.adapterSessionId });
+      return Promise.resolve({ sessionId: claim.adapterSessionId, status: "accepted" });
     });
     dependencies.respond.mockImplementation(respondToRealmContinuationWait);
     dependencies.wasAccepted.mockImplementation(wasRealmContinuationResponseApplied);
@@ -518,7 +518,7 @@ describe("exact legacy technical response and owner proof", () => {
     const native = streamSession(events, true);
     native.respond.mockImplementation((responses) => {
       events.push(nativeEvent({ type: "message.received", data: { message: responses[0]?.text } }));
-      return Promise.resolve({ status: "accepted", sessionId: claim.adapterSessionId });
+      return Promise.resolve({ sessionId: claim.adapterSessionId, status: "accepted" });
     });
     dependencies.respond.mockImplementation(respondToRealmContinuationWait);
     dependencies.wasAccepted.mockImplementation(wasRealmContinuationResponseApplied);
@@ -583,11 +583,13 @@ describe("exact legacy technical response and owner proof", () => {
         throw new Error("Expected submitted technical response.");
       }
       const [, submitted] = submittedCall;
-      const response = {
-        ...submitted,
-        ...(variant === "wrong-text" ? { text: "different" } : {}),
-        ...(variant === "approval-option" ? { optionId: "approve" } : {}),
-      };
+      const response: InputResponse = { ...submitted };
+      if (variant === "wrong-text") {
+        response.text = "different";
+      }
+      if (variant === "approval-option") {
+        response.optionId = "approve";
+      }
       const events = [
         nativeEvent(
           variant === "message-only"

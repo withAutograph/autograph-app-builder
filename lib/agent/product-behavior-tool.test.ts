@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import verifyAppBehavior from "../../agent/tools/verify_app_behavior";
+import { createVerifyAppBehaviorTool } from "../../agent/tools/verify_app_behavior";
+import { executeProductReadback } from "./product-behavior";
+import { workingPreviewState } from "./working-preview-state";
+
+type Dependencies = Parameters<typeof createVerifyAppBehaviorTool>[0];
 
 const mocks = vi.hoisted(() => ({
-  authority: vi.fn(),
+  authority: vi.fn<Dependencies["authority"]>(),
   current: vi.fn(() => true),
   eligible: vi.fn(() => true),
-  evidence: vi.fn(),
+  evidence: vi.fn<Dependencies["record"]>(),
   generation: vi.fn(() => 0),
   hasLive: vi.fn(() => true),
   preview: {
@@ -19,37 +23,34 @@ const mocks = vi.hoisted(() => ({
   readback: vi.fn(),
 }));
 
-vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 vi.mock("./product-behavior", () => ({ executeProductReadback: mocks.readback }));
-vi.mock("./product-behavior-state", () => ({
-  captureProductBehaviorProvenance: () =>
-    mocks.eligible()
-      ? { commandId: "command", previewGeneration: 0, sourceGeneration: mocks.generation() }
-      : undefined,
-  currentProductBehaviorGeneration: mocks.generation,
-  hasCurrentProductBehaviorProvenance: mocks.current,
-  recordProductBehaviorEvidence: mocks.evidence,
-}));
-vi.mock("./workflow-state", () => ({
-  appBuilderWorkflowState: {
-    get: () => ({
-      appSpec: {
-        content:
-          "## Acceptance walkthrough\n\nCreate a durable draft and read it back.\n\n## Build handoff",
-        digest: "a".repeat(64),
-      },
-      applyReceipt: { digest: "b".repeat(64) },
-      phase: "applied",
-    }),
-  },
-}));
 vi.mock("./working-preview-state", () => ({
   hasLiveWorkingPreview: mocks.hasLive,
   workingPreviewState: { get: () => mocks.preview },
 }));
-vi.mock("../sandbox/deployment-execution-lease", () => ({
-  assertHostedSandboxCommandAuthority: mocks.authority,
-}));
+
+const verifyAppBehavior = createVerifyAppBehaviorTool({
+  authority: mocks.authority,
+  capture: () =>
+    mocks.eligible()
+      ? { commandId: "command", previewGeneration: 0, sourceGeneration: mocks.generation() }
+      : undefined,
+  generation: mocks.generation,
+  hasLive: mocks.hasLive,
+  isCurrent: mocks.current,
+  preview: () => workingPreviewState.get(),
+  readback: executeProductReadback,
+  record: mocks.evidence,
+  workflow: () => ({
+    appSpec: {
+      content:
+        "## Acceptance walkthrough\n\nCreate a durable draft and read it back.\n\n## Build handoff",
+      digest: "a".repeat(64),
+    },
+    applyReceipt: { digest: "b".repeat(64) },
+    phase: "applied",
+  }),
+});
 
 const scenario = {
   body: { title: "Draft" },

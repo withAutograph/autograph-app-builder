@@ -465,19 +465,23 @@ const retainedDeliveryCorrections = (
     );
   });
 };
+interface OperatorRuntimeBindings {
+  environment: Record<string, string>;
+  nativePreview?: z.infer<typeof operatorNativePreviewSchema>;
+  publicDelivery?: PublicRuntimeBinding;
+  normalActors?: ReturnType<typeof projectNormalActorRuntime>;
+}
 type OperatorHttpResponse =
   | OperatorSelection
   | NeonAuthorizationResult
   | z.infer<typeof operatorAuthIdentityInputSchema>
   | OperatorPublicResult
   | { code: "not_found" | "protected_operator_required" }
-  | {
-      environment: Record<string, string>;
-      nativePreview?: z.infer<typeof operatorNativePreviewSchema>;
+  | (OperatorRuntimeBindings & {
       operationRef: string;
       plan: HostedOperatorPlan;
       proof: z.infer<typeof hostedRuntimeProofSchema>;
-    };
+    });
 const response = (value: OperatorHttpResponse, status = 200) =>
   Response.json(value, { headers: { "cache-control": "no-store" }, status });
 const resourceIdentity = (plan: HostedOperatorPlan) =>
@@ -810,7 +814,7 @@ const handlePlanOperation = async (
     const readAppProjectSettings = deps.readAppProjectSettings?.bind(deps);
     if (
       readAppProjectSettings !== undefined &&
-      saved?.record.approvedByCallId === "operator:unapproved-plan" &&
+      saved?.record.approvedByCallId === UNAPPROVED_PLAN &&
       saved.record.operator?.retainedProjectSettingsOperations !== undefined
     ) {
       const savedOperationRef = saved.record.operator.operationRef;
@@ -878,17 +882,21 @@ const handlePlanOperation = async (
           return renewal;
         }
       }
-      return await deps.plan({
+      const plan = deps.plan;
+      const planInput: Parameters<ProtectedHostedOperatorDependencies["plan"]>[0] = {
         ...context,
         action: input.operation,
-        ...(input.releaseIntent === undefined ? {} : { releaseIntent: input.releaseIntent }),
-        ...(input.normalActorProgram === undefined
-          ? {}
-          : { normalActorProgram: input.normalActorProgram }),
-        ...(input.authSignupPolicy === undefined
-          ? {}
-          : { authSignupPolicy: input.authSignupPolicy }),
-      });
+      };
+      if (input.releaseIntent !== undefined) {
+        planInput.releaseIntent = input.releaseIntent;
+      }
+      if (input.normalActorProgram !== undefined) {
+        planInput.normalActorProgram = input.normalActorProgram;
+      }
+      if (input.authSignupPolicy !== undefined) {
+        planInput.authSignupPolicy = input.authSignupPolicy;
+      }
+      return await plan.call(deps, planInput);
     },
   );
   const cleanupPrior = input.operation === "cleanup" ? await deps.store.read(context) : undefined;
@@ -1635,7 +1643,7 @@ const handlePlanOperation = async (
               );
             });
           }
-          const next = {
+          const next: HostedRuntimeJournalRecord = {
             ...retainCompletedParticipantGateway(record),
             approvedByCallId: UNAPPROVED_PLAN,
             environmentBound: false,
@@ -1644,27 +1652,29 @@ const handlePlanOperation = async (
               retainedAuth !== undefined && sameAuthPreparation(retainedAuth.plan, plan)
                 ? retainedAuth
                 : undefined,
-            status: "pending" as const,
-            step: "reserved" as const,
-            ...(captureTransition &&
+            status: "pending",
+            step: "reserved",
+          };
+          if (
+            captureTransition &&
             captureSuccessor !== undefined &&
             record.retainedAuth !== undefined
-              ? {
-                  unapprovedAppProposalHistory: [
-                    ...(record.unapprovedAppProposalHistory ?? []),
-                    {
-                      approvedByCallId: "operator:unapproved-plan" as const,
-                      operator: record.operator,
-                      preparation: captureSuccessor.account,
-                      retainedAuth: record.retainedAuth,
-                      ...(record.retainedParticipantGateway === undefined
-                        ? {}
-                        : { retainedParticipantGateway: record.retainedParticipantGateway }),
-                    },
-                  ],
-                }
-              : {}),
-          };
+          ) {
+            const history = [...(record.unapprovedAppProposalHistory ?? [])];
+            const entry: NonNullable<
+              HostedRuntimeJournalRecord["unapprovedAppProposalHistory"]
+            >[number] = {
+              approvedByCallId: "operator:unapproved-plan",
+              operator: record.operator,
+              preparation: captureSuccessor.account,
+              retainedAuth: record.retainedAuth,
+            };
+            if (record.retainedParticipantGateway !== undefined) {
+              entry.retainedParticipantGateway = record.retainedParticipantGateway;
+            }
+            history[history.length] = entry;
+            next.unapprovedAppProposalHistory = history;
+          }
           delete next.proof;
           if (
             gatewaySourceSuccessor ||
@@ -1817,15 +1827,17 @@ const handleBindingsOperation = async (input: {
   if (latest?.revision !== current.revision) {
     throw new HostedOperatorError("operation_in_progress");
   }
-  return response({
-    environment,
-    ...(nativePreview === undefined ? {} : { nativePreview }),
-    ...(publicDelivery === undefined ? {} : { publicDelivery }),
-    ...(normalActors === undefined ? {} : { normalActors }),
-    operationRef,
-    plan,
-    proof,
-  });
+  const bindings: OperatorRuntimeBindings = { environment };
+  if (nativePreview !== undefined) {
+    bindings.nativePreview = nativePreview;
+  }
+  if (publicDelivery !== undefined) {
+    bindings.publicDelivery = publicDelivery;
+  }
+  if (normalActors !== undefined) {
+    bindings.normalActors = normalActors;
+  }
+  return response({ ...bindings, operationRef, plan, proof });
 };
 
 const normalizeOperatorContext = (authorized: Context): Context => {
@@ -2160,18 +2172,23 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         if (status === "prepared" && signupReady) {
           status = "waiting_for_signup";
         }
-        return {
+        const result: OperatorPublicResult = {
           appId,
           authenticatedBehavior: "unassessed",
           operationRef,
           planDigest,
           status,
-          ...(preparationProgressRequested
-            ? { preparationProgress: readOperatorPreparationProgress(record, now()) }
-            : {}),
-          ...(appUrl === undefined ? {} : { appUrl }),
-          ...(signupUrl === undefined ? {} : { signupUrl }),
         };
+        if (preparationProgressRequested) {
+          result.preparationProgress = readOperatorPreparationProgress(record, now());
+        }
+        if (appUrl !== undefined) {
+          result.appUrl = appUrl;
+        }
+        if (signupUrl !== undefined) {
+          result.signupUrl = signupUrl;
+        }
+        return result;
       };
       if (input.action === "auth-identity-input") {
         if (plan.normalActorProgram !== undefined && plan.stage !== AUTH_PARTICIPANTS_STAGE) {
@@ -2203,7 +2220,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             "cleaned",
           ].includes(result.status)
         ) {
-          execution = { state: "settled", outcome: { status: result.status } };
+          execution = { outcome: { status: result.status }, state: "settled" };
         }
         return response(
           operatorPublicResultSchema.parse({
@@ -2218,7 +2235,6 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           throw new HostedOperatorError("auth_identity_required");
         }
         return await handleBindingsOperation({
-          request,
           context,
           current,
           deps,
@@ -2228,6 +2244,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           plan,
           planDigest,
           read,
+          request,
         });
       }
       if (input.planDigest !== planDigest) {
@@ -2380,30 +2397,26 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             ) {
               throw new HostedOperatorError("operation_in_progress");
             }
-            const claimedRecord = {
-              ...record,
-              // A new approved attempt verifies under its live lease. Completed
-              // resource reads remain idle-only until this attempt settles.
-              ...(plan.action === "prepare" && record.status === "prepared"
-                ? { status: "pending" as const }
-                : {}),
-              approvedByCallId: input.callId,
-              leaseExpiresAt: new Date(now() + 60_000).toISOString(),
-              leaseId,
-              ...(executionObservationRequested
-                ? {
-                    executionObservation: {
-                      state: "running" as const,
-                      attemptRef: leaseId,
-                      operationRef,
-                      planDigest,
-                      callId: input.callId,
-                      approvalId: approval.approvalId,
-                    },
-                  }
-                : {}),
-              operator: { ...record.operator, approvalId: approval.approvalId },
-            };
+            const claimedRecord: HostedRuntimeJournalRecord = { ...record };
+            // A new approved attempt verifies under its live lease. Completed
+            // resource reads remain idle-only until this attempt settles.
+            if (plan.action === "prepare" && record.status === "prepared") {
+              claimedRecord.status = "pending";
+            }
+            claimedRecord.approvedByCallId = input.callId;
+            claimedRecord.leaseExpiresAt = new Date(now() + 60_000).toISOString();
+            claimedRecord.leaseId = leaseId;
+            if (executionObservationRequested) {
+              claimedRecord.executionObservation = {
+                state: "running",
+                attemptRef: leaseId,
+                operationRef,
+                planDigest,
+                callId: input.callId,
+                approvalId: approval.approvalId,
+              };
+            }
+            claimedRecord.operator = { ...record.operator, approvalId: approval.approvalId };
             if (!executionObservationRequested) {
               delete claimedRecord.executionObservation;
             }
@@ -2528,12 +2541,15 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                   await executionResponse.clone().json(),
                 );
                 await assertFence();
-                await ownedUpdate((record) =>
-                  settleOperatorExecution(record, leaseId, {
+                await ownedUpdate((record) => {
+                  const outcome: Parameters<typeof settleOperatorExecution>[2] = {
                     status: result.status,
-                    ...(result.code === undefined ? {} : { code: result.code }),
-                  }),
-                );
+                  };
+                  if (result.code !== undefined) {
+                    outcome.code = result.code;
+                  }
+                  return settleOperatorExecution(record, leaseId, outcome);
+                });
               });
               return executionResponse;
             } catch (error) {
@@ -3079,13 +3095,16 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                     }
                   }),
                 );
-                effectInput.readyReplacement = {
+                const readyReplacement: NonNullable<
+                  HostedOperatorEffectContext["readyReplacement"]
+                > = {
                   originatingOperator: predecessor.originatingOperator,
                   appCandidate: predecessor.appCandidate,
-                  ...(predecessor.gatewayCandidate
-                    ? { gatewayCandidate: predecessor.gatewayCandidate }
-                    : {}),
                 };
+                if (predecessor.gatewayCandidate) {
+                  readyReplacement.gatewayCandidate = predecessor.gatewayCandidate;
+                }
+                effectInput.readyReplacement = readyReplacement;
               }
               // Always inspect before first execution as well as uncertain retry. Provider timeouts cannot create new identities.
               const observed = await observePrepare("effect_reconciliation", async () => {

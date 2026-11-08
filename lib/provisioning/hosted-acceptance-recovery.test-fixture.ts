@@ -34,11 +34,25 @@ import {
 import { runAppBrowserTests } from "../agent/app-browser-test-runner";
 import { createContinuityCapabilityCustody } from "./hosted-operator-continuity-custody";
 
+const listen = async (server: Server) => {
+  // oxlint-disable-next-line promise/avoid-new -- Adapt the owned loopback listener event.
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    // oxlint-disable-next-line sonarjs/no-nested-functions -- Listener completion owns the corresponding error callback cleanup.
+    server.listen(0, "127.0.0.1", () => {
+      server.removeListener("error", reject);
+      resolve();
+    });
+  });
+  const address = z.object({ port: z.number() }).parse(server.address());
+  return address.port;
+};
+
 export const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 export const context: HostedOperatorContext = {
   authority,
@@ -46,36 +60,35 @@ export const context: HostedOperatorContext = {
     appId: "orchard",
     branch: "preview",
     environment: "preview",
-    projectId: "app-project",
-    sessionId: "saved-session",
     installationId: "installation",
+    projectId: "app-project",
     scopeId: "team",
     scopeType: "team",
+    sessionId: "saved-session",
   },
 };
 export const preparedPlan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  action: "prepare",
   access: [{ actorId: "actor-one", organizationId: "organization-one", roles: ["custom_role"] }],
+  action: "prepare",
   appDatabase: {
     database: "app_db",
     migratorRole: "app_migrator",
-    runtimeRole: "app_runtime",
     resourceId: "app-resource",
+    runtimeRole: "app_runtime",
   },
   authDatabase: {
     database: "auth_db",
     migratorRole: "auth_migrator",
-    runtimeRole: "auth_runtime",
     resourceId: "auth-resource",
+    runtimeRole: "auth_runtime",
   },
   contextId: "ordinary-planning-context",
   cost: { class: "shared-recovery-group", description: "Controlled fixture", owner: "Fixture" },
   effects: [
-    { id: "resources", kind: "resources", description: "Prepare resources" },
-    { id: "install", kind: "install", description: "Install app" },
-    { id: "access", kind: "access", description: "Authorize app" },
-    { id: "bindings", kind: "bindings", description: "Bind runtime" },
+    { description: "Prepare resources", id: "resources", kind: "resources" },
+    { description: "Install app", id: "install", kind: "install" },
+    { description: "Authorize app", id: "access", kind: "access" },
+    { description: "Bind runtime", id: "bindings", kind: "bindings" },
   ],
   installer: { reference: "shared-installer", sha256: "a".repeat(64) },
   neon: {
@@ -94,6 +107,7 @@ export const preparedPlan = hostedOperatorPlanSchema.parse({
     projectId: context.target.projectId,
     sessionId: context.target.sessionId,
   },
+  version: 1,
 });
 export const selection = {
   version: 1 as const,
@@ -101,24 +115,24 @@ export const selection = {
   authority,
   target: context.target,
   originalSetup: {
-    operationRef: "10000000-0000-4000-8000-000000000001",
-    planDigest: "c".repeat(64),
     approvalId: "setup-human",
     approvedByCallId: "setup-call",
+    operationRef: "10000000-0000-4000-8000-000000000001",
+    planDigest: "c".repeat(64),
   },
   preparedPlan,
   runtime: {
-    sandboxId: "owned-sandbox",
-    root: "/controlled/source",
-    projectId: "builder-project",
-    ownerId: "team",
     appPort: 3000,
     bridgePort: 3100,
+    ownerId: "team",
+    projectId: "builder-project",
+    root: "/controlled/source",
+    sandboxId: "owned-sandbox",
   },
   gateway: {
-    projectId: "gateway-project",
-    ownerId: "team",
     environment: "preview" as const,
+    ownerId: "team",
+    projectId: "gateway-project",
     publicOrigin: "https://gateway.example",
   },
   actors: [{ actorId: "actor-one", organizationId: "organization-one" }],
@@ -243,10 +257,10 @@ export const setup = () => {
               providerSessionId: "provider-session",
               commandId: "runtime-command",
               worker: {
-                id: "managed-worker",
                 executablePath: "/private/worker",
-                sha256: "d".repeat(64),
+                id: "managed-worker",
                 operationScope: "managed-app-runtime-v1",
+                sha256: "d".repeat(64),
                 subcommand: "protected-managed-app-runtime",
               },
               attemptId,
@@ -377,7 +391,7 @@ export const installManagedAcceptanceSuite = (
           // The browser terminal and principal verifier are controlled ports; child,
           // loopback forwarding, capability IPC and process replacement are real.
           await assertCurrent();
-          const current = record.current;
+          const { current } = record;
           if (!current) {
             throw new Error("Managed runtime identity is missing");
           }
@@ -390,19 +404,6 @@ export const installManagedAcceptanceSuite = (
             fence: current.fence,
             sandboxId: current.sandboxId,
             providerSessionId: current.providerSessionId,
-          };
-          const listen = async (server: Server) => {
-            // oxlint-disable-next-line promise/avoid-new -- Adapt the owned loopback listener event.
-            await new Promise<void>((resolve, reject) => {
-              server.once("error", reject);
-              // oxlint-disable-next-line sonarjs/no-nested-functions -- Listener completion owns the corresponding error callback cleanup.
-              server.listen(0, "127.0.0.1", () => {
-                server.removeListener("error", reject);
-                resolve();
-              });
-            });
-            const address = z.object({ port: z.number() }).parse(server.address());
-            return address.port;
           };
           const reservation = createServer();
           const appPort = await listen(reservation);
@@ -440,7 +441,7 @@ export const installManagedAcceptanceSuite = (
                   expect(response.status).toBe(200);
                   await response.text();
                 },
-                { timeout: 3000, interval: 25 },
+                { interval: 25, timeout: 3000 },
               );
               return true;
             },
@@ -456,9 +457,7 @@ export const installManagedAcceptanceSuite = (
           const bridge = createManagedRuntimeBridge({
             identity,
             profile: managedRuntimePublicProfileSchema.parse({
-              version: 1,
               appId: identity.appId,
-              publicOrigin: "https://gateway.example",
               jwksUrl: "https://gateway.example/_platform/jwks.json",
               keys: [
                 {
@@ -468,6 +467,8 @@ export const installManagedAcceptanceSuite = (
                   use: "sig",
                 },
               ],
+              publicOrigin: "https://gateway.example",
+              version: 1,
             }),
             transportSha256: managedCapabilitySha256(capabilities.transport),
             actors: preparedPlan.access.map(({ actorId, organizationId }) => ({
@@ -494,14 +495,14 @@ export const installManagedAcceptanceSuite = (
           try {
             const bridgePort = await listen(bridge.server);
             const invalid = createManagedRuntimeIpcClient({
-              socketPath: ipc.socketPath,
               lifecycleCapability: "invalid",
+              socketPath: ipc.socketPath,
             });
             await expect(invalid.execute({ operation: "status" })).rejects.toThrow();
-            await client.execute({ operation: "start-same-environment", commandId: randomUUID() });
+            await client.execute({ commandId: randomUUID(), operation: "start-same-environment" });
             const before = await client.execute({
-              operation: "observe-readiness",
               commandId: randomUUID(),
+              operation: "observe-readiness",
             });
             expect(before.state).toBe("ready");
             const denied = await fetch(`http://127.0.0.1:${bridgePort}`, {
@@ -523,8 +524,8 @@ export const installManagedAcceptanceSuite = (
             };
             expect(await readThroughBridge()).toContain('"value":"preserved-value"');
             const stopped = await client.execute({
-              operation: "stop-and-wait",
               commandId: randomUUID(),
+              operation: "stop-and-wait",
             });
             expect(stopped.state).toBe("stopped");
             if (!before.process) {
@@ -533,10 +534,10 @@ export const installManagedAcceptanceSuite = (
             const oldPid = before.process.pid;
             expect(() => process.kill(oldPid, 0)).toThrow();
             await expect(fetch(`http://127.0.0.1:${appPort}`)).rejects.toThrow();
-            await client.execute({ operation: "start-same-environment", commandId: randomUUID() });
+            await client.execute({ commandId: randomUUID(), operation: "start-same-environment" });
             const after = await client.execute({
-              operation: "observe-readiness",
               commandId: randomUUID(),
+              operation: "observe-readiness",
             });
             expect(after.state).toBe("ready");
             expect(after.process?.generation).toBe(2);
@@ -547,7 +548,7 @@ export const installManagedAcceptanceSuite = (
             await ipc.close();
             await supervisor.close();
           }
-          return { exitCode: 0, stdout: "focused managed scenario completed", stderr: "" };
+          return { exitCode: 0, stderr: "", stdout: "focused managed scenario completed" };
         },
       },
     });

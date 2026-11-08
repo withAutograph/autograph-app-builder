@@ -40,25 +40,55 @@ const memoryFallback = new Map<string, unknown>();
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   const { promise, reject, resolve } = Promise.withResolvers<T>();
-  request.addEventListener("success", () => resolve(request.result), {
-    once: true,
-  });
-  request.addEventListener("error", () => reject(request.error), {
-    once: true,
-  });
+  request.addEventListener(
+    "success",
+    () => {
+      resolve(request.result);
+    },
+    {
+      once: true,
+    },
+  );
+  request.addEventListener(
+    "error",
+    () => {
+      reject(request.error);
+    },
+    {
+      once: true,
+    },
+  );
   return promise;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function transactionResult(transaction: IDBTransaction): Promise<undefined> {
   const { promise, reject, resolve } = Promise.withResolvers<undefined>();
-  transaction.addEventListener("complete", () => resolve(undefined as undefined), { once: true });
-  transaction.addEventListener("abort", () => reject(transaction.error), {
-    once: true,
-  });
-  transaction.addEventListener("error", () => reject(transaction.error), {
-    once: true,
-  });
+  transaction.addEventListener(
+    "complete",
+    () => {
+      resolve(undefined as undefined);
+    },
+    { once: true },
+  );
+  transaction.addEventListener(
+    "abort",
+    () => {
+      reject(transaction.error);
+    },
+    {
+      once: true,
+    },
+  );
+  transaction.addEventListener(
+    "error",
+    () => {
+      reject(transaction.error);
+    },
+    {
+      once: true,
+    },
+  );
   return promise;
 }
 
@@ -76,12 +106,24 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
     },
     { once: true },
   );
-  request.addEventListener("success", () => resolve(request.result), {
-    once: true,
-  });
-  request.addEventListener("error", () => reject(request.error), {
-    once: true,
-  });
+  request.addEventListener(
+    "success",
+    () => {
+      resolve(request.result);
+    },
+    {
+      once: true,
+    },
+  );
+  request.addEventListener(
+    "error",
+    () => {
+      reject(request.error);
+    },
+    {
+      once: true,
+    },
+  );
   return promise;
 }
 

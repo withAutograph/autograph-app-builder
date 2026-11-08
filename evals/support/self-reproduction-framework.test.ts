@@ -8,7 +8,7 @@ import { runTrustedFrameworkEvidence } from "./self-reproduction-framework";
 import { frameworkMatrix } from "./self-reproduction-parity";
 
 const browser = () => {
-  const close = vi.fn(() => Promise.resolve());
+  const close = vi.fn<() => Promise<void>>().mockResolvedValue();
   const page = {};
   return {
     close,
@@ -62,9 +62,9 @@ describe("trusted framework evidence", () => {
   it("combines source and browser evidence and uses instant navigation", async () => {
     const outputRoot = await mkdtemp(path.join(tmpdir(), "self-reproduction-framework-"));
     const fixture = browser();
-    const runInstant = vi.fn(() => Promise.resolve());
+    const runInstant = vi.fn<() => Promise<void>>().mockResolvedValue();
     const result = await runTrustedFrameworkEvidence({
-      adapters: { candidate: adapter as never },
+      adapters: { candidate: adapter },
       browser: fixture.value,
       outputRoot,
       runInstant,
@@ -98,11 +98,11 @@ describe("trusted framework evidence", () => {
               ready: false as const,
               reason: "Production instant-navigation runtime was unavailable.",
             }),
-        } as never,
+        },
       },
       browser: fixture.value,
       outputRoot,
-      runInstant: vi.fn(() => Promise.resolve()),
+      runInstant: vi.fn<() => Promise<void>>().mockResolvedValue(),
     });
     expect(
       result.observations.candidate.find((row) => row.requirementId === "instant-navigation"),
@@ -117,7 +117,7 @@ it("retains sanitized diagnostics and blocks an evaluator exception", async () =
       candidate: {
         ...adapter,
         reviewSource: () => Promise.reject(new Error("Fixture unavailable Bearer private-secret")),
-      } as never,
+      },
     },
     browser: browser().value,
     outputRoot,
@@ -144,14 +144,14 @@ it("keeps a missing browser fixture unassessed after a source review", async () 
           Promise.resolve({
             artifacts: [],
             assertions: [],
-            disposition: "not-run",
+            disposition: "not-run" as const,
             reason: "Fixture not bound",
           }),
-      } as never,
+      },
     },
     browser: browser().value,
     outputRoot,
-    runInstant: vi.fn(() => Promise.resolve()),
+    runInstant: vi.fn<() => Promise<void>>().mockResolvedValue(),
   });
   expect(
     result.observations.candidate.find((row) => row.requirementId === "server-first"),
@@ -163,7 +163,7 @@ it("retains an executed instant assertion failure as observed failure", async ()
     path.join(tmpdir(), "self-reproduction-framework-instant-failure-"),
   );
   const result = await runTrustedFrameworkEvidence({
-    adapters: { candidate: adapter as never },
+    adapters: { candidate: adapter },
     browser: browser().value,
     outputRoot,
     runInstant: () => Promise.reject(new Error("Resolved content never appeared")),

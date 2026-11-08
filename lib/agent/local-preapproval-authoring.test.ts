@@ -18,7 +18,7 @@ import { authoringScopeDigest, readInternalAuthoringMarker } from "./preapproval
 const roots: string[] = [];
 afterEach(async () => {
   vi.unstubAllEnvs();
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 const fixture = async () => {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "authoring-")));
@@ -47,14 +47,14 @@ const fixture = async () => {
     planningStateDigest: "d".repeat(64),
   };
   const decision = {
-    version: 1 as const,
-    kind: "preapproval-authoring-decision-v1" as const,
     adapterSessionId: "logical",
-    turnId: "turn1",
-    turnSequence: 1,
     decision: "runnable" as const,
+    kind: "preapproval-authoring-decision-v1" as const,
     scope,
     scopeDigest: authoringScopeDigest(scope),
+    turnId: "turn1",
+    turnSequence: 1,
+    version: 1 as const,
   };
   const ctx = { session: { id: "logical", turn: { id: "turn1", sequence: 1 } } } as Pick<
     HookContext,
@@ -62,7 +62,7 @@ const fixture = async () => {
   >;
   await recordLocalAuthoringDecision(ctx, decision);
   const assertCurrent = vi.fn(async () => {});
-  return { root, ctx, decision, assertCurrent };
+  return { assertCurrent, ctx, decision, root };
 };
 describe("private local drafting reservation", () => {
   it("persists private single-link reservation before exactly one dispatch and authenticates exact delivery", async () => {
@@ -79,11 +79,11 @@ describe("private local drafting reservation", () => {
       expect(await readFile(path.join(dir, op), "utf-8")).toContain("nonce");
     });
     const input = {
-      sessionId: "logical",
       active: false,
-      pendingInput: false,
-      dispatch,
       assertCurrent: f.assertCurrent,
+      dispatch,
+      pendingInput: false,
+      sessionId: "logical",
     };
     expect(await continueLocalPreapprovalAuthoring(input)).toBe("queued");
     expect(await continueLocalPreapprovalAuthoring(input)).toBe("queued");
@@ -94,11 +94,11 @@ describe("private local drafting reservation", () => {
       "session"
     >;
     const claim = {
+      messageSequence: 0,
       nonce: marker.nonce,
       operationId: marker.operationId,
-      turnId: "turn2",
-      messageSequence: 0,
       scopeDigest: f.decision.scopeDigest,
+      turnId: "turn2",
     };
     expect(await claimLocalAuthoringMessage(ctx, { ...claim, scopeDigest: "d".repeat(64) })).toBe(
       false,
@@ -113,11 +113,11 @@ describe("private local drafting reservation", () => {
       throw new Error("lost ack");
     });
     const input = {
-      sessionId: "logical",
       active: false,
-      pendingInput: false,
-      dispatch,
       assertCurrent: f.assertCurrent,
+      dispatch,
+      pendingInput: false,
+      sessionId: "logical",
     };
     expect(await continueLocalPreapprovalAuthoring(input)).toBe("unknown");
     expect(await continueLocalPreapprovalAuthoring(input)).toBe("unknown");
@@ -126,17 +126,17 @@ describe("private local drafting reservation", () => {
   });
   it("rechecks current owner and pending proposal boundary before dispatch", async () => {
     await fixture();
-    const dispatch = vi.fn(async () => {});
+    const dispatch = vi.fn<() => Promise<void>>().mockResolvedValue();
     const assertCurrent = vi.fn(async () => {
       throw new Error("new proposal");
     });
     expect(
       await continueLocalPreapprovalAuthoring({
-        sessionId: "logical",
         active: false,
-        pendingInput: false,
-        dispatch,
         assertCurrent,
+        dispatch,
+        pendingInput: false,
+        sessionId: "logical",
       }),
     ).toBe("blocked");
     expect(dispatch).not.toHaveBeenCalled();
@@ -144,7 +144,7 @@ describe("private local drafting reservation", () => {
   });
   it("refuses active/pending calls without reserving or dispatching", async () => {
     const f = await fixture();
-    const dispatch = vi.fn(async () => {});
+    const dispatch = vi.fn<() => Promise<void>>().mockResolvedValue();
     for (const flags of [
       { active: true, pendingInput: false },
       { active: false, pendingInput: true },
@@ -152,9 +152,9 @@ describe("private local drafting reservation", () => {
       expect(
         await continueLocalPreapprovalAuthoring({
           ...flags,
-          sessionId: "logical",
-          dispatch,
           assertCurrent: f.assertCurrent,
+          dispatch,
+          sessionId: "logical",
         }),
       ).toBe("idle");
     }

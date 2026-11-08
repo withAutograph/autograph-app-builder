@@ -819,8 +819,8 @@ describe("same-origin canonical Eve transport", () => {
       transport.activateRecovery?.({ operationId: recovery.operationId, principal, recovery }),
     ).resolves.toEqual(recoveryBinding);
     expect(JSON.parse(String(fetchImplementation.mock.calls[1]?.[1]?.body))).toMatchObject({
-      recoveryPhase: "activate",
       recovery,
+      recoveryPhase: "activate",
     });
     await expect(
       transport.sendAccepted?.({
@@ -924,7 +924,7 @@ describe("same-origin canonical Eve transport", () => {
       if (String(url).includes("/stream?")) {
         return stream();
       }
-      const body = JSON.parse(String(init?.body));
+      const body: unknown = JSON.parse(String(init?.body));
       expect(body).toMatchObject({
         forwardedPrincipal: {
           current: {
@@ -1752,11 +1752,12 @@ describe("same-origin canonical Eve transport", () => {
   });
 
   it("rejects a stream that is not bound to the pinned Eve 0.68 protocol", async () => {
-    for (const headers of [
+    const headerCases: Record<string, string>[] = [
       { "x-eve-session-id": "wrun_other" },
       { "x-eve-stream-format": "sse" },
       { "x-eve-stream-version": "24" },
-    ]) {
+    ];
+    for (const headers of headerCases) {
       const response = stream();
       for (const [name, value] of Object.entries(headers)) {
         response.headers.set(name, value);
@@ -2643,15 +2644,19 @@ describe("activation transport diagnostics", () => {
   const secret = "never-log-private-activation-body";
   it.each([
     {
-      name: "dispatch failure",
-      response: () => Promise.reject(new Error(secret)),
-      phase: "transport_dispatch",
       category: "unclassified_failure",
-      rejected: false,
       malformed: false,
+      name: "dispatch failure",
+      phase: "transport_dispatch",
+      rejected: false,
+      response: () => Promise.reject(new Error(secret)),
     },
     {
+      category: "rejected_before_dispatch",
+      malformed: false,
       name: "HTTP403",
+      phase: "transport_acceptance",
+      rejected: true,
       response: () =>
         Promise.resolve(
           Response.json(
@@ -2659,13 +2664,13 @@ describe("activation transport diagnostics", () => {
             { status: 403 },
           ),
         ),
-      phase: "transport_acceptance",
-      category: "rejected_before_dispatch",
-      rejected: true,
-      malformed: false,
     },
     {
+      category: "unclassified_failure",
+      malformed: false,
       name: "HTTP503",
+      phase: "transport_acceptance",
+      rejected: false,
       response: () =>
         Promise.resolve(
           Response.json(
@@ -2673,13 +2678,13 @@ describe("activation transport diagnostics", () => {
             { status: 503 },
           ),
         ),
-      phase: "transport_acceptance",
-      category: "unclassified_failure",
-      rejected: false,
-      malformed: false,
     },
     {
+      category: "unclassified_failure",
+      malformed: true,
       name: "accepted missing receipt",
+      phase: "transport_acceptance",
+      rejected: false,
       response: () =>
         Promise.resolve(
           Response.json(
@@ -2691,13 +2696,13 @@ describe("activation transport diagnostics", () => {
             { status: 202 },
           ),
         ),
-      phase: "transport_acceptance",
-      category: "unclassified_failure",
-      rejected: false,
-      malformed: true,
     },
     {
+      category: "unclassified_failure",
+      malformed: false,
       name: "accepted owner mismatch",
+      phase: "transport_acceptance",
+      rejected: false,
       response: () =>
         Promise.resolve(
           Response.json(
@@ -2710,10 +2715,6 @@ describe("activation transport diagnostics", () => {
             { status: 202 },
           ),
         ),
-      phase: "transport_acceptance",
-      category: "unclassified_failure",
-      rejected: false,
-      malformed: false,
     },
   ])(
     "reports $name without changing transport errors or retrying",
@@ -2732,10 +2733,10 @@ describe("activation transport diagnostics", () => {
       ).rejects.toBeInstanceOf(rejected ? SubmissionRejectedBeforeDispatchError : unknownError);
       expect(sink).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({
-          phase,
           category,
-          operationKind: "start",
           operationIdHash: `sha256:${createHash("sha256").update(recovery.operationId).digest("hex")}`,
+          operationKind: "start",
+          phase,
         }),
       );
       expect(fetchImplementation).toHaveBeenCalledOnce();
@@ -2754,33 +2755,35 @@ describe("activation transport diagnostics", () => {
   );
 });
 
-describe("retained confirmation presentation recovery", () => {
-  const observerConfig = { ...config, timeoutMs: 10_000 };
-  const requestEvent = (requestId: string, digest = "a".repeat(64)) => ({
-    type: "input.requested",
-    data: {
-      sequence: 0,
-      stepIndex: 0,
-      turnId: "confirmation-turn",
-      requests: [
-        {
-          requestId,
-          kind: "tool-approval",
-          action: {
-            kind: "tool-call",
-            callId: `call-${requestId}`,
-            toolName: "run-app-continuity-tests",
-            input: {
-              action: "continuity",
-              planRef: "_protected-operator/continuity-plans/00000000-0000-4000-8000-000000000001",
-              planDigest: digest,
-              idempotencyKey: "retained-exercise",
-            },
+const requestEvent = (requestId: string, digest = "a".repeat(64)) => ({
+  type: "input.requested",
+  data: {
+    sequence: 0,
+    stepIndex: 0,
+    turnId: "confirmation-turn",
+    requests: [
+      {
+        requestId,
+        kind: "tool-approval",
+        action: {
+          kind: "tool-call",
+          callId: `call-${requestId}`,
+          toolName: "run-app-continuity-tests",
+          input: {
+            action: "continuity",
+            planRef: "_protected-operator/continuity-plans/00000000-0000-4000-8000-000000000001",
+            planDigest: digest,
+            idempotencyKey: "retained-exercise",
           },
         },
-      ],
-    },
-  });
+      },
+    ],
+  },
+});
+
+describe("retained confirmation presentation recovery", () => {
+  const observerConfig = { ...config, timeoutMs: 10_000 };
+
   const seedFailure = async (events: unknown[]) => {
     const observed = await observeSameOriginEveStream({
       config: observerConfig,

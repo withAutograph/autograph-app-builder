@@ -22,9 +22,23 @@ import {
 import { workflowMatrix } from "../support/self-reproduction-parity";
 import type {
   AssertionResult,
+  Preparation,
   TrustedBrowserWorkflowAdapter,
   WorkflowId,
 } from "../support/self-reproduction-workflow-adapters";
+
+interface CandidatePreparationPage {
+  goto: (url: string) => Promise<{ ok: () => boolean } | null>;
+}
+
+type WorkflowAdapter<PageInput> = Omit<TrustedBrowserWorkflowAdapter, "prepare"> & {
+  prepare: (page: PageInput, workflowId: WorkflowId) => Promise<Preparation>;
+};
+
+interface WorkflowAdapters {
+  reference?: WorkflowAdapter<object>;
+  candidate?: WorkflowAdapter<CandidatePreparationPage>;
+}
 
 export interface WorkflowAdapterFactoryInput {
   referenceUrl?: string;
@@ -32,6 +46,9 @@ export interface WorkflowAdapterFactoryInput {
   candidateUrl?: string;
   outputRoot: string;
 }
+
+const infrastructureUnavailable = "infrastructure-unavailable";
+const providerReturnSuccess = "provider-return-success";
 
 const fixedName = "Self reproduction parity draft";
 const fixedBrief = "Create one small independent issue tracker with durable server persistence.";
@@ -69,7 +86,9 @@ const firstVisible = async (locators: Locator[]) => {
   return await find(0);
 };
 
-const semanticCandidateAdapter = (candidateUrl: string): TrustedBrowserWorkflowAdapter => {
+const semanticCandidateAdapter = (
+  candidateUrl: string,
+): WorkflowAdapter<CandidatePreparationPage> => {
   const entryUrl = new URL(candidateUrl).href;
   return {
     contextOptions: { baseURL: entryUrl },
@@ -121,9 +140,9 @@ const semanticCandidateAdapter = (candidateUrl: string): TrustedBrowserWorkflowA
         };
       }
       const response = await page.goto(entryUrl);
-      if (!response?.ok()) {
+      if (response?.ok() !== true) {
         return {
-          disposition: "infrastructure-unavailable",
+          disposition: infrastructureUnavailable,
           ready: false,
           reason: `Candidate runtime did not answer at ${entryUrl}.`,
         };
@@ -143,11 +162,11 @@ const semanticCandidateAdapter = (candidateUrl: string): TrustedBrowserWorkflowA
 const referenceAdapter = (
   referenceUrl: string,
   fixtureRoot = process.cwd(),
-): TrustedBrowserWorkflowAdapter => {
+): WorkflowAdapter<object> => {
   const supported = new Set<WorkflowId>([
     "authentication",
     "durable-draft",
-    "provider-return-success",
+    providerReturnSuccess,
     "provider-return-error",
     "documentation",
   ]);
@@ -241,10 +260,10 @@ const referenceAdapter = (
           const strangerId = strangerSession?.user?.id;
           const response = await stranger.request.get(statusPath);
           const body = await response.json();
+          const isDistinctUser =
+            ownerCanRead && typeof strangerId === "string" && strangerId !== ownerId;
           otherUserDenied =
-            ownerCanRead &&
-            typeof strangerId === "string" &&
-            strangerId !== ownerId &&
+            isDistinctUser &&
             response.status() === 404 &&
             body.error === "handoff_unavailable" &&
             Object.keys(body).length === 1;
@@ -279,7 +298,7 @@ const referenceAdapter = (
         await page.getByRole("button", { exact: true, name: "Connect emulated GitHub" }).click();
         await expect(page).toHaveURL(/\/local-connections\/github\?.*phase=authorize/u);
         const state = new URL(page.url()).searchParams.get("state");
-        if (!state) {
+        if (state === null || state === "") {
           throw new Error("Emulated GitHub authorization did not retain callback state.");
         }
         const callback = new URL("/github/installations/callback", referenceUrl);
@@ -325,7 +344,7 @@ const referenceAdapter = (
             "Returned a denial using actual pending emulated OAuth state, then replayed the consumed callback through the application.",
         };
       }
-      if (workflowId === "provider-return-success") {
+      if (workflowId === providerReturnSuccess) {
         await installProvider(page, "GitHub");
         return {
           assertions: [
@@ -376,7 +395,7 @@ const referenceAdapter = (
       }
       if (new URL(referenceUrl).origin !== appOrigin) {
         return {
-          disposition: "infrastructure-unavailable",
+          disposition: infrastructureUnavailable,
           ready: false,
           reason: `Reference E2E helpers are bound to ${appOrigin}; received ${referenceUrl}.`,
         };
@@ -391,7 +410,7 @@ const referenceAdapter = (
           passkeyOverride = await encryptOverrides({ passkeys: true }, secret, "1h");
         } catch {
           return {
-            disposition: "infrastructure-unavailable",
+            disposition: infrastructureUnavailable,
             ready: false,
             reason: "Reference authentication requires the emulated passkey flag fixture secret.",
           };
@@ -402,7 +421,7 @@ const referenceAdapter = (
       return { ready: true };
     },
     async verify(workflowId) {
-      if (workflowId === "provider-return-success") {
+      if (workflowId === providerReturnSuccess) {
         const counts = await applicationCounts();
         return {
           assertions: [
@@ -426,10 +445,12 @@ const referenceAdapter = (
             assertions: [
               assertion(
                 "revision-advanced",
-                Boolean(row && row.revision > initialDraftRevision && row.appName === fixedName),
-                row
-                  ? `PostgreSQL revision ${row.revision} contains the fixed app name.`
-                  : "No active durable draft row was found.",
+                row !== undefined &&
+                  row.revision > initialDraftRevision &&
+                  row.appName === fixedName,
+                row === undefined
+                  ? "No active durable draft row was found."
+                  : `PostgreSQL revision ${row.revision} contains the fixed app name.`,
               ),
             ],
             reason: "Evaluator read the durable draft row directly from PostgreSQL.",
@@ -443,11 +464,13 @@ const referenceAdapter = (
   };
 };
 
-export const createWorkflowAdapters = (
-  input: WorkflowAdapterFactoryInput,
-): Partial<Record<"reference" | "candidate", TrustedBrowserWorkflowAdapter>> => ({
-  ...(input.referenceUrl
-    ? { reference: referenceAdapter(input.referenceUrl, input.referenceFixtureRoot) }
-    : {}),
-  ...(input.candidateUrl ? { candidate: semanticCandidateAdapter(input.candidateUrl) } : {}),
-});
+export const createWorkflowAdapters = (input: WorkflowAdapterFactoryInput): WorkflowAdapters => {
+  const adapters: WorkflowAdapters = {};
+  if (input.referenceUrl) {
+    adapters.reference = referenceAdapter(input.referenceUrl, input.referenceFixtureRoot);
+  }
+  if (input.candidateUrl) {
+    adapters.candidate = semanticCandidateAdapter(input.candidateUrl);
+  }
+  return adapters;
+};

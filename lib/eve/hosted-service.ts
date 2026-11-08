@@ -147,10 +147,14 @@ import type {
   SendReadFailureCategory,
 } from "./hosted-submission-diagnostic";
 
+const PREPARE_NATIVE_TARGET_TOOL = "prepare-app-native-target";
+
 const guardDecisions: readonly ("continue" | "stop")[] = ["continue", "stop"];
 const HOSTED_START_REQUEST_TIMEOUT_MS = 300_000;
 const HOSTED_IDLE_RESERVATION_GRACE_MS = 300_000;
 const HOSTED_PROGRESS_NOTICE_MS = 60_000;
+const isUnsettledReservation = (operation: Pick<HostedOperationRecord, "state">): boolean =>
+  operation.state === "reserved" || operation.state === "submission_unknown";
 
 export {
   HostedAdapterSessionUnavailableError,
@@ -391,47 +395,47 @@ function checkpointInputRequest(
   }));
   const { authorization } = request;
   const repositoryAccess = authorization?.repositoryAccess;
+  const requestDetails: Partial<PublicInputRequest> = { allowFreeform: request.allowFreeform };
+  if (authorization !== undefined) {
+    const authorizationDetails: NonNullable<PublicInputRequest["authorization"]> = {};
+    if (authorization.displayName !== undefined) {
+      authorizationDetails.displayName = authorization.displayName;
+    }
+    if (authorization.expiresAt !== undefined) {
+      authorizationDetails.expiresAt = authorization.expiresAt;
+    }
+    if (profile.authorizationInstructionBytes !== 0 && authorization.instructions !== undefined) {
+      authorizationDetails.instructions = truncateUtf8(
+        authorization.instructions,
+        profile.authorizationInstructionBytes,
+      );
+    }
+    if (repositoryAccess !== undefined) {
+      authorizationDetails.repositoryAccess = {
+        ...repositoryAccess,
+        scopes: repositoryAccess.scopes.slice(0, profile.repositoryScopeCount),
+      };
+    }
+    if (authorization.url !== undefined) {
+      authorizationDetails.url = authorization.url;
+    }
+    if (authorization.userCode !== undefined) {
+      authorizationDetails.userCode = authorization.userCode;
+    }
+    requestDetails.authorization = authorizationDetails;
+  }
+  if (profile.descriptionBytes !== 0 && request.description !== undefined) {
+    requestDetails.description = truncateUtf8(request.description, profile.descriptionBytes);
+  }
+  const requestKind = { ...requestDetails, kind: request.kind };
+  if (options !== undefined && options.length !== 0) {
+    requestKind.options = options;
+  }
+  if (request.presentation !== undefined) {
+    requestKind.presentation = request.presentation;
+  }
   return publicInputRequestSchema.parse({
-    allowFreeform: request.allowFreeform,
-    ...(authorization === undefined
-      ? {}
-      : {
-          authorization: {
-            ...(authorization.displayName === undefined
-              ? {}
-              : { displayName: authorization.displayName }),
-            ...(authorization.expiresAt === undefined
-              ? {}
-              : { expiresAt: authorization.expiresAt }),
-            ...(profile.authorizationInstructionBytes === 0 ||
-            authorization.instructions === undefined
-              ? {}
-              : {
-                  instructions: truncateUtf8(
-                    authorization.instructions,
-                    profile.authorizationInstructionBytes,
-                  ),
-                }),
-            ...(repositoryAccess === undefined
-              ? {}
-              : {
-                  repositoryAccess: {
-                    ...repositoryAccess,
-                    scopes: repositoryAccess.scopes.slice(0, profile.repositoryScopeCount),
-                  },
-                }),
-            ...(authorization.url === undefined ? {} : { url: authorization.url }),
-            ...(authorization.userCode === undefined ? {} : { userCode: authorization.userCode }),
-          },
-        }),
-    ...(profile.descriptionBytes === 0 || request.description === undefined
-      ? {}
-      : {
-          description: truncateUtf8(request.description, profile.descriptionBytes),
-        }),
-    kind: request.kind,
-    ...(options === undefined || options.length === 0 ? {} : { options }),
-    ...(request.presentation === undefined ? {} : { presentation: request.presentation }),
+    ...requestKind,
     requestId: request.requestId,
     title: truncateUtf8(request.title, profile.titleBytes),
   });
@@ -525,26 +529,29 @@ function checkpointForSnapshot(
       } else if (retainedEvents[0].index !== 0) {
         truncatedBeforeIndex = retainedEvents[0].index;
       }
-      const candidate = hostedSessionCheckpointSchema.safeParse({
-        capturedAtEpochMs,
-        ...(snapshot.nativeDeliveryState === undefined
-          ? {}
-          : { nativeDeliveryState: snapshot.nativeDeliveryState }),
-        ...(snapshot.privateInputState === undefined
-          ? {}
-          : { privateInputState: snapshot.privateInputState }),
-        events: retainedEvents,
-        ...(snapshot.workingPreview === undefined
-          ? {}
-          : { workingPreview: snapshot.workingPreview }),
-        ...(inputRequests.length === 0 ? {} : { inputRequests }),
-        ...(input.includePrototype && snapshot.prototype !== undefined
-          ? { prototype: snapshot.prototype }
-          : {}),
-        status: snapshot.status,
-        ...(truncatedBeforeIndex === undefined ? {} : { truncatedBeforeIndex }),
-        version: 1,
-      });
+      const candidateDetails: Pick<HostedSessionCheckpoint, "capturedAtEpochMs"> &
+        Partial<HostedSessionCheckpoint> = { capturedAtEpochMs };
+      if (snapshot.nativeDeliveryState !== undefined) {
+        candidateDetails.nativeDeliveryState = snapshot.nativeDeliveryState;
+      }
+      if (snapshot.privateInputState !== undefined) {
+        candidateDetails.privateInputState = snapshot.privateInputState;
+      }
+      const candidateEvents = { ...candidateDetails, events: retainedEvents };
+      if (snapshot.workingPreview !== undefined) {
+        candidateEvents.workingPreview = snapshot.workingPreview;
+      }
+      if (inputRequests.length !== 0) {
+        candidateEvents.inputRequests = inputRequests;
+      }
+      if (input.includePrototype && snapshot.prototype !== undefined) {
+        candidateEvents.prototype = snapshot.prototype;
+      }
+      const candidateStatus = { ...candidateEvents, status: snapshot.status };
+      if (truncatedBeforeIndex !== undefined) {
+        candidateStatus.truncatedBeforeIndex = truncatedBeforeIndex;
+      }
+      const candidate = hostedSessionCheckpointSchema.safeParse({ ...candidateStatus, version: 1 });
       if (candidate.success) {
         best = candidate.data;
         lower = candidateCount + 1;
@@ -581,13 +588,16 @@ function checkpointForSnapshot(
 
   // A structurally valid fallback prevents an oversized transport snapshot
   // from turning an already-dispatched mutation into an unknown outcome.
-  return {
+  const fallback: Pick<HostedSessionCheckpoint, "capturedAtEpochMs" | "events" | "status"> &
+    Partial<HostedSessionCheckpoint> = {
     capturedAtEpochMs,
     events: [],
     status: snapshot.status,
-    ...(publicEventCount === 0 ? {} : { truncatedBeforeIndex: publicEventCount }),
-    version: 1,
   };
+  if (publicEventCount !== 0) {
+    fallback.truncatedBeforeIndex = publicEventCount;
+  }
+  return { ...fallback, version: 1 };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -721,22 +731,35 @@ const checkpointMetadataForSnapshot = (
     (event): event is InternalEveEvent => event !== null && typeof event === "object",
   );
   const inputRequests = outstandingInternalEveRequests(internalEvents);
-  return {
-    capturedAtEpochMs,
-    ...(snapshot.nativeDeliveryState === undefined
-      ? {}
-      : { nativeDeliveryState: snapshot.nativeDeliveryState }),
-    ...(snapshot.privateInputState === undefined
-      ? {}
-      : { privateInputState: snapshot.privateInputState }),
-    ...(inputRequests.length === 0 ? {} : { inputRequests }),
-    ...(snapshot.prototype === undefined ? {} : { prototype: snapshot.prototype }),
-    status: snapshot.status,
-    ...(truncatedBeforeIndex === undefined ? {} : { truncatedBeforeIndex }),
-    ...(snapshot.uiPreview === undefined ? {} : { uiPreview: snapshot.uiPreview }),
+  const checkpointDetails: Pick<HostedPagedCheckpointMetadata, "capturedAtEpochMs"> &
+    Partial<HostedPagedCheckpointMetadata> = { capturedAtEpochMs };
+  if (snapshot.nativeDeliveryState !== undefined) {
+    checkpointDetails.nativeDeliveryState = snapshot.nativeDeliveryState;
+  }
+  if (snapshot.privateInputState !== undefined) {
+    checkpointDetails.privateInputState = snapshot.privateInputState;
+  }
+  if (inputRequests.length !== 0) {
+    checkpointDetails.inputRequests = inputRequests;
+  }
+  if (snapshot.prototype !== undefined) {
+    checkpointDetails.prototype = snapshot.prototype;
+  }
+  const checkpointStatus = { ...checkpointDetails, status: snapshot.status };
+  if (truncatedBeforeIndex !== undefined) {
+    checkpointStatus.truncatedBeforeIndex = truncatedBeforeIndex;
+  }
+  if (snapshot.uiPreview !== undefined) {
+    checkpointStatus.uiPreview = snapshot.uiPreview;
+  }
+  const metadata: HostedPagedCheckpointMetadata = {
+    ...checkpointStatus,
     version: 1,
-    ...(snapshot.workingPreview === undefined ? {} : { workingPreview: snapshot.workingPreview }),
   };
+  if (snapshot.workingPreview !== undefined) {
+    metadata.workingPreview = snapshot.workingPreview;
+  }
+  return metadata;
 };
 
 // eslint-disable-next-line eslint/func-style -- Project snapshot events lazily for progress recovery.
@@ -799,20 +822,22 @@ async function spoolObservedSession(input: {
     );
   }
   const path = nodePath.join(directory, "events.ndjson");
-  const recorder = createPrivateHostedApprovalRecorder({
+  const recorderInput: Parameters<typeof createPrivateHostedApprovalRecorder>[0] = {
     principal: input.principal,
     sessionId: input.privateApprovalSessionId,
     store: input.store,
-    ...(input.privateApprovalCaptureState === undefined
-      ? {}
-      : { state: input.privateApprovalCaptureState }),
-  });
-  const capture = input.deferPrivateApprovalPersistence
-    ? createPrivateHostedApprovalCapture(
-        input.privateApprovalSessionId,
-        input.privateApprovalCaptureState,
-      )
-    : undefined;
+  };
+  if (input.privateApprovalCaptureState !== undefined) {
+    recorderInput.state = input.privateApprovalCaptureState;
+  }
+  const recorder = createPrivateHostedApprovalRecorder(recorderInput);
+  const capture =
+    (input.deferPrivateApprovalPersistence ?? false)
+      ? createPrivateHostedApprovalCapture(
+          input.privateApprovalSessionId,
+          input.privateApprovalCaptureState,
+        )
+      : undefined;
   let file: Awaited<ReturnType<typeof open>> | null = null;
   try {
     file = await open(path, "wx", 0o600);
@@ -929,6 +954,32 @@ interface SendReadEvidence {
   observation: NativeSendReadObservation;
   binding: SendObservationBinding;
 }
+
+// Recovery settlement may atomically inherit a newer private build decision
+// from the locked source or original authority. Compare the public child
+// proposal and committed record without this store-owned projection.
+const comparableStartSession = <T extends HostedSessionRecord | HostedPagedSessionBase>(
+  operation: HostedOperationRecord,
+  session: T,
+): T => {
+  if (operation.nativeRecovery === undefined || session.version !== 2) {
+    return session;
+  }
+  const {
+    privateBuildDecision: _storeOwnedDecision,
+    privateAuthoringDecision: _storeOwnedAuthoring,
+    ...comparable
+  } = session;
+  void _storeOwnedAuthoring;
+  void _storeOwnedDecision;
+  return comparable as T;
+};
+
+const replayPublicEvents = async function* replayPublicEvents(
+  values: readonly z.infer<typeof publicEveEventSchema>[],
+) {
+  yield* values;
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createHostedEveSessionService(input: {
@@ -1098,26 +1149,6 @@ export function createHostedEveSessionService(input: {
     }
   }
 
-  // Recovery settlement may atomically inherit a newer private build decision
-  // from the locked source or original authority. Compare the public child
-  // proposal and committed record without this store-owned projection.
-  const comparableStartSession = <T extends HostedSessionRecord | HostedPagedSessionBase>(
-    operation: HostedOperationRecord,
-    session: T,
-  ): T => {
-    if (operation.nativeRecovery === undefined || session.version !== 2) {
-      return session;
-    }
-    const {
-      privateBuildDecision: _storeOwnedDecision,
-      privateAuthoringDecision: _storeOwnedAuthoring,
-      ...comparable
-    } = session;
-    void _storeOwnedAuthoring;
-    void _storeOwnedDecision;
-    return comparable as T;
-  };
-
   // eslint-disable-next-line eslint/func-style -- Called by settlement, exact retry and GET after canonical readback.
   async function activateCommittedRecovery(operation: HostedOperationRecord): Promise<void> {
     if (operation.nativeRecovery === undefined) {
@@ -1244,7 +1275,7 @@ export function createHostedEveSessionService(input: {
       },
       operation.operationId,
       (observation, observedBinding) => {
-        sendRead = { observation, binding: observedBinding };
+        sendRead = { binding: observedBinding, observation };
       },
     );
     const current = await requireSession(operation.sessionId);
@@ -1288,7 +1319,7 @@ export function createHostedEveSessionService(input: {
   ): Promise<boolean> {
     const session = toDurableHostedSessionRecord(current);
     const observeTransport = input.transport.observe;
-    const observeSessionPaged = input.store.observeSessionPaged;
+    const { observeSessionPaged } = input.store;
     if (
       observeTransport === undefined ||
       observeSessionPaged === undefined ||
@@ -1315,7 +1346,7 @@ export function createHostedEveSessionService(input: {
           (entry) =>
             entry.requestId === id &&
             entry.kind === "tool-approval" &&
-            entry.toolName === "prepare-app-native-target",
+            entry.toolName === PREPARE_NATIVE_TARGET_TOOL,
         ),
       )
     ) {
@@ -1342,40 +1373,51 @@ export function createHostedEveSessionService(input: {
       cancellationRevision: session.cancellationRevision ?? 0,
     };
     let observation: PagedObservationSpool["observation"] | undefined;
-    const events = async function* events(values: readonly z.infer<typeof publicEveEventSchema>[]) {
-      yield* values;
-    };
     const assertOwner = async () => {
       const latest = toDurableHostedSessionRecord(await requireSession(session.sessionId));
       await assertSendOwner(latest);
-      if (
+      const adapterChanged =
         latest.adapterSessionId !== replayBinding.adapterSessionId ||
-        latest.adapterGeneration !== replayBinding.adapterGeneration ||
+        latest.adapterGeneration !== replayBinding.adapterGeneration;
+      if (
+        adapterChanged ||
         (latest.cancellationRevision ?? 0) !== replayBinding.cancellationRevision ||
         latest.checkpointDigest !== checkpoint.digest
       ) {
         throw new HostedCheckpointObservationConflictError();
       }
     };
-    const run = await runHistoricalApprovalReplay({
+    const replayDetails: Pick<
+      Parameters<typeof runHistoricalApprovalReplay>[0],
+      "binding" | "checkpoint" | "trustedEvents"
+    > &
+      Partial<Parameters<typeof runHistoricalApprovalReplay>[0]> = {
       binding,
       checkpoint,
       // oxlint-disable-next-line eslint/no-use-before-define -- The reader closure is initialized before reconciliation is invoked.
       trustedEvents: () => readCheckpointEvents(session),
-      ...(metadata.approvalReplayProgress === undefined
-        ? {}
-        : { progress: metadata.approvalReplayProgress }),
+    };
+    if (metadata.approvalReplayProgress !== undefined) {
+      replayDetails.progress = metadata.approvalReplayProgress;
+    }
+    const run = await runHistoricalApprovalReplay({
+      ...replayDetails,
       assertOwner,
       observe: async (previous) => {
-        const spool = await spoolObservedSession({
+        const spoolDetails: Pick<
+          Parameters<typeof spoolObservedSession>[0],
+          "adapterSessionId" | "allowPartialObservation"
+        > &
+          Partial<Parameters<typeof spoolObservedSession>[0]> = {
           adapterSessionId: session.adapterSessionId,
           allowPartialObservation: true,
-          ...(previous === undefined
-            ? {}
-            : {
-                nativeObservationState: previous.nativeObservationState,
-                privateApprovalCaptureState: previous.privateApprovalCaptureState,
-              }),
+        };
+        if (previous !== undefined) {
+          spoolDetails.nativeObservationState = previous.nativeObservationState;
+          spoolDetails.privateApprovalCaptureState = previous.privateApprovalCaptureState;
+        }
+        const spool = await spoolObservedSession({
+          ...spoolDetails,
           privateApprovalSessionId: approvalSessionId,
           principal,
           sessionId: session.sessionId,
@@ -1384,7 +1426,7 @@ export function createHostedEveSessionService(input: {
           deferPrivateApprovalPersistence: true,
         });
         try {
-          observation = spool.observation;
+          ({ observation } = spool);
           const native = spool.observation.nativeObservationState;
           const tail = spool.observation.nativeTailIndex;
           if (
@@ -1458,18 +1500,22 @@ export function createHostedEveSessionService(input: {
           nativeObservationState: progress.nativeObservationState,
           privateApprovalCaptureState: progress.privateApprovalCaptureState,
           status: observation.status,
-          ...(observation.pendingRequests.length === 0
-            ? {}
-            : { inputRequests: observation.pendingRequests }),
-          ...(observation.prototype === undefined ? {} : { prototype: observation.prototype }),
-          ...(observation.prototypeRef === undefined
-            ? {}
-            : { prototypeRef: observation.prototypeRef }),
-          ...(observation.uiPreview === undefined ? {} : { uiPreview: observation.uiPreview }),
-          ...(observation.workingPreview === undefined
-            ? {}
-            : { workingPreview: observation.workingPreview }),
         };
+        if (observation.pendingRequests.length !== 0) {
+          publishedMetadata.inputRequests = observation.pendingRequests;
+        }
+        if (observation.prototype !== undefined) {
+          publishedMetadata.prototype = observation.prototype;
+        }
+        if (observation.prototypeRef !== undefined) {
+          publishedMetadata.prototypeRef = observation.prototypeRef;
+        }
+        if (observation.uiPreview !== undefined) {
+          publishedMetadata.uiPreview = observation.uiPreview;
+        }
+        if (observation.workingPreview !== undefined) {
+          publishedMetadata.workingPreview = observation.workingPreview;
+        }
         const summary = eveSessionResultSchema.parse({
           cursor: 0,
           events: [],
@@ -1481,7 +1527,7 @@ export function createHostedEveSessionService(input: {
           sessionId: session.sessionId,
           expectedCheckpointDigest: expected.digest,
           metadata: publishedMetadata,
-          events: events(progress.events),
+          events: replayPublicEvents(progress.events),
           stage: stageForResult(summary),
           resumability: ["completed", "failed", "cancelled"].includes(summary.status)
             ? "terminal"
@@ -1518,9 +1564,9 @@ export function createHostedEveSessionService(input: {
     // oxlint-disable-next-line eslint/no-use-before-define -- Reconciliation observes only and never dispatches RESPOND again.
     let result = await readSession({
       continueWork: false,
-      recoverUnavailable: false,
       cursor: 0,
       limit: 100,
+      recoverUnavailable: false,
       sessionId: operation.sessionId,
     });
     let current = toDurableHostedSessionRecord(await requireSession(operation.sessionId));
@@ -1541,7 +1587,7 @@ export function createHostedEveSessionService(input: {
       ...(metadata?.privateApprovalCaptureState?.receipts ?? []),
       ...observedRequests,
     ].some(
-      (entry) => responseIds.has(entry.requestId) && entry.toolName === "prepare-app-native-target",
+      (entry) => responseIds.has(entry.requestId) && entry.toolName === PREPARE_NATIVE_TARGET_TOOL,
     );
     const replayed = await replayNativeApprovalHistory(current, [...responseIds]);
     // A stale native receipt may predate a later cancellation. Even exact retries
@@ -1612,7 +1658,7 @@ export function createHostedEveSessionService(input: {
     const nativeIds: string[] = [];
     for (const batch of [...state.pending, ...state.resolved.map((entry) => entry.batch)]) {
       for (const entry of batch.requests) {
-        if (entry.kind === "tool-approval" && entry.toolName === "prepare-app-native-target") {
+        if (entry.kind === "tool-approval" && entry.toolName === PREPARE_NATIVE_TARGET_TOOL) {
           nativeIds.push(entry.requestId);
         }
       }
@@ -1633,9 +1679,10 @@ export function createHostedEveSessionService(input: {
       });
       for (const raw of page.operations) {
         const operation = hostedOperationRecordSchema.parse(raw);
+        const notUnknownResponse =
+          operation.kind !== "respond" || operation.state !== "submission_unknown";
         if (
-          operation.kind !== "respond" ||
-          operation.state !== "submission_unknown" ||
+          notUnknownResponse ||
           operation.sessionId !== sessionId ||
           operation.internalSessionLimitResponse !== undefined ||
           tenantKeyFor(operation.principal) !== tenantKeyFor(principal)
@@ -1680,7 +1727,7 @@ export function createHostedEveSessionService(input: {
           { appId: string; operationRef: string; planDigest: string }
         >();
         for (const receipt of capture.receipts) {
-          if (receipt.toolName !== "prepare-app-native-target") {
+          if (receipt.toolName !== PREPARE_NATIVE_TARGET_TOOL) {
             continue;
           }
           const target = {
@@ -1691,7 +1738,7 @@ export function createHostedEveSessionService(input: {
           targets.set(JSON.stringify(target), target);
         }
         const candidates: NonNullable<ReturnType<typeof reconstructNativeApprovalResponse>>[] = [];
-        const checkpointDigest = current.checkpointDigest;
+        const { checkpointDigest } = current;
         const currentState = state;
         for (const target of targets.values()) {
           const candidate = reconstructNativeApprovalResponse({
@@ -1764,9 +1811,9 @@ export function createHostedEveSessionService(input: {
     result: EveSessionResult,
   ): Promise<EveSessionResult | undefined> => {
     const marker = operation.internalSessionLimitResponse;
+    const notSessionLimitResponse = operation.kind !== "respond" || marker === undefined;
     if (
-      operation.kind !== "respond" ||
-      marker === undefined ||
+      notSessionLimitResponse ||
       operation.sessionId !== result.sessionId ||
       tenantKeyFor(operation.principal) !== tenantKeyFor(principal) ||
       !["reserved", "submission_unknown"].includes(operation.state)
@@ -1834,7 +1881,7 @@ export function createHostedEveSessionService(input: {
       if (
         settled === undefined &&
         operation.internalSessionLimitResponse.decision === "stop" &&
-        (operation.state === "reserved" || operation.state === "submission_unknown")
+        isUnsettledReservation(operation)
       ) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- Retain current ownership while waiting for this exact stop operation.
         await assertSessionLimitOwner(session);
@@ -1951,15 +1998,15 @@ export function createHostedEveSessionService(input: {
         },
       );
       // Preserve this read's public cursor and event page; the continuation's pending state is current.
-      return omitControlledGuardQuestions(
-        {
-          ...result,
-          inputRequests: next.inputRequests ?? [],
-          status: next.status,
-          ...(next.error === undefined ? {} : { error: next.error }),
-        },
-        ids,
-      );
+      const continuedResult = {
+        ...result,
+        inputRequests: next.inputRequests ?? [],
+        status: next.status,
+      };
+      if (next.error !== undefined) {
+        continuedResult.error = next.error;
+      }
+      return omitControlledGuardQuestions(continuedResult, ids);
     } catch (error) {
       if (!(error instanceof HostedSubmissionUnknownError)) {
         throw error;
@@ -2000,14 +2047,16 @@ export function createHostedEveSessionService(input: {
     let cursor: SendAcknowledgementCursor | undefined;
     let queued: UnsettledSendAcknowledgement | undefined;
     do {
+      const pageDetails: Pick<Parameters<typeof read>[0], "principal" | "sessionId"> &
+        Partial<Parameters<typeof read>[0]> = { principal, sessionId };
+      if (operationId !== undefined) {
+        pageDetails.operationId = operationId;
+      }
+      if (cursor !== undefined) {
+        pageDetails.cursor = cursor;
+      }
       // oxlint-disable-next-line eslint/no-await-in-loop -- Each keyset page depends on the preceding cursor; there is no total scan cap.
-      const page = await readPage({
-        principal,
-        sessionId,
-        ...(operationId === undefined ? {} : { operationId }),
-        ...(cursor === undefined ? {} : { cursor }),
-        limit: 100,
-      });
+      const page = await readPage({ ...pageDetails, limit: 100 });
       for (const acknowledgement of page.acknowledgements) {
         const operation = requireOwnedOperation(acknowledgement.operation, {
           clientRequestId: acknowledgement.operation.clientRequestId,
@@ -2020,7 +2069,7 @@ export function createHostedEveSessionService(input: {
           operation.sendDelivery === undefined ||
           operation.internalBuildContinuation !== undefined ||
           operation.internalAuthoringContinuation !== undefined ||
-          (operation.state !== "reserved" && operation.state !== "submission_unknown")
+          !isUnsettledReservation(operation)
         ) {
           throw new HostedSubmissionUnknownError();
         }
@@ -2091,7 +2140,7 @@ export function createHostedEveSessionService(input: {
       (candidate) => candidate.operation.operationId === queued?.operation.operationId,
     );
     if (acknowledged === undefined) {
-      return { result, queued: false };
+      return { queued: false, result };
     }
     requireOwnedOperation(acknowledged.operation, {
       clientRequestId: queued.operation.clientRequestId,
@@ -2127,7 +2176,7 @@ export function createHostedEveSessionService(input: {
       if (settled.state !== "succeeded") {
         throw new HostedSubmissionUnknownError();
       }
-      return { result, queued: false };
+      return { queued: false, result };
     }
     current = await requireSession(sessionId);
     if (
@@ -2140,7 +2189,7 @@ export function createHostedEveSessionService(input: {
         proof: currentProof,
       })
     ) {
-      return { result: { ...result, status: "working" }, queued: true };
+      return { queued: true, result: { ...result, status: "working" } };
     }
     const latestStatus = toDurableHostedSessionRecord(current).status;
     let latestResult = result;
@@ -2153,7 +2202,7 @@ export function createHostedEveSessionService(input: {
         100,
       );
     }
-    return { result: latestResult, queued: false };
+    return { queued: false, result: latestResult };
   };
 
   const continueApprovedWork = async (
@@ -2273,26 +2322,30 @@ export function createHostedEveSessionService(input: {
       ]),
     );
     const timestamp = now();
-    const candidate = hostedOperationRecordSchema.parse({
+    const candidateDetails: Partial<z.input<typeof hostedOperationRecordSchema>> = {
       clientRequestId: options.request.clientRequestId,
       createdAtEpochMs: timestamp,
       kind: options.kind,
-      ...(options.internalSessionLimitResponse === undefined
-        ? {}
-        : { internalSessionLimitResponse: options.internalSessionLimitResponse }),
-      ...(options.resourceApprovalResponse === undefined
-        ? {}
-        : { resourceApprovalResponse: options.resourceApprovalResponse }),
-      operationId,
-      principal,
-      ...(options.nativeRecovery === undefined
-        ? {}
-        : { nativeRecovery: { ...options.nativeRecovery, operationId } }),
-      requestDigest,
-      ...(options.sessionId === undefined ? {} : { sessionId: options.sessionId }),
-      ...(options.resumeSessionId === undefined
-        ? {}
-        : { resumeSessionId: options.resumeSessionId }),
+    };
+    if (options.internalSessionLimitResponse !== undefined) {
+      candidateDetails.internalSessionLimitResponse = options.internalSessionLimitResponse;
+    }
+    if (options.resourceApprovalResponse !== undefined) {
+      candidateDetails.resourceApprovalResponse = options.resourceApprovalResponse;
+    }
+    const candidateIdentity = { ...candidateDetails, operationId, principal };
+    if (options.nativeRecovery !== undefined) {
+      candidateIdentity.nativeRecovery = { ...options.nativeRecovery, operationId };
+    }
+    const candidateRequest = { ...candidateIdentity, requestDigest };
+    if (options.sessionId !== undefined) {
+      candidateRequest.sessionId = options.sessionId;
+    }
+    if (options.resumeSessionId !== undefined) {
+      candidateRequest.resumeSessionId = options.resumeSessionId;
+    }
+    const candidate = hostedOperationRecordSchema.parse({
+      ...candidateRequest,
       state: "reserved",
       updatedAtEpochMs: timestamp,
       version: 1,
@@ -2560,17 +2613,22 @@ export function createHostedEveSessionService(input: {
       let settled: HostedOperationRecord;
       settlementPhase = "settlement";
       if (dispatchedPagedSession === undefined) {
-        settled = await input.store.settleSucceeded({
+        const { store } = input;
+        const { settleSucceeded } = store;
+        const settlement: Parameters<HostedEveStore["settleSucceeded"]>[0] = {
           nowEpochMs: now(),
           operationId,
           principal,
           requestDigest,
           result: dispatchedResult,
-          ...(dispatched.sendDeliveryResolution === undefined
-            ? {}
-            : { sendDeliveryResolution: dispatched.sendDeliveryResolution }),
-          ...(dispatchedSession === undefined ? {} : { session: dispatchedSession }),
-        });
+        };
+        if (dispatched.sendDeliveryResolution !== undefined) {
+          settlement.sendDeliveryResolution = dispatched.sendDeliveryResolution;
+        }
+        if (dispatchedSession !== undefined) {
+          settlement.session = dispatchedSession;
+        }
+        settled = await settleSucceeded.call(store, settlement);
       } else {
         if (input.store.settleSucceededPaged === undefined) {
           throw new HostedSubmissionUnknownError();
@@ -2744,20 +2802,22 @@ export function createHostedEveSessionService(input: {
       );
       const spool = await spoolSnapshotEvents(snapshot);
       try {
-        const summary = eveSessionResultSchema.parse({
-          cursor: 0,
-          events: [],
-          ...(metadata.inputRequests === undefined
-            ? {}
-            : { inputRequests: metadata.inputRequests }),
-          ...(metadata.prototype === undefined ? {} : { prototype: metadata.prototype }),
-          sessionId,
-          status: metadata.status,
-          ...(metadata.uiPreview === undefined ? {} : { uiPreview: metadata.uiPreview }),
-          ...(metadata.workingPreview === undefined
-            ? {}
-            : { workingPreview: metadata.workingPreview }),
-        });
+        const summaryDetails: Pick<z.input<typeof eveSessionResultSchema>, "cursor" | "events"> &
+          Partial<z.input<typeof eveSessionResultSchema>> = { cursor: 0, events: [] };
+        if (metadata.inputRequests !== undefined) {
+          summaryDetails.inputRequests = metadata.inputRequests;
+        }
+        if (metadata.prototype !== undefined) {
+          summaryDetails.prototype = metadata.prototype;
+        }
+        const summaryStatus = { ...summaryDetails, sessionId, status: metadata.status };
+        if (metadata.uiPreview !== undefined) {
+          summaryStatus.uiPreview = metadata.uiPreview;
+        }
+        if (metadata.workingPreview !== undefined) {
+          summaryStatus.workingPreview = metadata.workingPreview;
+        }
+        const summary = eveSessionResultSchema.parse(summaryStatus);
         const observed = await input.store.observeSessionPaged({
           ...(summary.uiPreview?.appId === undefined ? {} : { appId: summary.uiPreview.appId }),
           ...(explicitSendOperationId === undefined ? {} : { explicitSendOperationId }),
@@ -2780,18 +2840,31 @@ export function createHostedEveSessionService(input: {
       }
     }
     const checkpoint = checkpointForSnapshot(sessionId, snapshot, capturedAtEpochMs);
-    const observed = await input.store.observeSession?.({
-      checkpoint,
-      ...(explicitSendOperationId === undefined ? {} : { explicitSendOperationId }),
-      ...(completeResult.uiPreview?.appId === undefined
-        ? {}
-        : { appId: completeResult.uiPreview.appId }),
-      nowEpochMs: capturedAtEpochMs,
-      principal,
-      resumability,
-      sessionId,
-      stage: stageForResult(completeResult),
-    });
+    const { store } = input;
+    const { observeSession } = store;
+    let observation: ReturnType<NonNullable<HostedEveStore["observeSession"]>> | undefined;
+    if (observeSession != null) {
+      const observationDetails: Pick<
+        Parameters<NonNullable<HostedEveStore["observeSession"]>>[0],
+        "checkpoint"
+      > &
+        Partial<Parameters<NonNullable<HostedEveStore["observeSession"]>>[0]> = { checkpoint };
+      if (explicitSendOperationId !== undefined) {
+        observationDetails.explicitSendOperationId = explicitSendOperationId;
+      }
+      if (completeResult.uiPreview?.appId !== undefined) {
+        observationDetails.appId = completeResult.uiPreview.appId;
+      }
+      observation = observeSession.call(store, {
+        ...observationDetails,
+        nowEpochMs: capturedAtEpochMs,
+        principal,
+        resumability,
+        sessionId,
+        stage: stageForResult(completeResult),
+      });
+    }
+    const observed = await observation;
     if (observed?.status === "cancelled") {
       const durable = toDurableHostedSessionRecord(observed);
       if (durable.checkpoint) {
@@ -2823,24 +2896,35 @@ export function createHostedEveSessionService(input: {
         durable.status === "failed" && durable.resumability === "terminal"
           ? "failed"
           : metadata.status;
-      return eveSessionResultSchema.parse({
+      const resultDetails: Pick<z.input<typeof eveSessionResultSchema>, "cursor" | "events"> &
+        Partial<z.input<typeof eveSessionResultSchema>> = {
         cursor: page.cursor,
         events: page.events,
-        ...(metadata.inputRequests === undefined ? {} : { inputRequests: metadata.inputRequests }),
-        ...(metadata.prototype === undefined ? {} : { prototype: metadata.prototype }),
-        ...(metadata.prototypeRef === undefined ? {} : { prototypeRef: metadata.prototypeRef }),
+      };
+      if (metadata.inputRequests !== undefined) {
+        resultDetails.inputRequests = metadata.inputRequests;
+      }
+      if (metadata.prototype !== undefined) {
+        resultDetails.prototype = metadata.prototype;
+      }
+      if (metadata.prototypeRef !== undefined) {
+        resultDetails.prototypeRef = metadata.prototypeRef;
+      }
+      const resultStatus = {
+        ...resultDetails,
         sessionId,
         status: status === "working" && durable.resumability === "checkpoint" ? "waiting" : status,
-        ...(metadata.uiPreview === undefined ? {} : { uiPreview: metadata.uiPreview }),
-        ...(metadata.workingPreview === undefined
-          ? {}
-          : {
-              workingPreview:
-                status === "failed" || status === "cancelled"
-                  ? null
-                  : currentWorkingPreview(metadata.workingPreview),
-            }),
-      });
+      };
+      if (metadata.uiPreview !== undefined) {
+        resultStatus.uiPreview = metadata.uiPreview;
+      }
+      if (metadata.workingPreview !== undefined) {
+        resultStatus.workingPreview =
+          status === "failed" || status === "cancelled"
+            ? null
+            : currentWorkingPreview(metadata.workingPreview);
+      }
+      return eveSessionResultSchema.parse(resultStatus);
     }
     if (durable.checkpoint !== undefined) {
       return resultFromHostedCheckpoint(sessionId, durable.checkpoint, cursor, limit);
@@ -3141,15 +3225,22 @@ export function createHostedEveSessionService(input: {
                     : storedPrivateApprovalCaptureState.pendingRequests,
               });
         try {
-          const diagnostic = createHostedApprovalObservationDiagnostic({
+          const diagnosticDetails: Pick<
+            Parameters<typeof createHostedApprovalObservationDiagnostic>[0],
+            "coldReadProgress" | "inlineReceipts"
+          > &
+            Partial<Parameters<typeof createHostedApprovalObservationDiagnostic>[0]> = {
             coldReadProgress: coldReadProgress !== undefined,
             inlineReceipts: session.privateApprovalReceipts ?? [],
-            ...(nativeObservationState === undefined
-              ? {}
-              : { nativeState: nativeObservationState }),
-            ...(storedPrivateApprovalCaptureState === undefined
-              ? {}
-              : { privateCapture: storedPrivateApprovalCaptureState }),
+          };
+          if (nativeObservationState !== undefined) {
+            diagnosticDetails.nativeState = nativeObservationState;
+          }
+          if (storedPrivateApprovalCaptureState !== undefined) {
+            diagnosticDetails.privateCapture = storedPrivateApprovalCaptureState;
+          }
+          const diagnostic = createHostedApprovalObservationDiagnostic({
+            ...diagnosticDetails,
             publicPendingRequests:
               nativeObservationState?.pendingRequests ?? checkpointMetadata?.inputRequests ?? [],
             sessionId,
@@ -3160,13 +3251,24 @@ export function createHostedEveSessionService(input: {
         } catch {
           /* Approval observation is diagnostic only; never affect an ordinary read. */
         }
-        spool = await spoolObservedSession({
+        const spoolDetails: Pick<
+          Parameters<typeof spoolObservedSession>[0],
+          "adapterSessionId" | "allowPartialObservation"
+        > &
+          Partial<Parameters<typeof spoolObservedSession>[0]> = {
           adapterSessionId: session.adapterSessionId,
           allowPartialObservation:
             checkpointMetadata?.nativeObservationState === undefined ||
             coldReadProgress !== undefined,
-          ...(nativeObservationState === undefined ? {} : { nativeObservationState }),
-          ...(privateApprovalCaptureState === undefined ? {} : { privateApprovalCaptureState }),
+        };
+        if (nativeObservationState !== undefined) {
+          spoolDetails.nativeObservationState = nativeObservationState;
+        }
+        if (privateApprovalCaptureState !== undefined) {
+          spoolDetails.privateApprovalCaptureState = privateApprovalCaptureState;
+        }
+        spool = await spoolObservedSession({
+          ...spoolDetails,
           privateApprovalSessionId,
           principal,
           sessionId,
@@ -3174,11 +3276,13 @@ export function createHostedEveSessionService(input: {
           transport: input.transport.observe,
         });
         if (activationFailure !== undefined) {
-          const observation = spool.observation;
-          if (
+          const { observation } = spool;
+          const incompleteObservation =
             observation.observationComplete !== true ||
             observation.nativeTailIndex === undefined ||
-            observation.nextNativeIndex !== observation.nativeTailIndex + 1 ||
+            observation.nextNativeIndex !== observation.nativeTailIndex + 1;
+          if (
+            incompleteObservation ||
             observation.nativeObservationState?.adapterSessionId !== session.adapterSessionId ||
             observation.activeTurnId !== undefined ||
             !["completed", "failed", "cancelled"].includes(observation.status)
@@ -3186,17 +3290,21 @@ export function createHostedEveSessionService(input: {
             throw activationFailure;
           }
         }
-        const nativeReadObservation: NativeSendReadObservation = {
+        const nativeReadProgress: Pick<NativeSendReadObservation, "nativeStartIndex"> &
+          Partial<NativeSendReadObservation> = {
           nativeStartIndex: nativeObservationState?.nextNativeIndex ?? 0,
-          ...(spool.observation.nextNativeIndex === undefined
-            ? {}
-            : { nativeNextIndex: spool.observation.nextNativeIndex }),
-          ...(spool.observation.nativeTailIndex === undefined
-            ? {}
-            : { nativeTailIndex: spool.observation.nativeTailIndex }),
-          ...(spool.observation.observationComplete === undefined
-            ? {}
-            : { observationComplete: spool.observation.observationComplete }),
+        };
+        if (spool.observation.nextNativeIndex !== undefined) {
+          nativeReadProgress.nativeNextIndex = spool.observation.nextNativeIndex;
+        }
+        if (spool.observation.nativeTailIndex !== undefined) {
+          nativeReadProgress.nativeTailIndex = spool.observation.nativeTailIndex;
+        }
+        if (spool.observation.observationComplete !== undefined) {
+          nativeReadProgress.observationComplete = spool.observation.observationComplete;
+        }
+        const nativeReadObservation: NativeSendReadObservation = {
+          ...nativeReadProgress,
           currentTurnPresent: spool.observation.activeTurnId !== undefined,
         };
         const sendRead: SendReadEvidence = {
@@ -3288,16 +3396,19 @@ export function createHostedEveSessionService(input: {
         } else {
           orderedEvents = readColdPrefixAndDelta();
         }
-        if (
+        const hasDirectArtifactProjection =
           !spool.observation.artifactProjectionRequiresLegacyReadback ||
-          spool.observation.prototype !== undefined ||
+          spool.observation.prototype !== undefined;
+        if (
+          hasDirectArtifactProjection ||
           spool.observation.prototypeRef !== undefined ||
           observedNativeState !== undefined
         ) {
           const capturedAtEpochMs = now();
-          const metadata: HostedPagedCheckpointMetadata = {
-            capturedAtEpochMs,
-            ...(checkpointMetadata?.approvalReplayProgress !== undefined &&
+          const metadataDetails: Pick<HostedPagedCheckpointMetadata, "capturedAtEpochMs"> &
+            Partial<HostedPagedCheckpointMetadata> = { capturedAtEpochMs };
+          if (
+            checkpointMetadata?.approvalReplayProgress !== undefined &&
             checkpointMetadata.approvalReplayProgress.binding.sessionId === sessionId &&
             checkpointMetadata.approvalReplayProgress.binding.adapterSessionId ===
               session.adapterSessionId &&
@@ -3307,48 +3418,55 @@ export function createHostedEveSessionService(input: {
               checkpointMetadata.approvalReplayProgress.binding.principal,
               session.principal,
             )
-              ? { approvalReplayProgress: checkpointMetadata.approvalReplayProgress }
-              : {}),
-            ...(spool.observation.activeTurnId === undefined
-              ? {}
-              : { activeTurnId: spool.observation.activeTurnId }),
-            ...(spool.observation.pendingRequests.length === 0
-              ? {}
-              : { inputRequests: spool.observation.pendingRequests }),
-            ...(spool.observation.prototypeRef === undefined
-              ? {}
-              : { prototypeRef: spool.observation.prototypeRef }),
-            ...(observedNativeState === undefined
-              ? {}
-              : { nativeObservationState: observedNativeState }),
+          ) {
+            metadataDetails.approvalReplayProgress = checkpointMetadata.approvalReplayProgress;
+          }
+          if (spool.observation.activeTurnId !== undefined) {
+            metadataDetails.activeTurnId = spool.observation.activeTurnId;
+          }
+          if (spool.observation.pendingRequests.length !== 0) {
+            metadataDetails.inputRequests = spool.observation.pendingRequests;
+          }
+          if (spool.observation.prototypeRef !== undefined) {
+            metadataDetails.prototypeRef = spool.observation.prototypeRef;
+          }
+          if (observedNativeState !== undefined) {
+            metadataDetails.nativeObservationState = observedNativeState;
+          }
+          const metadataCapture = {
+            ...metadataDetails,
             privateApprovalCaptureState: spool.privateApprovalCaptureState,
-            ...(spool.observation.prototype === undefined
-              ? {}
-              : { prototype: spool.observation.prototype }),
-            status: spool.observation.status,
-            ...(spool.observation.uiPreview === undefined
-              ? {}
-              : { uiPreview: spool.observation.uiPreview }),
-            version: 1,
-            ...(spool.observation.workingPreview === undefined
-              ? {}
-              : { workingPreview: spool.observation.workingPreview }),
           };
-          const summary = eveSessionResultSchema.parse({
-            cursor: 0,
-            events: [],
-            ...(metadata.inputRequests === undefined
-              ? {}
-              : { inputRequests: metadata.inputRequests }),
-            ...(metadata.prototypeRef === undefined ? {} : { prototypeRef: metadata.prototypeRef }),
-            ...(metadata.prototype === undefined ? {} : { prototype: metadata.prototype }),
-            sessionId,
-            status: metadata.status,
-            ...(metadata.uiPreview === undefined ? {} : { uiPreview: metadata.uiPreview }),
-            ...(metadata.workingPreview === undefined
-              ? {}
-              : { workingPreview: metadata.workingPreview }),
-          });
+          if (spool.observation.prototype !== undefined) {
+            metadataCapture.prototype = spool.observation.prototype;
+          }
+          const metadataStatus = { ...metadataCapture, status: spool.observation.status };
+          if (spool.observation.uiPreview !== undefined) {
+            metadataStatus.uiPreview = spool.observation.uiPreview;
+          }
+          const metadata: HostedPagedCheckpointMetadata = { ...metadataStatus, version: 1 };
+          if (spool.observation.workingPreview !== undefined) {
+            metadata.workingPreview = spool.observation.workingPreview;
+          }
+          const summaryDetails: Pick<z.input<typeof eveSessionResultSchema>, "cursor" | "events"> &
+            Partial<z.input<typeof eveSessionResultSchema>> = { cursor: 0, events: [] };
+          if (metadata.inputRequests !== undefined) {
+            summaryDetails.inputRequests = metadata.inputRequests;
+          }
+          if (metadata.prototypeRef !== undefined) {
+            summaryDetails.prototypeRef = metadata.prototypeRef;
+          }
+          if (metadata.prototype !== undefined) {
+            summaryDetails.prototype = metadata.prototype;
+          }
+          const summaryStatus = { ...summaryDetails, sessionId, status: metadata.status };
+          if (metadata.uiPreview !== undefined) {
+            summaryStatus.uiPreview = metadata.uiPreview;
+          }
+          if (metadata.workingPreview !== undefined) {
+            summaryStatus.workingPreview = metadata.workingPreview;
+          }
+          const summary = eveSessionResultSchema.parse(summaryStatus);
           const resumability = ["completed", "failed", "cancelled"].includes(summary.status)
             ? "terminal"
             : "live";
@@ -3595,7 +3713,7 @@ export function createHostedEveSessionService(input: {
         sendDelivery === undefined ? undefined : sendDiagnostic?.operationId,
         (observed, binding) => {
           nativeRead = observed;
-          sendRead = { observation: observed, binding };
+          sendRead = { binding, observation: observed };
         },
       );
       const current = toDurableHostedSessionRecord(await requireSession(sessionId));
@@ -3646,14 +3764,22 @@ export function createHostedEveSessionService(input: {
       return result;
     } catch (error) {
       if (sendDiagnostic !== undefined && sendDelivery !== undefined) {
-        reportHostedSubmissionDiagnostic({
+        const diagnosticDetails: typeof sendDiagnostic & {
+          adapterSessionId: string;
+          error: unknown;
+          failureCategory: typeof failureCategory;
+          sendDeliveryObservation?: NonNullable<typeof deliveryObservation>;
+        } = {
           ...sendDiagnostic,
           adapterSessionId: sendDelivery.adapterSessionId,
           error,
           failureCategory,
-          ...(deliveryObservation === undefined
-            ? {}
-            : { sendDeliveryObservation: deliveryObservation }),
+        };
+        if (deliveryObservation !== undefined) {
+          diagnosticDetails.sendDeliveryObservation = deliveryObservation;
+        }
+        reportHostedSubmissionDiagnostic({
+          ...diagnosticDetails,
           operationKind: "send",
           phase,
           sink: input.onSubmissionDiagnostic,
@@ -3778,28 +3904,30 @@ export function createHostedEveSessionService(input: {
           ),
         )
       ) {
-        marker = internalSessionLimitResponseSchema.parse({
+        const markerDetails: Partial<z.input<typeof internalSessionLimitResponseSchema>> = {
           adapterGeneration: toDurableHostedSessionRecord(session).adapterGeneration,
           adapterSessionId: session.adapterSessionId,
           batches: stopGuardOnly ? frameworkGuardBatches(state) : state.pending,
           decision: stopGuardOnly ? "stop" : "continue",
-          ...(stopGuardOnly &&
+        };
+        if (
+          stopGuardOnly &&
           toDurableHostedSessionRecord(session).privateBuildDecision !== undefined
-            ? {
-                stoppedBuildTurnId:
-                  toDurableHostedSessionRecord(session).privateBuildDecision?.turnId,
-              }
-            : {}),
+        ) {
+          markerDetails.stoppedBuildTurnId =
+            toDurableHostedSessionRecord(session).privateBuildDecision?.turnId;
+        }
+        marker = internalSessionLimitResponseSchema.parse({
+          ...markerDetails,
           responses: nativeResponses(responses),
         });
       }
     }
     // Preserve original resource approval authority before dispatch when the full private batch is available.
     const approvalRequest = resourceApprovalResponseProofSchema.shape.request.safeParse(request);
-    const approvalMetadata =
-      marker === undefined && approvalRequest.success && (state?.pending.length ?? 0) > 0
-        ? await readCheckpointMetadata(session)
-        : null;
+    const hasEligibleApproval = marker === undefined && approvalRequest.success;
+    const hasPendingApproval = hasEligibleApproval && (state?.pending.length ?? 0) > 0;
+    const approvalMetadata = hasPendingApproval ? await readCheckpointMetadata(session) : null;
     const resourceApprovalResponse =
       marker === undefined && approvalRequest.success
         ? captureResourceApprovalResponse(
@@ -3809,9 +3937,15 @@ export function createHostedEveSessionService(input: {
             approvalRequest.data,
           )
         : undefined;
+    const responseMetadata: Partial<Parameters<typeof mutate>[0]> = {};
+    if (resourceApprovalResponse !== undefined) {
+      responseMetadata.resourceApprovalResponse = resourceApprovalResponse;
+    }
+    if (marker !== undefined) {
+      responseMetadata.internalSessionLimitResponse = marker;
+    }
     return mutate({
-      ...(resourceApprovalResponse === undefined ? {} : { resourceApprovalResponse }),
-      ...(marker === undefined ? {} : { internalSessionLimitResponse: marker }),
+      ...responseMetadata,
       async dispatch(operationId) {
         const paged =
           input.transport.observe !== undefined &&
@@ -3879,24 +4013,26 @@ export function createHostedEveSessionService(input: {
         }
         const responseCursor =
           before === undefined ? mutationEventCursor(session) : publicSnapshotEventCount(before);
-        const responseInput = {
+        const responseDetails: Pick<
+          Parameters<HostedEveTransport["respond"]>[0],
+          "adapterSessionId"
+        > &
+          Partial<Parameters<HostedEveTransport["respond"]>[0]> = {
           adapterSessionId: session.adapterSessionId,
-          ...(session.version === 2 && session.nativeRecoveryBinding !== undefined
-            ? { logicalSessionId: session.nativeRecoveryBinding.logicalSessionId }
-            : {}),
-          ...(marker === undefined ? {} : { internalSessionLimitResponse: marker }),
-          ...(preflight?.nativeObservationState === undefined
-            ? {}
-            : {
-                nativeObservationState: preflight.nativeObservationState,
-              }),
-          operationId,
-          principal,
-          responses,
-          ...(session.version === 2 && session.sourceHandoffId
-            ? { sourceHandoffId: session.sourceHandoffId }
-            : {}),
         };
+        if (session.version === 2 && session.nativeRecoveryBinding !== undefined) {
+          responseDetails.logicalSessionId = session.nativeRecoveryBinding.logicalSessionId;
+        }
+        if (marker !== undefined) {
+          responseDetails.internalSessionLimitResponse = marker;
+        }
+        if (preflight?.nativeObservationState !== undefined) {
+          responseDetails.nativeObservationState = preflight.nativeObservationState;
+        }
+        const responseInput = { ...responseDetails, operationId, principal, responses };
+        if (session.version === 2 && session.sourceHandoffId) {
+          responseInput.sourceHandoffId = session.sourceHandoffId;
+        }
         if (nativePreflight) {
           await input.transport.respondAccepted?.(responseInput);
           const result = await readAcceptedMutation(
@@ -4039,9 +4175,10 @@ export function createHostedEveSessionService(input: {
           nowEpochMs: now(),
         });
       }
+      const canObserveCancellation =
+        input.transport.observe !== undefined && input.transport.cancelAccepted !== undefined;
       const paged =
-        input.transport.observe !== undefined &&
-        input.transport.cancelAccepted !== undefined &&
+        canObserveCancellation &&
         input.store.observeSessionPaged !== undefined &&
         input.store.readCheckpointPage !== undefined;
       let snapshot: HostedEngineSnapshot;
@@ -4092,25 +4229,50 @@ export function createHostedEveSessionService(input: {
                 })
               : result;
           }
-          await input.transport.cancelAccepted?.({
-            adapterSessionId: session.adapterSessionId,
-            ...(session.version === 2 && session.nativeRecoveryBinding !== undefined
-              ? { logicalSessionId: session.nativeRecoveryBinding.logicalSessionId }
-              : {}),
-            nativeObservationState: preflight.nativeObservationState,
-            principal,
-            ...(turnId === undefined ? {} : { turnId }),
-          });
+          const { transport } = input;
+          const { cancelAccepted } = transport;
+          let cancellation: Promise<void> | undefined;
+          if (cancelAccepted != null) {
+            const cancelIdentity: Pick<
+              Parameters<NonNullable<HostedEveTransport["cancelAccepted"]>>[0],
+              "adapterSessionId"
+            > &
+              Partial<Parameters<NonNullable<HostedEveTransport["cancelAccepted"]>>[0]> = {
+              adapterSessionId: session.adapterSessionId,
+            };
+            if (session.version === 2 && session.nativeRecoveryBinding !== undefined) {
+              cancelIdentity.logicalSessionId = session.nativeRecoveryBinding.logicalSessionId;
+            }
+            const cancelInput = {
+              ...cancelIdentity,
+              nativeObservationState: preflight.nativeObservationState,
+              principal,
+            };
+            if (turnId !== undefined) {
+              cancelInput.turnId = turnId;
+            }
+            cancellation = cancelAccepted.call(transport, cancelInput);
+          }
+          await cancellation;
           return readAcceptedMutation(sessionId, session.checkpointDigest, 0);
         }
-        snapshot = await input.transport.cancel({
+        const { transport } = input;
+        const { cancel } = transport;
+        const cancelIdentity: Pick<
+          Parameters<HostedEveTransport["cancel"]>[0],
+          "adapterSessionId"
+        > &
+          Partial<Parameters<HostedEveTransport["cancel"]>[0]> = {
           adapterSessionId: session.adapterSessionId,
-          ...(session.version === 2 && session.nativeRecoveryBinding !== undefined
-            ? { logicalSessionId: session.nativeRecoveryBinding.logicalSessionId }
-            : {}),
-          principal,
-          ...(turnId === undefined ? {} : { turnId }),
-        });
+        };
+        if (session.version === 2 && session.nativeRecoveryBinding !== undefined) {
+          cancelIdentity.logicalSessionId = session.nativeRecoveryBinding.logicalSessionId;
+        }
+        const cancelInput = { ...cancelIdentity, principal };
+        if (turnId !== undefined) {
+          cancelInput.turnId = turnId;
+        }
+        snapshot = await cancel.call(transport, cancelInput);
       } catch (error) {
         if (error instanceof SubmissionRejectedBeforeDispatchError) {
           throw new HostedRejectedOperationError(error.code);
@@ -4296,13 +4458,15 @@ export function createHostedEveSessionService(input: {
           if (matches.length !== 1) {
             return false;
           }
-          const receipt = matches[0];
-          return (
+          const [receipt] = matches;
+          const sameApproval =
             receipt !== undefined &&
             // Native target response recovery requires proof of the complete original batch.
             // This legacy shortcut checks only the IDs supplied by its caller.
-            receipt.toolName !== "prepare-app-native-target" &&
-            privateResourceApprovalSessionId(receipt) === approvalSessionId &&
+            receipt.toolName !== PREPARE_NATIVE_TARGET_TOOL &&
+            privateResourceApprovalSessionId(receipt) === approvalSessionId;
+          return (
+            sameApproval &&
             receipt.responderPrincipalId === principal.ownerUserId &&
             receipt.outcome === (response.kind === "approve" ? "approved" : "cancelled")
           );
@@ -4315,10 +4479,14 @@ export function createHostedEveSessionService(input: {
             sessionId,
           });
           const latest = toDurableHostedSessionRecord(await requireSession(sessionId));
-          const currentIsStable =
+          const sameAdapter =
             latest.adapterSessionId === durable.adapterSessionId &&
-            latest.adapterGeneration === durable.adapterGeneration &&
-            canonical(latest.nativeRecoveryBinding) === canonical(durable.nativeRecoveryBinding) &&
+            latest.adapterGeneration === durable.adapterGeneration;
+          const sameRecovery =
+            sameAdapter &&
+            canonical(latest.nativeRecoveryBinding) === canonical(durable.nativeRecoveryBinding);
+          const currentIsStable =
+            sameRecovery &&
             current.error === undefined &&
             (current.status === "working" || current.status === "completed");
           if (currentIsStable) {
@@ -4344,18 +4512,20 @@ export function createHostedEveSessionService(input: {
       requireHostedOperationScope(principal, "send");
       let session = await requireSession(request.sessionId);
       const initialBinding = toDurableHostedSessionRecord(session);
+      const hasCancellation =
+        session.status === "cancelled" ||
+        (initialBinding.cancellationRevision ?? 0) >
+          (initialBinding.resumedCancellationRevision ?? 0);
       const resumeCancellationRevision =
-        (session.status === "cancelled" ||
-          (initialBinding.cancellationRevision ?? 0) >
-            (initialBinding.resumedCancellationRevision ?? 0)) &&
-        input.store.recordCancellationIntent !== undefined
+        hasCancellation && input.store.recordCancellationIntent !== undefined
           ? (initialBinding.cancellationRevision ?? 0)
           : undefined;
       const settledResult = await mutate({
         async dispatch(operationId) {
+          const canObserveSend =
+            input.transport.observe !== undefined && input.transport.sendAccepted !== undefined;
           const paged =
-            input.transport.observe !== undefined &&
-            input.transport.sendAccepted !== undefined &&
+            canObserveSend &&
             input.store.observeSessionPaged !== undefined &&
             input.store.readCheckpointPage !== undefined;
           let preflight: Awaited<ReturnType<typeof readMutationPreflight>> | undefined;
@@ -4403,15 +4573,23 @@ export function createHostedEveSessionService(input: {
           }
           const requestDigest = digest({ kind: "send", request, sessionId: request.sessionId });
           let sendDelivery: SendDelivery | undefined;
-          const sendInput = {
+          const sendIdentity: Pick<Parameters<HostedEveTransport["send"]>[0], "adapterSessionId"> &
+            Partial<Parameters<HostedEveTransport["send"]>[0]> = {
             adapterSessionId: session.adapterSessionId,
-            ...(session.version === 2 && session.nativeRecoveryBinding !== undefined
-              ? { logicalSessionId: session.nativeRecoveryBinding.logicalSessionId }
-              : {}),
+          };
+          if (session.version === 2 && session.nativeRecoveryBinding !== undefined) {
+            sendIdentity.logicalSessionId = session.nativeRecoveryBinding.logicalSessionId;
+          }
+          const sendInput = {
+            ...sendIdentity,
             message: request.message,
             onAccepted: async (deliveryId: string) => {
+              const markerRevision: Pick<SendDelivery, "resumeCancellationRevision"> = {};
+              if (resumeCancellationRevision !== undefined) {
+                markerRevision.resumeCancellationRevision = resumeCancellationRevision;
+              }
               const marker: SendDelivery = {
-                ...(resumeCancellationRevision === undefined ? {} : { resumeCancellationRevision }),
+                ...markerRevision,
                 adapterGeneration: binding.adapterGeneration,
                 adapterSessionId: binding.adapterSessionId,
                 deliveryId,
@@ -4444,10 +4622,10 @@ export function createHostedEveSessionService(input: {
             },
             operationId,
             principal,
-            ...(session.version === 2 && session.sourceHandoffId
-              ? { sourceHandoffId: session.sourceHandoffId }
-              : {}),
           };
+          if (session.version === 2 && session.sourceHandoffId) {
+            sendInput.sourceHandoffId = session.sourceHandoffId;
+          }
           if (nativePreflight) {
             await input.transport.sendAccepted?.(sendInput);
             if (sendDelivery === undefined) {
@@ -4464,11 +4642,15 @@ export function createHostedEveSessionService(input: {
                 queued = evidence;
               },
             );
+            const dispatchResult: {
+              result: EveSessionResult;
+              queuedSend?: { delivery: SendDelivery; evidence: SendReadEvidence };
+            } = { result };
+            if (queued !== undefined) {
+              dispatchResult.queuedSend = { delivery: sendDelivery, evidence: queued };
+            }
             return {
-              result,
-              ...(queued === undefined
-                ? {}
-                : { queuedSend: { delivery: sendDelivery, evidence: queued } }),
+              ...dispatchResult,
               sendDeliveryResolution: await nativeDeliveriesForSession(
                 await requireSession(request.sessionId),
               ),
@@ -4550,9 +4732,11 @@ export function createHostedEveSessionService(input: {
             ["sessionId", operation.kind === "resume" ? request.resumeSessionId : undefined],
           ]),
         );
-        if (
+        const wrongStart =
           (operation.kind !== "start" && operation.kind !== "resume") ||
-          operation.clientRequestId !== request.clientRequestId ||
+          operation.clientRequestId !== request.clientRequestId;
+        if (
+          wrongStart ||
           tenantKeyFor(operation.principal) !== tenantKeyFor(principal) ||
           operation.requestDigest !== expectedDigest
         ) {
@@ -4598,9 +4782,10 @@ export function createHostedEveSessionService(input: {
         const executionTransfer = request.resumeMode !== undefined;
         const transferKind =
           request.resumeMode === "recover-idle" ? "idle-checkpoint" : "pending-approval";
+        const needsTransfer =
+          executionTransfer && retainedRecovery?.executionTransfer === undefined;
         if (
-          executionTransfer &&
-          retainedRecovery?.executionTransfer === undefined &&
+          needsTransfer &&
           (existing.status !==
             (transferKind === "idle-checkpoint" ? "waiting" : "input_required") ||
             existing.checkpointDigest === undefined)
@@ -4610,33 +4795,32 @@ export function createHostedEveSessionService(input: {
         const terminal = ["completed", "failed", "cancelled"].includes(existing.status);
         const interrupted = existing.status === "working" && existing.resumability === "checkpoint";
         if (terminal || interrupted || executionTransfer) {
-          const recoverySource =
-            retainedRecovery ??
-            (existing.status === "failed" || executionTransfer
-              ? {
-                  version: 1 as const,
-                  sourcePublicSessionId: existing.sessionId,
-                  sourceOwnerRunId: existing.adapterSessionId,
-                  sourceAdapterGeneration: existing.adapterGeneration,
-                  logicalSessionId:
-                    existing.nativeRecoveryBinding?.logicalSessionId ?? existing.adapterSessionId,
-                  originalAuthoritySessionId:
-                    existing.nativeRecoveryBinding?.originalAuthoritySessionId ??
-                    existing.sessionId,
-                  parentCancellationRevision: existing.cancellationRevision ?? 0,
-                  ...(executionTransfer && existing.checkpointDigest !== undefined
-                    ? {
-                        executionTransfer: {
-                          kind: transferKind,
-                          sourceCheckpointDigest: existing.checkpointDigest,
-                        },
-                      }
-                    : {}),
-                  ...(existing.sourceHandoffId === undefined
-                    ? {}
-                    : { sourceHandoffId: existing.sourceHandoffId }),
-                }
-              : undefined);
+          let recoverySource:
+            | Omit<NonNullable<typeof retainedRecovery>, "operationId">
+            | undefined = retainedRecovery;
+          if (recoverySource === undefined && (existing.status === "failed" || executionTransfer)) {
+            const source: Omit<NonNullable<typeof retainedRecovery>, "operationId"> = {
+              version: 1,
+              sourcePublicSessionId: existing.sessionId,
+              sourceOwnerRunId: existing.adapterSessionId,
+              sourceAdapterGeneration: existing.adapterGeneration,
+              logicalSessionId:
+                existing.nativeRecoveryBinding?.logicalSessionId ?? existing.adapterSessionId,
+              originalAuthoritySessionId:
+                existing.nativeRecoveryBinding?.originalAuthoritySessionId ?? existing.sessionId,
+              parentCancellationRevision: existing.cancellationRevision ?? 0,
+            };
+            if (executionTransfer && existing.checkpointDigest !== undefined) {
+              source.executionTransfer = {
+                kind: transferKind,
+                sourceCheckpointDigest: existing.checkpointDigest,
+              };
+            }
+            if (existing.sourceHandoffId !== undefined) {
+              source.sourceHandoffId = existing.sourceHandoffId;
+            }
+            recoverySource = source;
+          }
           if (recoverySource !== undefined) {
             await (input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner)(existing);
           }
@@ -4666,16 +4850,23 @@ export function createHostedEveSessionService(input: {
                 }
                 await (input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner)(current);
               }
-              const response = await input.transport.start({
+              const { transport } = input;
+              const { start } = transport;
+              const startInput: Parameters<HostedEveTransport["start"]>[0] = {
                 operationId,
                 principal,
                 prompt:
                   recovery === undefined
                     ? await recoveryPrompt({ principal, record: existing, store: input.store })
                     : "",
-                ...(recovery === undefined ? {} : { recovery }),
-                ...(existing.sourceHandoffId ? { sourceHandoffId: existing.sourceHandoffId } : {}),
-              });
+              };
+              if (recovery !== undefined) {
+                startInput.recovery = recovery;
+              }
+              if (existing.sourceHandoffId) {
+                startInput.sourceHandoffId = existing.sourceHandoffId;
+              }
+              const response = await start.call(transport, startInput);
               let recoveryBinding: NativeRecoveryBinding | undefined;
               if (recovery !== undefined) {
                 recoveryBinding = nativeRecoveryBindingSchema.parse(response.recoveryBinding);
@@ -4693,25 +4884,40 @@ export function createHostedEveSessionService(input: {
               );
               const result = projectSnapshot(sessionId, response.snapshot);
               const timestamp = now();
-              const sessionBase: HostedPagedSessionBase = {
+              const sessionIdentity: Pick<
+                HostedPagedSessionBase,
+                "adapterGeneration" | "adapterSessionId"
+              > &
+                Partial<HostedPagedSessionBase> = {
                 adapterGeneration: 1,
                 adapterSessionId: response.adapterSessionId,
-                ...(result.uiPreview?.appId === undefined && existing.appId === undefined
-                  ? {}
-                  : { appId: result.uiPreview?.appId ?? existing.appId }),
+              };
+              if (result.uiPreview?.appId !== undefined || existing.appId !== undefined) {
+                sessionIdentity.appId = result.uiPreview?.appId ?? existing.appId;
+              }
+              const sessionOrigin = {
+                ...sessionIdentity,
                 createdAtEpochMs: timestamp,
                 lastProgressAtEpochMs: timestamp,
                 originAdapterSessionId: response.adapterSessionId,
-                ...(recoveryBinding === undefined
-                  ? {}
-                  : { nativeRecoveryBinding: recoveryBinding }),
+              };
+              if (recoveryBinding !== undefined) {
+                sessionOrigin.nativeRecoveryBinding = recoveryBinding;
+              }
+              const sessionParent = {
+                ...sessionOrigin,
                 parentSessionId: existing.sessionId,
                 principal,
                 resumability: ["completed", "failed", "cancelled"].includes(result.status)
-                  ? "terminal"
-                  : "live",
+                  ? ("terminal" as const)
+                  : ("live" as const),
                 sessionId,
-                ...(existing.sourceHandoffId ? { sourceHandoffId: existing.sourceHandoffId } : {}),
+              };
+              if (existing.sourceHandoffId) {
+                sessionParent.sourceHandoffId = existing.sourceHandoffId;
+              }
+              const sessionBase: HostedPagedSessionBase = {
+                ...sessionParent,
                 stage: stageForResult(result),
                 status: result.status,
                 title: existing.title,
@@ -4737,10 +4943,13 @@ export function createHostedEveSessionService(input: {
               const { appId: existingAppId } = existing;
               const { appId: implementationAppId } = result.uiPreview ?? {};
               const appId = implementationAppId ?? existingAppId;
+              const sessionWithApp = { ...sessionBase };
+              if (appId !== undefined) {
+                sessionWithApp.appId = appId;
+              }
               return {
                 newSession: durableHostedSessionRecordSchema.parse({
-                  ...sessionBase,
-                  ...(appId === undefined ? {} : { appId }),
+                  ...sessionWithApp,
                   checkpoint,
                   checkpointDigest: hostedSessionCheckpointDigest(checkpoint),
                   checkpointProgressDigest: hostedSessionCheckpointProgressDigest(checkpoint),
@@ -4804,8 +5013,10 @@ export function createHostedEveSessionService(input: {
             }
           }
         }
+        const missingCheckpoint =
+          existing.checkpoint === undefined && existing.checkpointRef === undefined;
         if (
-          (existing.checkpoint === undefined && existing.checkpointRef === undefined) ||
+          missingCheckpoint ||
           existing.checkpointDigest === undefined ||
           (input.store.replaceSessionAdapter === undefined &&
             input.store.replaceSessionAdapterPaged === undefined)
@@ -4821,12 +5032,17 @@ export function createHostedEveSessionService(input: {
         }
         return mutate({
           async dispatch(operationId) {
-            const response = await input.transport.start({
+            const { transport } = input;
+            const { start } = transport;
+            const startInput: Parameters<HostedEveTransport["start"]>[0] = {
               operationId,
               principal,
               prompt: await recoveryPrompt({ principal, record: existing, store: input.store }),
-              ...(existing.sourceHandoffId ? { sourceHandoffId: existing.sourceHandoffId } : {}),
-            });
+            };
+            if (existing.sourceHandoffId) {
+              startInput.sourceHandoffId = existing.sourceHandoffId;
+            }
+            const response = await start.call(transport, startInput);
             if (
               input.transport.observeStarted !== undefined &&
               input.store.replaceSessionAdapterPaged !== undefined &&
@@ -4851,43 +5067,51 @@ export function createHostedEveSessionService(input: {
                   spool.observation.prototypeRef !== undefined
                 ) {
                   const timestamp = now();
-                  const metadata: HostedPagedCheckpointMetadata = {
-                    capturedAtEpochMs: timestamp,
-                    ...(spool.observation.pendingRequests.length === 0
-                      ? {}
-                      : { inputRequests: spool.observation.pendingRequests }),
-                    ...(spool.observation.prototype === undefined
-                      ? {}
-                      : { prototype: spool.observation.prototype }),
-                    ...(spool.observation.prototypeRef === undefined
-                      ? {}
-                      : { prototypeRef: spool.observation.prototypeRef }),
-                    status: spool.observation.status,
-                    ...(spool.observation.uiPreview === undefined
-                      ? {}
-                      : { uiPreview: spool.observation.uiPreview }),
-                    version: 1,
-                    ...(spool.observation.workingPreview === undefined
-                      ? {}
-                      : { workingPreview: spool.observation.workingPreview }),
-                  };
-                  const summary = eveSessionResultSchema.parse({
-                    cursor: 0,
-                    events: [],
-                    ...(metadata.inputRequests === undefined
-                      ? {}
-                      : { inputRequests: metadata.inputRequests }),
-                    ...(metadata.prototype === undefined ? {} : { prototype: metadata.prototype }),
-                    ...(metadata.prototypeRef === undefined
-                      ? {}
-                      : { prototypeRef: metadata.prototypeRef }),
+                  const metadataDetails: Pick<HostedPagedCheckpointMetadata, "capturedAtEpochMs"> &
+                    Partial<HostedPagedCheckpointMetadata> = { capturedAtEpochMs: timestamp };
+                  if (spool.observation.pendingRequests.length !== 0) {
+                    metadataDetails.inputRequests = spool.observation.pendingRequests;
+                  }
+                  if (spool.observation.prototype !== undefined) {
+                    metadataDetails.prototype = spool.observation.prototype;
+                  }
+                  if (spool.observation.prototypeRef !== undefined) {
+                    metadataDetails.prototypeRef = spool.observation.prototypeRef;
+                  }
+                  const metadataStatus = { ...metadataDetails, status: spool.observation.status };
+                  if (spool.observation.uiPreview !== undefined) {
+                    metadataStatus.uiPreview = spool.observation.uiPreview;
+                  }
+                  const metadata: HostedPagedCheckpointMetadata = { ...metadataStatus, version: 1 };
+                  if (spool.observation.workingPreview !== undefined) {
+                    metadata.workingPreview = spool.observation.workingPreview;
+                  }
+                  const summaryDetails: Pick<
+                    z.input<typeof eveSessionResultSchema>,
+                    "cursor" | "events"
+                  > &
+                    Partial<z.input<typeof eveSessionResultSchema>> = { cursor: 0, events: [] };
+                  if (metadata.inputRequests !== undefined) {
+                    summaryDetails.inputRequests = metadata.inputRequests;
+                  }
+                  if (metadata.prototype !== undefined) {
+                    summaryDetails.prototype = metadata.prototype;
+                  }
+                  if (metadata.prototypeRef !== undefined) {
+                    summaryDetails.prototypeRef = metadata.prototypeRef;
+                  }
+                  const summaryStatus = {
+                    ...summaryDetails,
                     sessionId: existing.sessionId,
                     status: metadata.status,
-                    ...(metadata.uiPreview === undefined ? {} : { uiPreview: metadata.uiPreview }),
-                    ...(metadata.workingPreview === undefined
-                      ? {}
-                      : { workingPreview: metadata.workingPreview }),
-                  });
+                  };
+                  if (metadata.uiPreview !== undefined) {
+                    summaryStatus.uiPreview = metadata.uiPreview;
+                  }
+                  if (metadata.workingPreview !== undefined) {
+                    summaryStatus.workingPreview = metadata.workingPreview;
+                  }
+                  const summary = eveSessionResultSchema.parse(summaryStatus);
                   const replaced = await input.store.replaceSessionAdapterPaged({
                     adapterSessionId: response.adapterSessionId,
                     ...(summary.uiPreview?.appId === undefined
@@ -5022,12 +5246,17 @@ export function createHostedEveSessionService(input: {
       const { prompt } = request;
       return mutate({
         async dispatch(operationId) {
-          const response = await input.transport.start({
+          const { transport } = input;
+          const { start } = transport;
+          const startInput: Parameters<HostedEveTransport["start"]>[0] = {
             operationId,
             principal,
             prompt,
-            ...(request.sourceHandoffId ? { sourceHandoffId: request.sourceHandoffId } : {}),
-          });
+          };
+          if (request.sourceHandoffId) {
+            startInput.sourceHandoffId = request.sourceHandoffId;
+          }
+          const response = await start.call(transport, startInput);
           const sessionId = stableId(
             "ses",
             Object.fromEntries([
@@ -5037,10 +5266,30 @@ export function createHostedEveSessionService(input: {
           );
           const result = projectSnapshot(sessionId, response.snapshot);
           const timestamp = now();
-          const sessionBase: HostedPagedSessionBase = {
+          const sessionIdentity: Pick<
+            HostedPagedSessionBase,
+            "adapterGeneration" | "adapterSessionId"
+          > &
+            Partial<HostedPagedSessionBase> = {
             adapterGeneration: 1,
             adapterSessionId: response.adapterSessionId,
-            ...(result.uiPreview?.appId === undefined ? {} : { appId: result.uiPreview.appId }),
+          };
+          if (result.uiPreview?.appId !== undefined) {
+            sessionIdentity.appId = result.uiPreview.appId;
+          }
+          const sessionDetails: Pick<
+            HostedPagedSessionBase,
+            | "adapterGeneration"
+            | "adapterSessionId"
+            | "createdAtEpochMs"
+            | "lastProgressAtEpochMs"
+            | "originAdapterSessionId"
+            | "principal"
+            | "resumability"
+            | "sessionId"
+          > &
+            Partial<HostedPagedSessionBase> = {
+            ...sessionIdentity,
             createdAtEpochMs: timestamp,
             lastProgressAtEpochMs: timestamp,
             originAdapterSessionId: response.adapterSessionId,
@@ -5049,7 +5298,12 @@ export function createHostedEveSessionService(input: {
               ? "terminal"
               : "live",
             sessionId,
-            ...(request.sourceHandoffId ? { sourceHandoffId: request.sourceHandoffId } : {}),
+          };
+          if (request.sourceHandoffId) {
+            sessionDetails.sourceHandoffId = request.sourceHandoffId;
+          }
+          const sessionBase: HostedPagedSessionBase = {
+            ...sessionDetails,
             stage: stageForResult(result),
             status: result.status,
             title: titleFromPrompt(prompt),
@@ -5118,7 +5372,7 @@ export function createHostedEveSessionService(input: {
           }),
         );
         for (const acknowledgement of page.acknowledgements) {
-          const operation = acknowledgement.operation;
+          const { operation } = acknowledgement;
           const marker = operation.sendDelivery;
           if (
             marker?.resumeCancellationRevision === binding.cancellationRevision &&

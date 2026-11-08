@@ -6,6 +6,7 @@ import { createGateAEvalProfile } from "./gate-a-eval-profile.mjs";
 import { runWithTestCapability } from "./run-with-test-capability.mts";
 import { loadEveEvalOidc } from "./eve-eval-oidc";
 
+const hostedArtifactProfile = "hosted-artifact";
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const eveEntry = path.resolve(repositoryRoot, "node_modules/eve/bin/eve.js");
 const args = process.argv.slice(2);
@@ -51,7 +52,7 @@ if (profileName === "general-enabled" || profileName === "general-disabled") {
     },
     repositoryRoot,
   );
-} else if (profileName === "sandbox" || profileName === "hosted-artifact") {
+} else if (profileName === "sandbox" || profileName === hostedArtifactProfile) {
   gateAEvalProfile = createGateAEvalProfile(
     {
       image: image ?? null,
@@ -71,13 +72,13 @@ if (
   throw new Error("Fresh Gate A arguments require the fresh profile.");
 if (
   gateAEvalProfile.profile !== "sandbox" &&
-  gateAEvalProfile.profile !== "hosted-artifact" &&
+  gateAEvalProfile.profile !== hostedArtifactProfile &&
   image !== undefined
 )
   throw new Error("The sandbox image requires the sandbox profile.");
 if (
   gateAEvalProfile.profile !== "sandbox" &&
-  gateAEvalProfile.profile !== "hosted-artifact" &&
+  gateAEvalProfile.profile !== hostedArtifactProfile &&
   sourceRoot !== undefined
 )
   throw new Error("The sandbox source root requires the sandbox profile.");
@@ -109,18 +110,18 @@ const sandboxEvaluations = new Set([
   "self-reproduction",
 ]);
 if (
-  (gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact") &&
+  (gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === hostedArtifactProfile) &&
   (args[0] === undefined || !sandboxEvaluations.has(args[0]))
 )
   throw new Error("The sandbox Gate A evaluation was invalid.");
 if (
-  (gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact") &&
+  (gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === hostedArtifactProfile) &&
   args[0] === "sandbox-identity-planning" &&
   gateAEvalProfile.sourceRoot === null
 )
   throw new Error("The sandbox identity/planning proof requires exact inputs.");
 if (
-  (gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact") &&
+  (gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === hostedArtifactProfile) &&
   args[0] === "sandbox-reviewed-change-set" &&
   gateAEvalProfile.sourceRoot === null
 )
@@ -128,7 +129,7 @@ if (
 if (args.some((argument) => argument.startsWith("--gate-a-")))
   throw new Error("An unknown Gate A argument remained.");
 const realSandbox =
-  gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact";
+  gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === hostedArtifactProfile;
 if (realSandbox) {
   const locks = await reconcileDeadEveEvalPrewarmLocks(repositoryRoot);
   for (const lock of locks) {

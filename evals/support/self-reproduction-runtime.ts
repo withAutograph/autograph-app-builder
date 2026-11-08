@@ -10,6 +10,8 @@ import {
 } from "../../lib/sandbox/development-toolchain";
 import { requirements } from "./self-reproduction-parity";
 
+const infrastructureUnavailable = "infrastructure-unavailable";
+
 export interface RuntimeCommandReceipt {
   command: string;
   exitCode: number | null;
@@ -51,8 +53,8 @@ const runtimeFailureObservations = (input: {
     return [];
   }
   const disposition =
-    input.receipt.status === "infrastructure-unavailable"
-      ? "infrastructure-unavailable"
+    input.receipt.status === infrastructureUnavailable
+      ? infrastructureUnavailable
       : "missing-functionality";
   const artifact = input.artifact ?? "candidate-runtime.json";
   return requirements
@@ -62,7 +64,7 @@ const runtimeFailureObservations = (input: {
           ? requirement.kind === "capture"
           : requirement.kind !== "capture") &&
         requirement.id !== "anonymous-entry" &&
-        !input.existingRequirementIds?.has(requirement.id),
+        input.existingRequirementIds?.has(requirement.id) !== true,
     )
     .map((requirement) => ({
       artifacts: [artifact],
@@ -207,10 +209,9 @@ export const evaluateCandidateRuntime = async (input: {
   const commands: RuntimeCommandReceipt[] = [];
   let handle: CandidateRuntimeSandbox | undefined;
   const controller = new AbortController();
-  const timer = setTimeout(
-    () => controller.abort(new Error("Candidate runtime deadline exceeded.")),
-    input.timeoutMs ?? 600_000,
-  );
+  const timer = setTimeout(() => {
+    controller.abort(new Error("Candidate runtime deadline exceeded."));
+  }, input.timeoutMs ?? 600_000);
   try {
     if (input.backend === undefined) {
       const native = await Sandbox.create({
@@ -286,7 +287,7 @@ export const evaluateCandidateRuntime = async (input: {
         producer: "evaluator",
         reason: "Candidate runtime toolchain installation failed.",
         sandboxId: handle.id,
-        status: "infrastructure-unavailable",
+        status: infrastructureUnavailable,
       };
     }
     const runtimeEnvironment = Object.entries(DEVELOPMENT_SANDBOX_ENVIRONMENT)
@@ -450,7 +451,7 @@ export const evaluateCandidateRuntime = async (input: {
       } else {
         probes.push({
           detail: `Evaluator browser was unavailable: ${browser.stderr || browser.stdout}`,
-          disposition: "infrastructure-unavailable",
+          disposition: infrastructureUnavailable,
           id: "documentation",
           method: "browser",
           passed: false,
@@ -472,15 +473,21 @@ export const evaluateCandidateRuntime = async (input: {
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const receipt: Pick<CandidateRuntimeReceipt, "commands" | "producer" | "reason" | "sandboxId"> =
+      {
+        commands: [],
+        producer: "evaluator",
+        reason: message,
+      };
+    if (handle !== undefined) {
+      receipt.sandboxId = handle.id;
+    }
     return {
-      commands: [],
-      producer: "evaluator",
-      reason: message,
-      ...(handle === undefined ? {} : { sandboxId: handle.id }),
+      ...receipt,
       probes: [],
       status:
         handle === undefined && /credential|oidc|sandbox|network|fetch/iu.test(message)
-          ? "infrastructure-unavailable"
+          ? infrastructureUnavailable
           : "failed",
     };
   } finally {

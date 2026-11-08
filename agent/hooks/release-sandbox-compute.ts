@@ -23,6 +23,28 @@ import {
   releaseHostedSandboxExecutionLease,
 } from "../../lib/sandbox/deployment-execution-lease";
 
+interface ReleaseDependencies {
+  isHosted: typeof isHostedSandboxExecutionEnabled;
+  preview: typeof workingPreviewState;
+  attempt: typeof workingPreviewAttemptState;
+  provider: (...args: Parameters<typeof getVercelPreviewProvider>) => Promise<{
+    status: string;
+    currentSession: () => { sessionId: string };
+    getCommand: (id: string) => Promise<{ exitCode: number | null }>;
+  }>;
+  invalidate: typeof invalidateProductBehaviorPreview;
+  releaseLease: typeof releaseHostedSandboxExecutionLease;
+}
+
+const releaseDependencies: ReleaseDependencies = {
+  attempt: workingPreviewAttemptState,
+  invalidate: invalidateProductBehaviorPreview,
+  isHosted: isHostedSandboxExecutionEnabled,
+  preview: workingPreviewState,
+  provider: getVercelPreviewProvider,
+  releaseLease: releaseHostedSandboxExecutionLease,
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function release(
   ctx: HookContext,
@@ -32,11 +54,12 @@ async function release(
     | "turn-failed"
     | "session-completed"
     | "session-failed",
+  dependencies: ReleaseDependencies,
 ) {
   const environment = process.env;
-  const hosted = isHostedSandboxExecutionEnabled(environment);
-  const preview = workingPreviewState.get();
-  const pending = workingPreviewAttemptState.get();
+  const hosted = dependencies.isHosted(environment);
+  const preview = dependencies.preview.get();
+  const pending = dependencies.attempt.get();
   if (!hosted && preview === null && pending === null) {
     return;
   }
@@ -46,11 +69,7 @@ async function release(
       (reason === "turn-completed" || reason === "session-completed") &&
       hasLiveWorkingPreview(preview, getBuilderSandboxId(sandbox))
     ) {
-      const provider = await getVercelPreviewProvider(
-        getBuilderSandboxId(sandbox),
-        undefined,
-        false,
-      );
+      const provider = await dependencies.provider(getBuilderSandboxId(sandbox), undefined, false);
       const command =
         preview !== null &&
         provider.status === "running" &&
@@ -63,15 +82,15 @@ async function release(
         return;
       }
     }
-    invalidateProductBehaviorPreview("preview-released");
-    workingPreviewState.update(() => null);
+    dependencies.invalidate("preview-released");
+    dependencies.preview.update(() => null);
     if (!hosted) {
       // Local development uses the same cancellation and failure lifecycle.
       await sandbox.stop();
-      workingPreviewAttemptState.update(() => null);
+      dependencies.attempt.update(() => null);
       return;
     }
-    await releaseHostedSandboxExecutionLease({
+    await dependencies.releaseLease({
       environment,
       reason,
       sandbox,
@@ -84,59 +103,62 @@ async function release(
   }
 }
 
-export default defineHook({
-  events: {
-    "session.completed"(_event, ctx) {
-      return release(ctx, "session-completed");
-    },
-    "session.failed"(_event, ctx) {
-      return release(ctx, "session-failed");
-    },
-    "turn.cancelled"(_event, ctx) {
-      return release(ctx, "turn-cancelled");
-    },
-    "turn.completed"(_event, ctx) {
-      return release(ctx, "turn-completed");
-    },
-    "turn.failed"(_event, ctx) {
-      return release(ctx, "turn-failed");
-    },
-    async "turn.started"(_event, ctx) {
-      const environment = process.env;
-      if (!isHostedSandboxExecutionEnabled(environment)) {
-        return;
-      }
-      const source = sourceWorkflowState.get();
-      const workflow = appBuilderWorkflowState.get();
-      console.info(
-        JSON.stringify({
-          event: "autograph.sandbox.restore-source-state",
-          sourceHasGitHubBinding: source.phase !== "empty" && source.githubSource !== undefined,
-          sourcePhase: source.phase,
-          workflowHasGitHubBinding:
-            workflow.phase !== "empty" && workflow.githubSource !== undefined,
-          workflowPhase: workflow.phase,
-        }),
-      );
-      const githubSource = selectedGitHubSourceForSandboxRestore({
-        sourceState: source.phase === "empty" ? undefined : source.githubSource,
-        workflowState: workflow.phase === "empty" ? undefined : workflow.githubSource,
-      });
-      if (githubSource !== undefined) {
-        console.info(JSON.stringify({ event: "autograph.sandbox.restore-source-selected" }));
-        restoreSelectedGitHubSandboxSource({
-          accessReceipt: repositoryAccessReceiptState.get(),
-          githubSource,
-          runtime: () => repositoryAccessRuntimeForSession(ctx.session.auth),
+export const createReleaseSandboxComputeHook = (dependencies: ReleaseDependencies) =>
+  defineHook({
+    events: {
+      "session.completed"(_event, ctx) {
+        return release(ctx, "session-completed", dependencies);
+      },
+      "session.failed"(_event, ctx) {
+        return release(ctx, "session-failed", dependencies);
+      },
+      "turn.cancelled"(_event, ctx) {
+        return release(ctx, "turn-cancelled", dependencies);
+      },
+      "turn.completed"(_event, ctx) {
+        return release(ctx, "turn-completed", dependencies);
+      },
+      "turn.failed"(_event, ctx) {
+        return release(ctx, "turn-failed", dependencies);
+      },
+      async "turn.started"(_event, ctx) {
+        const environment = process.env;
+        if (!isHostedSandboxExecutionEnabled(environment)) {
+          return;
+        }
+        const source = sourceWorkflowState.get();
+        const workflow = appBuilderWorkflowState.get();
+        console.info(
+          JSON.stringify({
+            event: "autograph.sandbox.restore-source-state",
+            sourceHasGitHubBinding: source.phase !== "empty" && source.githubSource !== undefined,
+            sourcePhase: source.phase,
+            workflowHasGitHubBinding:
+              workflow.phase !== "empty" && workflow.githubSource !== undefined,
+            workflowPhase: workflow.phase,
+          }),
+        );
+        const githubSource = selectedGitHubSourceForSandboxRestore({
+          sourceState: source.phase === "empty" ? undefined : source.githubSource,
+          workflowState: workflow.phase === "empty" ? undefined : workflow.githubSource,
+        });
+        if (githubSource !== undefined) {
+          console.info(JSON.stringify({ event: "autograph.sandbox.restore-source-selected" }));
+          restoreSelectedGitHubSandboxSource({
+            accessReceipt: repositoryAccessReceiptState.get(),
+            githubSource,
+            runtime: () => repositoryAccessRuntimeForSession(ctx.session.auth),
+            sessionId: ctx.session.id,
+          });
+        }
+        await acquireHostedSandboxExecutionLease({
+          environment,
+          sandbox: await ctx.getSandbox(),
+          sessionAuth: ctx.session.auth,
           sessionId: ctx.session.id,
         });
-      }
-      await acquireHostedSandboxExecutionLease({
-        environment,
-        sandbox: await ctx.getSandbox(),
-        sessionAuth: ctx.session.auth,
-        sessionId: ctx.session.id,
-      });
+      },
     },
-  },
-});
+  });
+
+export default createReleaseSandboxComputeHook(releaseDependencies);

@@ -15,11 +15,12 @@ async function AuthConfiguration({ children }: { children: ReactNode }) {
   return (
     <AuthRouteProvider
       githubAuthEnabled={Boolean(
-        showEmulatedProviders || (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
+        showEmulatedProviders ||
+        (Boolean(process.env.GITHUB_CLIENT_ID) && process.env.GITHUB_CLIENT_SECRET),
       )}
       vercelAuthEnabled={Boolean(
         showEmulatedProviders ||
-        (process.env.VERCEL_AUTH_CLIENT_ID && process.env.VERCEL_AUTH_CLIENT_SECRET),
+        (Boolean(process.env.VERCEL_AUTH_CLIENT_ID) && process.env.VERCEL_AUTH_CLIENT_SECRET),
       )}
       passkeysEnabled={passkeysEnabled}
     >

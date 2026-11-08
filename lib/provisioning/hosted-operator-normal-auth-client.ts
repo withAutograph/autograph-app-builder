@@ -29,7 +29,7 @@ const sessionSchema = z
       expiresAt: z.iso.datetime({ offset: true }),
       activeOrganizationId: id.nullable().optional(),
     }),
-    user: z.object({ id, email }),
+    user: z.object({ email, id }),
   })
   .nullable();
 
@@ -174,13 +174,12 @@ export const projectNormalAuthClientFailure = (
     const retryAfterMs = normalAuthClientFailureDiagnosticSchema.shape.retryAfterMs
       .unwrap()
       .safeParse(Object.getOwnPropertyDescriptor(error, "retryAfterMs")?.value);
-    return {
-      code: code.data,
-      ...(operation.success ? { operation: operation.data } : {}),
-      ...(httpStatus.success ? { httpStatus: httpStatus.data } : {}),
-      ...(authCode.success ? { authCode: authCode.data } : {}),
-      ...(retryAfterMs.success ? { retryAfterMs: retryAfterMs.data } : {}),
-    };
+    const diagnostic: NormalAuthClientFailureDiagnostic = { code: code.data };
+    if (operation.success) diagnostic.operation = operation.data;
+    if (httpStatus.success) diagnostic.httpStatus = httpStatus.data;
+    if (authCode.success) diagnostic.authCode = authCode.data;
+    if (retryAfterMs.success) diagnostic.retryAfterMs = retryAfterMs.data;
+    return diagnostic;
   } catch {
     return undefined;
   }
@@ -279,11 +278,12 @@ const rejectedResponse = async (
   } catch {
     // Error bodies are untrusted and stay private, including malformed or oversized responses.
   }
-  return new NormalAuthClientError("auth_rejected", {
-    operation,
+  const details: NonNullable<ConstructorParameters<typeof NormalAuthClientError>[1]> = {
     httpStatus: response.status,
-    ...(authCode ? { authCode } : {}),
-  });
+    operation,
+  };
+  if (authCode) details.authCode = authCode;
+  return new NormalAuthClientError("auth_rejected", details);
 };
 
 const cookieSameSite = (cookie: Cookie): "Strict" | "None" | "Lax" => {
@@ -324,7 +324,7 @@ export const createHostedOperatorNormalAuthClient = (options: {
   } catch {
     throw new NormalAuthClientError("invalid_origin");
   }
-  const jar = new CookieJar(undefined, { prefixSecurity: "strict", allowSpecialUseDomain: false });
+  const jar = new CookieJar(undefined, { allowSpecialUseDomain: false, prefixSecurity: "strict" });
   try {
     for (const saved of options.storageState?.cookies ?? []) {
       const cookie = new Cookie({
@@ -399,14 +399,16 @@ export const createHostedOperatorNormalAuthClient = (options: {
       }
       let response: Response;
       try {
-        response = await (options.fetch ?? fetch)(url, {
+        const fetchRequest = options.fetch ?? fetch;
+        const requestOptions: RequestInit = {
           method: input === undefined ? "GET" : "POST",
           headers,
-          ...(body === undefined ? {} : { body }),
-          cache: "no-store",
-          redirect: "error",
-          signal,
-        });
+        };
+        if (body !== undefined) requestOptions.body = body;
+        requestOptions.cache = "no-store";
+        requestOptions.redirect = "error";
+        requestOptions.signal = signal;
+        response = await fetchRequest(url, requestOptions);
         if (
           response.redirected ||
           (response.url && new URL(response.url).origin !== origin.origin)
@@ -439,15 +441,15 @@ export const createHostedOperatorNormalAuthClient = (options: {
       assertDeadline();
       if (retryAfterMs === 0) {
         throw new NormalAuthClientError("auth_rejected", {
-          operation,
           httpStatus: 429,
+          operation,
           retryAfterMs,
         });
       }
       if (retryAfterMs >= deadline - now()) {
         throw new NormalAuthClientError("deadline_exceeded", {
-          operation,
           httpStatus: 429,
+          operation,
           retryAfterMs,
         });
       }
@@ -455,8 +457,8 @@ export const createHostedOperatorNormalAuthClient = (options: {
         await (options.wait ?? waitForRetry)(retryAfterMs, signal);
       } catch {
         throw new NormalAuthClientError("deadline_exceeded", {
-          operation,
           httpStatus: 429,
+          operation,
           retryAfterMs,
         });
       }
@@ -483,8 +485,8 @@ export const createHostedOperatorNormalAuthClient = (options: {
       } catch {
         assertDeadline();
         throw new NormalAuthClientError("invalid_response", {
-          operation,
           httpStatus: response.status,
+          operation,
         });
       }
     }
@@ -495,7 +497,7 @@ export const createHostedOperatorNormalAuthClient = (options: {
       await request(
         "sign_up",
         "sign-up/email",
-        z.object({ user: z.object({ id, email }) }),
+        z.object({ user: z.object({ email, id }) }),
         parseInput(signUpInput, input, "sign_up"),
       );
     },
@@ -503,7 +505,7 @@ export const createHostedOperatorNormalAuthClient = (options: {
       await request(
         "sign_in",
         "sign-in/email",
-        z.object({ user: z.object({ id, email }) }),
+        z.object({ user: z.object({ email, id }) }),
         parseInput(credentials, input, "sign_in"),
       );
     },
@@ -518,15 +520,16 @@ export const createHostedOperatorNormalAuthClient = (options: {
       if (value.session.userId !== value.user.id) {
         throw new NormalAuthClientError("invalid_response", { operation: "get_session" });
       }
-      return {
+      const session: NormalAuthSession = {
         actorId: value.user.id,
         sessionId: value.session.id,
         email: value.user.email,
         expiresAt: value.session.expiresAt,
-        ...(value.session.activeOrganizationId === undefined
-          ? {}
-          : { activeOrganizationId: value.session.activeOrganizationId }),
       };
+      if (value.session.activeOrganizationId !== undefined) {
+        session.activeOrganizationId = value.session.activeOrganizationId;
+      }
+      return session;
     },
     async setActiveOrganization(input) {
       const parsed = parseInput(organizationInput, input, "set_active_organization");
@@ -574,12 +577,21 @@ export const createHostedOperatorNormalAuthClient = (options: {
         input,
         "list_members",
       );
-      return await request("list_members", "organization/list-members", membersSchema, undefined, {
+      const query: NonNullable<Parameters<typeof request>[4]> = {
         organizationId: parsed.organizationId,
-        ...(parsed.userId === undefined
-          ? {}
-          : { filterField: "userId", filterValue: parsed.userId, filterOperator: "eq" }),
-      });
+      };
+      if (parsed.userId !== undefined) {
+        query.filterField = "userId";
+        query.filterValue = parsed.userId;
+        query.filterOperator = "eq";
+      }
+      return await request(
+        "list_members",
+        "organization/list-members",
+        membersSchema,
+        undefined,
+        query,
+      );
     },
     exportStorageState() {
       const now = Date.now();

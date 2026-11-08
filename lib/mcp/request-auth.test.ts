@@ -1,4 +1,5 @@
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
+import type { JWTHeaderParameters } from "jose";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -154,14 +155,18 @@ describe("hosted MCP request authentication", () => {
     });
     const now = 2_000_000_000;
     const omitKid = Object.hasOwn(override, "kid");
+    const protectedHeader = (): JWTHeaderParameters => {
+      const header: JWTHeaderParameters = { alg: "ES256" };
+      if (!omitKid) {
+        header.kid = "key-1";
+      }
+      return header;
+    };
     const signer = new SignJWT({
       scope: "autograph:session",
       workspace_id: "workspace-one",
     })
-      .setProtectedHeader({
-        alg: "ES256",
-        ...(omitKid ? {} : { kid: "key-1" }),
-      })
+      .setProtectedHeader(protectedHeader())
       .setIssuer(config.issuer)
       .setAudience(override.audience ?? config.audience)
       .setSubject("user-one")

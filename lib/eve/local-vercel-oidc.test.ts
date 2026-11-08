@@ -51,7 +51,7 @@ interface InstalledEveFixture {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function token(payload: Record<string, unknown> = claims): string {
+function token(payload: typeof claims = claims): string {
   return [
     Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url"),
     Buffer.from(JSON.stringify(payload)).toString("base64url"),

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { builderHandoffIntentSchema } from "./contracts";
 import { validateApplicationSourceArtifact } from "./application-source-bytes";
 import { createOwnedSourceCandidateValidator } from "./source-candidate-validation";
@@ -34,14 +34,14 @@ const intent = builderHandoffIntentSchema.parse({
   appId: "supplier-spend",
   appName: "Supplier Spend",
   brief: "Continue this app",
-  modelId: "openai/gpt-6-luna",
   connections: [],
+  modelId: "openai/gpt-6-luna",
   repository: { private: true, requestedName: "supplier-spend" },
   sourceCandidate: {
-    kind: "application-source-candidate-v1",
-    uploadId: "123e4567-e89b-42d3-a456-426614174000",
     appId: "supplier-spend",
+    kind: "application-source-candidate-v1",
     manifestDigest: verified.manifestDigest,
+    uploadId: "123e4567-e89b-42d3-a456-426614174000",
   },
 });
 
@@ -78,7 +78,7 @@ it("denies acknowledgment when membership is revoked during artifact read", asyn
 it("does not read source for an inactive member", async () => {
   let reads = 0;
   const validate = createOwnedSourceCandidateValidator({
-    isActiveMember: () => Promise.resolve(false),
+    isActiveMember: vi.fn<() => Promise<boolean>>().mockResolvedValue(false),
     readCompleted: () => {
       reads += 1;
       return Promise.resolve(verified.artifact);

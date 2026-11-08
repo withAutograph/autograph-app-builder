@@ -32,6 +32,8 @@ import type {
   TenantExportWorkerInput,
 } from "./hosted-operator-export-contract";
 
+const APP_EXPORT_KIND = "app-export";
+
 /** Private execution locator, retained before dispatch; no credentials or output bytes. */
 export const tenantExportWorkerLocatorSchema = z.strictObject({
   sandboxId: z.string().min(1),
@@ -41,7 +43,7 @@ export const tenantExportWorkerLocatorSchema = z.strictObject({
 export type TenantExportWorkerLocator = z.infer<typeof tenantExportWorkerLocatorSchema>;
 // This deployment-only state extends the Builder journal, never the cross-repo worker wire.
 export const hostedTenantExportExecutionRecordSchema = z.strictObject({
-  kind: z.literal("app-export"),
+  kind: z.literal(APP_EXPORT_KIND),
   originalTarget: hostedRuntimeTargetSchema,
   journal: tenantExportJournalRecordSchema,
   approvalObservation: privateOperatorApprovalObservationSchema.optional(),
@@ -177,7 +179,7 @@ const workerFor = (
   if (attempt?.snapshotId === undefined) {
     throw unavailable();
   }
-  const plan = record.plan;
+  const { plan } = record;
   return {
     version: 1,
     kind: "tenant-export-worker",
@@ -192,22 +194,22 @@ const workerFor = (
     format: plan.format,
   };
 };
-export const tenantExportStatus = (record: TenantExportJournalRecord): TenantExportStatus =>
-  tenantExportStatusSchema.parse({
+export const tenantExportStatus = (record: TenantExportJournalRecord): TenantExportStatus => {
+  const status: z.input<typeof tenantExportStatusSchema> = {
     exportId: record.plan.exportId,
     planRef: record.plan.planRef,
     state: record.state,
-    ...(record.completion === undefined
-      ? {}
-      : {
-          counts: {
-            fileCount: record.completion.fileCount,
-            rowCount: record.completion.rowCount,
-            byteLength: record.completion.byteLength,
-          },
-          download: { indexPath: `/api/hosted-operator/exports/${record.plan.exportId}` },
-        }),
-  });
+  };
+  if (record.completion !== undefined) {
+    status.counts = {
+      fileCount: record.completion.fileCount,
+      rowCount: record.completion.rowCount,
+      byteLength: record.completion.byteLength,
+    };
+    status.download = { indexPath: `/api/hosted-operator/exports/${record.plan.exportId}` };
+  }
+  return tenantExportStatusSchema.parse(status);
+};
 export const createHostedTenantExportOperations = (deps: HostedTenantExportDependencies) => {
   const now = deps.now ?? (() => new Date());
   const read = async (context: HostedOperatorContext, exportId: string) => {
@@ -240,12 +242,18 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
   };
   const approvalObservation = (
     record: HostedTenantExportExecutionRecord,
-  ): PrivateOperatorApprovalObservationPort => ({
-    ...(record.approvalObservation === undefined ? {} : { state: record.approvalObservation }),
-    save: async (state) => {
-      await update(record, (value) => ({ ...value, approvalObservation: state }));
-    },
-  });
+  ): PrivateOperatorApprovalObservationPort => {
+    const observation: Pick<PrivateOperatorApprovalObservationPort, "state"> = {};
+    if (record.approvalObservation !== undefined) {
+      observation.state = record.approvalObservation;
+    }
+    return {
+      ...observation,
+      save: async (state) => {
+        await update(record, (value) => ({ ...value, approvalObservation: state }));
+      },
+    };
+  };
   const assertApproval = async (
     context: HostedOperatorContext,
     record: HostedTenantExportExecutionRecord,
@@ -364,10 +372,10 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
       advanceExportPlanningStage(onPlanStage, "plan_reservation");
       const record = await deps.store.reserve({
         record: {
-          kind: "app-export",
+          kind: APP_EXPORT_KIND,
           originalTarget: context.target,
           journal: {
-            kind: "app-export",
+            kind: APP_EXPORT_KIND,
             version: 1,
             requestId: exportId,
             authority: plan.authority,
@@ -532,7 +540,7 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
           },
           readCurrentFence: async () => {
             const latest = await read(context, exportId);
-            const claim = latest.journal.claim;
+            const { claim } = latest.journal;
             if (latest.journal.state === "complete") {
               return {
                 operationRef: exportId,
@@ -555,7 +563,7 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
           if (current.journal.state === "complete") {
             return tenantExportStatus(current.journal);
           }
-          const claim = current.journal.claim;
+          const { claim } = current.journal;
           if (claim === undefined) {
             throw unavailable();
           }

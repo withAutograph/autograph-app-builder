@@ -22,10 +22,18 @@ const sameAppNarrowedPlan = (prior: HostedOperatorPlan, next: HostedOperatorPlan
     prior.stage !== "app" ||
     next.stage !== "app" ||
     prior.action !== "prepare" ||
-    policy === undefined ||
+    policy === undefined
+  ) {
+    return false;
+  }
+  if (
     boundary === undefined ||
     prior.publicGateway === undefined ||
-    prior.gatewayBindings === undefined ||
+    prior.gatewayBindings === undefined
+  ) {
+    return false;
+  }
+  if (
     (prior.appTrustedSources === undefined && prior.gatewayBindings.trustedSources === undefined) ||
     !matchesExternalTrustedSources(
       policy,
@@ -44,13 +52,10 @@ const sameNarrowedPlan = (prior: HostedOperatorPlan, next: HostedOperatorPlan): 
     return sameAppNarrowedPlan(prior, next);
   }
   const binding = prior.effects.find((effect) => effect.kind === GATEWAY_BINDINGS);
-  if (
-    prior.stage !== AUTH_BOOTSTRAP ||
-    next.stage !== AUTH_BOOTSTRAP ||
-    binding === undefined ||
-    prior.gatewayBindings?.trustedSources === undefined ||
-    next.gatewayBindings === undefined
-  ) {
+  if (prior.stage !== AUTH_BOOTSTRAP || next.stage !== AUTH_BOOTSTRAP || binding === undefined) {
+    return false;
+  }
+  if (prior.gatewayBindings?.trustedSources === undefined || next.gatewayBindings === undefined) {
     return false;
   }
   if (

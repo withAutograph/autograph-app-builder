@@ -160,15 +160,26 @@ export default defineTool({
         expected: current,
         operation: "workspace preparation",
         transition: (latest) =>
-          workspacePreparationTransition(latest, () => ({
-            artifacts: [],
-            ...(githubSource === undefined ? {} : { githubSource }),
-            phase: "prepared",
-            preparedByCallId: ctx.callId,
-            sourceReceipt: currentReceipt,
-            version: APP_BUILDER_WORKFLOW_VERSION,
-            workspace,
-          })),
+          workspacePreparationTransition(latest, () => {
+            type PreparedState = Extract<
+              ReturnType<typeof appBuilderWorkflowState.get>,
+              { phase: "prepared" }
+            >;
+            const preparedFields: Pick<PreparedState, "artifacts" | "githubSource"> = {
+              artifacts: [],
+            };
+            if (githubSource !== undefined) {
+              preparedFields.githubSource = githubSource;
+            }
+            return {
+              ...preparedFields,
+              phase: "prepared",
+              preparedByCallId: ctx.callId,
+              sourceReceipt: currentReceipt,
+              version: APP_BUILDER_WORKFLOW_VERSION,
+              workspace,
+            };
+          }),
       });
       return workspace;
     } catch (error) {

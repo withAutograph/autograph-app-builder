@@ -181,7 +181,10 @@ describe("hosted sandbox turn lease lifecycle", () => {
         sessionId: "session_1",
       }).catch((error: unknown) => error);
       expect(rejection).toBeInstanceOf(Error);
-      expect((rejection as Error).message).toContain(candidate.message);
+      if (!(rejection instanceof Error)) {
+        throw new Error("Expected lease acquisition to reject with an Error.");
+      }
+      expect(rejection.message).toContain(candidate.message);
       expect(stop).toHaveBeenCalledOnce();
       expect(sandboxCleanupEvidence(rejection)).toEqual({
         attempted: true,

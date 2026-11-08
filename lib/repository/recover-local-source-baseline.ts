@@ -17,6 +17,9 @@ import {
 } from "./local-source-baseline-store";
 import { safeSourcePath } from "./source-path";
 
+const gitExecutable = "/usr/bin/git";
+const gitExecutablePath = "/usr/bin:/bin";
+
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const sourcePath = z
   .string()
@@ -49,20 +52,20 @@ export const localSourceRecoveryRequestSchema = z.strictObject({
 const hash = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 const cleanGit = (root: string, args: string[], input?: string) =>
   execFileSync(
-    "/usr/bin/git",
+    gitExecutable,
     ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-C", root, ...args],
     {
-      input,
-      maxBuffer: 32 * 1024 * 1024,
       env: {
         NODE_ENV: "test",
-        PATH: "/usr/bin:/bin",
+        PATH: gitExecutablePath,
         HOME: root,
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_NO_REPLACE_OBJECTS: "1",
         GIT_CONFIG_GLOBAL: "/dev/null",
         GIT_TERMINAL_PROMPT: "0",
       },
+      input,
+      maxBuffer: 32 * 1024 * 1024,
     },
   );
 
@@ -86,12 +89,12 @@ export const recoverLocalSourceBaseline = async (input: {
     throw new Error("source_baseline_authority_unavailable");
   }
   const authority = await readLocalOperatorArtifactAuthority({
-    APP_BUILDER_EXECUTION_MODE: "development",
-    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
-    APP_BUILDER_LOCAL_ADAPTER: "1",
-    EVE_HOSTED_ADAPTER: "0",
-    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
     APP_BUILDER_DEV_RUNS_ROOT: input.runsRoot,
+    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+    APP_BUILDER_EXECUTION_MODE: "development",
+    APP_BUILDER_LOCAL_ADAPTER: "1",
+    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+    EVE_HOSTED_ADAPTER: "0",
   });
   if (authority === undefined) {
     throw new Error("source_baseline_authority_unavailable");
@@ -107,8 +110,8 @@ export const recoverLocalSourceBaseline = async (input: {
   await mkdir(gitRoot, { mode: 0o700 });
   localBaselineGit(gitRoot, ["init", "--bare", "--quiet"]);
   await writeFile(path.join(gitRoot, "shallow"), `${request.originalSourceSha}\n`, {
-    mode: 0o600,
     flag: "wx",
+    mode: 0o600,
   });
   // Transfer genuine tree/blob objects only. The new root capture commit is distinct
   // from the historical source commit; shallow missing history is never invented.
@@ -121,10 +124,10 @@ export const recoverLocalSourceBaseline = async (input: {
       .filter(Boolean)
       .map((line) => line.split(/\s/u)[2]),
   ];
-  const producer = spawn("/usr/bin/git", ["-C", originalRoot, "pack-objects", "--stdout"], {
+  const producer = spawn(gitExecutable, ["-C", originalRoot, "pack-objects", "--stdout"], {
     env: {
       NODE_ENV: "test",
-      PATH: "/usr/bin:/bin",
+      PATH: gitExecutablePath,
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_NO_REPLACE_OBJECTS: "1",
       GIT_CONFIG_GLOBAL: "/dev/null",
@@ -132,12 +135,12 @@ export const recoverLocalSourceBaseline = async (input: {
     stdio: ["pipe", "pipe", "pipe"],
   });
   const consumer = spawn(
-    "/usr/bin/git",
+    gitExecutable,
     ["--git-dir", gitRoot, "index-pack", "--stdin", "--strict"],
     {
       env: {
         NODE_ENV: "test",
-        PATH: "/usr/bin:/bin",
+        PATH: gitExecutablePath,
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_NO_REPLACE_OBJECTS: "1",
         GIT_CONFIG_GLOBAL: "/dev/null",
@@ -257,7 +260,7 @@ export const recoverLocalSourceBaseline = async (input: {
   }
   const tree = localBaselineGit(gitRoot, ["write-tree"]).toString().trim();
   const captured = execFileSync(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "--git-dir",
       gitRoot,
@@ -273,14 +276,14 @@ export const recoverLocalSourceBaseline = async (input: {
       request.originalSourceSha,
     ],
     {
-      input: "Explicit source-only baseline recovery capture\n",
       env: {
         NODE_ENV: "test",
-        PATH: "/usr/bin:/bin",
+        PATH: gitExecutablePath,
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_NO_REPLACE_OBJECTS: "1",
         GIT_CONFIG_GLOBAL: "/dev/null",
       },
+      input: "Explicit source-only baseline recovery capture\n",
     },
   )
     .toString()
@@ -292,13 +295,10 @@ export const recoverLocalSourceBaseline = async (input: {
   if (readLocalEveCycleBinding(cycleFile) !== cycle) {
     throw new Error("source_baseline_authority_changed");
   }
+  const { originalSourceSha, workspaceDigest } = request;
   const manifest = {
-    version: 1 as const,
     kind: "local-planning-source-baseline" as const,
-    originalSourceSha: request.originalSourceSha,
-    workspaceDigest: request.workspaceDigest,
-    sourceSha: captured,
-    sourceTree: tree,
+    originalSourceSha,
     provenance: {
       kind: "recovered-source-archives",
       originalSourceRoot: originalRoot,
@@ -306,11 +306,15 @@ export const recoverLocalSourceBaseline = async (input: {
       archives: archiveProofs,
       files: actual.files,
     },
+    sourceSha: captured,
+    sourceTree: tree,
+    version: 1 as const,
+    workspaceDigest,
   };
-  const pack = spawn("/usr/bin/git", ["--git-dir", gitRoot, "pack-objects", "--stdout", "--revs"], {
+  const pack = spawn(gitExecutable, ["--git-dir", gitRoot, "pack-objects", "--stdout", "--revs"], {
     env: {
       NODE_ENV: "test",
-      PATH: "/usr/bin:/bin",
+      PATH: gitExecutablePath,
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_NO_REPLACE_OBJECTS: "1",
       GIT_CONFIG_GLOBAL: "/dev/null",
@@ -321,7 +325,7 @@ export const recoverLocalSourceBaseline = async (input: {
   const packed = localBaselineProcessExit(pack);
   pack.stdin.end(`${captured}\n`);
   const packFile = path.join(scratch, "capture.pack");
-  await pipeline(pack.stdout, createWriteStream(packFile, { mode: 0o600, flags: "wx" }));
+  await pipeline(pack.stdout, createWriteStream(packFile, { flags: "wx", mode: 0o600 }));
   const packedCode = await packed;
   if (packedCode !== 0) {
     throw new Error("source_baseline_pack_failed");
@@ -332,6 +336,9 @@ export const recoverLocalSourceBaseline = async (input: {
     authority,
     manifest,
     pack: new ReadableStream<Uint8Array>({
+      cancel() {
+        packInput.destroy();
+      },
       async pull(controller) {
         const item = await chunks.next();
         if (item.done === true) {
@@ -343,15 +350,12 @@ export const recoverLocalSourceBaseline = async (input: {
         }
         controller.enqueue(item.value);
       },
-      cancel() {
-        packInput.destroy();
-      },
     }),
   });
   await writeFile(
     path.join(scratch, "result.json"),
     `${JSON.stringify({ root: result.root, sourceSha: result.manifest.sourceSha, workspaceDigest: result.manifest.workspaceDigest })}\n`,
-    { mode: 0o600, flag: "wx" },
+    { flag: "wx", mode: 0o600 },
   );
   return result;
 };

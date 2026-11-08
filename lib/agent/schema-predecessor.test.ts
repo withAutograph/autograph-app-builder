@@ -61,9 +61,9 @@ const receipt = {
 const fixture = () => {
   const sandbox = {
     run: vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) }),
-    writeBinaryFile: vi.fn<
-      (input: Parameters<SandboxSession["writeBinaryFile"]>[0]) => Promise<void>
-    >(async () => {}),
+    writeBinaryFile: vi
+      .fn<(input: Parameters<SandboxSession["writeBinaryFile"]>[0]) => Promise<void>>()
+      .mockResolvedValue(),
   };
   return {
     adapterSessionId: "saved-session",

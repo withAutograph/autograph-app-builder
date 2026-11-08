@@ -59,13 +59,6 @@ vi.mock("./private-compute-planning", async (importOriginal) => ({
   preparePrivateComputePlanning: ports.profile,
 }));
 vi.mock("../repository/target-planning", () => ({
-  targetExecutionBinding: () => ({
-    fixture: true,
-    dependencyCacheDigest: "cache",
-    imageDigest: "image",
-  }),
-  fixtureTargetCommandExecutor: () => ({}),
-  sandboxTargetCommandExecutor: () => ({}),
   executeTargetIdentityAndPlanning: async (input: {
     onIdentity: (identity: { appId: string; workspacePath: string }) => void | Promise<void>;
   }) => {
@@ -73,30 +66,37 @@ vi.mock("../repository/target-planning", () => ({
     const result: unknown = await ports.execute(input);
     return result;
   },
+  fixtureTargetCommandExecutor: () => ({}),
+  sandboxTargetCommandExecutor: () => ({}),
+  targetExecutionBinding: () => ({
+    dependencyCacheDigest: "cache",
+    fixture: true,
+    imageDigest: "image",
+  }),
 }));
 const sha256 = (content: string) => createHash("sha256").update(content).digest("hex");
 const profile = () =>
   privateComputeProfileSchema.parse({
-    version: 1,
-    id: "private-checks-16gib-v1",
-    vcpus: 8,
-    memoryMiB: 16_384,
-    lintWorkers: 1,
-    target: { sandboxId: "workspace", workspaceDrive: "same-drive" },
     checkPolicy: {
-      path: "apps/example/.config/mise/tasks/check",
-      beforeSha256: "a".repeat(64),
       afterSha256: sha256(PRIVATE_COMPUTE_CHECK_TASK),
+      beforeSha256: "a".repeat(64),
+      path: "apps/example/.config/mise/tasks/check",
     },
+    id: "private-checks-16gib-v1",
     limits: {
-      version: 1,
-      teamId: "team_owned",
-      projectId: "prj_owned",
-      plan: "pro",
-      maxVcpus: 8,
       limited: false,
+      maxVcpus: 8,
       observedAt: "2026-11-03T12:00:00.000Z",
+      plan: "pro",
+      projectId: "prj_owned",
+      teamId: "team_owned",
+      version: 1,
     },
+    lintWorkers: 1,
+    memoryMiB: 16_384,
+    target: { sandboxId: "workspace", workspaceDrive: "same-drive" },
+    vcpus: 8,
+    version: 1,
   });
 const fixture = (phase: "planned" | "identity_resolved", compute = profile()) =>
   // SAFETY: The real producer consumes these immutable state fields; unrelated receipt internals are opaque test sentinels and no provider or filesystem port is available.
@@ -115,12 +115,12 @@ const fixture = (phase: "planned" | "identity_resolved", compute = profile()) =>
     artifacts: [],
     sourceReceipt: { digest: "source" },
     workspace: {
-      workspaceId: "workspace",
-      workspacePath: "/workspace/repository",
+      eligibilityDigest: "eligible",
       sourceSha: "source-sha",
       sourceTree: "source-tree",
       workspaceDigest: "workspace",
-      eligibilityDigest: "eligible",
+      workspaceId: "workspace",
+      workspacePath: "/workspace/repository",
     },
     dependencyReceipt: { digest: "dependency" },
     identityReceipt: { digest: "identity" },
@@ -158,9 +158,9 @@ describe("normal private compute recipe projection", () => {
         expect(result.checkTaskSha256).toBe(sha256(PRIVATE_COMPUTE_CHECK_TASK));
         expect(implementationFilesSchema.parse(result.implementationFiles)).toEqual([
           {
-            path: profile().checkPolicy.path,
-            operation: "upsert",
             content: PRIVATE_COMPUTE_CHECK_TASK,
+            operation: "upsert",
+            path: profile().checkPolicy.path,
           },
         ]);
         expect(result.privateCompute).toEqual(profile());
@@ -179,7 +179,7 @@ describe("normal private compute recipe projection", () => {
       }
       Reflect.deleteProperty(current.proposal.target, "privateCompute");
       appBuilderWorkflowState.update(() => current);
-      ports.profile.mockImplementation(() => Promise.resolve());
+      ports.profile.mockResolvedValue(undefined);
       const result = await prepareAppCreation({}, context);
       expect(result.reused).toBe(true);
       expect(result).not.toHaveProperty("privateCompute");
@@ -233,8 +233,8 @@ const approveRepairFixture = (state: AppBuilderWorkflowState) => {
 };
 const repairFiles = [
   {
-    path: "apps/example/.config/mise/config.toml",
     content: "# Enables discovery of generated app-scoped mise tasks.\n",
+    path: "apps/example/.config/mise/config.toml",
   },
 ];
 
@@ -372,7 +372,7 @@ describe("resume the approved build through the planning tool", () => {
             appSpec: { ...planned.appSpec, appId: "different-app" },
           }));
         } else {
-          const grant = readPrivateApplyAuthority().grant;
+          const { grant } = readPrivateApplyAuthority();
           if (grant === null) {
             throw new Error("fixture");
           }
@@ -552,7 +552,7 @@ describe("explicit same-app private repair through the real planning producer", 
       ).rejects.toThrow("exact reviewed");
       await expect(
         prepareAppCreation(
-          { existingAppChanges: [{ path: "apps/foreign/page.tsx", content: "x" }] },
+          { existingAppChanges: [{ content: "x", path: "apps/foreign/page.tsx" }] },
           context,
         ),
       ).rejects.toThrow("path");

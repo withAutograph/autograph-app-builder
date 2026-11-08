@@ -16,6 +16,8 @@ import type {
   ReconciliationReviewReceipt,
 } from "../repository/github-draft-reconciliation";
 
+const INPUT_REQUESTED_EVENT = "input.requested";
+
 const workflowKey = "autograph-app-builder.workflow.v17";
 const candidateKey = "autograph-app-builder.draft-reconciliation.v1";
 const completionsKey = "autograph-app-builder.draft-reconciliation-completions.v1";
@@ -95,7 +97,7 @@ const readRecoveryHistory = (
       return undefined;
     }
     if (
-      parsed.type === "input.requested" ||
+      parsed.type === INPUT_REQUESTED_EVENT ||
       parsed.type === "approval.settled" ||
       parsed.type === "action.result"
     ) {
@@ -137,7 +139,7 @@ const uniqueHistoryApproval = (parts: Part[], callId: string): boolean => {
   ) {
     return false;
   }
-  const approvalId = requests[0].approvalId;
+  const [{ approvalId }] = requests;
   const responses = parts.filter(
     (value) => value.type === "tool-approval-response" && value.approvalId === approvalId,
   );
@@ -153,7 +155,7 @@ const uniqueHistoryApproval = (parts: Part[], callId: string): boolean => {
 /** Native server frames, not a model/history approval response, establish the human decision. */
 const nativeHumanApproval = (events: Event[], call: Part, expectedPrincipalId: string): boolean => {
   const requests = events.flatMap((value, index) => {
-    if (value.type !== "input.requested") {
+    if (value.type !== INPUT_REQUESTED_EVENT) {
       return [];
     }
     const parsed = z.object({ requests: z.array(z.unknown()) }).safeParse(value.data).data;
@@ -164,15 +166,15 @@ const nativeHumanApproval = (events: Event[], call: Part, expectedPrincipalId: s
         return [];
       }
       const request = requestSchema.safeParse(entry).data;
-      return [{ request, index }];
+      return [{ index, request }];
     });
   });
   if (requests.length !== 1 || requests[0].request === undefined) {
     return false;
   }
-  const { request, index } = requests[0];
+  const [{ request, index }] = requests;
   const requestIdMatches = events.flatMap((value) => {
-    if (value.type !== "input.requested") {
+    if (value.type !== INPUT_REQUESTED_EVENT) {
       return [];
     }
     const parsed = z.object({ requests: z.array(z.unknown()) }).safeParse(value.data).data;
@@ -199,7 +201,7 @@ const nativeHumanApproval = (events: Event[], call: Part, expectedPrincipalId: s
       return [];
     }
     const settlement = settlementSchema.safeParse(value.data).data;
-    return [{ settlement, settledIndex }];
+    return [{ settledIndex, settlement }];
   });
   if (settlements.length !== 1 || settlements[0].settlement === undefined) {
     return false;

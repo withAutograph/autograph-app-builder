@@ -20,9 +20,9 @@ const fixture = () => {
   const readBinaryFile = vi.fn(async ({ path }: { path: string }) =>
     path.endsWith("image.bin") ? binary : Buffer.from("ok"),
   );
-  const run = vi.fn(async () => ({ exitCode: 0, stdout: JSON.stringify(rows), stderr: "" }));
+  const run = vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(rows) }));
   return {
-    sandbox: { run, readBinaryFile },
+    sandbox: { readBinaryFile, run },
     signal: new AbortController().signal,
     appId: "app",
     displayName: "App",
@@ -96,6 +96,11 @@ it("prunes actual Playwright reports and browser auth while retaining nested cod
       signal: new AbortController().signal,
       assertCurrent: async () => {},
       sandbox: {
+        readBinaryFile: async ({ path }) => {
+          const relative = path.slice("/workspace/repository/apps/app/".length);
+          reads.push(relative);
+          return await readFile(nodePath.join(root, "apps/app", relative));
+        },
         run: async () => {
           const stdout = execFileSync(
             "/usr/bin/python3",
@@ -109,12 +114,7 @@ it("prunes actual Playwright reports and browser auth while retaining nested cod
             ],
             { encoding: "utf-8" },
           );
-          return { exitCode: 0, stdout, stderr: "" };
-        },
-        readBinaryFile: async ({ path }) => {
-          const relative = path.slice("/workspace/repository/apps/app/".length);
-          reads.push(relative);
-          return await readFile(nodePath.join(root, "apps/app", relative));
+          return { exitCode: 0, stderr: "", stdout };
         },
       },
     });
@@ -141,6 +141,6 @@ it("prunes actual Playwright reports and browser auth while retaining nested cod
       Buffer.from([0, 255, 4]),
     );
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { force: true, recursive: true });
   }
 });

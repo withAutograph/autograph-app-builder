@@ -33,6 +33,8 @@ export interface RepositoryProductionManagementDependencies extends Pick<
   renewSignIn: (scope: RepositoryProductionScope, context: AppAccessEffectContext) => Promise<void>;
 }
 
+const CHANGE_ROLE_ACTION = "change-role";
+
 const invitationSchema = z.object({
   id: z.uuid(),
   appId: z.string(),
@@ -66,6 +68,13 @@ const operationId = (requestId: string, step: string) => {
   const hex = createHash("sha256").update(`${requestId}:${step}`).digest("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 };
+const readEffect = (assertCurrent: () => Promise<void>): AppAccessEffectContext => ({
+  operationRef: randomUUID(),
+  createdAt: new Date().toISOString(),
+  assertCurrent,
+  checkpoint: () => Promise.resolve(),
+  readCheckpoints: () => [],
+});
 
 /** Concrete access adapter over the same pinned Auth and generated-data workers as setup. */
 export const createRepositoryProductionManagement = (
@@ -155,7 +164,7 @@ export const createRepositoryProductionManagement = (
       await auth(scope, { action: "set-access", actorId, roles, active }, false, effect, step);
       return;
     }
-    await deps.workers(scope).mutateAppAccess(context, { actorId, roles, active });
+    await deps.workers(scope).mutateAppAccess(context, { active, actorId, roles });
   };
   const accessState = async (
     scope: RepositoryProductionScope,
@@ -178,16 +187,9 @@ export const createRepositoryProductionManagement = (
         ? ("applied" as const)
         : ("absent" as const);
     }
-    const result = await deps.workers(scope).inspectAppAccess(context, { actorId, roles, active });
+    const result = await deps.workers(scope).inspectAppAccess(context, { active, actorId, roles });
     return result.state === "not-applied" ? ("absent" as const) : result.state;
   };
-  const readEffect = (assertCurrent: () => Promise<void>): AppAccessEffectContext => ({
-    operationRef: randomUUID(),
-    createdAt: new Date().toISOString(),
-    assertCurrent,
-    checkpoint: () => Promise.resolve(),
-    readCheckpoints: () => [],
-  });
   const cancelMemberInvitations = async (
     scope: RepositoryProductionScope,
     member: { id: string; email: string },
@@ -290,7 +292,7 @@ export const createRepositoryProductionManagement = (
     if (removed.length > 0 || command.action === "remove") {
       await setAccess(scope, member.id, removed, false, effect, "revoke");
     }
-    if (command.action === "change-role") {
+    if (command.action === CHANGE_ROLE_ACTION) {
       await setAccess(scope, member.id, desired, true, effect, "grant");
     }
     return "applied" as const;
@@ -365,7 +367,7 @@ export const createRepositoryProductionManagement = (
     ...deps,
     readPeople: async (scope, cursor) => {
       if (!(await deps.readSetup(scope))) {
-        return { members: [], invitations: [] };
+        return { invitations: [], members: [] };
       }
       return await deps.withLease(scope, async (assertCurrent) => {
         const effect = readEffect(assertCurrent);
@@ -381,19 +383,18 @@ export const createRepositoryProductionManagement = (
           ) {
             continue;
           }
-          visible.push({
-            id: item.id,
+          const projected: AppAccessSnapshot["invitations"][number] = {
             email: item.email,
+            expiresAt: item.expiresAt,
+            id: item.id,
             roles: item.roles,
             status: Date.parse(item.expiresAt) <= Date.now() ? "expired" : "pending",
-            expiresAt: item.expiresAt,
-            ...(item.deliveryStatus === undefined
-              ? {}
-              : {
-                  deliveryStatus:
-                    item.deliveryStatus === "sending" ? "unknown" : item.deliveryStatus,
-                }),
-          });
+          };
+          if (item.deliveryStatus !== undefined) {
+            projected.deliveryStatus =
+              item.deliveryStatus === "sending" ? "unknown" : item.deliveryStatus;
+          }
+          visible.push(projected);
         }
         // Pages bound a response, never the number of people an app can have.
         const offset = cursor === undefined ? 0 : Number(cursor);
@@ -401,13 +402,14 @@ export const createRepositoryProductionManagement = (
           throw new AppAccessError("request_invalid");
         }
         const pageSize = 50;
-        return {
+        const page: Pick<AppAccessSnapshot, "members" | "invitations" | "nextCursor"> = {
           members: people.slice(offset, offset + pageSize),
           invitations: visible.slice(offset, offset + pageSize),
-          ...(Math.max(people.length, visible.length) > offset + pageSize
-            ? { nextCursor: String(offset + pageSize) }
-            : {}),
         };
+        if (Math.max(people.length, visible.length) > offset + pageSize) {
+          page.nextCursor = String(offset + pageSize);
+        }
+        return page;
       });
     },
     execute: async (scope, command, effect) => {
@@ -467,7 +469,7 @@ export const createRepositoryProductionManagement = (
         if (command.action === "resend") {
           await auth(scope, { action: "send", invitationId: found.id }, false, effect, "send");
         }
-      } else if (command.action === "change-role" || command.action === "remove") {
+      } else if (command.action === CHANGE_ROLE_ACTION || command.action === "remove") {
         const result = await updateMember(scope, command, effect);
         if (result === "rejected") {
           return result;
@@ -494,7 +496,7 @@ export const createRepositoryProductionManagement = (
       ) {
         return await reconcileInvitation(scope, command, effect);
       }
-      if (command.action === "change-role" || command.action === "remove") {
+      if (command.action === CHANGE_ROLE_ACTION || command.action === "remove") {
         return await reconcileMember(scope, command, effect);
       }
       // Setup and link renewal have their own durable same-operation reconciliation.
@@ -512,10 +514,10 @@ export const createRepositoryProductionManagement = (
         return undefined;
       }
       return {
+        accepted: found.status === "accepted",
         actorId: found.verifiedActorId,
         email: found.email,
         roles: found.roles,
-        accepted: found.status === "accepted",
       };
     },
     enrollInvitee: async (scope, id, actorId, roles, effect) => {

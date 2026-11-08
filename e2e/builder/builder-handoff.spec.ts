@@ -3,6 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { expect, test } from "playwright/test";
 import type { Page } from "playwright/test";
 import postgres from "postgres";
+import { z } from "zod";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { eq } from "drizzle-orm";
 
@@ -23,6 +24,14 @@ import {
   waitForHandoffContent,
 } from "../support/harness";
 
+const statusBodySchema = z.looseObject({ status: z.unknown() });
+const handoffBodySchema = z.looseObject({
+  handoffId: z.unknown(),
+  intent: z.looseObject({ appName: z.unknown(), brief: z.unknown() }),
+  status: z.unknown(),
+});
+const errorBodySchema = z.looseObject({ error: z.unknown() });
+
 // OAuth callbacks and browser cookies must not enter failure artifacts.
 test.use({ screenshot: "off", trace: "off", video: "off" });
 
@@ -35,7 +44,9 @@ test.use({ screenshot: "off", trace: "off", video: "off" });
 // or raw status responses. No native-client acceptance is claimed by this suite.
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-test.beforeEach(async () => resetApplicationState());
+test.beforeEach(async () => {
+  await resetApplicationState();
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function completeHandoff(page: Page) {
@@ -80,7 +91,7 @@ async function prepareNamedHandoff(
   const url = page.url();
   const { pathname } = new URL(url);
   const id = pathname.split("/").at(-1);
-  if (!id) throw new Error("Handoff URL is missing an ID");
+  if (id === undefined || id === null || id === "") throw new Error("Handoff URL is missing an ID");
   return { id, pathname, statusPath: `/api/builder/handoffs/${id}`, url };
 }
 
@@ -101,7 +112,7 @@ test("a lost handoff action response retries its saved checkpoint without resavi
       !interrupted &&
       request.method() === "POST" &&
       new URL(request.url()).pathname === "/" &&
-      request.postData()?.includes("draftCheckpoint")
+      request.postData()?.includes("draftCheckpoint") === true
     ) {
       interrupted = true;
       // Complete the real server mutation before dropping only its response.
@@ -169,7 +180,7 @@ test("multiple handoffs reload independently without replacing saved app context
       const response = await getWithTransientRetry(activePage, handoff.statusPath);
       expect(response.ok()).toBe(true);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const status = await response.json();
+      const status = handoffBodySchema.parse(await response.json());
       expect(status.handoffId).toBe(handoff.id);
       expect(status.intent.appName).toBe(name);
       expect(status.intent.brief).toBe(brief);
@@ -218,7 +229,7 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
     const strangerPage = await stranger.newPage();
     const anonymousResponse = await getWithTransientRetry(strangerPage, handoff.statusPath);
     expect(anonymousResponse.status()).toBe(401);
-    const anonymousBody = await anonymousResponse.json();
+    const anonymousBody = errorBodySchema.parse(await anonymousResponse.json());
     expect(Object.keys(anonymousBody)).toEqual(["error"]);
     expect(anonymousBody.error).toBe("authentication_required");
     expect(anonymousResponse.headers()["cache-control"]).toContain("no-store");
@@ -240,7 +251,7 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
     expect(strangerId).not.toBe(ownerId);
     const unavailableResponse = await getWithTransientRetry(strangerPage, handoff.statusPath);
     expect(unavailableResponse.status()).toBe(404);
-    const unavailableBody = await unavailableResponse.json();
+    const unavailableBody = errorBodySchema.parse(await unavailableResponse.json());
     expect(Object.keys(unavailableBody)).toEqual(["error"]);
     expect(unavailableBody.error).toBe("handoff_unavailable");
     expect(unavailableResponse.headers()["cache-control"]).toContain("no-store");
@@ -255,7 +266,7 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
     await expect(strangerPage.getByRole("textbox", { name: "Handoff prompt" })).toHaveCount(0);
     const ownerResponse = await getWithTransientRetry(page, handoff.statusPath);
     expect(ownerResponse.ok()).toBe(true);
-    const ownerBody = await ownerResponse.json();
+    const ownerBody = statusBodySchema.parse(await ownerResponse.json());
     expect(ownerBody.status).toBe("prepared");
   } finally {
     try {
@@ -278,7 +289,9 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
     "Observe server-confirmed continuation only.",
   );
   await page.bringToFront();
-  await expect.poll(() => page.evaluate(() => document.visibilityState)).toBe("visible");
+  await expect
+    .poll(async () => await page.evaluate(() => document.visibilityState))
+    .toBe("visible");
   const continued = page.getByText("Continued in your app.", { exact: false });
   // The server-rendered handoff never initiates a custom-protocol navigation
   // on arrival. Launching a client is an explicit, user-owned action.
@@ -287,7 +300,7 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
   await expect(continued).toHaveCount(0);
   const before = await getWithTransientRetry(page, handoff.statusPath);
   expect(before.ok()).toBe(true);
-  const beforeBody = await before.json();
+  const beforeBody = statusBodySchema.parse(await before.json());
   expect(beforeBody.status).toBe("prepared");
 
   let polled = 0;
@@ -317,7 +330,7 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
     expect(polled).toBeGreaterThan(0);
     const after = await getWithTransientRetry(page, handoff.statusPath);
     expect(after.ok()).toBe(true);
-    const afterBody = await after.json();
+    const afterBody = statusBodySchema.parse(await after.json());
     expect(afterBody.status).toBe("continued");
     expect(mcpRequests).toBe(0);
     const finalBoundaryState = await browserBoundaryState(page);
@@ -374,15 +387,17 @@ test("Cursor install link remains hidden until its dedicated local client is reg
       ).toBeVisible();
       const before = await getWithTransientRetry(page, handoff.statusPath);
       expect(before.ok()).toBe(true);
-      const beforeBody = await before.json();
+      const beforeBody = statusBodySchema.parse(await before.json());
       expect(beforeBody.cursorInstallReady).toBe(false);
       await setupCursorClient(database, `${appOrigin}/mcp`);
       await expect(install).toBeVisible({ timeout: 15_000 });
       const installHref = await install.getAttribute("href");
-      if (!installHref) throw new Error("Cursor install link is missing an href");
+      if (installHref === undefined || installHref === null || installHref === "")
+        throw new Error("Cursor install link is missing an href");
       const installUrl = new URL(installHref);
       const installConfig = installUrl.searchParams.get("config");
-      if (!installConfig) throw new Error("Cursor install link is missing its configuration");
+      if (installConfig === undefined || installConfig === null || installConfig === "")
+        throw new Error("Cursor install link is missing its configuration");
       const config = JSON.parse(Buffer.from(installConfig, "base64").toString("utf-8"));
       expect(Object.keys(config).toSorted()).toEqual(["auth", "url"]);
       expect(config.url).toBe(`${appOrigin}/mcp`);
@@ -473,7 +488,8 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   );
   expect(state.opened.at(-1)).toMatch(/^codex:\/\/new\?prompt=/u);
   const codexLaunchUrl = state.opened.at(-1);
-  if (!codexLaunchUrl) throw new Error("Codex launch URL is missing");
+  if (codexLaunchUrl === undefined || codexLaunchUrl === null || codexLaunchUrl === "")
+    throw new Error("Codex launch URL is missing");
   expect(new URL(codexLaunchUrl).searchParams.get("prompt")).toBe(state.clipboard[0]);
 
   await expect(page.getByText("Launch requested for Codex", { exact: false })).toBeVisible();
@@ -510,10 +526,12 @@ test("Cursor handoff carries the exact copied prompt", async ({ context, page })
   const install = page.getByRole("link", { name: "Add Autograph to Cursor" });
   await expect(install).toBeVisible();
   const installHref = await install.getAttribute("href");
-  if (!installHref) throw new Error("Cursor install link is missing an href");
+  if (installHref === undefined || installHref === null || installHref === "")
+    throw new Error("Cursor install link is missing an href");
   const installUrl = new URL(installHref);
   const installConfig = installUrl.searchParams.get("config");
-  if (!installConfig) throw new Error("Cursor install link is missing its configuration");
+  if (installConfig === undefined || installConfig === null || installConfig === "")
+    throw new Error("Cursor install link is missing its configuration");
   expect(JSON.parse(Buffer.from(installConfig, "base64").toString("utf-8"))).toEqual({
     auth: { CLIENT_ID: "autograph-cursor-desktop" },
     url: `${appOrigin}/mcp`,
@@ -525,7 +543,8 @@ test("Cursor handoff carries the exact copied prompt", async ({ context, page })
   expect(state.clipboard[0]).not.toContain("codex plugin");
   expect(state.opened.at(-1)).toMatch(/^cursor:\/\/anysphere\.cursor-deeplink\/prompt\?text=/u);
   const cursorLaunchUrl = state.opened.at(-1);
-  if (!cursorLaunchUrl) throw new Error("Cursor launch URL is missing");
+  if (cursorLaunchUrl === undefined || cursorLaunchUrl === null || cursorLaunchUrl === "")
+    throw new Error("Cursor launch URL is missing");
   expect(new URL(cursorLaunchUrl).searchParams.get("text")).toBe(state.clipboard[0]);
   await expect(page.getByRole("button", { name: "Open in Cursor" })).toBeVisible();
 });
@@ -561,11 +580,12 @@ test("expired handoff renews in place without changing intent or provisioning re
 
   const handoffUrl = page.url();
   const handoffId = new URL(handoffUrl).pathname.split("/").at(-1);
-  if (!handoffId) throw new Error("Handoff URL is missing an ID");
+  if (handoffId === undefined || handoffId === null || handoffId === "")
+    throw new Error("Handoff URL is missing an ID");
   const statusPath = `/api/builder/handoffs/${handoffId}`;
   const preparedResponse = await getWithTransientRetry(page, statusPath);
   expect(preparedResponse.ok()).toBe(true);
-  const prepared = await preparedResponse.json();
+  const prepared = handoffBodySchema.parse(await preparedResponse.json());
   expect(prepared.status).toBe("prepared");
 
   const provisioningRequests: string[] = [];
@@ -612,7 +632,7 @@ test("expired handoff renews in place without changing intent or provisioning re
 
     const statusResponse = await getWithTransientRetry(page, statusPath);
     expect(statusResponse.ok()).toBe(true);
-    const renewed = await statusResponse.json();
+    const renewed = handoffBodySchema.parse(await statusResponse.json());
     expect(renewed.handoffId).toBe(handoffId);
     expect(renewed.status).toBe("prepared");
     expect(renewed.intent).toEqual(prepared.intent);

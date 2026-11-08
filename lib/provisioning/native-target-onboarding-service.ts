@@ -38,6 +38,8 @@ import type {
 } from "./native-target-vercel-provider";
 import type { NativeTargetVercelAuthorizationObservation } from "./native-target-vercel-authorization";
 
+const NATIVE_TARGET_PLAN_ACTION = "native-target-plan";
+
 type Invocation = NativeTargetTransportRequest;
 type Current = NativeTargetCurrentOwner & { historyOwner: OperatorOwnerContext };
 
@@ -178,7 +180,7 @@ export const createNativeTargetOnboardingService =
   (deps: NativeTargetOnboardingServiceDependencies) =>
   async (request: Request, input: Invocation): Promise<Response> => {
     const workloadHeaders = new Headers(request.headers);
-    const isPlan = input.action === "native-target-plan";
+    const isPlan = input.action === NATIVE_TARGET_PLAN_ACTION;
     await observeNativePlan(isPlan, "native_plan_workload", () =>
       deps.verifyWorkload(new Request(request.url, { headers: workloadHeaders })),
     );
@@ -239,7 +241,7 @@ export const createNativeTargetOnboardingService =
     });
     const runtime = createNativeTargetOnboardingRuntime({
       readCapturedRelease: async (_ctx, appId, retainedPlan) => {
-        if (input.action !== "native-target-plan") {
+        if (input.action !== NATIVE_TARGET_PLAN_ACTION) {
           throw mismatch();
         }
         if (retainedPlan !== undefined) {
@@ -334,7 +336,7 @@ export const createNativeTargetOnboardingService =
     };
     let output: NativeTargetTransportResponse;
     switch (input.action) {
-      case "native-target-plan": {
+      case NATIVE_TARGET_PLAN_ACTION: {
         try {
           output = await observeNativePlan(isPlan, "native_plan_dispatch", () =>
             runtime.plan(input.input, context, {

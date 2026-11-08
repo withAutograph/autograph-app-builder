@@ -31,6 +31,17 @@ import {
 export { appBrowserTestCommand } from "../../lib/agent/app-browser-test-runner";
 
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
+const identity = (value: NonNullable<ReturnType<typeof workingPreviewState.get>>) =>
+  JSON.stringify([
+    value.commandId,
+    value.providerSessionId,
+    value.sandboxId,
+    value.receipt.appId,
+    value.receipt.url,
+    value.receipt.expiresAt,
+    value.requestDigest,
+    value.priorValidatedArtifact,
+  ]);
 
 // oxlint-disable-next-line eslint/complexity -- Keep explicit prior-preview selection separate from existing hosted and local paths.
 export const runAppBrowserTests = async (input: {
@@ -70,11 +81,14 @@ export const runAppBrowserTests = async (input: {
   const run = async (environment?: Record<string, string>, assertPreview?: () => void) => {
     await priorArtifact?.verifyCurrent();
     assertPreview?.();
-    return await runResolvedAppBrowserTests({
+    const browserInput: Parameters<typeof runResolvedAppBrowserTests>[0] = {
       ...runInput,
       runtime,
-      ...(environment ? { privateBrowserEnvironment: environment } : {}),
-    });
+    };
+    if (environment) {
+      browserInput.privateBrowserEnvironment = environment;
+    }
+    return await runResolvedAppBrowserTests(browserInput);
   };
   if (priorArtifact !== undefined && execution === undefined) {
     throw new Error("The prior validated artifact requires an owned private preview.");
@@ -83,17 +97,6 @@ export const runAppBrowserTests = async (input: {
     return await run();
   }
   const preview = workingPreviewState.get();
-  const identity = (value: NonNullable<typeof preview>) =>
-    JSON.stringify([
-      value.commandId,
-      value.providerSessionId,
-      value.sandboxId,
-      value.receipt.appId,
-      value.receipt.url,
-      value.receipt.expiresAt,
-      value.requestDigest,
-      value.priorValidatedArtifact,
-    ]);
   try {
     if (
       priorArtifact !== undefined &&
@@ -176,9 +179,9 @@ export default defineTool({
         appId: input.appId,
         state,
         resolveRoot: async ({ appId, root }) =>
-          await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
+          await resolveAcceptanceRuntimeRoot({ appId, ctx, fallbackRoot: root, sandbox, state }),
       }));
-    const root = selected.root;
+    const { root } = selected;
     return await runAppBrowserTests({
       appId: selected.appId,
       execution: {

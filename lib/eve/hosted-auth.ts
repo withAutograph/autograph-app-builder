@@ -10,27 +10,23 @@ export const hostedIdentifierSchema = z
  * Closed projection produced only after an adapter has verified the token's
  * signature, expiry, not-before time, and issuer key material.
  */
-export const verifiedHostedClaimsSchema = z
-  .object({
-    audience: z.string().min(1).max(300),
-    issuer: z.string().url(),
-    scopes: z.array(z.string().min(1).max(100)).min(1).max(50),
-    subject: hostedIdentifierSchema,
-    workspaceId: hostedIdentifierSchema,
-  })
-  .strict();
+export const verifiedHostedClaimsSchema = z.strictObject({
+  audience: z.string().min(1).max(300),
+  issuer: z.url(),
+  scopes: z.array(z.string().min(1).max(100)).min(1).max(50),
+  subject: hostedIdentifierSchema,
+  workspaceId: hostedIdentifierSchema,
+});
 
 export type VerifiedHostedClaims = z.infer<typeof verifiedHostedClaimsSchema>;
 
-export const hostedPrincipalSchema = z
-  .object({
-    audience: z.string().min(1).max(300),
-    issuer: z.string().url(),
-    ownerUserId: hostedIdentifierSchema,
-    scopes: z.array(z.string().min(1).max(100)).min(1).max(50),
-    workspaceId: hostedIdentifierSchema,
-  })
-  .strict();
+export const hostedPrincipalSchema = z.strictObject({
+  audience: z.string().min(1).max(300),
+  issuer: z.url(),
+  ownerUserId: hostedIdentifierSchema,
+  scopes: z.array(z.string().min(1).max(100)).min(1).max(50),
+  workspaceId: hostedIdentifierSchema,
+});
 
 export type HostedPrincipal = z.infer<typeof hostedPrincipalSchema>;
 

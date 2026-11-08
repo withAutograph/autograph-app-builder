@@ -26,10 +26,11 @@ if (
   receipt.format !== "autograph-portable-plugin-release-v3" ||
   receipt.specification !== "1.0.0" ||
   !/^[0-9a-f]{40}$/u.test(receipt.source?.sha ?? "") ||
-  !/^[0-9a-f]{40}$/u.test(receipt.source?.tree ?? "") ||
-  !Array.isArray(receipt.tools) ||
-  JSON.stringify(receipt.tools) !== JSON.stringify(TOOL_NAMES)
+  !/^[0-9a-f]{40}$/u.test(receipt.source?.tree ?? "")
 ) {
+  throw new Error("Portable release receipt was invalid.");
+}
+if (!Array.isArray(receipt.tools) || JSON.stringify(receipt.tools) !== JSON.stringify(TOOL_NAMES)) {
   throw new Error("Portable release receipt was invalid.");
 }
 const archive = await readFile(path.join(releaseRoot, receipt.archive.name));
@@ -91,11 +92,19 @@ await Promise.all(
       harness.format !== "agent-plugins-client-harness-v2" ||
       harness.client !== client ||
       harness.pluginRoot !== "./app-builder" ||
-      harness.mcp !== "./app-builder/mcp.json" ||
+      harness.mcp !== "./app-builder/mcp.json"
+    ) {
+      throw new Error(`${client} offline harness metadata was invalid.`);
+    }
+    if (
       harness.transport?.type !== "streamable-http" ||
       harness.transport?.url !== receipt.endpoint ||
       harness.oauth?.protectedResourceMetadata !==
-        `${new URL(receipt.endpoint).origin}/.well-known/oauth-protected-resource` ||
+        `${new URL(receipt.endpoint).origin}/.well-known/oauth-protected-resource`
+    ) {
+      throw new Error(`${client} offline harness metadata was invalid.`);
+    }
+    if (
       installation.client !== client ||
       installation.releaseArchive.sha256 !== receipt.archive.sha256
     ) {

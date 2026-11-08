@@ -43,7 +43,7 @@ const fixture = () => {
         ],
       },
       approvalReceipts: [
-        { approvedByCallId: "global-setup-call", approvedAt: "2026-11-03T00:00:00Z" },
+        { approvedAt: "2026-11-03T00:00:00Z", approvedByCallId: "global-setup-call" },
       ],
     }),
   };
@@ -91,7 +91,7 @@ const fixture = () => {
       planDigest: centralHostPlanDigest(callerPlan),
       effects: { "authorize-app-central-caller": "applied" },
       approvalReceipts: [
-        { approvedByCallId: "app-caller-call", approvedAt: "2026-11-03T00:00:00Z" },
+        { approvedAt: "2026-11-03T00:00:00Z", approvedByCallId: "app-caller-call" },
       ],
       observation: actual,
     }),
@@ -113,12 +113,12 @@ const fixture = () => {
     observe: vi.fn(async () => structuredClone(actual)),
   };
   return {
-    setup,
-    caller,
-    request,
-    ports,
     actual,
+    caller,
+    ports,
     read: createReadCentralIntegrationHostReady(ports),
+    request,
+    setup,
   };
 };
 it("requires independently current setup and app-caller authority with separate global ownership", async () => {

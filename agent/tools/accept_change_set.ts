@@ -132,32 +132,54 @@ export const createChangeSetAcceptanceTool = (
       updateExactWorkflow({
         expected: state,
         operation: "destination change-set acceptance",
-        transition: () => ({
-          appSpec: state.appSpec,
-          ...(state.appBackendKind === undefined ? {} : { appBackendKind: state.appBackendKind }),
-          applyReceipt: state.applyReceipt,
-          artifacts: state.artifacts,
-          ...(state.publishedGitHubDraftProposalDigest === undefined
-            ? {}
-            : { publishedGitHubDraftProposalDigest: state.publishedGitHubDraftProposalDigest }),
-          dependencyReceipt: state.dependencyReceipt,
-          ...(state.githubSource === undefined ? {} : { githubSource: state.githubSource }),
-          ...(state.githubDestinationReview === undefined
-            ? {}
-            : { githubDestinationReview: state.githubDestinationReview }),
-          ...(state.githubDestinationReviewRead === undefined
-            ? {}
-            : { githubDestinationReviewRead: state.githubDestinationReviewRead }),
-          identityReceipt: state.identityReceipt,
-          phase: "reviewed",
-          preparedByCallId: state.preparedByCallId,
-          proposal: state.proposal,
-          reviewReceipt: receipt,
-          sourceReceipt: state.sourceReceipt,
-          validationReceipt: state.validationReceipt,
-          version: APP_BUILDER_WORKFLOW_VERSION,
-          workspace: state.workspace,
-        }),
+        transition: () => {
+          type ReviewedState = Extract<
+            ReturnType<typeof appBuilderWorkflowState.get>,
+            { phase: "reviewed" }
+          >;
+          const appSpec = { appSpec: state.appSpec };
+          const backend: Pick<ReviewedState, "appBackendKind"> = {};
+          if (state.appBackendKind !== undefined) {
+            backend.appBackendKind = state.appBackendKind;
+          }
+          const applied = { applyReceipt: state.applyReceipt, artifacts: state.artifacts };
+          const publication: Pick<ReviewedState, "publishedGitHubDraftProposalDigest"> = {};
+          if (state.publishedGitHubDraftProposalDigest !== undefined) {
+            publication.publishedGitHubDraftProposalDigest =
+              state.publishedGitHubDraftProposalDigest;
+          }
+          const dependency = { dependencyReceipt: state.dependencyReceipt };
+          const github: Pick<
+            ReviewedState,
+            "githubSource" | "githubDestinationReview" | "githubDestinationReviewRead"
+          > = {};
+          if (state.githubSource !== undefined) {
+            github.githubSource = state.githubSource;
+          }
+          if (state.githubDestinationReview !== undefined) {
+            github.githubDestinationReview = state.githubDestinationReview;
+          }
+          if (state.githubDestinationReviewRead !== undefined) {
+            github.githubDestinationReviewRead = state.githubDestinationReviewRead;
+          }
+          return {
+            ...appSpec,
+            ...backend,
+            ...applied,
+            ...publication,
+            ...dependency,
+            ...github,
+            identityReceipt: state.identityReceipt,
+            phase: "reviewed",
+            preparedByCallId: state.preparedByCallId,
+            proposal: state.proposal,
+            reviewReceipt: receipt,
+            sourceReceipt: state.sourceReceipt,
+            validationReceipt: state.validationReceipt,
+            version: APP_BUILDER_WORKFLOW_VERSION,
+            workspace: state.workspace,
+          };
+        },
       });
       return checkedNativeToolResult(
         reviewedChangeSetSummary({

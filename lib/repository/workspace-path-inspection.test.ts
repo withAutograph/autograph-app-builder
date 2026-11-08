@@ -13,7 +13,7 @@ import {
 
 const roots: string[] = [];
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 const fixture = async () => {
   const parent = await realpath(await mkdtemp(path.join(tmpdir(), "workspace-inspection-")));
@@ -67,8 +67,8 @@ describe("actual selected workspace entry program", () => {
   it("lists both formerly failing subdirectories and their real package export file names", async () => {
     const f = await fixture();
     expect(inspect(f.root, "packages")).toMatchObject({
+      entries: [{ kind: "directory", path: "/workspace/repository/packages/playwright-config" }],
       kind: "workspace-directory",
-      entries: [{ path: "/workspace/repository/packages/playwright-config", kind: "directory" }],
     });
     const nested = inspect(f.root, "packages/playwright-config");
     expect(nested.kind).toBe("workspace-directory");
@@ -85,8 +85,8 @@ describe("actual selected workspace entry program", () => {
       kind: "workspace-missing",
     });
     expect(inspect(f.root, "packages/playwright-config/normal-actor-login.js")).toMatchObject({
-      kind: "workspace-entry",
       entryKind: "file",
+      kind: "workspace-entry",
     });
   });
   it("rejects traversal and a directory symlink outside its selected source", async () => {
@@ -155,8 +155,8 @@ describe("actual selected workspace entry program", () => {
       },
     });
     expect(resultSchema.parse(JSON.parse(output))).toMatchObject({
+      entries: [{ kind: "file", path: `/workspace/repository/${relativePath}/actual.js` }],
       kind: "workspace-directory",
-      entries: [{ path: `/workspace/repository/${relativePath}/actual.js`, kind: "file" }],
     });
   });
 });

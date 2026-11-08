@@ -18,7 +18,7 @@ const production = createRepositoryProductionNativeHandler(process.env, waitUnti
 const possession = createCustodyPossessionHandler();
 export default {
   async fetch(request: Request) {
-    const pathname = new URL(request.url).pathname;
+    const { pathname } = new URL(request.url);
     if ([repositoryProductionPath, repositoryProductionCompletionPath].includes(pathname)) {
       if (request.method !== "POST") {
         return Response.json(

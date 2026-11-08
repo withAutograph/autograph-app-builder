@@ -1,12 +1,9 @@
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 
-import type * as databaseSchema from "../db/schema";
 import { member, organization, user } from "../db/schema";
 import type { HostedWorkspaceMembership } from "../mcp/request-handler";
 import { hostedPrincipalSchema } from "./hosted-auth";
-
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 /**
  * Request-time membership authority. A signed workspace claim selects the
@@ -14,7 +11,9 @@ type Database = PostgresJsDatabase<typeof databaseSchema>;
  * Missing rows, revoked rows, and database errors all fail closed.
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function createPostgresWorkspaceMembership(database: Database): HostedWorkspaceMembership {
+export function createPostgresWorkspaceMembership(
+  database: Pick<Database, "select">,
+): HostedWorkspaceMembership {
   return {
     async isMember({ principal: principalInput, workspaceId }) {
       const principal = hostedPrincipalSchema.parse(principalInput);
@@ -47,7 +46,7 @@ export function createPostgresWorkspaceMembership(database: Database): HostedWor
 /** Consent-time authority for the future Preview issuer. Exactly one active
  * workspace is required; zero or multiple rows fail closed without guessing. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function createPostgresOAuthMembershipAuthority(database: Database) {
+export function createPostgresOAuthMembershipAuthority(database: Pick<Database, "select">) {
   return {
     async activeWorkspaceForUser(input: {
       issuer: string;

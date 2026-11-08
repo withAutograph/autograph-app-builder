@@ -21,7 +21,7 @@ export function serializeAuthPageSearchParams(searchParams: AuthPageSearchParams
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function resolveAuthCallbackURL(defaultURL: string, search: string, sameOrigin?: string) {
   const callbackURL = new URLSearchParams(search).get("callbackURL");
-  if (!callbackURL) {
+  if (callbackURL === null || callbackURL === "") {
     return defaultURL;
   }
 
@@ -53,7 +53,7 @@ export function resolveProviderCallbackURL(
 export function resolvePasskeyRedirectTo(redirectTo: string, search: string, origin: string) {
   const searchParams = new URLSearchParams(search);
   const inheritedRedirect = searchParams.get("redirectTo");
-  if (inheritedRedirect) {
+  if (inheritedRedirect !== null && inheritedRedirect !== "") {
     return resolveAuthCallbackURL(
       redirectTo,
       `?callbackURL=${encodeURIComponent(inheritedRedirect)}`,

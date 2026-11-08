@@ -39,48 +39,60 @@ const target = {
 };
 const context = { authority, target };
 const program = normalActorProgramSchema.parse({
-  version: 1,
-  appId: target.appId,
-  origin: "https://apps.example.test",
   actors: [
-    { actorKey: "owner", email: "owner@example.test", name: "Owner", account: "capture-existing" },
+    { account: "capture-existing", actorKey: "owner", email: "owner@example.test", name: "Owner" },
   ],
-  organizations: [],
-  memberships: [],
   appAccess: [],
+  appId: target.appId,
+  memberships: [],
+  organizations: [],
+  origin: "https://apps.example.test",
+  version: 1,
 });
 const plan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  stage: "auth-participants",
-  action: "prepare",
   access: [],
-  normalActorProgram: program,
-  selection: {
-    appId: target.appId,
-    branch: target.branch,
-    environment: target.environment,
-    projectId: target.projectId,
-    sessionId: target.sessionId,
-  },
+  action: "prepare",
   appDatabase: {
-    resourceId: "app-resource",
     database: "normal",
     migratorRole: "normal_owner",
+    resourceId: "app-resource",
     runtimeRole: "normal_runtime",
   },
   authDatabase: {
-    resourceId: "auth-resource",
     database: "auth",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
+  deploymentBoundary: {
+    app: {
+      branch: target.branch,
+      deploymentId: "dpl_app",
+      environment: "preview",
+      projectId: target.projectId,
+    },
+    authority,
+    gateway: {
+      branch: target.branch,
+      deploymentId: "dpl_gateway",
+      environment: "preview",
+      projectId: "prj_gateway",
+    },
+    operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
+    teamId: "team",
+    verification: {
+      gatewayOrigin: "https://gateway.example.test",
+      jwksUrl: "https://gateway.example.test/_platform/jwks.json",
+      publicOrigin: program.origin,
+    },
+  },
   effects: [
     {
+      description: "Capture approved actual accounts",
       id: "normal-accounts",
       kind: "normal-accounts",
-      description: "Capture approved actual accounts",
     },
   ],
   installer: { reference: "owned-worker", sha256: "a".repeat(64) },
@@ -91,31 +103,19 @@ const plan = hostedOperatorPlanSchema.parse({
     projectId: "neon-owned",
     source: "synthetic-only",
   },
+  normalActorProgram: program,
+  publicGateway: { branch: target.branch, origin: program.origin, projectId: "prj_gateway" },
   release: { artifactRef: "owned-release", id: "release", sha256: "b".repeat(64) },
   retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain Auth" },
-  publicGateway: { branch: target.branch, origin: program.origin, projectId: "prj_gateway" },
-  deploymentBoundary: {
-    authority,
-    teamId: "team",
-    app: {
-      branch: target.branch,
-      deploymentId: "dpl_app",
-      environment: "preview",
-      projectId: target.projectId,
-    },
-    gateway: {
-      branch: target.branch,
-      deploymentId: "dpl_gateway",
-      environment: "preview",
-      projectId: "prj_gateway",
-    },
-    operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
-    verification: {
-      gatewayOrigin: "https://gateway.example.test",
-      jwksUrl: "https://gateway.example.test/_platform/jwks.json",
-      publicOrigin: program.origin,
-    },
+  selection: {
+    appId: target.appId,
+    branch: target.branch,
+    environment: target.environment,
+    projectId: target.projectId,
+    sessionId: target.sessionId,
   },
+  stage: "auth-participants",
+  version: 1,
 });
 const preparationInput = {
   program,
@@ -139,21 +139,16 @@ const normalCookie = {
 };
 const fixture = (selectedPreparation = preparationInput) => {
   let row: HostedRuntimeJournalRow = {
-    revision: 1,
     record: hostedRuntimeJournalRecordSchema.parse({
-      kind: "app-runtime",
-      version: 1,
-      request: target,
       approvedByCallId: "initial-call",
-      status: "pending",
-      step: "reserved",
+      kind: "app-runtime",
       leaseId: "44444444-4444-4444-8444-444444444444",
       operator: {
+        approvalId: "initial-approval",
         mode: "protected-operator-v1",
         operationRef: accountOperationRef,
         plan: selectedPreparation.accountPlan,
         planDigest: selectedPreparation.accountPlanDigest,
-        approvalId: "initial-approval",
         receipts: [],
       },
       privateState: {
@@ -162,7 +157,12 @@ const fixture = (selectedPreparation = preparationInput) => {
         tokenIv: "resource-iv",
         tokenTag: "resource-tag",
       },
+      request: target,
+      status: "pending",
+      step: "reserved",
+      version: 1,
     }),
+    revision: 1,
   };
   let approved = true;
   let owned = true;
@@ -170,17 +170,6 @@ const fixture = (selectedPreparation = preparationInput) => {
   let writes = 0;
   let approvals = 0;
   const journal = createNormalActorJournal({
-    keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
-    now: () => Date.now(),
-    assertAuthorized: async (input) => {
-      if (
-        !owned ||
-        input.authority.ownerUserId !== authority.ownerUserId ||
-        input.target.sessionId !== target.sessionId
-      ) {
-        throw new Error("owner_revoked");
-      }
-    },
     assertAccountApproval: async (_context, preparation) => {
       approvals += 1;
       if (
@@ -192,13 +181,23 @@ const fixture = (selectedPreparation = preparationInput) => {
         throw new Error("approval_revoked");
       }
     },
+    assertAuthorized: async (input) => {
+      if (
+        !owned ||
+        input.authority.ownerUserId !== authority.ownerUserId ||
+        input.target.sessionId !== target.sessionId
+      ) {
+        throw new Error("owner_revoked");
+      }
+    },
     assertMutationAuthority: async (_context, current) => {
       if (current.record.leaseId !== row.record.leaseId || current.revision !== row.revision) {
         throw new Error("lease_changed");
       }
     },
+    keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
+    now: () => Date.now(),
     store: {
-      read: async () => structuredClone(row),
       compareAndSet: async (input): Promise<HostedRuntimeJournalRow | undefined> => {
         if (conflict) {
           conflict = false;
@@ -215,10 +214,23 @@ const fixture = (selectedPreparation = preparationInput) => {
         };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
     },
   });
   return {
+    get approvals() {
+      return approvals;
+    },
+    conflictOnce() {
+      conflict = true;
+    },
     journal,
+    revokeApproval() {
+      approved = false;
+    },
+    revokeOwner() {
+      owned = false;
+    },
     get row() {
       return row;
     },
@@ -228,28 +240,16 @@ const fixture = (selectedPreparation = preparationInput) => {
     get writes() {
       return writes;
     },
-    get approvals() {
-      return approvals;
-    },
-    revokeApproval() {
-      approved = false;
-    },
-    revokeOwner() {
-      owned = false;
-    },
-    conflictOnce() {
-      conflict = true;
-    },
   };
 };
 
 const organizationProofFixture = async () => {
   const selectedProgram = normalActorProgramSchema.parse({
     ...program,
-    organizations: [
-      { organizationId: "org-one", ownerActorKey: "owner", name: "One", slug: "one" },
-    ],
     memberships: [{ actorKey: "owner", organizationId: "org-one", role: "owner" }],
+    organizations: [
+      { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
+    ],
   });
   const selectedPlan = hostedOperatorPlanSchema.parse({
     ...plan,
@@ -275,8 +275,8 @@ const organizationProofFixture = async () => {
   state.actors = [
     {
       actorKey: "owner",
-      signup: "complete",
       session: owner,
+      signup: "complete",
       storageState: { cookies: [], origins: [] },
     },
   ];
@@ -305,8 +305,8 @@ const organizationProofFixture = async () => {
       environment: "preview" as const,
     },
   };
-  const input = { organizationId: "org-one", ownerActorKey: "owner", owner, binding };
-  return { value, input, selectedPreparation };
+  const input = { binding, organizationId: "org-one", owner, ownerActorKey: "owner" };
+  return { input, selectedPreparation, value };
 };
 
 const currentBootstrapFixture = async () => {
@@ -338,11 +338,11 @@ const currentBootstrapFixture = async () => {
       gitSha: "c".repeat(40),
     },
     effects: [
-      { id: "auth-resources", kind: "resources", description: "Auth", resourceId: "auth-resource" },
-      { id: "app-resources", kind: "resources", description: "App", resourceId: "app-resource" },
-      { id: "auth-schema", kind: "install", description: "Auth schema" },
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
+      { description: "Auth", id: "auth-resources", kind: "resources", resourceId: "auth-resource" },
+      { description: "App", id: "app-resources", kind: "resources", resourceId: "app-resource" },
+      { description: "Auth schema", id: "auth-schema", kind: "install" },
+      { description: "Gateway configuration", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
     ],
   });
   const operationRef = "33333333-3333-4333-8333-333333333333";
@@ -404,11 +404,11 @@ const currentBootstrapFixture = async () => {
   const bootstrap = { auth, candidate };
   const nextInput = {
     ...input,
+    assertBootstrapCurrent: async () => {},
     binding: { ...input.binding, endpointOrigin: candidate.origin },
     bootstrap,
-    assertBootstrapCurrent: async () => {},
   };
-  return { ...prepared, old, bootstrap, nextInput };
+  return { ...prepared, bootstrap, nextInput, old };
 };
 
 describe("retained actual normal actor journal", () => {
@@ -418,12 +418,13 @@ describe("retained actual normal actor journal", () => {
     value.row.record.leaseExpiresAt = new Date(Date.now() + 40_000).toISOString();
     let reads = 0;
     const journal = createNormalActorJournal({
+      assertAccountApproval: async () => undefined,
+      assertAuthorized: async () => undefined,
+      assertMutationAuthority: async () => undefined,
       keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
       now: Date.now,
-      assertAuthorized: async () => undefined,
-      assertAccountApproval: async () => undefined,
-      assertMutationAuthority: async () => undefined,
       store: {
+        compareAndSet: async () => undefined,
         read: async () => {
           reads += 1;
           if (reads === 2) {
@@ -438,7 +439,6 @@ describe("retained actual normal actor journal", () => {
           }
           return structuredClone(value.row);
         },
-        compareAndSet: async () => undefined,
       },
     });
     const retained = await journal.read(context);
@@ -453,12 +453,13 @@ describe("retained actual normal actor journal", () => {
       value.row.record.leaseExpiresAt = new Date(Date.now() + 40_000).toISOString();
       let reads = 0;
       const journal = createNormalActorJournal({
+        assertAccountApproval: async () => undefined,
+        assertAuthorized: async () => undefined,
+        assertMutationAuthority: async () => undefined,
         keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
         now: Date.now,
-        assertAuthorized: async () => undefined,
-        assertAccountApproval: async () => undefined,
-        assertMutationAuthority: async () => undefined,
         store: {
+          compareAndSet: async () => undefined,
           read: async () => {
             reads += 1;
             if (reads === 2) {
@@ -482,11 +483,10 @@ describe("retained actual normal actor journal", () => {
               if (change === "expired renewal") {
                 record.leaseExpiresAt = new Date(Date.now() - 1000).toISOString();
               }
-              value.row = { revision: value.row.revision + 1, record };
+              value.row = { record, revision: value.row.revision + 1 };
             }
             return structuredClone(value.row);
           },
-          compareAndSet: async () => undefined,
         },
       });
       await expect(journal.read(context)).rejects.toThrow("normal_actor_journal_changed");
@@ -540,26 +540,26 @@ describe("retained actual normal actor journal", () => {
       }),
     };
     const guard = createNormalActorJournalAuthority({
-      store: { read: async () => structuredClone(value.row), compareAndSet: async () => undefined },
+      assertApprovedOwner: async () => undefined,
+      assertCanonicalOwner: async () => undefined,
       keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
       now: () => now,
-      assertCanonicalOwner: async () => undefined,
-      assertApprovedOwner: async () => undefined,
       readApproval: async () => ({
+        action: "prepare",
         approvalId: "initial-approval",
+        approved: true,
         callId: "initial-call",
         planDigest: operatorPlanDigest(plan),
-        action: "prepare",
-        approved: true,
       }),
+      store: { compareAndSet: async () => undefined, read: async () => structuredClone(value.row) },
     });
     const effect = {
       ...context,
       effect: plan.effects[0],
-      operationRef: accountOperationRef,
-      plan,
       fenceGeneration: 1,
       leaseId: value.row.record.leaseId,
+      operationRef: accountOperationRef,
+      plan,
     };
     const snapshot = structuredClone(value.row);
     await guard.assertMutationAuthority(effect, snapshot);
@@ -583,10 +583,10 @@ describe("retained actual normal actor journal", () => {
     const effect = {
       ...context,
       effect: plan.effects[0],
-      operationRef: accountOperationRef,
-      plan,
       fenceGeneration: 1,
       leaseId: value.row.record.leaseId,
+      operationRef: accountOperationRef,
+      plan,
     };
     const snapshot = structuredClone(value.row);
     value.row = {
@@ -594,18 +594,18 @@ describe("retained actual normal actor journal", () => {
       record: { ...value.row.record, leaseExpiresAt: new Date(now + 60_000).toISOString() },
     };
     const guard = createNormalActorJournalAuthority({
-      store: { read: async () => structuredClone(value.row), compareAndSet: async () => undefined },
+      assertApprovedOwner: async () => undefined,
+      assertCanonicalOwner: async () => undefined,
       keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
       now: () => now,
-      assertCanonicalOwner: async () => undefined,
-      assertApprovedOwner: async () => undefined,
       readApproval: async () => ({
+        action: "prepare",
         approvalId: "initial-approval",
+        approved: true,
         callId: "initial-call",
         planDigest: operatorPlanDigest(plan),
-        action: "prepare",
-        approved: true,
       }),
+      store: { compareAndSet: async () => undefined, read: async () => structuredClone(value.row) },
     });
     await expect(guard.assertMutationAuthority(effect, snapshot)).resolves.toBeUndefined();
     if (value.row.record.operator === undefined) {
@@ -629,10 +629,8 @@ describe("retained actual normal actor journal", () => {
     let checks = 0;
     let writes = 0;
     const journal = createNormalActorJournal({
-      keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
-      now: Date.now,
-      assertAuthorized: async () => undefined,
       assertAccountApproval: async () => undefined,
+      assertAuthorized: async () => undefined,
       assertMutationAuthority: async () => {
         checks += 1;
         if (checks === 2) {
@@ -645,16 +643,19 @@ describe("retained actual normal actor journal", () => {
           };
         }
       },
+      keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
+      now: Date.now,
       store: {
-        read: async () => structuredClone(value.row),
         compareAndSet: async (input) => {
           if (input.expectedRevision !== value.row.revision) {
             return undefined;
           }
           writes += 1;
-          value.row = { revision: value.row.revision + 1, record: input.record };
+          const revision = value.row.revision + 1;
+          value.row = { record: input.record, revision };
           return structuredClone(value.row);
         },
+        read: async () => structuredClone(value.row),
       },
     });
     await journal.checkpoint(context, initial.state);
@@ -675,12 +676,12 @@ describe("retained actual normal actor journal", () => {
       id: "00000000-0000-4000-8000-000000000004",
     };
     const guard = createNormalActorJournalAuthority({
-      store: { read: async () => structuredClone(value.row), compareAndSet: async () => undefined },
+      assertApprovedOwner: async () => undefined,
+      assertCanonicalOwner: async () => undefined,
       keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
       now: Date.now,
-      assertCanonicalOwner: async () => undefined,
-      assertApprovedOwner: async () => undefined,
       readApproval: async () => null,
+      store: { compareAndSet: async () => undefined, read: async () => structuredClone(value.row) },
     });
     await expect(
       guard.assertMutationAuthority(context, structuredClone(value.row), "capture"),
@@ -714,10 +715,10 @@ describe("retained actual normal actor journal", () => {
   it("waits for every approved organization session before recording account completion", async () => {
     const selectedProgram = normalActorProgramSchema.parse({
       ...program,
-      organizations: [
-        { organizationId: "org-one", ownerActorKey: "owner", name: "One", slug: "one" },
-      ],
       memberships: [{ actorKey: "owner", organizationId: "org-one", role: "owner" }],
+      organizations: [
+        { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
+      ],
     });
     const selectedPlan = hostedOperatorPlanSchema.parse({
       ...plan,
@@ -741,7 +742,7 @@ describe("retained actual normal actor journal", () => {
       expiresAt: "2030-01-01T00:00:00.000Z",
     };
     const storageState = { cookies: [], origins: [] };
-    state.actors = [{ actorKey: "owner", signup: "complete", session, storageState }];
+    state.actors = [{ actorKey: "owner", session, signup: "complete", storageState }];
     const baseOnly = await value.journal.checkpoint(context, state);
     expect(baseOnly.accountsCompletedAt).toBeUndefined();
     state.organizationSessions = [
@@ -770,11 +771,11 @@ describe("retained actual normal actor journal", () => {
         operatorOrigin: "https://operator.example.test",
         catalogAppIds: [target.appId],
         sourceWorkload: {
-          issuer: "https://oidc.vercel.com",
           audience: "https://gateway.example.test",
+          environment: "preview",
+          issuer: "https://oidc.vercel.com",
           ownerId: "team",
           projectId: "prj_gateway",
-          environment: "preview",
           subject: "gateway",
         },
       },
@@ -834,7 +835,6 @@ describe("retained actual normal actor journal", () => {
     value.row.record.operator.pendingEffectId = "normal-accounts";
     value.row.record.operator.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000004" };
     const store = {
-      read: async () => structuredClone(value.row),
       compareAndSet: async (request: {
         expectedRevision: number;
         record: typeof value.row.record;
@@ -842,23 +842,25 @@ describe("retained actual normal actor journal", () => {
         if (request.expectedRevision !== value.row.revision) {
           return undefined;
         }
-        value.row = { revision: value.row.revision + 1, record: request.record };
+        const revision = value.row.revision + 1;
+        value.row = { record: request.record, revision };
         return structuredClone(value.row);
       },
+      read: async () => structuredClone(value.row),
     };
     const keyring = { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" };
     const guarded = createNormalActorJournal(
       createNormalActorJournalAuthority({
-        store,
+        assertApprovedOwner: async () => undefined,
+        assertCanonicalOwner: async () => undefined,
         keyring,
         now: Date.now,
-        assertCanonicalOwner: async () => undefined,
-        assertApprovedOwner: async () => undefined,
         readApproval: async (request) => ({
           ...request,
           approvalId: "initial-approval",
           approved: true,
         }),
+        store,
       }),
     );
     await guarded.registerPendingCapture(context, input);
@@ -926,7 +928,7 @@ describe("retained actual normal actor journal", () => {
       organizationProofs: [next.record],
       supersededOrganizationProofs: [old.record],
     });
-    const writes = value.writes;
+    const { writes } = value;
     expect(await value.journal.prepareOrganizationProof(context, nextInput)).toEqual(next);
     expect(value.writes).toBe(writes);
     const proofSha256 = "e".repeat(64);
@@ -959,7 +961,7 @@ describe("retained actual normal actor journal", () => {
     "live-lease",
   ])("preserves the old proof when successor authority is invalid: %s", async (change) => {
     const { value, nextInput } = await currentBootstrapFixture();
-    const operator = value.row.record.operator;
+    const { operator } = value.row.record;
     const gatewayRow = operator?.gatewayEnvironment?.[0];
     const actor = nextInput.bootstrap.auth.plan.normalActorProgram?.actors[0];
     if (operator === undefined || gatewayRow === undefined || actor === undefined) {
@@ -1019,7 +1021,7 @@ describe("retained actual normal actor journal", () => {
       }
     }
     const before = structuredClone(value.row);
-    const writes = value.writes;
+    const { writes } = value;
     let selected: Parameters<typeof value.journal.prepareOrganizationProof>[1] = nextInput;
     if (change === "missing-guard") {
       selected = { ...nextInput, assertBootstrapCurrent: undefined };
@@ -1150,7 +1152,6 @@ describe("retained actual normal actor journal", () => {
     state.actors = [
       {
         actorKey: "owner",
-        signup: "complete",
         session: {
           reference: "22222222-2222-4222-8222-222222222222",
           actorId: "actual-actor",
@@ -1158,6 +1159,7 @@ describe("retained actual normal actor journal", () => {
           origin: program.origin,
           expiresAt: "2030-01-01T00:00:00.000Z",
         },
+        signup: "complete",
         storageState: {
           cookies: [
             {

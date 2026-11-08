@@ -11,20 +11,16 @@ import {
   getBuilderHandoffRenewDeploymentHandler,
 } from "@/lib/handoff/deployment";
 
-const renewalInputSchema = z
-  .object({
-    creationRequestId: z.string().uuid(),
-    handoffId: z.string().uuid(),
-  })
-  .strict();
+const renewalInputSchema = z.strictObject({
+  creationRequestId: z.uuid(),
+  handoffId: z.uuid(),
+});
 
-const renewedHandoffSchema = z
-  .object({
-    expiresAt: z.string().datetime(),
-    handoffId: z.string().uuid(),
-    version: z.literal(1),
-  })
-  .strict();
+const renewedHandoffSchema = z.strictObject({
+  expiresAt: z.iso.datetime(),
+  handoffId: z.uuid(),
+  version: z.literal(1),
+});
 
 export interface HandoffControlData {
   version: 1;

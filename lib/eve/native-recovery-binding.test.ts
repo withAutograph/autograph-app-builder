@@ -104,10 +104,13 @@ describe("native recovery authority", () => {
       store: {
         commitNativeRecoveryReceipt,
         // oxlint-disable-next-line eslint/require-await -- The test double follows the async store contract.
-        getPrivateOperation: async () => ({
-          ...currentOperation,
-          ...(savedReceipt === undefined ? {} : { nativeRecoveryReceipt: savedReceipt }),
-        }),
+        getPrivateOperation: async () => {
+          const observedOperation = { ...currentOperation };
+          if (savedReceipt !== undefined) {
+            observedOperation.nativeRecoveryReceipt = savedReceipt;
+          }
+          return observedOperation;
+        },
         // oxlint-disable-next-line eslint/require-await -- The test double follows the async store contract.
         getSession: async (_principal, id) => (id === source.sessionId ? current : child),
       },
@@ -228,15 +231,17 @@ describe("read-only native source observation authority", () => {
       updatedAtEpochMs: 2,
       version: 2,
     });
-    const getPrivateOperation = vi.fn(() => Promise.resolve(null));
-    const commitNativeRecoveryReceipt = vi.fn(() => Promise.resolve(receipt));
-    const assertOwner = vi.fn(() => Promise.resolve());
+    const getPrivateOperation = vi.fn<() => Promise<null>>().mockResolvedValue(null);
+    const commitNativeRecoveryReceipt = vi
+      .fn<() => Promise<NativeRecoveryBinding>>()
+      .mockResolvedValue(receipt);
+    const assertOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
     const binding = createNativeRecoveryBinding({
       assertOwner,
       store: {
-        getSession: () => Promise.resolve(source),
-        getPrivateOperation,
         commitNativeRecoveryReceipt,
+        getPrivateOperation,
+        getSession: () => Promise.resolve(source),
       },
     });
     const coordinates = {
@@ -251,7 +256,7 @@ describe("read-only native source observation authority", () => {
     };
     await expect(
       binding.authorizeSourceObservation({ auth: getOnlyAuth, source: coordinates }),
-    ).resolves.toEqual({ ownerRunId: "run_parent", logicalSessionId: "run_parent" });
+    ).resolves.toEqual({ logicalSessionId: "run_parent", ownerRunId: "run_parent" });
     for (const changed of [
       { ...coordinates, sourceAdapterGeneration: 2 },
       { ...coordinates, cancellationRevision: 1 },

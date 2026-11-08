@@ -100,16 +100,16 @@ const fixture = () => {
     git(candidate, "fetch", "--quiet", "--no-write-fetch-head", bundle, capture.snapshotSha);
   };
   return {
-    source,
     candidate,
-    originalSha,
-    git,
-    write,
-    run,
-    importCapture,
     dispose: () => {
-      rmSync(directory, { recursive: true, force: true });
+      rmSync(directory, { force: true, recursive: true });
     },
+    git,
+    importCapture,
+    originalSha,
+    run,
+    source,
+    write,
   };
 };
 
@@ -280,7 +280,7 @@ describe("retained dirty planning baseline", () => {
       initial.dispose();
       const stateRoot = path.join(path.dirname(f.source), "retained");
       const snapshot = path.join(stateRoot, "runs", "run-ABC123", "source");
-      mkdirSync(path.dirname(snapshot), { recursive: true, mode: 0o700 });
+      mkdirSync(path.dirname(snapshot), { mode: 0o700, recursive: true });
       execFileSync("/usr/bin/git", ["clone", "--quiet", f.source, snapshot]);
       chmodSync(snapshot, 0o700);
       chmodSync(path.join(snapshot, ".git"), 0o700);
@@ -302,7 +302,7 @@ describe("retained dirty planning baseline", () => {
       expect(baseline.sourceSha).toBe(retainedSha);
       expect(baseline.sourceSha).not.toBe(f.originalSha);
       const artifact = path.join(stateRoot, "source-baselines", f.originalSha, expected);
-      mkdirSync(artifact, { recursive: true, mode: 0o700 });
+      mkdirSync(artifact, { mode: 0o700, recursive: true });
       const artifactGit = path.join(artifact, "source.git");
       execFileSync("/usr/bin/git", ["clone", "--bare", "--quiet", snapshot, artifactGit]);
       chmodSync(artifactGit, 0o700);
@@ -370,7 +370,7 @@ describe("retained dirty planning baseline", () => {
       initial.dispose();
       const stateRoot = path.join(path.dirname(f.source), "retained");
       const snapshot = path.join(stateRoot, "runs", "run-ABC123", "source");
-      mkdirSync(path.dirname(snapshot), { recursive: true, mode: 0o700 });
+      mkdirSync(path.dirname(snapshot), { mode: 0o700, recursive: true });
       execFileSync("/usr/bin/git", ["clone", "--quiet", f.source, snapshot]);
       chmodSync(snapshot, 0o700);
       chmodSync(path.join(snapshot, ".git"), 0o700);
@@ -454,9 +454,32 @@ describe("retained dirty planning baseline", () => {
       Promise.reject(new Error("Unexpected process/stream operation in source-only fixture"));
     const sandbox: SandboxSession & { id: string } = {
       id: "saved-workspace",
-      resolvePath: localPath,
-      spawn: unavailable,
+      readBinaryFile: ({ path: name }) => {
+        try {
+          return Promise.resolve(readFileSync(localPath(name)));
+        } catch (error) {
+          if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+            return Promise.resolve(null);
+          }
+          throw error;
+        }
+      },
       readFile: unavailable,
+      readTextFile: ({ path: name }) => {
+        try {
+          return Promise.resolve(readFileSync(localPath(name), "utf-8"));
+        } catch (error) {
+          if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+            return Promise.resolve(null);
+          }
+          throw error;
+        }
+      },
+      removePath: ({ path: name, recursive, force }) => {
+        rmSync(localPath(name), { force, recursive });
+        return Promise.resolve();
+      },
+      resolvePath: localPath,
       run: ({ command, workingDirectory }) => {
         const mapped = command
           .replaceAll("/workspace/repository", f.candidate)
@@ -471,36 +494,11 @@ describe("retained dirty planning baseline", () => {
         }
         return Promise.resolve({
           exitCode: result.status,
-          stdout: result.stdout,
           stderr: result.stderr,
+          stdout: result.stdout,
         });
       },
-      readTextFile: ({ path: name }) => {
-        try {
-          return Promise.resolve(readFileSync(localPath(name), "utf-8"));
-        } catch (error) {
-          if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-            return Promise.resolve(null);
-          }
-          throw error;
-        }
-      },
-      readBinaryFile: ({ path: name }) => {
-        try {
-          return Promise.resolve(readFileSync(localPath(name)));
-        } catch (error) {
-          if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-            return Promise.resolve(null);
-          }
-          throw error;
-        }
-      },
-      writeTextFile: ({ path: name, content }) => {
-        const file = localPath(name);
-        mkdirSync(path.dirname(file), { recursive: true });
-        writeFileSync(file, content);
-        return Promise.resolve();
-      },
+      spawn: unavailable,
       writeBinaryFile: ({ path: name, content }) => {
         const file = localPath(name);
         mkdirSync(path.dirname(file), { recursive: true });
@@ -512,8 +510,10 @@ describe("retained dirty planning baseline", () => {
         mkdirSync(path.dirname(file), { recursive: true });
         writeFileSync(file, Buffer.from(await new Response(content).arrayBuffer()));
       },
-      removePath: ({ path: name, recursive, force }) => {
-        rmSync(localPath(name), { recursive, force });
+      writeTextFile: ({ path: name, content }) => {
+        const file = localPath(name);
+        mkdirSync(path.dirname(file), { recursive: true });
+        writeFileSync(file, content);
         return Promise.resolve();
       },
     };

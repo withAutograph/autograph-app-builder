@@ -15,6 +15,17 @@ import {
   restoreDraftReconciliationCandidateFile,
 } from "@/lib/repository/sandbox-draft-reconciliation";
 
+interface PreservedCandidateSource {
+  kind: "preserved-draft-candidate";
+  nextAction: string;
+  preservedWorkspaceIndex: number | undefined;
+  reviewDigest: string;
+}
+
+interface CandidatePageMetadata {
+  source?: PreservedCandidateSource;
+}
+
 export default defineTool({
   description:
     "Read a current app-owned text file in bounded UTF-8 pages in Builder's isolated draft merge candidate. A read may specify preservedWorkspaceIndex from the candidate's preservedWorkspaces to inspect a retained draft candidate; this never selects an arbitrary root and does not edit preserved work. Retained app-review content remains available through change_set_status with includeContent. Continue with nextCursor and the read source's whole-file digest as expectedDigest; an ordinary file change returns its fresh first page with sourceChanged. Read the current candidate separately before using its digest for an edit. Replace one unique exact passage using the current whole-file digest, or restore one app-owned file's exact bytes and mode from the retained draft head. Restore accepts only a path and preserves other repairs. This changes no GitHub branch. Revalidate and review both diffs after an edit.",
@@ -47,7 +58,7 @@ export default defineTool({
           "Read the preserved app review through change_set_status with includeContent. This reader opens only retained draft candidates.",
         );
       }
-      return {
+      const page = {
         ...(await readDraftReconciliationCandidateFilePage({
           cursor: input.cursor,
           expectedDigest: input.expectedDigest,
@@ -56,17 +67,20 @@ export default defineTool({
           sandbox,
         })),
         path: input.path,
-        ...(preserved === undefined
-          ? {}
-          : {
-              source: {
-                kind: "preserved-draft-candidate" as const,
-                preservedWorkspaceIndex: input.preservedWorkspaceIndex,
-                reviewDigest: preserved.reviewDigest,
-                nextAction:
-                  "This digest belongs to preserved content. Read the current candidate separately before a deliberate replacement using its current digest.",
-              },
-            }),
+      };
+      const metadata: CandidatePageMetadata = {};
+      if (preserved !== undefined) {
+        metadata.source = {
+          kind: "preserved-draft-candidate",
+          preservedWorkspaceIndex: input.preservedWorkspaceIndex,
+          reviewDigest: preserved.reviewDigest,
+          nextAction:
+            "This digest belongs to preserved content. Read the current candidate separately before a deliberate replacement using its current digest.",
+        };
+      }
+      return {
+        ...page,
+        ...metadata,
         status: preserved === undefined ? ("current_file" as const) : ("preserved_file" as const),
       };
     }

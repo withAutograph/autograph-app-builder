@@ -49,9 +49,9 @@ const fixture = () => {
         throw new Error("denied");
       }
     },
-    readReceipt: async () => state.receipt,
     authorizeActivation: effect,
     commitReceipt: effect,
+    readReceipt: async () => state.receipt,
   };
   const input = {
     auth: { authenticator: "test", principalType: "user", principalId: "owner" },
@@ -63,19 +63,19 @@ const fixture = () => {
       await authorizeOwner(selected);
       return { kind: "candidate", candidate: payload };
     },
+    getHook: effect,
+    now: () => 0,
     readCandidate: (candidate) => candidate,
+    readEntry: effect,
+    reconcile: effect,
     recordObservation: (record) => {
       state.reports.push({ record, authorized: state.authorized });
       return true;
     },
-    now: () => 0,
-    start: effect,
     resumeHook: effect,
-    reconcile: effect,
-    readEntry: effect,
-    getHook: effect,
+    start: effect,
   };
-  return { input, deps, payload, state };
+  return { deps, input, payload, state };
 };
 
 test("trusted candidate facts run within exact-owner authorization, revalidate before emission and deduplicate only completed observation", async () => {

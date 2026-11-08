@@ -1,14 +1,11 @@
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import { describe, expect, it, vi } from "vitest";
 
-import type * as databaseSchema from "../db/schema";
 import type { HostedPrincipal } from "./hosted-auth";
 import {
   createPostgresOAuthMembershipAuthority,
   createPostgresWorkspaceMembership,
 } from "./postgres-workspace-membership";
-
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 const principal: HostedPrincipal = {
   audience: "https://builder.example.test/mcp",
@@ -23,9 +20,9 @@ function databaseReturning<T extends Record<string, unknown>>(rows: T[]) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const limit = vi.fn(async () => rows);
   const where = vi.fn(() => ({ limit }));
-  const joined = { innerJoin: undefined as unknown, where };
-  const innerJoin = vi.fn(() => joined);
-  joined.innerJoin = innerJoin;
+  const innerJoin = vi.fn();
+  const joined = { innerJoin, where };
+  innerJoin.mockReturnValue(joined);
   const from = vi.fn(() => joined);
   const select = vi.fn(() => ({ from }));
   return {
@@ -104,7 +101,7 @@ describe("PostgreSQL workspace membership", () => {
       select() {
         throw new Error("database unavailable");
       },
-    } as unknown as Database;
+    };
     await expect(
       createPostgresWorkspaceMembership(database).isMember({
         principal,

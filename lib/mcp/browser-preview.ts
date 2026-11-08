@@ -24,12 +24,10 @@ const previewDigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 
 const unprivilegedPortSchema = z.coerce.number().int().min(1024).max(65_535);
 
-const previewRouteInputSchema = z
-  .object({
-    digest: previewDigestSchema,
-    sessionId: previewSessionIdSchema,
-  })
-  .strict();
+const previewRouteInputSchema = z.strictObject({
+  digest: previewDigestSchema,
+  sessionId: previewSessionIdSchema,
+});
 
 type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
@@ -44,10 +42,12 @@ export function prototypePreviewRequestUrl(input: {
   requestUrl: string;
 }): string {
   const { environment } = input;
-  const exactDevelopmentAdapter =
+  const localExecutionBundle =
     environment.APP_BUILDER_EXECUTION_MODE === "development" &&
     environment.APP_BUILDER_EXECUTION_BUNDLE === "local-development" &&
-    environment.APP_BUILDER_SANDBOX_PROVIDER === "vercel" &&
+    environment.APP_BUILDER_SANDBOX_PROVIDER === "vercel";
+  const exactDevelopmentAdapter =
+    localExecutionBundle &&
     environment.APP_BUILDER_LOCAL_ADAPTER === "1" &&
     environment.EVE_HOSTED_ADAPTER === "0";
   if (!exactDevelopmentAdapter) {
@@ -60,18 +60,13 @@ export function prototypePreviewRequestUrl(input: {
   }
   const origin = new URL(configured);
   const port = unprivilegedPortSchema.safeParse(origin.port);
-  if (
-    !(
-      (origin.protocol === "http:" && origin.hostname === "127.0.0.1") ||
-      (origin.protocol === "https:" && origin.hostname === "localhost")
-    ) ||
-    !port.success ||
-    origin.username !== "" ||
-    origin.password !== "" ||
-    origin.pathname !== "/" ||
-    origin.search !== "" ||
-    origin.hash !== ""
-  ) {
+  const allowedHost =
+    (origin.protocol === "http:" && origin.hostname === "127.0.0.1") ||
+    (origin.protocol === "https:" && origin.hostname === "localhost");
+  const hasCredentials = () => origin.username !== "" || origin.password !== "";
+  const hasExtraUrlParts = () =>
+    origin.pathname !== "/" || origin.search !== "" || origin.hash !== "";
+  if (!allowedHost || !port.success || hasCredentials() || hasExtraUrlParts()) {
     throw new Error(
       "The local development preview origin must be an exact unprivileged 127.0.0.1 HTTP or localhost HTTPS origin.",
     );
@@ -161,18 +156,20 @@ export function attachPrototypePreviewUrl(
   if (url === undefined) {
     return result;
   }
-  return eveSessionResultSchema.parse({
-    ...result,
-    ...(result.prototype === undefined || result.prototypeRef !== undefined
-      ? {}
-      : { prototype: { ...result.prototype, previewUrl: url } }),
-    ...(result.prototypeRef === undefined
-      ? {}
-      : { prototypeRef: { ...result.prototypeRef, previewUrl: url } }),
-    ...(result.uiPreview === undefined
-      ? {}
-      : { uiPreview: { ...result.uiPreview, previewUrl: url } }),
-  });
+  const withPreviewUrl = (): EveSessionResult => {
+    const updated: EveSessionResult = { ...result };
+    if (result.prototype !== undefined && result.prototypeRef === undefined) {
+      updated.prototype = { ...result.prototype, previewUrl: url };
+    }
+    if (result.prototypeRef !== undefined) {
+      updated.prototypeRef = { ...result.prototypeRef, previewUrl: url };
+    }
+    if (result.uiPreview !== undefined) {
+      updated.uiPreview = { ...result.uiPreview, previewUrl: url };
+    }
+    return updated;
+  };
+  return eveSessionResultSchema.parse(withPreviewUrl());
 }
 
 export type PrototypePreviewResolver = (input: {

@@ -4,8 +4,7 @@ import { planAcceptedAppSpec } from "./accepted-spec-planning";
 
 describe("planAcceptedAppSpec", () => {
   it("continues an accepted non-vendor Stock Exceptions design without model tool selection", async () => {
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const plan = vi.fn(async () => {});
+    const plan = vi.fn<() => Promise<void>>().mockResolvedValue();
     await planAcceptedAppSpec({
       phase: "app_spec_accepted",
       plan,
@@ -16,8 +15,7 @@ describe("planAcceptedAppSpec", () => {
   });
 
   it("does not invoke planning again after the accepted design is already planned", async () => {
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const plan = vi.fn(async () => {});
+    const plan = vi.fn<() => Promise<void>>().mockResolvedValue();
 
     await planAcceptedAppSpec({
       phase: "planned",

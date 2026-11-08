@@ -44,7 +44,13 @@ export function Passkeys({ className }: PasskeysProps) {
       </ItemGroup>
     );
   } else {
-    passkeyContent = <PasskeysEmpty onAddPress={() => setAddOpen(true)} />;
+    passkeyContent = (
+      <PasskeysEmpty
+        onAddPress={() => {
+          setAddOpen(true);
+        }}
+      />
+    );
   }
 
   return (
@@ -56,7 +62,9 @@ export function Passkeys({ className }: PasskeysProps) {
           className="shrink-0"
           size="sm"
           disabled={isPending}
-          onClick={() => setAddOpen(true)}
+          onClick={() => {
+            setAddOpen(true);
+          }}
         >
           {passkeyLocalization.addPasskey}
         </Button>

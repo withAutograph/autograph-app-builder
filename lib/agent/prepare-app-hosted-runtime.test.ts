@@ -217,10 +217,10 @@ const participantPlan = hostedOperatorPlanSchema.parse({
     origin: plan.deploymentBoundary?.verification.publicOrigin,
     actors: [
       {
+        account: "capture-existing",
         actorKey: "owner",
         email: "owner@example.test",
         name: "Owner",
-        account: "capture-existing",
       },
     ],
     organizations: [],
@@ -228,7 +228,7 @@ const participantPlan = hostedOperatorPlanSchema.parse({
     appAccess: [],
   },
   effects: [
-    { id: "normal-accounts", kind: "normal-accounts", description: "Connect the approved account" },
+    { description: "Connect the approved account", id: "normal-accounts", kind: "normal-accounts" },
   ],
 });
 const participantInput = {
@@ -267,7 +267,7 @@ const workflowContext = (response: ToolInputResponse) => {
       throw new Error("No provider authorization is expected");
     },
   };
-  return { context, ask };
+  return { ask, context };
 };
 
 describe("hosted runtime Auth identity handoff", () => {
@@ -347,7 +347,7 @@ describe("hosted runtime Auth identity handoff", () => {
         vi.fn<(selection: PreparedRuntimeSelection) => void>(),
         contract,
       );
-      expect(value.result).toMatchObject({ status: "blocked", code: "auth_identity_required" });
+      expect(value.result).toMatchObject({ code: "auth_identity_required", status: "blocked" });
       expect(value.identityInput).toEqual(identityLink);
       expect(operator.authIdentityInput).toHaveBeenCalledWith(
         { action: "auth-identity-input", operationRef, selection: participantPlan.selection },
@@ -408,20 +408,20 @@ describe("hosted runtime Auth identity handoff", () => {
   });
   it("returns the protected Auth identity link without a manual confirmation step", async () => {
     stepMocks.step.mockResolvedValueOnce({
+      identityInput: identityLink,
       result: {
         appId: input.appId,
         authenticatedBehavior: "unassessed",
         operationRef,
         status: "auth-schema-prepared",
       },
-      identityInput: identityLink,
     });
-    const value = workflowContext({ status: "answered", optionId: "continue" });
+    const value = workflowContext({ optionId: "continue", status: "answered" });
     const result = await continueHostedRuntimePreparation(input, value.context, stepMocks.step);
     expect(result).toMatchObject({
-      status: "auth-schema-prepared",
       authIdentityLink: identityLink.browserUrl,
       authIdentityLinkExpiresAt: identityLink.expiresAt,
+      status: "auth-schema-prepared",
     });
     expect(value.ask).not.toHaveBeenCalled();
     expect(stepMocks.step).toHaveBeenCalledTimes(1);
@@ -439,7 +439,7 @@ describe("hosted runtime Auth identity handoff", () => {
       contract,
     );
     expect(value.identityInput).toBeNull();
-    expect(value.result).toMatchObject({ status: "blocked", code: "auth_identity_required" });
+    expect(value.result).toMatchObject({ code: "auth_identity_required", status: "blocked" });
     expect(operator.authIdentityInput).toHaveBeenCalledTimes(1);
   });
   it("does not request participant sign-in for an unrelated authority denial", async () => {
@@ -451,28 +451,28 @@ describe("hosted runtime Auth identity handoff", () => {
       () => {},
       contract,
     );
-    expect(value.result).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(value.result).toMatchObject({ code: "authorization_required", status: "blocked" });
     expect(operator.authIdentityInput).not.toHaveBeenCalled();
   });
   it("resumes the same approved workflow input and call after the human answers normal sign-in", async () => {
     stepMocks.step
-      .mockResolvedValueOnce({ result: participantBlocked, identityInput: identityLink })
+      .mockResolvedValueOnce({ identityInput: identityLink, result: participantBlocked })
       .mockResolvedValueOnce({
+        identityInput: null,
         result: {
           appId: input.appId,
           authenticatedBehavior: "unassessed",
           operationRef,
           status: "participants-prepared",
         },
-        identityInput: null,
       });
-    const value = workflowContext({ status: "answered", optionId: "continue" });
+    const value = workflowContext({ optionId: "continue", status: "answered" });
     const result = await continueHostedRuntimePreparation(
       participantInput,
       value.context,
       stepMocks.step,
     );
-    expect(result).toMatchObject({ status: "participants-prepared", identityResponse: "answered" });
+    expect(result).toMatchObject({ identityResponse: "answered", status: "participants-prepared" });
     expect(value.ask).toHaveBeenCalledWith(participantIdentityInputQuestion(identityLink));
     expect(stepMocks.step.mock.calls).toEqual([
       [participantInput, value.context],
@@ -484,8 +484,8 @@ describe("hosted runtime Auth identity handoff", () => {
     "keeps the actual blocked result when normal sign-in is %s",
     async (status) => {
       stepMocks.step.mockResolvedValueOnce({
-        result: participantBlocked,
         identityInput: identityLink,
+        result: participantBlocked,
       });
       const value = workflowContext({ status });
       const result = await continueHostedRuntimePreparation(
@@ -494,17 +494,17 @@ describe("hosted runtime Auth identity handoff", () => {
         stepMocks.step,
       );
       expect(result).toMatchObject({
-        status: "blocked",
         code: "auth_identity_required",
         identityResponse: status,
+        status: "blocked",
       });
       expect(stepMocks.step).toHaveBeenCalledTimes(1);
     },
   );
   it("keeps waiting for real capture rather than treating a human answer as identity evidence", async () => {
     stepMocks.step
-      .mockResolvedValueOnce({ result: participantBlocked, identityInput: identityLink })
-      .mockResolvedValueOnce({ result: participantBlocked, identityInput: identityLink });
+      .mockResolvedValueOnce({ identityInput: identityLink, result: participantBlocked })
+      .mockResolvedValueOnce({ identityInput: identityLink, result: participantBlocked });
     const value = workflowContext({ status: "answered", text: "I signed in" });
     value.ask
       .mockResolvedValueOnce({ status: "answered", text: "I signed in" })
@@ -515,9 +515,9 @@ describe("hosted runtime Auth identity handoff", () => {
       stepMocks.step,
     );
     expect(result).toMatchObject({
-      status: "blocked",
       code: "auth_identity_required",
       identityResponse: "dismissed",
+      status: "blocked",
     });
     expect(stepMocks.step).toHaveBeenCalledTimes(2);
     expect(value.ask).toHaveBeenCalledTimes(2);
@@ -535,12 +535,12 @@ it("reports execute-stage failure without changing the public blocked result or 
         reportRuntimePreparationFailure(ctx.session.id, stage, caught);
       },
     });
-    expect(value.result).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+    expect(value.result).toMatchObject({ code: "operator_unavailable", status: "blocked" });
     expect(logs).toHaveBeenCalledWith(
       "[builder:hosted-neon-consent]",
       expect.objectContaining({
         boundary: "builder",
-        preparationFailure: { stage: "operator_execute", errorClass: "type_error" },
+        preparationFailure: { errorClass: "type_error", stage: "operator_execute" },
       }),
     );
     expect(JSON.stringify(logs.mock.calls)).not.toContain(privateMessage);
@@ -569,26 +569,26 @@ it("reports actual approval evaluator entry and preserves its denied response", 
       },
       readPrior,
       {
-        onStarted: () => {
-          reportRuntimePreparationStarted(ctx.session.id, "approval_evaluation");
-        },
         onFailure: (caught) => {
           reportRuntimePreparationFailure(ctx.session.id, "approval_evaluation", caught);
+        },
+        onStarted: () => {
+          reportRuntimePreparationStarted(ctx.session.id, "approval_evaluation");
         },
       },
     );
     expect(value).toMatchObject({ type: "denied" });
     expect(logs).toHaveBeenCalledWith(
       "[builder:hosted-neon-consent]",
-      expect.objectContaining({ preparationStage: "approval_evaluation", outcome: "started" }),
+      expect.objectContaining({ outcome: "started", preparationStage: "approval_evaluation" }),
     );
     expect(logs).toHaveBeenCalledWith(
       "[builder:hosted-neon-consent]",
       expect.objectContaining({
         preparationFailure: {
-          stage: "approval_evaluation",
-          errorClass: "operator_error",
           code: "resource_mismatch",
+          errorClass: "operator_error",
+          stage: "approval_evaluation",
         },
       }),
     );
@@ -623,15 +623,15 @@ describe("settled preparation yielding for ordinary replanning", () => {
     expect(prepared.result).toMatchObject({
       ...result,
       nextAction: {
-        tool: "plan-app-hosted-runtime",
         approval: "normal-plan-approval",
         input: {
           appId: input.appId,
           branch: input.branch,
           environment: input.environment,
-          projectId: input.projectId,
           operation: "prepare",
+          projectId: input.projectId,
         },
+        tool: "plan-app-hosted-runtime",
       },
     });
     expect(operator.request).toHaveBeenCalledOnce();
@@ -679,20 +679,20 @@ describe("confirmed Gateway build failure recovery", () => {
       );
       expect(value.identityInput).toBeNull();
       expect(value.result).toMatchObject({
-        status: "blocked",
         code: "gateway_delivery_failed",
         nextAction: {
-          tool: "plan-app-hosted-runtime",
           approval: "normal-plan-approval",
           input: {
             appId: input.appId,
             branch: input.branch,
-            projectId: input.projectId,
             environment: "preview",
-            operation: "prepare",
             normalActorProgram: participantInput.plan.normalActorProgram,
+            operation: "prepare",
+            projectId: input.projectId,
           },
+          tool: "plan-app-hosted-runtime",
         },
+        status: "blocked",
       });
       expect(participantInput).toEqual(frozen);
       expect(operator.request).toHaveBeenCalledOnce();
@@ -715,8 +715,8 @@ describe("confirmed Gateway build failure recovery", () => {
         gatewayBindings: {
           ...plan.gatewayBindings,
           trustedSources: {
-            builderProduction: { projectId: "builder", from: "production", to: "preview" },
-            operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+            builderProduction: { from: "production", projectId: "builder", to: "preview" },
+            operatorPreview: { from: "preview", projectId: "operator", to: "preview" },
           },
         },
       });
@@ -747,19 +747,19 @@ describe("confirmed Gateway build failure recovery", () => {
         contract,
       );
       expect(value.result).toMatchObject({
-        status: "blocked",
         code: "operator_unavailable",
         nextAction: {
-          tool: "plan-app-hosted-runtime",
           approval: "normal-plan-approval",
           input: {
             appId: input.appId,
             branch: input.branch,
             environment: input.environment,
-            projectId: input.projectId,
             operation: "prepare",
+            projectId: input.projectId,
           },
+          tool: "plan-app-hosted-runtime",
         },
+        status: "blocked",
       });
       expect(legacyInput).toEqual(frozen);
       expect(value.identityInput).toBeNull();
@@ -785,8 +785,8 @@ describe("confirmed Gateway build failure recovery", () => {
             boundary === "missing-trusted-sources"
               ? undefined
               : {
-                  builderProduction: { projectId: "builder", from: "production", to: "preview" },
-                  operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+                  builderProduction: { from: "production", projectId: "builder", to: "preview" },
+                  operatorPreview: { from: "preview", projectId: "operator", to: "preview" },
                 },
         },
       });
@@ -855,19 +855,19 @@ describe("changed trusted app delivery settings recovery", () => {
       const value = await prepareHostedRuntimeWithOperator(input, ctx, operator, retain, contract);
       expect(value.identityInput).toBeNull();
       expect(value.result).toMatchObject({
-        status: "blocked",
         code: "app_delivery_configuration_changed",
         nextAction: {
-          tool: "plan-app-hosted-runtime",
           approval: "normal-plan-approval",
           input: {
             appId: input.appId,
             branch: input.branch,
             environment: "preview",
-            projectId: input.projectId,
             operation: "prepare",
+            projectId: input.projectId,
           },
+          tool: "plan-app-hosted-runtime",
         },
+        status: "blocked",
       });
       expect(operator.request).toHaveBeenCalledOnce();
       expect(operator.authIdentityInput).not.toHaveBeenCalled();

@@ -1,7 +1,5 @@
 import { and, asc, eq, gt, isNotNull, isNull } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { githubRepositoryAccessContinuations } from "../db/schema";
 import type { HostedGitHubTenantAuthority } from "../repository/postgres-github-installation-store";
 import { repositoryAccessContinuationSchema } from "./repository-access-continuation";
@@ -10,7 +8,7 @@ import type {
   RepositoryAccessContinuationStore,
 } from "./repository-access-continuation";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 
 const columns = {
   audience: githubRepositoryAccessContinuations.audience,
@@ -44,17 +42,33 @@ function tenant(authority: HostedGitHubTenantAuthority) {
 function record(
   row: typeof githubRepositoryAccessContinuations.$inferSelect,
 ): RepositoryAccessContinuation {
-  return repositoryAccessContinuationSchema.parse({
+  const parse = repositoryAccessContinuationSchema.parse.bind(repositoryAccessContinuationSchema);
+  const authority: Pick<RepositoryAccessContinuation, "authority" | "authorizedAt"> = {
     authority: {
       audience: row.audience,
       issuer: row.issuer,
       ownerUserId: row.ownerUserId,
       workspaceId: row.workspaceId,
     },
-    ...(row.authorizedAt ? { authorizedAt: row.authorizedAt } : {}),
+  };
+  if (row.authorizedAt) {
+    authority.authorizedAt = row.authorizedAt;
+  }
+  const continuation: typeof authority &
+    Pick<RepositoryAccessContinuation, "callbackUrl" | "continuationDigest" | "consumedAt"> = {
+    ...authority,
     callbackUrl: row.callbackUrl,
     continuationDigest: row.continuationDigest,
-    ...(row.consumedAt ? { consumedAt: row.consumedAt } : {}),
+  };
+  if (row.consumedAt) {
+    continuation.consumedAt = row.consumedAt;
+  }
+  const details: typeof continuation &
+    Pick<
+      RepositoryAccessContinuation,
+      "createdAt" | "expiresAt" | "repository" | "requestId" | "selectedInstallationId"
+    > = {
+    ...continuation,
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
     repository: {
@@ -63,7 +77,12 @@ function record(
       owner: row.repositoryOwner,
     },
     requestId: row.requestId,
-    ...(row.selectedInstallationId ? { selectedInstallationId: row.selectedInstallationId } : {}),
+  };
+  if (row.selectedInstallationId) {
+    details.selectedInstallationId = row.selectedInstallationId;
+  }
+  return parse({
+    ...details,
     sessionId: row.sessionId,
   });
 }
@@ -87,7 +106,7 @@ export function createPostgresRepositoryAccessContinuationStore(
           ),
         )
         .returning(columns);
-      return rows[0] ? record(rows[0]) : undefined;
+      return rows[0] === undefined ? undefined : record(rows[0]);
     },
 
     async consume(value) {
@@ -114,7 +133,7 @@ export function createPostgresRepositoryAccessContinuationStore(
           ),
         )
         .returning(columns);
-      return rows[0] ? record(rows[0]) : undefined;
+      return rows[0] === undefined ? undefined : record(rows[0]);
     },
 
     async create(value) {
@@ -147,7 +166,7 @@ export function createPostgresRepositoryAccessContinuationStore(
           ),
         )
         .limit(1);
-      return rows[0] ? record(rows[0]) : undefined;
+      return rows[0] === undefined ? undefined : record(rows[0]);
     },
 
     async listAuthorizedForSession(value) {

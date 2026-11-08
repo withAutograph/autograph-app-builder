@@ -23,10 +23,13 @@ const origin = z.url().refine((value) => {
     parsed.origin === value,
   ].every(Boolean);
 }, "An exact public HTTPS origin is required");
+const fenceIntegrationAuthority = "fence-app-integration-authority";
+const bindProductionRuntime = "bind-production-runtime";
+const publishReleaseSource = "publish-release-source";
 export const publicReleaseEffects = [
-  "fence-app-integration-authority",
-  "bind-production-runtime",
-  "publish-release-source",
+  fenceIntegrationAuthority,
+  bindProductionRuntime,
+  publishReleaseSource,
 ] as const;
 export const publicReleaseEffectSchema = z.enum(publicReleaseEffects);
 export type PublicReleaseEffect = z.infer<typeof publicReleaseEffectSchema>;
@@ -96,11 +99,11 @@ export const publicReleasePlanSchema = z
       .refine((rows) => new Set(rows.map((row) => row.key)).size === rows.length)
       .transform((rows) => rows.toSorted((left, right) => left.key.localeCompare(right.key))),
     effects: z.union([
-      z.tuple([z.literal("bind-production-runtime"), z.literal("publish-release-source")]),
+      z.tuple([z.literal(bindProductionRuntime), z.literal(publishReleaseSource)]),
       z.tuple([
-        z.literal("fence-app-integration-authority"),
-        z.literal("bind-production-runtime"),
-        z.literal("publish-release-source"),
+        z.literal(fenceIntegrationAuthority),
+        z.literal(bindProductionRuntime),
+        z.literal(publishReleaseSource),
       ]),
     ]),
   })
@@ -131,7 +134,7 @@ export const publicReleasePlanSchema = z
       plan.retainedOptionalBindings === undefined,
     ].some(Boolean);
     if (
-      removing !== plan.effects.some((effect) => effect === "fence-app-integration-authority") ||
+      removing !== plan.effects.some((effect) => effect === fenceIntegrationAuthority) ||
       (removing && invalidRemoval)
     ) {
       context.addIssue({

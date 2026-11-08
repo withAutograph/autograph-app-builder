@@ -35,7 +35,7 @@ const git = (root: string, ...args: string[]): string =>
 
 afterEach(() => {
   for (const root of roots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { force: true, recursive: true });
   }
 });
 
@@ -430,7 +430,7 @@ describe("current accepted planning input compaction", () => {
     "retains a current planning root containing referenced %s working output",
     async () => {
       const f = compactionFixture();
-      const readAcceptedContent = vi.fn(() => Promise.resolve(accepted));
+      const readAcceptedContent = vi.fn<() => Promise<string>>().mockResolvedValue(accepted);
       await expect(
         compactAcceptedPlanningInput({
           ...f.input,

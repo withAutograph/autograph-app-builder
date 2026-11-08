@@ -31,7 +31,6 @@ import { AuthenticatedBuilder } from "../ui/authenticated-builder";
 import { BuilderLoadingShell } from "../ui/builder-loading-shell";
 import { Header } from "../ui/builder-shell";
 import styles from "../ui/app-builder.module.css";
-import type { BuilderDraft } from "../ui/builder-types";
 import { WorkspaceOnboarding } from "../ui/workspace-onboarding";
 
 interface PageProps {
@@ -170,7 +169,7 @@ async function HomeContent({ searchParams }: PageProps) {
         integrations={integrations}
         providerNotices={notices}
         providerResumeKey={resumeKey}
-        initialDurableDraft={durableDraft?.record.draft as BuilderDraft | undefined}
+        initialDurableDraft={durableDraft?.record.draft}
         durableDraftId={durableDraft?.draftId}
         durableDraftRevision={durableDraft?.revision}
         durableDraftUpdatedAt={durableDraft?.updatedAt}

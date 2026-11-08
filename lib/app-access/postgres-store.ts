@@ -1,15 +1,13 @@
 import { isDeepStrictEqual } from "node:util";
 import { and, eq, or, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle's database type is the complete schema module; no runtime wildcard is imported.
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { builderProvisioningJournals } from "../db/schema";
 import type { RepositoryProductionScope } from "../provisioning/repository-production-contract";
 import { AppAccessError } from "./errors";
 import { appAccessOperationDigest, appAccessOperationSchema } from "./management";
 import type { AppAccessOperationRow, AppAccessOperationStore } from "./management";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 const ownerPredicate = (scope: RepositoryProductionScope) =>
   and(
     eq(builderProvisioningJournals.issuer, scope.authority.issuer),

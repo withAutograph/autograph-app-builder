@@ -71,12 +71,6 @@ const fixture = (failure) => {
       }
       return Promise.resolve();
     },
-    readReceipt() {
-      if (failure === "receipt_read" || (failure === "post_holder_receipt_read" && holderClosed)) {
-        throw fault;
-      }
-      return Promise.resolve(null);
-    },
     commitReceipt(input) {
       if (failure === "receipt_commit") {
         throw fault;
@@ -86,18 +80,15 @@ const fixture = (failure) => {
       }
       throw new Error("unexpected-commit");
     },
-  };
-  const deps = {
-    getHook() {
-      if (failure === "initial_ready_lookup" || (failure === "owner_readiness_lookup" && started)) {
+    readReceipt() {
+      if (failure === "receipt_read" || (failure === "post_holder_receipt_read" && holderClosed)) {
         throw fault;
       }
-      if (readyHook === undefined) {
-        throw new Error("hook-not-found");
-      }
-      return Promise.resolve(readyHook);
+      return Promise.resolve(null);
     },
-    isHookNotFound: (error) => error?.message === "hook-not-found",
+  };
+  const { now } = Date;
+  const deps = {
     async closeHolder(input) {
       await input.authorizeCurrent();
       if (failure === "holder_closure") {
@@ -109,9 +100,23 @@ const fixture = (failure) => {
       await input.authorizeOwner(input.binding);
       return { kind: "candidate", candidate };
     },
+    getHook() {
+      if (failure === "initial_ready_lookup" || (failure === "owner_readiness_lookup" && started)) {
+        throw fault;
+      }
+      if (readyHook === undefined) {
+        throw new Error("hook-not-found");
+      }
+      return Promise.resolve(readyHook);
+    },
+    isHookNotFound: (error) => error?.message === "hook-not-found",
+    now,
     readCandidate(handle) {
       assert.equal(handle, candidate);
       return payload;
+    },
+    readEntry() {
+      return Promise.resolve({ kind: "handoff", checkpoint });
     },
     reconcile() {
       return Promise.resolve({
@@ -122,9 +127,6 @@ const fixture = (failure) => {
         },
         provenance: { selectedOrigin: payload.candidates[0].origin },
       });
-    },
-    readEntry() {
-      return Promise.resolve({ kind: "handoff", checkpoint });
     },
     start(input) {
       if (failure === "owner_start") {
@@ -143,15 +145,14 @@ const fixture = (failure) => {
       };
       return Promise.resolve();
     },
-    now: Date.now,
     wait() {
       throw new Error("unexpected-wait");
     },
   };
   return {
+    deps,
     fault,
     ports,
-    deps,
     recover: async () => await recoverTerminalSession({ auth, descriptor, ports }, deps),
   };
 };

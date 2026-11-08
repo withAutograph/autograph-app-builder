@@ -18,6 +18,8 @@ import type {
   GitHubRepositoryObservation,
   DraftPullRequestProposal,
   GitHubDraftPullRequestContent,
+  DraftPublicationReadBack,
+  GitHubMutationAcknowledgement,
 } from "./github-publication";
 import { createGitHubPrDeliveryProvider, GitHubPrEffectRejectedError } from "./github-pr-delivery";
 import type { GitHubPrDeliveryProvider } from "./github-pr-delivery";
@@ -33,6 +35,26 @@ import type {
 } from "./github-draft-reconciliation";
 import { historicalAppSourceSelectorSchema } from "./historical-app-source";
 import type { HistoricalAppSourceObservation } from "./historical-app-source";
+
+interface GitTreeBase {
+  base_tree?: string;
+}
+
+interface GitHubInstallationAuthPrefix {
+  installationId: string;
+  permissions: GitHubPermissionRequest;
+  repositoryIds?: number[];
+}
+
+const invalidProviderConfigurationMessage = "GitHub App provider configuration is invalid.";
+const invalidResponseMessage = "invalid-response";
+const invalidMaterialMessage = "invalid-material";
+const githubRequestFailedMessage = "github-request-failed";
+const repositoryIdentityChangedCode = "repository-identity-changed";
+const invalidPublicationMaterialCode = "invalid-publication-material";
+const reviewedPathChangedCode = "reviewed-path-changed";
+const branchMovedCode = "branch-moved";
+const pullRequestChangedCode = "pull-request-changed";
 
 const reconciliationCommitMessage = (proposal: ExistingDraftReconciliationProposal): string =>
   `Reconcile draft pull request #${proposal.pullRequestNumber} with ${proposal.baseBranch}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`;
@@ -73,22 +95,21 @@ const providerHttpStatus = (error: unknown): number | undefined => {
     return;
   }
   const { status } = cause;
-  return typeof status === "number" && Number.isInteger(status) && status >= 400 && status <= 599
-    ? status
-    : undefined;
+  if (typeof status !== "number" || !Number.isInteger(status)) {
+    return;
+  }
+  return status >= 400 && status <= 599 ? status : undefined;
 };
 
 const decimal = z.string().regex(/^[1-9]\d*$/u);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const name = z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/u);
 
-const configSchema = z
-  .object({
-    appId: decimal,
-    installationId: decimal,
-    privateKey: z.string().min(1).max(32_768),
-  })
-  .strict();
+const configSchema = z.strictObject({
+  appId: decimal,
+  installationId: decimal,
+  privateKey: z.string().min(1).max(32_768),
+});
 
 export type GitHubAppHttpProviderConfig = z.infer<typeof configSchema>;
 
@@ -100,7 +121,7 @@ export const parseGitHubAppHttpProviderCredentials = (
 ): GitHubAppHttpProviderCredentials => {
   const parsed = credentialsSchema.safeParse(input);
   if (!parsed.success) {
-    throw new Error("GitHub App provider configuration is invalid.");
+    throw new Error(invalidProviderConfigurationMessage);
   }
   try {
     const key = createPrivateKey(parsed.data.privateKey);
@@ -108,7 +129,7 @@ export const parseGitHubAppHttpProviderCredentials = (
       throw new Error("not-rsa");
     }
   } catch {
-    throw new Error("GitHub App provider configuration is invalid.");
+    throw new Error(invalidProviderConfigurationMessage);
   }
   return parsed.data;
 };
@@ -116,7 +137,7 @@ export const parseGitHubAppHttpProviderCredentials = (
 export const parseGitHubAppHttpProviderConfig = (input: unknown): GitHubAppHttpProviderConfig => {
   const parsed = configSchema.safeParse(input);
   if (!parsed.success) {
-    throw new Error("GitHub App provider configuration is invalid.");
+    throw new Error(invalidProviderConfigurationMessage);
   }
   const credentials = parseGitHubAppHttpProviderCredentials({
     appId: parsed.data.appId,
@@ -134,7 +155,10 @@ export interface GitHubPublicationFile {
 export interface GitHubAppHttpProvider
   extends GitHubAppInstallationProvider, GitHubTargetAccessProvider {
   prDelivery: GitHubPrDeliveryProvider;
-  inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown | undefined>;
+  inspectExistingDraft: (
+    input: ExistingDraftInspectionRequest,
+  ) => Promise<ExistingDraftObservation>;
+  inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown>;
   inspectHistoricalAppSource: (input: {
     repositoryId: string;
     owner: string;
@@ -164,7 +188,7 @@ const record = (value: unknown): value is Record<string, unknown> =>
 
 const property = (value: unknown, key: string): unknown => {
   if (!record(value) || !(key in value)) {
-    throw new TypeError("invalid-response");
+    throw new TypeError(invalidResponseMessage);
   }
   return value[key];
 };
@@ -172,18 +196,19 @@ const property = (value: unknown, key: string): unknown => {
 const stringProperty = (value: unknown, key: string): string => {
   const result = property(value, key);
   if (typeof result !== "string") {
-    throw new TypeError("invalid-response");
+    throw new TypeError(invalidResponseMessage);
   }
   return result;
 };
 
 const decimalProperty = (value: unknown, key: string): string => {
   const result = property(value, key);
-  if (
-    (typeof result !== "number" || !Number.isSafeInteger(result) || result < 1) &&
-    (typeof result !== "string" || !decimal.safeParse(result).success)
-  ) {
-    throw new TypeError("invalid-response");
+  if (typeof result === "number") {
+    if (!Number.isSafeInteger(result) || result < 1) {
+      throw new TypeError(invalidResponseMessage);
+    }
+  } else if (typeof result !== "string" || !decimal.safeParse(result).success) {
+    throw new TypeError(invalidResponseMessage);
   }
   return String(result);
 };
@@ -191,7 +216,7 @@ const decimalProperty = (value: unknown, key: string): string => {
 const safeRepositoryIdNumber = (value: string): number => {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < 1 || String(parsed) !== value) {
-    throw new TypeError("invalid-response");
+    throw new TypeError(invalidResponseMessage);
   }
   return parsed;
 };
@@ -199,7 +224,7 @@ const safeRepositoryIdNumber = (value: string): number => {
 const booleanProperty = (value: unknown, key: string): boolean => {
   const result = property(value, key);
   if (typeof result !== "boolean") {
-    throw new TypeError("invalid-response");
+    throw new TypeError(invalidResponseMessage);
   }
   return result;
 };
@@ -207,7 +232,7 @@ const booleanProperty = (value: unknown, key: string): boolean => {
 const arrayProperty = (value: unknown, key: string): unknown[] => {
   const result = property(value, key);
   if (!Array.isArray(result)) {
-    throw new TypeError("invalid-response");
+    throw new TypeError(invalidResponseMessage);
   }
   return result;
 };
@@ -220,7 +245,7 @@ const validateFile = (file: GitHubPublicationFile): void => {
     (file.mode !== "100644" && file.mode !== "100755") ||
     !(file.content instanceof Uint8Array)
   ) {
-    throw new Error("invalid-material");
+    throw new Error(invalidMaterialMessage);
   }
 };
 
@@ -228,7 +253,7 @@ const canonicalFiles = (
   input: readonly GitHubPublicationFile[],
 ): readonly GitHubPublicationFile[] => {
   if (input.length === 0) {
-    throw new Error("invalid-material");
+    throw new Error(invalidMaterialMessage);
   }
   interface PathNode {
     children: Map<string, PathNode>;
@@ -243,7 +268,7 @@ const canonicalFiles = (
     let node = root;
     for (const segment of file.path.split("/")) {
       if (node.file) {
-        throw new Error("invalid-material");
+        throw new Error(invalidMaterialMessage);
       }
       let child = node.children.get(segment);
       if (child === undefined) {
@@ -253,26 +278,51 @@ const canonicalFiles = (
       node = child;
     }
     if (node.file || node.children.size > 0) {
-      throw new Error("invalid-material");
+      throw new Error(invalidMaterialMessage);
     }
     node.file = true;
   }
   return [...input].toSorted((left, right) => compareOverlayPaths(left.path, right.path));
 };
 
-const permissionRequest = (permission: PermissionSnapshot) => ({
-  ...(permission.actions === "read" ? { actions: "read" as const } : {}),
-  ...(permission.variables === "read" ? { actions_variables: "read" as const } : {}),
-  contents: permission.contents,
-  metadata: "read" as const,
-  ...(permission.workflows === "write" ? { workflows: "write" as const } : {}),
-  ...(permission.pullRequests === "none" ? {} : { pull_requests: permission.pullRequests }),
-  ...(permission.administration === "write" ? { administration: "write" as const } : {}),
-});
+interface GitHubPermissionRequest {
+  actions?: "read";
+  actions_variables?: "read";
+  contents: PermissionSnapshot["contents"];
+  metadata: "read";
+  workflows?: "write";
+  pull_requests?: PermissionSnapshot["pullRequests"];
+  administration?: "write";
+}
+
+const permissionRequest = (permission: PermissionSnapshot): GitHubPermissionRequest => {
+  const optionalActions: Pick<GitHubPermissionRequest, "actions" | "actions_variables"> = {};
+  if (permission.actions === "read") {
+    optionalActions.actions = "read";
+  }
+  if (permission.variables === "read") {
+    optionalActions.actions_variables = "read";
+  }
+  const request: GitHubPermissionRequest = {
+    ...optionalActions,
+    contents: permission.contents,
+    metadata: "read",
+  };
+  if (permission.workflows === "write") {
+    request.workflows = "write";
+  }
+  if (permission.pullRequests !== "none") {
+    request.pull_requests = permission.pullRequests;
+  }
+  if (permission.administration === "write") {
+    request.administration = "write";
+  }
+  return request;
+};
 
 const normalizedPermissions = (value: unknown): PermissionSnapshot => {
   if (!record(value)) {
-    throw new Error("invalid-response");
+    throw new Error(invalidResponseMessage);
   }
   const allowed = new Set([
     "actions",
@@ -284,7 +334,7 @@ const normalizedPermissions = (value: unknown): PermissionSnapshot => {
     "actions_variables",
   ]);
   if (Object.keys(value).some((key) => !allowed.has(key))) {
-    throw new Error("invalid-response");
+    throw new Error(invalidResponseMessage);
   }
   const actions = z.literal("read").optional().parse(value.actions);
   const { metadata } = value;
@@ -293,27 +343,53 @@ const normalizedPermissions = (value: unknown): PermissionSnapshot => {
   const pullRequests = z.enum(["none", "read", "write"]).parse(value.pull_requests ?? "none");
   const administration = value.administration ?? "none";
   const variables = z.enum(["none", "read"]).parse(value.actions_variables ?? "none");
+  if (metadata !== "read" || (contents !== "read" && contents !== "write")) {
+    throw new Error(invalidResponseMessage);
+  }
   if (
-    metadata !== "read" ||
-    (contents !== "read" && contents !== "write") ||
     (workflows !== "none" && workflows !== "write") ||
     (administration !== "none" && administration !== "write")
   ) {
-    throw new Error("invalid-response");
+    throw new Error(invalidResponseMessage);
   }
-  return {
-    ...(actions === "read" ? { actions } : {}),
-    administration,
-    contents,
-    metadata,
-    pullRequests,
-    variables,
-    workflows,
-  };
+  if (actions === "read") {
+    return { actions, administration, contents, metadata, pullRequests, variables, workflows };
+  }
+  return { administration, contents, metadata, pullRequests, variables, workflows };
 };
 
 const requestId = (value: string): string =>
   /^[A-Za-z0-9_-]{1,128}$/u.test(value) ? value : sha256(value).slice(0, 32);
+
+const reconciliationMatchesDraft = (
+  proposal: ExistingDraftReconciliationProposal,
+  draft: ExistingDraftObservation,
+): boolean => {
+  if (
+    proposal.repositoryId !== draft.repositoryId ||
+    proposal.owner !== draft.owner ||
+    proposal.name !== draft.name ||
+    proposal.pullRequestNumber !== draft.number
+  ) {
+    return false;
+  }
+  if (
+    proposal.pullRequestId !== draft.pullRequestId ||
+    draft.headRepositoryId !== proposal.repositoryId ||
+    draft.baseRepositoryId !== proposal.repositoryId ||
+    !draft.draft
+  ) {
+    return false;
+  }
+  if (
+    draft.state !== "open" ||
+    draft.headBranch !== proposal.branchName ||
+    draft.baseBranch !== proposal.baseBranch
+  ) {
+    return false;
+  }
+  return draft.verifiedBuilderOrigin?.marker === proposal.originMarker;
+};
 
 // Keep provider helpers scoped to the provider factory's contract.
 // oxlint-disable-next-line unicorn/consistent-function-scoping
@@ -338,12 +414,14 @@ export const createGitHubAppHttpProvider = (input: {
     expected: readonly number[];
   }): Promise<{ status: number; body: unknown; requestId: string }> => {
     try {
-      const response = await createGitHubTokenOctokit({
+      const client = createGitHubTokenOctokit({
         fetch: request,
         token: requestInput.authorization,
-      }).request(`${requestInput.method ?? "GET"} ${requestInput.path}`, {
-        ...(record(requestInput.body) ? requestInput.body : {}),
       });
+      const execute = client.request.bind(client);
+      const route = `${requestInput.method ?? "GET"} ${requestInput.path}`;
+      const body = record(requestInput.body) ? { ...requestInput.body } : {};
+      const response = await execute(route, body);
       if (!requestInput.expected.includes(response.status)) {
         throw new Error(`github-status-${response.status}`);
       }
@@ -366,7 +444,7 @@ export const createGitHubAppHttpProvider = (input: {
           status,
         };
       }
-      throw new Error("github-request-failed", { cause: error });
+      throw new Error(githubRequestFailedMessage, { cause: error });
     }
   };
 
@@ -379,37 +457,44 @@ export const createGitHubAppHttpProvider = (input: {
     const accountType = stringProperty(account, "type");
     if (
       decimalProperty(data, "id") !== config.installationId ||
-      (selection !== "all" && selection !== "selected") ||
-      (accountType !== "Organization" && accountType !== "User")
+      (selection !== "all" && selection !== "selected")
     ) {
-      throw new Error("invalid-response");
+      throw new Error(invalidResponseMessage);
+    }
+    if (accountType !== "Organization" && accountType !== "User") {
+      throw new Error(invalidResponseMessage);
     }
     return {
       accountId: decimalProperty(account, "id"),
       accountLogin: stringProperty(account, "login"),
-      accountType: accountType as "Organization" | "User",
+      accountType,
       installationId: config.installationId,
       repositorySelection: selection,
     };
   };
 
   const token = async (permissions: PermissionSnapshot, repositoryIds?: readonly string[]) => {
-    const authentication = await app.octokit.auth({
+    const { octokit } = app;
+    const authenticate = octokit.auth.bind(octokit);
+    const prefix: GitHubInstallationAuthPrefix = {
       installationId: config.installationId,
       permissions: permissionRequest(permissions),
-      ...(repositoryIds === undefined
-        ? {}
-        : { repositoryIds: repositoryIds.map(safeRepositoryIdNumber) }),
+    };
+    if (repositoryIds !== undefined) {
+      prefix.repositoryIds = repositoryIds.map(safeRepositoryIdNumber);
+    }
+    const authentication = await authenticate({
+      ...prefix,
       refresh: true,
       type: "installation",
     });
     const value = stringProperty(authentication, "token");
     if (value.length < 20 || value.length > 512) {
-      throw new Error("invalid-response");
+      throw new Error(invalidResponseMessage);
     }
     const granted = normalizedPermissions(property(authentication, "permissions"));
     if (JSON.stringify(granted) !== JSON.stringify(permissions)) {
-      throw new Error("invalid-response");
+      throw new Error(invalidResponseMessage);
     }
     return value;
   };
@@ -425,16 +510,18 @@ export const createGitHubAppHttpProvider = (input: {
     });
     const value = stringProperty(authentication, "token");
     if (value.length < 20 || value.length > 512) {
-      throw new Error("invalid-response");
+      throw new Error(invalidResponseMessage);
     }
     const permissions = property(authentication, "permissions");
     if (
       !record(permissions) ||
       permissions.contents !== "read" ||
-      (permissions.metadata !== undefined && permissions.metadata !== "read") ||
-      Object.keys(permissions).some((key) => key !== "contents" && key !== "metadata")
+      (permissions.metadata !== undefined && permissions.metadata !== "read")
     ) {
-      throw new Error("invalid-response");
+      throw new Error(invalidResponseMessage);
+    }
+    if (Object.keys(permissions).some((key) => key !== "contents" && key !== "metadata")) {
+      throw new Error(invalidResponseMessage);
     }
     return value;
   };
@@ -483,7 +570,7 @@ export const createGitHubAppHttpProvider = (input: {
     const repositoryOwner = stringProperty(owner, "login");
     const repositoryName = stringProperty(repositoryResponse.body, "name");
     if (!name.safeParse(repositoryOwner).success || !name.safeParse(repositoryName).success) {
-      throw new Error("invalid-response");
+      throw new Error(invalidResponseMessage);
     }
     const commit = await github({
       authorization: accessToken,
@@ -507,7 +594,7 @@ export const createGitHubAppHttpProvider = (input: {
       }
     }
     if (!booleanProperty(repositoryResponse.body, "private")) {
-      throw new Error("invalid-response");
+      throw new Error(invalidResponseMessage);
     }
     return {
       accessToken,
@@ -539,7 +626,7 @@ export const createGitHubAppHttpProvider = (input: {
         path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}`,
       });
     } catch {
-      throw new Error("github-request-failed");
+      throw new Error(githubRequestFailedMessage);
     }
     if (response.status === 404) {
       return;
@@ -607,10 +694,15 @@ export const createGitHubAppHttpProvider = (input: {
         type: "blob",
       });
     }
+    const { accessToken: authorization } = treeInput;
+    const treeBase: GitTreeBase = {};
+    if (treeInput.baseTree !== undefined) {
+      treeBase.base_tree = treeInput.baseTree;
+    }
     const response = await github({
-      authorization: treeInput.accessToken,
+      authorization,
       body: {
-        ...(treeInput.baseTree === undefined ? {} : { base_tree: treeInput.baseTree }),
+        ...treeBase,
         tree: [
           ...entries,
           ...(treeInput.deletions ?? []).map((path) => ({
@@ -644,7 +736,7 @@ export const createGitHubAppHttpProvider = (input: {
       stringProperty(observed.body, "name") !== repository.name ||
       !booleanProperty(observed.body, "private")
     ) {
-      throw new Error("invalid-response");
+      throw new Error(invalidResponseMessage);
     }
     const commit = await github({
       authorization: accessToken,
@@ -655,7 +747,7 @@ export const createGitHubAppHttpProvider = (input: {
       stringProperty(commit.body, "sha") !== repository.headSha ||
       stringProperty(property(commit.body, "tree"), "sha") !== repository.headTree
     ) {
-      throw new Error("invalid-response");
+      throw new Error(invalidResponseMessage);
     }
     return accessToken;
   };
@@ -673,7 +765,7 @@ export const createGitHubAppHttpProvider = (input: {
         path: `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/git/trees/${treeSha}`,
       });
       if (booleanProperty(tree.body, "truncated")) {
-        throw new Error("invalid-response");
+        throw new Error(invalidResponseMessage);
       }
       const entries = arrayProperty(tree.body, "tree");
       trees.set(treeSha, entries);
@@ -698,14 +790,14 @@ export const createGitHubAppHttpProvider = (input: {
       }
       if (index < segments.length - 1) {
         if (stringProperty(entry, "type") !== "tree") {
-          throw new Error("invalid-response");
+          throw new Error(invalidResponseMessage);
         }
         treeSha = objectId.parse(stringProperty(entry, "sha"));
         continue;
       }
       const gitMode = z.enum(["100644", "100755"]).parse(stringProperty(entry, "mode"));
       if (stringProperty(entry, "type") !== "blob") {
-        throw new Error("invalid-response");
+        throw new Error(invalidResponseMessage);
       }
       const blobSha = objectId.parse(stringProperty(entry, "sha"));
       // oxlint-disable-next-line eslint/no-await-in-loop -- read the resolved immutable blob
@@ -718,12 +810,12 @@ export const createGitHubAppHttpProvider = (input: {
         stringProperty(blob.body, "sha") !== blobSha ||
         stringProperty(blob.body, "encoding") !== "base64"
       ) {
-        throw new Error("invalid-response");
+        throw new Error(invalidResponseMessage);
       }
       const encoded = stringProperty(blob.body, "content").replaceAll(/\s/gu, "");
       const bytes = Buffer.from(encoded, "base64");
       if (bytes.toString("base64") !== encoded) {
-        throw new Error("invalid-response");
+        throw new Error(invalidResponseMessage);
       }
       return {
         bytes: new Uint8Array(bytes),
@@ -731,7 +823,7 @@ export const createGitHubAppHttpProvider = (input: {
         mode: gitMode === "100644" ? ("644" as const) : ("755" as const),
       };
     }
-    throw new Error("invalid-response");
+    throw new Error(invalidResponseMessage);
   };
 
   const reviewedPreimageMatches = async (preimage: {
@@ -753,7 +845,7 @@ export const createGitHubAppHttpProvider = (input: {
         path: `/repos/${encodeURIComponent(preimage.owner)}/${encodeURIComponent(preimage.repositoryName)}/git/trees/${encodeURIComponent(treeSha)}`,
       });
       if (booleanProperty(treeResponse.body, "truncated")) {
-        throw new Error("invalid-response");
+        throw new Error(invalidResponseMessage);
       }
       const entries = arrayProperty(treeResponse.body, "tree");
       entry = entries.find((candidate) => stringProperty(candidate, "path") === segment);
@@ -781,7 +873,7 @@ export const createGitHubAppHttpProvider = (input: {
       path: `/repos/${encodeURIComponent(preimage.owner)}/${encodeURIComponent(preimage.repositoryName)}/git/blobs/${encodeURIComponent(blobSha)}`,
     });
     if (stringProperty(blobResponse.body, "encoding") !== "base64") {
-      throw new Error("invalid-response");
+      throw new Error(invalidResponseMessage);
     }
     const encoded = stringProperty(blobResponse.body, "content").replaceAll(/\s/gu, "");
     const bytes = Buffer.from(encoded, "base64");
@@ -824,23 +916,6 @@ export const createGitHubAppHttpProvider = (input: {
     workflows: "write",
   };
 
-  const reconciliationMatchesDraft = (
-    proposal: ExistingDraftReconciliationProposal,
-    draft: ExistingDraftObservation,
-  ): boolean =>
-    proposal.repositoryId === draft.repositoryId &&
-    proposal.owner === draft.owner &&
-    proposal.name === draft.name &&
-    proposal.pullRequestNumber === draft.number &&
-    proposal.pullRequestId === draft.pullRequestId &&
-    draft.headRepositoryId === proposal.repositoryId &&
-    draft.baseRepositoryId === proposal.repositoryId &&
-    draft.draft &&
-    draft.state === "open" &&
-    draft.headBranch === proposal.branchName &&
-    draft.baseBranch === proposal.baseBranch &&
-    draft.verifiedBuilderOrigin?.marker === proposal.originMarker;
-
   const exactReconciliationHead = async (
     proposal: ExistingDraftReconciliationProposal,
     draft: ExistingDraftObservation,
@@ -855,9 +930,10 @@ export const createGitHubAppHttpProvider = (input: {
       path: `/repos/${encodeURIComponent(draft.owner)}/${encodeURIComponent(draft.name)}/git/commits/${draft.headSha}`,
     });
     const parents = property(applied.body, "parents");
+    if (!Array.isArray(parents) || parents.length !== 2) {
+      return false;
+    }
     return (
-      Array.isArray(parents) &&
-      parents.length === 2 &&
       stringProperty(parents[0], "sha") === proposal.expectedHeadSha &&
       stringProperty(parents[1], "sha") === proposal.expectedBaseSha &&
       stringProperty(property(applied.body, "tree"), "sha") === proposal.resolvedTree &&
@@ -874,7 +950,11 @@ export const createGitHubAppHttpProvider = (input: {
       recovery === undefined ||
       draft.verifiedBuilderOrigin === undefined ||
       !draft.draft ||
-      draft.state !== "open" ||
+      draft.state !== "open"
+    ) {
+      return false;
+    }
+    if (
       draft.headRepositoryId !== draft.repositoryId ||
       draft.baseRepositoryId !== draft.repositoryId
     ) {
@@ -902,7 +982,7 @@ export const createGitHubAppHttpProvider = (input: {
     snapshotHeadSha: string,
     accessToken: string,
   ): Promise<boolean> => {
-    const reconciliation = draftRequest.reconciliation;
+    const { reconciliation } = draftRequest;
     if (await ownedDraftHead(draftRequest.recovery, observed, accessToken)) {
       return true;
     }
@@ -954,7 +1034,7 @@ export const createGitHubAppHttpProvider = (input: {
     }
     const repository = await repositoryById(draftRequest.repositoryId, "HEAD", draftPermissions);
     if (repository.owner !== draftRequest.owner || repository.name !== draftRequest.name) {
-      throw new Error("repository-identity-changed");
+      throw new Error(repositoryIdentityChangedCode);
     }
     const pull = await github({
       authorization: repository.accessToken,
@@ -994,11 +1074,13 @@ export const createGitHubAppHttpProvider = (input: {
       const appSlug = stringProperty(appInfo.data, "slug");
       const author = property(pull.body, "user");
       const commitMessage = stringProperty(property(commit.body, "commit"), "message");
-      if (
+      const verifiedAuthor =
         appId === config.appId &&
         stringProperty(author, "type") === "Bot" &&
         stringProperty(author, "login") === `${appSlug}[bot]` &&
-        headBranch === `app-builder/review-${marker.slice(0, 20)}` &&
+        headBranch === `app-builder/review-${marker.slice(0, 20)}`;
+      if (
+        verifiedAuthor &&
         (commitMessage.includes(`App-Builder-Idempotency: ${marker}`) ||
           commitMessage.includes(`App-Builder-Origin: ${marker}`))
       ) {
@@ -1025,8 +1107,10 @@ export const createGitHubAppHttpProvider = (input: {
       pullRequestId: decimalProperty(pull.body, "id"),
       repositoryId: repository.repositoryId,
       state: z.enum(["open", "closed"]).parse(stringProperty(pull.body, "state")),
-      ...(verifiedBuilderOrigin === undefined ? {} : { verifiedBuilderOrigin }),
     };
+    if (verifiedBuilderOrigin !== undefined) {
+      observed.verifiedBuilderOrigin = verifiedBuilderOrigin;
+    }
     if (stalePull) {
       if (
         !(await provenDraftHead(draftRequest, observed, snapshotHeadSha, repository.accessToken))
@@ -1089,18 +1173,26 @@ export const createGitHubAppHttpProvider = (input: {
       const baseName = stringProperty(baseRepository, "name");
       const headName = stringProperty(headRepository, "name");
       const headSha = objectId.parse(stringProperty(head, "sha"));
+      const invalidHistoricalPullRequest =
+        "historical-source-pull-request-not-merged-in-repository";
       if (
         stringProperty(pull.body, "state") !== "closed" ||
         typeof property(pull.body, "merged_at") !== "string" ||
         decimalProperty(pull.body, "number") !== String(source.pullRequestNumber) ||
-        decimalProperty(baseRepository, "id") !== repositoryId ||
+        decimalProperty(baseRepository, "id") !== repositoryId
+      ) {
+        throw new Error(invalidHistoricalPullRequest);
+      }
+      if (
         decimalProperty(headRepository, "id") !== repositoryId ||
         baseOwner !== repositoryOwner ||
         headOwner !== repositoryOwner ||
-        baseName !== repositoryName ||
-        headName !== repositoryName
+        baseName !== repositoryName
       ) {
-        throw new Error("historical-source-pull-request-not-merged-in-repository");
+        throw new Error(invalidHistoricalPullRequest);
+      }
+      if (headName !== repositoryName) {
+        throw new Error(invalidHistoricalPullRequest);
       }
       commitSha = headSha;
       const { pullRequestNumber: selectedPullRequestNumber } = source;
@@ -1118,14 +1210,14 @@ export const createGitHubAppHttpProvider = (input: {
     const treeSha = objectId.parse(
       stringProperty(property(property(commit.body, "commit"), "tree"), "sha"),
     );
-    return {
-      commitSha,
-      name: repositoryName,
-      owner: repositoryOwner,
-      ...(pullRequestNumber === undefined ? {} : { pullRequestNumber }),
-      repositoryId,
-      treeSha,
-    };
+    const sourceObservation: Pick<
+      HistoricalAppSourceObservation,
+      "commitSha" | "name" | "owner" | "pullRequestNumber"
+    > = { commitSha, name: repositoryName, owner: repositoryOwner };
+    if (pullRequestNumber !== undefined) {
+      sourceObservation.pullRequestNumber = pullRequestNumber;
+    }
+    return { ...sourceObservation, repositoryId, treeSha };
   };
 
   const inspectedUpdateTree = async (
@@ -1188,7 +1280,7 @@ export const createGitHubAppHttpProvider = (input: {
         stringProperty(property(repository.body, "owner"), "login") !== ref.owner ||
         stringProperty(repository.body, "name") !== ref.name
       ) {
-        throw new Error("repository-identity-changed");
+        throw new Error(repositoryIdentityChangedCode);
       }
       return async ({ effect, ...requestInput }) => {
         try {
@@ -1237,7 +1329,7 @@ export const createGitHubAppHttpProvider = (input: {
         );
       } catch {
         return {
-          code: "invalid-publication-material",
+          code: invalidPublicationMaterialCode,
           status: "rejected",
         };
       }
@@ -1305,14 +1397,17 @@ export const createGitHubAppHttpProvider = (input: {
       ) {
         return false;
       }
-      const current = await inspectExistingDraft({
+      const inspection: ExistingDraftInspectionRequest = {
         name: proposal.name,
         number: proposal.pullRequestNumber,
         owner: proposal.owner,
         repositoryId: proposal.repositoryId,
         reconciliation: proposal,
-        ...(recovery === undefined ? {} : { recovery }),
-      });
+      };
+      if (recovery !== undefined) {
+        inspection.recovery = recovery;
+      }
+      const current = await inspectExistingDraft(inspection);
       if (current.headSha !== observed.headSha || current.headTree !== observed.headTree) {
         return false;
       }
@@ -1323,9 +1418,10 @@ export const createGitHubAppHttpProvider = (input: {
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/commits/${observed.headSha}`,
       });
       const parents = property(response.body, "parents");
+      if (!Array.isArray(parents) || parents.length !== 2) {
+        return false;
+      }
       return (
-        Array.isArray(parents) &&
-        parents.length === 2 &&
         stringProperty(parents[0], "sha") === proposal.expectedHeadSha &&
         stringProperty(parents[1], "sha") === proposal.expectedBaseSha &&
         stringProperty(property(response.body, "tree"), "sha") === proposal.resolvedTree &&
@@ -1365,9 +1461,10 @@ export const createGitHubAppHttpProvider = (input: {
       });
       const parents = property(response.body, "parents");
       const expectedMessage = `Update draft pull request #${proposal.pullRequestNumber}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`;
+      if (!Array.isArray(parents) || parents.length !== 1) {
+        return false;
+      }
       return (
-        Array.isArray(parents) &&
-        parents.length === 1 &&
         stringProperty(parents[0], "sha") === proposal.expectedHeadSha &&
         stringProperty(property(response.body, "tree"), "sha") === expectedTree &&
         stringProperty(response.body, "message") === expectedMessage
@@ -1396,9 +1493,10 @@ export const createGitHubAppHttpProvider = (input: {
       });
       const parents = property(response.body, "parents");
       const message = `Update draft pull request #${proposal.pullRequestNumber}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`;
+      if (!Array.isArray(parents) || parents.length !== 1) {
+        return false;
+      }
       return (
-        Array.isArray(parents) &&
-        parents.length === 1 &&
         stringProperty(parents[0], "sha") === proposal.expectedHeadSha &&
         stringProperty(property(response.body, "tree"), "sha") === resolvedTree &&
         stringProperty(response.body, "message") === message
@@ -1421,7 +1519,7 @@ export const createGitHubAppHttpProvider = (input: {
     },
     async inspectDestinationFiles({ repository, paths }) {
       if (paths.some((path) => !safeSourcePath(path))) {
-        throw new Error("invalid-response");
+        throw new Error(invalidResponseMessage);
       }
       const accessToken = await destinationSnapshot(repository);
       const files = [];
@@ -1454,7 +1552,7 @@ export const createGitHubAppHttpProvider = (input: {
       const changedPathsSinceBase = arrayProperty(compare.body, "files")
         .map((file) => stringProperty(file, "filename"))
         .toSorted(compareOverlayPaths);
-      let branch: unknown = { status: "absent" };
+      let branch: DraftPublicationReadBack["branch"] = { status: "absent" };
       let branchSha: string | undefined;
       try {
         const branchResponse = await github({
@@ -1497,7 +1595,7 @@ export const createGitHubAppHttpProvider = (input: {
           };
         }
       } catch {
-        throw new Error("github-request-failed");
+        throw new Error(githubRequestFailedMessage);
       }
       const pulls = await github({
         authorization: accessToken,
@@ -1505,11 +1603,11 @@ export const createGitHubAppHttpProvider = (input: {
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/pulls?state=open&head=${encodeURIComponent(`${proposal.owner}:${proposal.branchName}`)}&base=${encodeURIComponent(proposal.baseBranch)}&per_page=2`,
       });
       if (!Array.isArray(pulls.body)) {
-        throw new TypeError("invalid-response");
+        throw new TypeError(invalidResponseMessage);
       }
-      const candidates = pulls.body;
+      const candidates: unknown[] = pulls.body;
       if (candidates.length > 1) {
-        throw new Error("invalid-response");
+        throw new Error(invalidResponseMessage);
       }
       const [pull] = candidates;
       const exactPull =
@@ -1670,33 +1768,33 @@ export const createGitHubAppHttpProvider = (input: {
       }[];
       try {
         assertExactGitHubDraftPullRequestContent({ content, proposal });
-        changes = content.changes.map((change) => ({
-          kind: change.kind,
-          path: change.path,
-          ...(change.kind === "added" ? {} : { before: change.before }),
-          ...(change.kind === "deleted"
-            ? {}
-            : {
-                after: Object.fromEntries([
-                  ["path", change.path],
-                  ["mode", change.after.mode === "755" ? "100755" : "100644"],
-                  ["content", change.after.bytes],
-                ]),
-              }),
-        }));
+        changes = content.changes.map((change) => {
+          const entry: (typeof changes)[number] = { kind: change.kind, path: change.path };
+          if (change.kind !== "added") {
+            entry.before = change.before;
+          }
+          if (change.kind !== "deleted") {
+            entry.after = Object.fromEntries([
+              ["path", change.path],
+              ["mode", change.after.mode === "755" ? "100755" : "100644"],
+              ["content", change.after.bytes],
+            ]);
+          }
+          return entry;
+        });
         if (changes.length === 0 || changes.some((change) => !safeSourcePath(change.path))) {
-          throw new Error("invalid-material");
+          throw new Error(invalidMaterialMessage);
         }
         const paths = changes.map(({ path }) => path).toSorted(compareOverlayPaths);
         if (JSON.stringify(paths) !== JSON.stringify(proposal.approvedPaths)) {
-          throw new Error("invalid-material");
+          throw new Error(invalidMaterialMessage);
         }
         changes = changes.map((change) => {
           if (change.after !== undefined) {
             validateFile(change.after);
           }
           if (change.after !== undefined && change.after.path !== change.path) {
-            throw new Error("invalid-material");
+            throw new Error(invalidMaterialMessage);
           }
           const after =
             change.after === undefined
@@ -1705,18 +1803,20 @@ export const createGitHubAppHttpProvider = (input: {
                   ["mode", change.after.mode === "100755" ? "755" : "644"],
                   ["digest", sha256(change.after.content)],
                 ]);
-          if (
-            (change.kind === "added" && (change.before !== undefined || after === undefined)) ||
-            (change.kind === "deleted" && (change.before === undefined || after !== undefined)) ||
-            (change.kind === "modified" && (change.before === undefined || after === undefined))
-          ) {
-            throw new Error("invalid-material");
+          if (change.kind === "added" && (change.before !== undefined || after === undefined)) {
+            throw new Error(invalidMaterialMessage);
+          }
+          if (change.kind === "deleted" && (change.before === undefined || after !== undefined)) {
+            throw new Error(invalidMaterialMessage);
+          }
+          if (change.kind === "modified" && (change.before === undefined || after === undefined)) {
+            throw new Error(invalidMaterialMessage);
           }
           return change;
         });
       } catch {
         return {
-          code: "invalid-publication-material",
+          code: invalidPublicationMaterialCode,
           status: "rejected",
         };
       }
@@ -1733,10 +1833,12 @@ export const createGitHubAppHttpProvider = (input: {
         snapshot.repositoryId !== proposal.repositoryId ||
         snapshot.owner !== proposal.owner ||
         snapshot.name !== proposal.name ||
-        snapshot.visibility !== proposal.visibility ||
-        snapshot.defaultBranch !== proposal.baseBranch
+        snapshot.visibility !== proposal.visibility
       ) {
-        return { code: "repository-identity-changed", status: "rejected" };
+        return { code: repositoryIdentityChangedCode, status: "rejected" };
+      }
+      if (snapshot.defaultBranch !== proposal.baseBranch) {
+        return { code: repositoryIdentityChangedCode, status: "rejected" };
       }
       const upstreamCompare = await github({
         authorization: accessToken,
@@ -1753,23 +1855,25 @@ export const createGitHubAppHttpProvider = (input: {
         ),
       );
       if (conflicts.length > 0) {
-        return { code: "reviewed-path-changed", path: conflicts.at(0) ?? "", status: "rejected" };
+        return { code: reviewedPathChangedCode, path: conflicts.at(0) ?? "", status: "rejected" };
       }
       for (const change of changes) {
+        const preimage: Pick<Parameters<typeof reviewedPreimageMatches>[0]["change"], "before"> =
+          {};
+        if (change.before !== undefined) {
+          preimage.before = change.before;
+        }
         // oxlint-disable-next-line eslint/no-await-in-loop -- each live preimage is checked before any mutation
         const matches = await reviewedPreimageMatches({
           accessToken,
-          change: {
-            ...(change.before === undefined ? {} : { before: change.before }),
-            path: change.path,
-          },
+          change: { ...preimage, path: change.path },
           headSha: snapshot.headSha,
           headTree: snapshot.headTree,
           owner: proposal.owner,
           repositoryName: proposal.name,
         });
         if (!matches) {
-          return { code: "reviewed-path-changed", path: change.path, status: "rejected" };
+          return { code: reviewedPathChangedCode, path: change.path, status: "rejected" };
         }
       }
       const files = changes.flatMap((change) => (change.after === undefined ? [] : [change.after]));
@@ -1788,14 +1892,19 @@ export const createGitHubAppHttpProvider = (input: {
         });
       } catch (error) {
         if (error instanceof GitHubBlobWriteFailureError) {
-          return {
+          const failure: Pick<
+            Extract<GitHubMutationAcknowledgement, { code: "github-file-write-failed" }>,
+            "bytes" | "code" | "operation" | "path" | "providerStatus"
+          > = {
             bytes: error.bytes,
             code: "github-file-write-failed",
             operation: "create-blob",
             path: error.path,
-            ...(error.providerStatus === undefined ? {} : { providerStatus: error.providerStatus }),
-            status: "rejected",
           };
+          if (error.providerStatus !== undefined) {
+            failure.providerStatus = error.providerStatus;
+          }
+          return { ...failure, status: "rejected" };
         }
         throw error;
       }
@@ -1836,7 +1945,7 @@ export const createGitHubAppHttpProvider = (input: {
     },
     async readDestinationFile({ repository, path }) {
       if (!safeSourcePath(path)) {
-        throw new Error("invalid-response");
+        throw new Error(invalidResponseMessage);
       }
       const accessToken = await destinationSnapshot(repository);
       return readDestinationPath(
@@ -1855,32 +1964,39 @@ export const createGitHubAppHttpProvider = (input: {
       try {
         assertReconciliationContent(proposal, content);
       } catch {
-        return { code: "invalid-publication-material", status: "rejected" };
+        return { code: invalidPublicationMaterialCode, status: "rejected" };
       }
-      const current = await inspectExistingDraft({
+      const inspection: ExistingDraftInspectionRequest = {
         name: proposal.name,
         number: proposal.pullRequestNumber,
         owner: proposal.owner,
         repositoryId: proposal.repositoryId,
-        ...(recovery === undefined ? {} : { recovery }),
-      });
+      };
+      if (recovery !== undefined) {
+        inspection.recovery = recovery;
+      }
+      const current = await inspectExistingDraft(inspection);
       if (
         current.pullRequestId !== proposal.pullRequestId ||
         !current.draft ||
         current.state !== "open" ||
-        current.repositoryId !== proposal.repositoryId ||
+        current.repositoryId !== proposal.repositoryId
+      ) {
+        return { code: pullRequestChangedCode, status: "rejected" };
+      }
+      if (
         current.headRepositoryId !== proposal.repositoryId ||
         current.baseRepositoryId !== proposal.repositoryId ||
         current.headBranch !== proposal.branchName ||
         current.baseBranch !== proposal.baseBranch
       ) {
-        return { code: "pull-request-changed", status: "rejected" };
+        return { code: pullRequestChangedCode, status: "rejected" };
       }
       if (
         current.headSha !== proposal.expectedHeadSha ||
         current.headTree !== proposal.expectedHeadTree
       ) {
-        return { code: "branch-moved", status: "rejected" };
+        return { code: branchMovedCode, status: "rejected" };
       }
       const base = await repositoryById(
         proposal.repositoryId,
@@ -1891,27 +2007,32 @@ export const createGitHubAppHttpProvider = (input: {
         base.repositoryId !== proposal.repositoryId ||
         base.owner !== proposal.owner ||
         base.name !== proposal.name ||
-        base.headSha !== proposal.expectedBaseSha ||
-        base.headTree !== proposal.expectedBaseTree
+        base.headSha !== proposal.expectedBaseSha
       ) {
-        return { code: "branch-moved", status: "rejected" };
+        return { code: branchMovedCode, status: "rejected" };
+      }
+      if (base.headTree !== proposal.expectedBaseTree) {
+        return { code: branchMovedCode, status: "rejected" };
       }
       const accessToken = await token(draftPermissions, [proposal.repositoryId]);
       for (const change of content.changes) {
+        const preimageChange: Parameters<typeof reviewedPreimageMatches>[0]["change"] = {
+          path: change.path,
+        };
+        if (change.before !== undefined) {
+          preimageChange.before = change.before;
+        }
         // oxlint-disable-next-line eslint/no-await-in-loop -- verify every base preimage before publishing a merge commit
         const matches = await reviewedPreimageMatches({
           accessToken,
-          change: {
-            path: change.path,
-            ...(change.before === undefined ? {} : { before: change.before }),
-          },
+          change: preimageChange,
           headSha: base.headSha,
           headTree: base.headTree,
           owner: proposal.owner,
           repositoryName: proposal.name,
         });
         if (!matches)
-          return { code: "reviewed-path-changed", path: change.path, status: "rejected" };
+          return { code: reviewedPathChangedCode, path: change.path, status: "rejected" };
       }
       const tree = await createTree({
         accessToken,
@@ -1934,7 +2055,7 @@ export const createGitHubAppHttpProvider = (input: {
         repositoryName: proposal.name,
       });
       if (tree !== proposal.resolvedTree) {
-        return { code: "invalid-publication-material", status: "rejected" };
+        return { code: invalidPublicationMaterialCode, status: "rejected" };
       }
       const commit = await github({
         authorization: accessToken,
@@ -1956,7 +2077,7 @@ export const createGitHubAppHttpProvider = (input: {
         objectId.parse(stringProperty(property(reference.body, "object"), "sha")) !==
         current.headSha
       ) {
-        return { code: "branch-moved", status: "rejected" };
+        return { code: branchMovedCode, status: "rejected" };
       }
       const baseNow = await repositoryById(
         proposal.repositoryId,
@@ -1964,14 +2085,14 @@ export const createGitHubAppHttpProvider = (input: {
         draftPermissions,
       );
       if (baseNow.headSha !== proposal.expectedBaseSha)
-        return { code: "branch-moved", status: "rejected" };
+        return { code: branchMovedCode, status: "rejected" };
       const repositoryIdentity = await github({
         authorization: accessToken,
         expected: [200],
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}`,
       });
       if (decimalProperty(repositoryIdentity.body, "id") !== proposal.repositoryId) {
-        return { code: "repository-identity-changed", status: "rejected" };
+        return { code: repositoryIdentityChangedCode, status: "rejected" };
       }
       const result = await github({
         authorization: accessToken,
@@ -1994,7 +2115,7 @@ export const createGitHubAppHttpProvider = (input: {
         Array.isArray(result.body.errors) &&
         result.body.errors.length > 0
       ) {
-        return { code: "branch-moved", status: "rejected" };
+        return { code: branchMovedCode, status: "rejected" };
       }
       property(property(result.body, "data"), "updateRefs");
       return { requestId: result.requestId, status: "accepted" };
@@ -2003,7 +2124,7 @@ export const createGitHubAppHttpProvider = (input: {
       try {
         assertExactGitHubDraftPullRequestContent({ content, proposal });
       } catch {
-        return { code: "invalid-publication-material", status: "rejected" };
+        return { code: invalidPublicationMaterialCode, status: "rejected" };
       }
       const current = await inspectExistingDraft({
         name: proposal.name,
@@ -2015,35 +2136,42 @@ export const createGitHubAppHttpProvider = (input: {
         current.pullRequestId !== proposal.pullRequestId ||
         !current.draft ||
         current.state !== "open" ||
-        current.headRepositoryId !== proposal.repositoryId ||
+        current.headRepositoryId !== proposal.repositoryId
+      ) {
+        return { code: pullRequestChangedCode, status: "rejected" };
+      }
+      if (
         current.baseRepositoryId !== proposal.repositoryId ||
         current.headBranch !== proposal.branchName ||
         current.baseBranch !== proposal.baseBranch
       ) {
-        return { code: "pull-request-changed", status: "rejected" };
+        return { code: pullRequestChangedCode, status: "rejected" };
       }
       if (
         current.headSha !== proposal.expectedHeadSha ||
         current.headTree !== proposal.expectedHeadTree
       ) {
-        return { code: "branch-moved", status: "rejected" };
+        return { code: branchMovedCode, status: "rejected" };
       }
       const accessToken = await token(draftPermissions, [proposal.repositoryId]);
       for (const change of content.changes) {
+        const preimageChange: Parameters<typeof reviewedPreimageMatches>[0]["change"] = {
+          path: change.path,
+        };
+        if (change.kind !== "added") {
+          preimageChange.before = change.before;
+        }
         // oxlint-disable-next-line eslint/no-await-in-loop -- inspect every reviewed preimage before any ref mutation
         const matches = await reviewedPreimageMatches({
           accessToken,
-          change: {
-            path: change.path,
-            ...(change.kind === "added" ? {} : { before: change.before }),
-          },
+          change: preimageChange,
           headSha: current.headSha,
           headTree: current.headTree,
           owner: proposal.owner,
           repositoryName: proposal.name,
         });
         if (!matches) {
-          return { code: "reviewed-path-changed", path: change.path, status: "rejected" };
+          return { code: reviewedPathChangedCode, path: change.path, status: "rejected" };
         }
       }
       const files = content.changes.flatMap((change) =>
@@ -2088,7 +2216,7 @@ export const createGitHubAppHttpProvider = (input: {
         objectId.parse(stringProperty(property(reference.body, "object"), "sha")) !==
         current.headSha
       ) {
-        return { code: "branch-moved", status: "rejected" };
+        return { code: branchMovedCode, status: "rejected" };
       }
       const repositoryIdentity = await github({
         authorization: accessToken,
@@ -2096,7 +2224,7 @@ export const createGitHubAppHttpProvider = (input: {
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}`,
       });
       if (decimalProperty(repositoryIdentity.body, "id") !== proposal.repositoryId) {
-        return { code: "repository-identity-changed", status: "rejected" };
+        return { code: repositoryIdentityChangedCode, status: "rejected" };
       }
       const result = await github({
         authorization: accessToken,
@@ -2119,7 +2247,7 @@ export const createGitHubAppHttpProvider = (input: {
         Array.isArray(result.body.errors) &&
         result.body.errors.length > 0
       ) {
-        return { code: "branch-moved", status: "rejected" };
+        return { code: branchMovedCode, status: "rejected" };
       }
       property(property(result.body, "data"), "updateRefs");
       return { requestId: result.requestId, status: "accepted" };

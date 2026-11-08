@@ -98,6 +98,48 @@ const projectActionResult = (input: OwnerActionResultDiagnostic) => {
   };
 };
 
+type OwnerSelectionRecord = Extract<
+  HostedRuntimeHandoffDiagnostic,
+  { stage: "owner_selection_read" }
+> & { event: string };
+type NativePreviewCandidateRecord = Extract<
+  HostedRuntimeHandoffDiagnostic,
+  { stage: "native_preview_candidate" }
+> & { event: string };
+
+const projectOwnerSelection = (
+  event: string,
+  state: z.infer<typeof referenceState>,
+  input: Extract<HostedRuntimeHandoffDiagnostic, { stage: "owner_selection_read" }>,
+) => {
+  const result: OwnerSelectionRecord = {
+    event,
+    stage: "owner_selection_read",
+    referenceState: state,
+  };
+  if (input.selectionPresent !== undefined) {
+    result.selectionPresent = diagnosticBoolean.parse(input.selectionPresent);
+  }
+  return result;
+};
+
+const projectNativePreviewCandidate = (
+  event: string,
+  input: Extract<HostedRuntimeHandoffDiagnostic, { stage: "native_preview_candidate" }>,
+) => {
+  const result: NativePreviewCandidateRecord = {
+    event,
+    stage: "native_preview_candidate",
+    acceptedAppIdPresent: diagnosticBoolean.parse(input.acceptedAppIdPresent),
+    inputAppIdPresent: diagnosticBoolean.parse(input.inputAppIdPresent),
+    lookupAttempted: diagnosticBoolean.parse(input.lookupAttempted),
+  };
+  if (input.appIdMatches !== undefined) {
+    result.appIdMatches = diagnosticBoolean.parse(input.appIdMatches);
+  }
+  return result;
+};
+
 /** Project closed metadata only; diagnostics cannot affect handoff or tool behavior. */
 export const reportHostedRuntimeHandoffDiagnostic = (
   input: HostedRuntimeHandoffDiagnostic,
@@ -132,32 +174,12 @@ export const reportHostedRuntimeHandoffDiagnostic = (
       case "owner_selection_read": {
         const state = referenceState.safeParse(input.referenceState);
         if (state.success) {
-          console.info(
-            JSON.stringify({
-              event,
-              stage: "owner_selection_read",
-              referenceState: state.data,
-              ...(input.selectionPresent === undefined
-                ? {}
-                : { selectionPresent: diagnosticBoolean.parse(input.selectionPresent) }),
-            }),
-          );
+          console.info(JSON.stringify(projectOwnerSelection(event, state.data, input)));
         }
         break;
       }
       case "native_preview_candidate": {
-        console.info(
-          JSON.stringify({
-            event,
-            stage: "native_preview_candidate",
-            acceptedAppIdPresent: diagnosticBoolean.parse(input.acceptedAppIdPresent),
-            inputAppIdPresent: diagnosticBoolean.parse(input.inputAppIdPresent),
-            lookupAttempted: diagnosticBoolean.parse(input.lookupAttempted),
-            ...(input.appIdMatches === undefined
-              ? {}
-              : { appIdMatches: diagnosticBoolean.parse(input.appIdMatches) }),
-          }),
-        );
+        console.info(JSON.stringify(projectNativePreviewCandidate(event, input)));
         break;
       }
       default: {

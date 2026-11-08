@@ -13,6 +13,8 @@ import {
   operatorDeploymentCandidateSchema,
 } from "./hosted-operator-contract";
 
+const RECONCILIATION_REQUIRED = "reconciliation-required";
+
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const origin = z.url().refine((value) => {
@@ -123,14 +125,7 @@ export const continuityIdentitySchema = z.strictObject({
   providerSessionId: id,
 });
 export const continuityCurrentSchema = continuityIdentitySchema.extend({
-  state: z.enum([
-    "starting",
-    "ready",
-    "restarting",
-    "revoked",
-    "expired",
-    "reconciliation-required",
-  ]),
+  state: z.enum(["starting", "ready", "restarting", "revoked", "expired", RECONCILIATION_REQUIRED]),
   leaseExpiresAt: z.iso.datetime(),
 });
 export type ContinuityCurrent = z.infer<typeof continuityCurrentSchema>;
@@ -212,7 +207,7 @@ export const continuityRecordSchema = z
       "revoking",
       "revoked",
       "settled",
-      "reconciliation-required",
+      RECONCILIATION_REQUIRED,
     ]),
     fence: z.number().int().nonnegative(),
     attemptId: z.uuid().optional(),
@@ -262,7 +257,7 @@ export const canRebindUndispatchedContinuityRuntime = (record: ContinuityRecord)
     return false;
   }
   return [
-    ["starting", "reconciliation-required"].includes(record.state),
+    ["starting", RECONCILIATION_REQUIRED].includes(record.state),
     record.pendingStage === "runtime",
     record.supersededBy === undefined,
     record.cancelled !== true,
@@ -298,23 +293,32 @@ export const canRebindUndispatchedContinuityRuntime = (record: ContinuityRecord)
 /** Journal markers are observations only. An unrecorded marker is never proof of no effect. */
 const checkpointMarker = (recorded: boolean) =>
   recorded ? ("recorded" as const) : ("unrecorded" as const);
-export const continuityStatus = (record: ContinuityRecord) => ({
-  intentId: record.requestId,
-  planRef: record.plan.planRef,
-  state: record.state,
-  ...(record.supersededBy === undefined ? {} : { supersededBy: record.supersededBy }),
-  ...(record.outcome === undefined ? {} : { outcome: record.outcome }),
-  ...(record.failure === undefined ? {} : { failure: record.failure }),
-  ...(record.current === undefined
-    ? {}
-    : {
-        runtime: {
-          runtimeAttemptId: record.current.runtimeAttemptId,
-          state: record.current.state,
-          leaseExpiresAt: record.current.leaseExpiresAt,
-        },
-      }),
-});
+export const continuityStatus = (
+  record: ContinuityRecord,
+): z.infer<typeof continuityStatusSchema> => {
+  const status: z.infer<typeof continuityStatusSchema> = {
+    intentId: record.requestId,
+    planRef: record.plan.planRef,
+    state: record.state,
+  };
+  if (record.supersededBy !== undefined) {
+    status.supersededBy = record.supersededBy;
+  }
+  if (record.outcome !== undefined) {
+    status.outcome = record.outcome;
+  }
+  if (record.failure !== undefined) {
+    status.failure = record.failure;
+  }
+  if (record.current !== undefined) {
+    status.runtime = {
+      runtimeAttemptId: record.current.runtimeAttemptId,
+      state: record.current.state,
+      leaseExpiresAt: record.current.leaseExpiresAt,
+    };
+  }
+  return status;
+};
 
 export const continuityStatusSchema = z.strictObject({
   intentId: z.uuid(),
@@ -346,21 +350,29 @@ export const continuityCheckpointSchema = continuityStatusSchema.extend({
     outcome: z.enum(["recorded", "unrecorded"]),
   }),
 });
-export const continuityCheckpoints = (record: ContinuityRecord) => ({
-  ...continuityStatus(record),
-  checkpoints: {
-    ...(record.pendingStage === undefined ? {} : { pendingStage: record.pendingStage }),
-    runtimeLocator: checkpointMarker(record.locator !== undefined),
-    runtimeDispatch: checkpointMarker(record.locator?.dispatchAttempted === true),
-    runtimeCommand: checkpointMarker(record.locator?.commandId !== undefined),
-    publicationAttempt: checkpointMarker(record.deliveryAttempted === true),
-    publicationCandidate: checkpointMarker(record.deliveryCandidates.length > 0),
-    environmentWrite: checkpointMarker(record.environmentWrites.length > 0),
-    suiteDispatch: checkpointMarker(record.suiteDispatched === true),
-    suiteCommand: checkpointMarker(record.suiteCommandId !== undefined),
-    outcome: checkpointMarker(record.outcome !== undefined),
-  },
-});
+export const continuityCheckpoints = (record: ContinuityRecord) => {
+  const status = { ...continuityStatus(record) };
+  const pending: Pick<z.infer<typeof continuityCheckpointSchema>["checkpoints"], "pendingStage"> =
+    {};
+  if (record.pendingStage !== undefined) {
+    pending.pendingStage = record.pendingStage;
+  }
+  return {
+    ...status,
+    checkpoints: {
+      ...pending,
+      runtimeLocator: checkpointMarker(record.locator !== undefined),
+      runtimeDispatch: checkpointMarker(record.locator?.dispatchAttempted === true),
+      runtimeCommand: checkpointMarker(record.locator?.commandId !== undefined),
+      publicationAttempt: checkpointMarker(record.deliveryAttempted === true),
+      publicationCandidate: checkpointMarker(record.deliveryCandidates.length > 0),
+      environmentWrite: checkpointMarker(record.environmentWrites.length > 0),
+      suiteDispatch: checkpointMarker(record.suiteDispatched === true),
+      suiteCommand: checkpointMarker(record.suiteCommandId !== undefined),
+      outcome: checkpointMarker(record.outcome !== undefined),
+    },
+  };
+};
 
 export const continuityPlannedSchema = z.strictObject({
   plan: hostedContinuityPlanSchema,

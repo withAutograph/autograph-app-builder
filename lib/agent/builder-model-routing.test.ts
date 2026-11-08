@@ -303,7 +303,7 @@ describe("native Gateway reporting metadata", () => {
       nativeTagFor("native-one"),
       "builder-callsite:main",
     ]);
-    const tags = tagged.gateway.tags;
+    const { tags } = tagged.gateway;
     if (!Array.isArray(tags)) {
       throw new TypeError("Missing controlled reporting tags");
     }
@@ -348,8 +348,8 @@ describe("native Gateway reporting metadata", () => {
     };
     expect(await handler({ type: "step.started" }, unavailableContext)).toMatchObject({
       model: activeBuilderModelId,
-      reasoning: "low",
       modelOptions: { providerOptions: { gateway: { only: ["openai"], order: ["openai"] } } },
+      reasoning: "low",
     });
     expect(console.info).not.toHaveBeenCalled();
   });

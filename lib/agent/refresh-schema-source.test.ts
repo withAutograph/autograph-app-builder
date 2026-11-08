@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => ({
   accessUpdate: vi.fn(),
   classify: vi.fn(),
   inspect: vi.fn(),
-  observeLocal: vi.fn(() => Promise.resolve()),
+  observeLocal: vi.fn<() => Promise<void>>().mockResolvedValue(),
   prepare: vi.fn(),
   reconcile: vi.fn(),
   sandbox: { id: "owned-sandbox" },

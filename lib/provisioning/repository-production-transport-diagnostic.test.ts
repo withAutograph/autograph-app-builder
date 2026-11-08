@@ -10,11 +10,11 @@ import type {
 const privateCredentials = Buffer.from("synthetic private role credentials");
 const runId = "11111111-1111-4111-a111-111111111111";
 const worker: ProtectedInstallerWorkerDescriptor = {
+  executablePath: "/worker/resource",
   id: "neon-resource-bootstrap-v1",
   operationScope: "neon-resource-bootstrap-v1",
-  executablePath: "/worker/resource",
-  subcommand: "neon-resource-bootstrap",
   sha256: "a".repeat(64),
+  subcommand: "neon-resource-bootstrap",
 };
 const context: ResourceBootstrapContextWire = {
   version: 1,
@@ -41,20 +41,26 @@ const context: ResourceBootstrapContextWire = {
   installer: { id: worker.id, sha256: worker.sha256 },
   tenant_targets: [],
 };
-const input = () => ({
-  operation: "storage" as const,
-  worker,
-  context,
-  startupFiles: {},
-  directDatabaseUrl:
-    "postgresql://maintenance:private-fixture-password@ep-fixture.neon.tech/neondb",
-  resourceCredentialBytes: privateCredentials,
-  readOnly: false,
-  runId,
-  signal: new AbortController().signal,
-  assertCurrent: vi.fn(async () => {}),
-  recordCheckpoint: vi.fn(async () => {}),
-});
+const input = () => {
+  const startupFiles = {};
+  const { signal } = new AbortController();
+  const assertCurrent = vi.fn(async () => {});
+  const recordCheckpoint = vi.fn(async () => {});
+  return {
+    assertCurrent,
+    context,
+    directDatabaseUrl:
+      "postgresql://maintenance:private-fixture-password@ep-fixture.neon.tech/neondb",
+    operation: "storage" as const,
+    readOnly: false,
+    recordCheckpoint,
+    resourceCredentialBytes: privateCredentials,
+    runId,
+    signal,
+    startupFiles,
+    worker,
+  };
+};
 const configuration = {
   image: "fixture-image",
   projectId: "operator",

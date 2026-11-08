@@ -23,6 +23,8 @@ import {
 import { exactLocalPublicationProposal } from "./local_publication_status";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
+const SIMULATED_PUBLICATION_CAPABILITY = "simulated-publication";
+
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const file = z.strictObject({
   digest,
@@ -219,7 +221,7 @@ export default defineTool({
       },
     });
     if (
-      hasTestCapability("simulated-publication") &&
+      hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
       workflow.appSpec.appId === "publication-pre-journal-interruption"
     ) {
       throw new Error(
@@ -227,39 +229,44 @@ export default defineTool({
       );
     }
     const relativeRoot = workflow.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
+    const publishedByCallId = ctx.callId;
+    const review = workflow.reviewReceipt;
+    const { sourceReceipt } = workflow;
+    const optionalHooks: Pick<Parameters<typeof publishReviewedChangeSet>[0], "hooks"> = {};
+    if (
+      hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
+      workflow.appSpec.appId === "publication-interruption"
+    ) {
+      optionalHooks.hooks = {
+        afterPendingJournal: () => {
+          throw new Error("Fixture interruption after durable publication pending.");
+        },
+        preservePendingOnFailure: true,
+      };
+    }
+    if (
+      hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
+      workflow.appSpec.appId === "publication-failure-recovery"
+    ) {
+      optionalHooks.hooks = {
+        afterMutation: () => {
+          throw new Error("Fixture failure after local publication mutation.");
+        },
+      };
+    }
     const result = await publishReviewedChangeSet({
       proposal,
-      publishedByCallId: ctx.callId,
+      publishedByCallId,
       readOverlayFile: (path) =>
-        hasTestCapability("simulated-publication") &&
+        hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
         workflow.appSpec.appId === "publication-precondition-failure"
           ? Promise.resolve(null)
           : ctx
               .getSandbox()
               .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
-      review: workflow.reviewReceipt,
-      sourceReceipt: workflow.sourceReceipt,
-      ...(hasTestCapability("simulated-publication") &&
-      workflow.appSpec.appId === "publication-interruption"
-        ? {
-            hooks: {
-              afterPendingJournal: () => {
-                throw new Error("Fixture interruption after durable publication pending.");
-              },
-              preservePendingOnFailure: true,
-            },
-          }
-        : {}),
-      ...(hasTestCapability("simulated-publication") &&
-      workflow.appSpec.appId === "publication-failure-recovery"
-        ? {
-            hooks: {
-              afterMutation: () => {
-                throw new Error("Fixture failure after local publication mutation.");
-              },
-            },
-          }
-        : {}),
+      review,
+      sourceReceipt,
+      ...optionalHooks,
     });
     const terminalJournal = await readLocalPublicationJournal(expected.destinationPath);
     if (result.ok) {
@@ -286,7 +293,7 @@ export default defineTool({
       );
     }
     if (
-      hasTestCapability("simulated-publication") &&
+      hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
       (workflow.appSpec.appId === "publication-success-recovery" ||
         workflow.appSpec.appId === "publication-failure-recovery")
     ) {
@@ -304,9 +311,10 @@ export default defineTool({
       expected: expectedPending,
       operation: "local-publication terminal recording",
       transition: (current) => {
+        const differentPendingCall =
+          current.phase !== "publication_pending" || current.publicationCallId !== ctx.callId;
         if (
-          current.phase !== "publication_pending" ||
-          current.publicationCallId !== ctx.callId ||
+          differentPendingCall ||
           current.publicationProposal.digest !== proposal.digest ||
           current.sourceReceipt.digest !== workflow.sourceReceipt.digest ||
           current.reviewReceipt.digest !== workflow.reviewReceipt.digest

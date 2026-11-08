@@ -16,9 +16,9 @@ const authority = {
   workspaceId: "workspace-one",
 };
 const hash = (v: string | Uint8Array) => createHash("sha256").update(v).digest("hex");
+const key = (k: SourceArtifactChunkKey) => JSON.stringify(k);
 const fixture = () => {
   const rows = new Map<string, string>();
-  const key = (k: SourceArtifactChunkKey) => JSON.stringify(k);
   const store = createImmutableSourceArtifactStore({
     get: (k) => Promise.resolve(rows.get(key(k))),
     put: (k, v) => {
@@ -86,7 +86,7 @@ describe("owned immutable source uploads", () => {
     await f.store.complete({ authority, reference });
     expect(f.rows.size).toBe(before);
     const restored = await f.store.readCompleted({ authority, reference });
-    const restoredFile = validateApplicationSourceArtifact(restored).files[0];
+    const [restoredFile] = validateApplicationSourceArtifact(restored).files;
     expect(restoredFile.mode).toBe("100755");
     expect([...restoredFile.bytes]).toEqual([0, 255, 128, 1]);
   });

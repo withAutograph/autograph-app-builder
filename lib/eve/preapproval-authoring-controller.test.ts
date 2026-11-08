@@ -73,7 +73,7 @@ const fixture = async () => {
       updatedAtEpochMs: 1,
     },
   });
-  await store.recordPreapprovalAuthoringDecision({ principal, sessionId: "public", decision });
+  await store.recordPreapprovalAuthoringDecision({ decision, principal, sessionId: "public" });
   const sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(async () => {});
   const observe = vi.fn(async () => ({ status: "waiting", pendingRequests: [] }));
   return {
@@ -106,8 +106,7 @@ describe("canonical preapproval authoring", () => {
     let operationId = "";
     let message = "";
     f.sendAccepted.mockImplementation(async (request) => {
-      operationId = request.operationId;
-      message = request.message;
+      ({ operationId, message } = request);
       throw new Error("lost ack");
     });
     expect((await continueHostedPreapprovalAuthoring(f)).error?.code).toBe(
@@ -195,13 +194,13 @@ describe("canonical preapproval authoring", () => {
     expect(
       hostedOperationRecordSchema.safeParse({
         ...common,
-        state: "reserved",
         internalBuildContinuation: {},
+        state: "reserved",
       }).success,
     ).toBe(false);
     for (const terminal of [
-      { state: "rejected", safeErrorCode: "denied" },
-      { state: "succeeded", result },
+      { safeErrorCode: "denied", state: "rejected" },
+      { result, state: "succeeded" },
     ]) {
       expect(
         isDeliveredInternalContinuation(
@@ -213,8 +212,8 @@ describe("canonical preapproval authoring", () => {
       isDeliveredInternalContinuation(
         hostedOperationRecordSchema.parse({
           ...common,
-          state: "submission_unknown",
           safeErrorCode: "lost_ack",
+          state: "submission_unknown",
         }),
       ),
     ).toBe(true);

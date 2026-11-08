@@ -5,6 +5,8 @@ import { assertExactReviewedChangeSet, stableDigest } from "./local-publication"
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 
+const emptyDirectoryKind = "empty-directory";
+
 export const FRESH_BOOTSTRAP_VERSION = 3 as const;
 
 export interface PathIdentity {
@@ -190,10 +192,10 @@ export const gitTreeId = (files: readonly FreshBootstrapFile[]): string => {
   const paths = new Set<string>();
   for (const file of files) {
     const components = file.path.split("/");
+    const invalidFileIdentity =
+      !safeSourcePath(file.path) || !/^[0-9a-f]{40}$/u.test(file.blob) || paths.has(file.path);
     if (
-      !safeSourcePath(file.path) ||
-      !/^[0-9a-f]{40}$/u.test(file.blob) ||
-      paths.has(file.path) ||
+      invalidFileIdentity ||
       components.some((component) =>
         [".git", ".repository-bootstrap-claim"].includes(component.toLowerCase()),
       ) ||
@@ -247,20 +249,29 @@ export const gitTreeId = (files: readonly FreshBootstrapFile[]): string => {
 };
 
 const commitActor = (identity: FreshBootstrapIdentity): string => {
+  const invalidIdentity = "The fresh-bootstrap Git identity is invalid.";
   if (
     !/^(?![.-])[A-Za-z0-9._/-]+$/u.test(identity.initialBranch) ||
     identity.initialBranch.includes("..") ||
     identity.initialBranch.includes("@{") ||
-    identity.initialBranch.includes("//") ||
+    identity.initialBranch.includes("//")
+  ) {
+    throw new Error(invalidIdentity);
+  }
+  if (
     identity.initialBranch.endsWith("/") ||
     identity.authorName.trim() !== identity.authorName ||
     identity.authorName.length === 0 ||
-    /[\n\r<>]/u.test(identity.authorName) ||
+    /[\n\r<>]/u.test(identity.authorName)
+  ) {
+    throw new Error(invalidIdentity);
+  }
+  if (
     !/^[^\s<>@]+@[^\s<>@]+$/u.test(identity.authorEmail) ||
     /[\0\r]/u.test(identity.commitMessage) ||
     identity.commitMessage.trim().length === 0
   ) {
-    throw new Error("The fresh-bootstrap Git identity is invalid.");
+    throw new Error(invalidIdentity);
   }
   const milliseconds = Date.parse(identity.commitTimestamp);
   const offset = /(?<sign>[+-])(?<hours>\d{2}):(?<minutes>\d{2})$/u.exec(identity.commitTimestamp);
@@ -404,22 +415,30 @@ const hasExactKeys = <Value extends object>(
 const pathIdentityKeys = ["path", "device", "inode", "uid", "mode", "nlink"] as const;
 const executableIdentityKeys = [...pathIdentityKeys, "sha256"] as const;
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+const isRecord = <Value>(value: Value): value is Value & Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const isPathIdentity = (value: unknown): value is PathIdentity => {
+const isPathIdentity = <Value>(value: Value): value is Value & PathIdentity => {
   if (!isRecord(value) || !hasExactKeys(value, pathIdentityKeys)) {
     return false;
   }
+  if (
+    typeof value.path !== "string" ||
+    !value.path.startsWith("/") ||
+    typeof value.device !== "string" ||
+    !/^\d+$/u.test(value.device)
+  ) {
+    return false;
+  }
+  if (
+    typeof value.inode !== "string" ||
+    !/^\d+$/u.test(value.inode) ||
+    typeof value.uid !== "string" ||
+    !/^\d+$/u.test(value.uid)
+  ) {
+    return false;
+  }
   return (
-    typeof value.path === "string" &&
-    value.path.startsWith("/") &&
-    typeof value.device === "string" &&
-    /^\d+$/u.test(value.device) &&
-    typeof value.inode === "string" &&
-    /^\d+$/u.test(value.inode) &&
-    typeof value.uid === "string" &&
-    /^\d+$/u.test(value.uid) &&
     typeof value.mode === "string" &&
     /^[0-7]+$/u.test(value.mode) &&
     typeof value.nlink === "string" &&
@@ -427,12 +446,16 @@ const isPathIdentity = (value: unknown): value is PathIdentity => {
   );
 };
 
-const isExecutableIdentity = (value: unknown): value is ExecutableIdentity =>
-  isRecord(value) &&
-  hasExactKeys(value, executableIdentityKeys) &&
-  isPathIdentity(Object.fromEntries(pathIdentityKeys.map((key) => [key, value[key]]))) &&
-  typeof value.sha256 === "string" &&
-  /^[0-9a-f]{64}$/u.test(value.sha256);
+const isExecutableIdentity = (value: unknown): value is ExecutableIdentity => {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, executableIdentityKeys) ||
+    !isPathIdentity(Object.fromEntries(pathIdentityKeys.map((key) => [key, value[key]])))
+  ) {
+    return false;
+  }
+  return typeof value.sha256 === "string" && /^[0-9a-f]{64}$/u.test(value.sha256);
+};
 
 const dirnameForComparison = (path: string): string => {
   const index = path.lastIndexOf("/");
@@ -440,26 +463,44 @@ const dirnameForComparison = (path: string): string => {
 };
 
 export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapProposal): void => {
+  const invalidProposal = "The fresh-bootstrap proposal is not canonical V3.";
   if (
     !isRecord(proposal) ||
     !isRecord(proposal.capability) ||
     !isRecord(proposal.destinationPrestate) ||
-    !isRecord(proposal.repositoryIdentity) ||
+    !isRecord(proposal.repositoryIdentity)
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     !Array.isArray(proposal.exactTree) ||
     !isPathIdentity(proposal.capability.stateRoot) ||
     !isPathIdentity(proposal.capability.allowedRoot) ||
-    !isPathIdentity(proposal.destinationPrestate.parent) ||
-    (proposal.destinationPrestate.kind === "empty-directory" &&
+    !isPathIdentity(proposal.destinationPrestate.parent)
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
+    (proposal.destinationPrestate.kind === emptyDirectoryKind &&
       !isPathIdentity(proposal.destinationPrestate.destination)) ||
-    (proposal.destinationPrestate.kind !== "empty-directory" &&
-      proposal.destinationPrestate.kind !== "absent") ||
+    (proposal.destinationPrestate.kind !== emptyDirectoryKind &&
+      proposal.destinationPrestate.kind !== "absent")
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     !isExecutableIdentity(proposal.capability.systemGitIdentity) ||
     !isExecutableIdentity(proposal.capability.systemPythonIdentity) ||
     !isExecutableIdentity(proposal.capability.systemNodeIdentity) ||
-    !isExecutableIdentity(proposal.capability.lockHelperIdentity) ||
-    (proposal.capability.lockStrategy !== "flock" && proposal.capability.lockStrategy !== "lockf")
+    !isExecutableIdentity(proposal.capability.lockHelperIdentity)
   ) {
-    throw new Error("The fresh-bootstrap proposal is not canonical V3.");
+    throw new Error(invalidProposal);
+  }
+  if (
+    proposal.capability.lockStrategy !== "flock" &&
+    proposal.capability.lockStrategy !== "lockf"
+  ) {
+    throw new Error(invalidProposal);
   }
   if (
     !hasExactKeys(proposal, [
@@ -507,12 +548,16 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
       "lockStrategy",
       "lockHelper",
       "lockHelperIdentity",
-    ]) ||
+    ])
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     ![
       proposal.capability.stateRoot,
       proposal.capability.allowedRoot,
       proposal.destinationPrestate.parent,
-      ...(proposal.destinationPrestate.kind === "empty-directory"
+      ...(proposal.destinationPrestate.kind === emptyDirectoryKind
         ? [proposal.destinationPrestate.destination]
         : []),
     ].every((value) => hasExactKeys(value, pathIdentityKeys)) ||
@@ -521,7 +566,11 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
       proposal.capability.systemPythonIdentity,
       proposal.capability.systemNodeIdentity,
       proposal.capability.lockHelperIdentity,
-    ].every((value) => hasExactKeys(value, executableIdentityKeys)) ||
+    ].every((value) => hasExactKeys(value, executableIdentityKeys))
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     !hasExactKeys(
       proposal.destinationPrestate,
       proposal.destinationPrestate.kind === "absent"
@@ -534,22 +583,38 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
       "authorEmail",
       "commitMessage",
       "commitTimestamp",
-    ]) ||
+    ])
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     !proposal.exactTree.every((file) => hasExactKeys(file, ["path", "mode", "blob"])) ||
     proposal.version !== FRESH_BOOTSTRAP_VERSION ||
     proposal.githubOutcome !== "unavailable" ||
-    proposal.releaseEnabled !== false ||
+    proposal.releaseEnabled !== false
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     !/^[0-9a-f]{64}$/u.test(proposal.atomicAdapterDigest) ||
     !/^[0-9a-f]{64}$/u.test(proposal.materializeAdapterDigest) ||
     proposal.destinationLockDigest !==
       stableDigest({
         allowedRoot: proposal.capability.allowedRoot,
         destinationPath: proposal.destinationPath,
-      }) ||
+      })
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     proposal.lockPath !==
       `${proposal.capability.stateRoot.path}/locks/${proposal.destinationLockDigest}.lock` ||
     dirnameForComparison(proposal.stagingPath) !== dirnameForComparison(proposal.destinationPath) ||
-    proposal.exactTreeDigest !== stableDigest(proposal.exactTree) ||
+    proposal.exactTreeDigest !== stableDigest(proposal.exactTree)
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     proposal.expectedGitTree !== gitTreeId(proposal.exactTree) ||
     proposal.expectedInitialCommit !==
       initialCommitId({
@@ -558,7 +623,7 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
       }) ||
     proposal.digest !== stableDigest(canonicalProposal(proposal))
   ) {
-    throw new Error("The fresh-bootstrap proposal is not canonical V3.");
+    throw new Error(invalidProposal);
   }
 };
 
@@ -567,7 +632,7 @@ export const freshBootstrapJournalDigest = (value: unknown) => stableDigest(valu
 export const proposalFromFreshBootstrapJournal = (
   journal: FreshBootstrapJournal,
 ): FreshBootstrapProposal => {
-  const candidate = { ...journal } as Record<string, unknown>;
+  const candidate = { ...journal };
   const digest = journal.proposalDigest;
   for (const key of [
     "proposalDigest",
@@ -733,7 +798,7 @@ export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJour
     (journal.status === "succeeded" &&
       (journal.recoveryRequired !== false ||
         journal.commitCount !== 1 ||
-        (journal.destinationPrestate.kind === "empty-directory") !==
+        (journal.destinationPrestate.kind === emptyDirectoryKind) !==
           (journal.swappedOldIdentity !== undefined))) ||
     digest !== freshBootstrapJournalDigest(unsigned) ||
     journal.proposalDigest !== proposal.digest
@@ -749,10 +814,12 @@ export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJour
     if (journal.swappedOldIdentity !== undefined) {
       assertExactPathIdentity(journal.swappedOldIdentity, "swapped-old");
     }
-    if (
+    const invalidHead =
       journal.headReference !== `refs/heads/${journal.repositoryIdentity.initialBranch}` ||
       journal.headCommit !== journal.expectedInitialCommit ||
-      journal.headTree !== journal.expectedGitTree ||
+      journal.headTree !== journal.expectedGitTree;
+    if (
+      invalidHead ||
       !/^[0-9a-f]{64}$/u.test(journal.remoteDigest) ||
       !/^[0-9a-f]{64}$/u.test(journal.worktreeDigest)
     ) {

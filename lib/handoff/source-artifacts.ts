@@ -1,9 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- The existing typed Drizzle database uses the repository schema namespace.
-import type * as schema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { prototypeArtifactChunks } from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { sourceCandidateReferenceSchema } from "./application-source-contract";
@@ -200,18 +198,19 @@ export const createImmutableSourceArtifactStore = (storage: SourceArtifactChunkS
   };
 };
 
-export const createSourceArtifactStore = (db: PostgresJsDatabase<typeof schema>) => {
-  const predicate = (k: SourceArtifactChunkKey) =>
-    and(
-      eq(prototypeArtifactChunks.issuer, k.authority.issuer),
-      eq(prototypeArtifactChunks.audience, k.authority.audience),
-      eq(prototypeArtifactChunks.workspaceId, k.authority.workspaceId),
-      eq(prototypeArtifactChunks.ownerUserId, k.authority.ownerUserId),
-      eq(prototypeArtifactChunks.sessionId, `source-upload:v1:${k.uploadId}`),
-      eq(prototypeArtifactChunks.path, k.path),
-      eq(prototypeArtifactChunks.transferDigest, k.transferDigest),
-      eq(prototypeArtifactChunks.chunkIndex, k.chunkIndex),
-    );
+const predicate = (k: SourceArtifactChunkKey) =>
+  and(
+    eq(prototypeArtifactChunks.issuer, k.authority.issuer),
+    eq(prototypeArtifactChunks.audience, k.authority.audience),
+    eq(prototypeArtifactChunks.workspaceId, k.authority.workspaceId),
+    eq(prototypeArtifactChunks.ownerUserId, k.authority.ownerUserId),
+    eq(prototypeArtifactChunks.sessionId, `source-upload:v1:${k.uploadId}`),
+    eq(prototypeArtifactChunks.path, k.path),
+    eq(prototypeArtifactChunks.transferDigest, k.transferDigest),
+    eq(prototypeArtifactChunks.chunkIndex, k.chunkIndex),
+  );
+
+export const createSourceArtifactStore = (db: HostedDatabase) => {
   const get = async (k: SourceArtifactChunkKey) => {
     const [row] = await db
       .select({

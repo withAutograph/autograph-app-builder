@@ -36,7 +36,10 @@ function runLookup(options: LookupOptions) {
     if (lookupError) {
       throw lookupError;
     }
-    return { address: lookupAddress as string | LookupAddress[], family: lookupFamily };
+    if (lookupAddress === undefined) {
+      throw new Error("Expected a DNS lookup address.");
+    }
+    return { address: lookupAddress, family: lookupFamily };
   });
 }
 
@@ -62,7 +65,7 @@ function requestFixture(input: { lookupOptions: LookupOptions; responseStatus?: 
             request.emit("error", error);
             return;
           }
-          if (input.lookupOptions.all) {
+          if (input.lookupOptions.all === true) {
             expect(address).toEqual(publicAddresses);
           } else {
             expect(address).toBe(publicAddresses[0].address);
@@ -150,7 +153,7 @@ describe("Preview CIMD transport", () => {
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
       requestHttps,
-      resolveHostname: vi.fn(() => once(new EventTarget(), "pending") as Promise<LookupAddress[]>),
+      resolveHostname: vi.fn(() => Promise.withResolvers<LookupAddress[]>().promise),
       timeoutSignal,
     });
 
@@ -169,7 +172,7 @@ describe("Preview CIMD transport", () => {
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
       requestHttps,
-      resolveHostname: vi.fn(() => once(new EventTarget(), "pending") as Promise<LookupAddress[]>),
+      resolveHostname: vi.fn(() => Promise.withResolvers<LookupAddress[]>().promise),
     });
 
     const rejection = expect(

@@ -69,7 +69,7 @@ const hasUniqueApprovedBinding = (parts: z.infer<typeof partSchema>[], id: strin
   if (requests.length !== 1) {
     return false;
   }
-  const approvalId = requests[0].approvalId;
+  const [{ approvalId }] = requests;
   if (approvalId === undefined || approvalId.length === 0) {
     return false;
   }

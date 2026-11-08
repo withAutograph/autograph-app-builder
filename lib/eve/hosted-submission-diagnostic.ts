@@ -144,9 +144,9 @@ export const sendDeliveryObservationDiagnostic = (input: {
   nativeRead?: NativeSendReadObservation;
 }): SendDeliveryObservationDiagnostic => {
   const turns = input.proof?.turns ?? [];
-  const deliveryId = input.delivery.deliveryId;
+  const { deliveryId } = input.delivery;
   const matches = turns.filter((turn) => turn.deliveryIds.includes(deliveryId));
-  return {
+  const observation: SendDeliveryObservationDiagnostic = {
     ackObserved: true,
     sameAdapterSession: input.binding.adapterSessionId === input.delivery.adapterSessionId,
     sameAdapterGeneration: input.binding.adapterGeneration === input.delivery.adapterGeneration,
@@ -167,8 +167,11 @@ export const sendDeliveryObservationDiagnostic = (input: {
     currentTurnPresent:
       input.nativeRead?.currentTurnPresent ?? input.proof?.currentTurnId !== undefined,
     nativeReadObserved: input.nativeRead !== undefined,
-    ...(input.nativeRead === undefined ? {} : { nativeRead: input.nativeRead }),
   };
+  if (input.nativeRead !== undefined) {
+    observation.nativeRead = input.nativeRead;
+  }
+  return observation;
 };
 
 export interface HostedSubmissionDiagnostic {

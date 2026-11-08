@@ -21,6 +21,10 @@ import { localSourceBaselineManifestSchema } from "./local-source-baseline-contr
 import type { LocalSourceBaselineManifest } from "./local-source-baseline-contract";
 import type { LocalOperatorArtifactAuthority } from "../provisioning/hosted-operator-artifact-store";
 
+const gitExecutable = "/usr/bin/git";
+const gitExecutablePath = "/usr/bin:/bin";
+const sourceRepositoryDirectory = "source.git";
+
 // oxlint-disable-next-line promise/avoid-new -- Convert the concrete child-process close/error callbacks into one typed completion value.
 export const localBaselineProcessExit = (child: ChildProcess): Promise<number> =>
   // oxlint-disable-next-line promise/avoid-new -- Typed adaptation of native child-process lifecycle callbacks.
@@ -42,14 +46,14 @@ const ensureDirectory = async (directory: string) => {
 
 export const localBaselineGit = (root: string, args: string[], input?: Uint8Array | string) =>
   execFileSync(
-    "/usr/bin/git",
+    gitExecutable,
     ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "--git-dir", root, ...args],
     {
       input,
       maxBuffer: 32 * 1024 * 1024,
       env: {
         NODE_ENV: "test",
-        PATH: "/usr/bin:/bin",
+        PATH: gitExecutablePath,
         HOME: path.dirname(root),
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_NO_REPLACE_OBJECTS: "1",
@@ -93,10 +97,10 @@ export const committedDevelopmentInventory = async (gitRoot: string, sourceSha: 
       }
       return 0;
     });
-  const child = spawn("/usr/bin/git", ["--git-dir", gitRoot, "cat-file", "--batch"], {
+  const child = spawn(gitExecutable, ["--git-dir", gitRoot, "cat-file", "--batch"], {
     env: {
       NODE_ENV: "test",
-      PATH: "/usr/bin:/bin",
+      PATH: gitExecutablePath,
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_NO_REPLACE_OBJECTS: "1",
       GIT_CONFIG_GLOBAL: "/dev/null",
@@ -209,7 +213,7 @@ const readOwnedManifest = async (root: string, uid: number) => {
 };
 const validateStored = async (root: string, manifest: LocalSourceBaselineManifest, uid: number) => {
   await ownedDirectory(root, uid);
-  await ownedDirectory(path.join(root, "source.git"), uid);
+  await ownedDirectory(path.join(root, sourceRepositoryDirectory), uid);
   const stored = await readOwnedManifest(root, uid);
   if (
     stored.originalSourceSha !== manifest.originalSourceSha ||
@@ -219,7 +223,7 @@ const validateStored = async (root: string, manifest: LocalSourceBaselineManifes
   ) {
     throw new Error("source_baseline_conflict");
   }
-  const gitRoot = path.join(root, "source.git");
+  const gitRoot = path.join(root, sourceRepositoryDirectory);
   if (
     localBaselineGit(gitRoot, ["rev-parse", "HEAD"]).toString().trim() !== manifest.sourceSha ||
     localBaselineGit(gitRoot, ["rev-parse", "HEAD^{tree}"]).toString().trim() !==
@@ -277,7 +281,7 @@ export const retainLocalSourceBaseline = async (input: {
     }
   }
   const temporary = await mkdtemp(path.join(parent, ".capture-"));
-  const gitRoot = path.join(temporary, "source.git");
+  const gitRoot = path.join(temporary, sourceRepositoryDirectory);
   await mkdir(gitRoot, { mode: 0o700 });
   localBaselineGit(gitRoot, ["init", "--bare", "--quiet"]);
   await writeFile(
@@ -285,10 +289,10 @@ export const retainLocalSourceBaseline = async (input: {
     `${[...new Set([manifest.originalSourceSha, manifest.sourceSha])].join("\n")}\n`,
     { mode: 0o600, flag: "wx" },
   );
-  const child = spawn("/usr/bin/git", ["--git-dir", gitRoot, "index-pack", "--stdin", "--strict"], {
+  const child = spawn(gitExecutable, ["--git-dir", gitRoot, "index-pack", "--stdin", "--strict"], {
     env: {
       NODE_ENV: "test",
-      PATH: "/usr/bin:/bin",
+      PATH: gitExecutablePath,
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_NO_REPLACE_OBJECTS: "1",
       GIT_CONFIG_GLOBAL: "/dev/null",

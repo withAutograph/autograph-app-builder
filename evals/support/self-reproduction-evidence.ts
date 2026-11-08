@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { appendFileSync } from "node:fs";
 
+const redactedPrefix = "$<prefix>[REDACTED]";
+
 export const evidencePrefix = "SELF_REPRODUCTION_EVIDENCE ";
 
 // Apply to structured receipts and native diagnostics before persistence. Never
@@ -13,21 +15,21 @@ export function sanitizeEvidence(value: unknown): unknown {
       .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, "[REDACTED JWT]")
       .replaceAll(
         /(?<prefix>[A-Z_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)[A-Z_]*["']?\s*[:=]\s*["']?)[^\s"',}]+/gu,
-        "$<prefix>[REDACTED]",
+        redactedPrefix,
       )
       .replaceAll(
         /(?<prefix>["'](?:authorization|cookie|continuationToken|[^"']*(?:token|secret|password)|api[_-]?key)["']\s*:\s*["'])[^"']+/giu,
-        "$<prefix>[REDACTED]",
+        redactedPrefix,
       )
       .replaceAll(
         /(?<prefix>[?&](?:token|key|signature|code|state|x-vercel-protection-bypass)=)[^&\s"']+/giu,
-        "$<prefix>[REDACTED]",
+        redactedPrefix,
       );
   }
   if (Array.isArray(value)) {
     return value.map(sanitizeEvidence);
   }
-  if (value && typeof value === "object") {
+  if (typeof value === "object" && value !== null) {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         key,
@@ -136,13 +138,15 @@ function changeSetStatusOutput(
   if (event?.type !== "action.result" || !event.data?.result) {
     return undefined;
   }
-  if (["change-set-status", "change_set_status"].includes(event.data.result.toolName as string)) {
+  const { toolName: resultToolName } = event.data.result;
+  if (resultToolName === "change-set-status" || resultToolName === "change_set_status") {
     const { output } = event.data.result;
-    return output && typeof output === "object" && !Array.isArray(output)
+    return typeof output === "object" && output !== null && !Array.isArray(output)
       ? (output as Record<string, unknown>)
       : undefined;
   }
-  return ["change-set-status", "change_set_status"].includes(event.data.toolName as string)
+  const { toolName } = event.data;
+  return toolName === "change-set-status" || toolName === "change_set_status"
     ? event.data.result
     : undefined;
 }
@@ -174,7 +178,7 @@ export function candidateExportFromEvidence(
     const validated: CandidateExportFile[] = [];
     const paths = new Set<string>();
     for (const file of files) {
-      if (!file || typeof file !== "object" || Array.isArray(file)) {
+      if (typeof file !== "object" || file === null || Array.isArray(file)) {
         return undefined;
       }
       const { path, content } = file as { path?: unknown; content?: unknown };
@@ -182,7 +186,11 @@ export function candidateExportFromEvidence(
         typeof path !== "string" ||
         typeof content !== "string" ||
         path.startsWith("/") ||
-        path.includes("\\") ||
+        path.includes("\\")
+      ) {
+        return undefined;
+      }
+      if (
         path.split("/").some((segment) => !segment || segment === "." || segment === "..") ||
         paths.has(path)
       ) {
@@ -194,7 +202,8 @@ export function candidateExportFromEvidence(
     const appRoots = new Set(
       validated.flatMap((file) => {
         const match = /^(?<appRoot>apps\/[^/]+)\/next\.config\.(?:[cm]?[jt]s)$/u.exec(file.path);
-        return match?.groups?.appRoot ? [match.groups.appRoot] : [];
+        const appRoot = match?.groups?.appRoot;
+        return appRoot !== undefined && appRoot !== "" ? [appRoot] : [];
       }),
     );
     if (appRoots.size === 1) {

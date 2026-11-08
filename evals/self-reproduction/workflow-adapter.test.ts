@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import type { Page } from "playwright";
 import type * as Harness from "../../e2e/support/harness";
 import { createWorkflowAdapters } from "./workflow-adapter";
 import { describe, expect, it, vi } from "vitest";
@@ -33,7 +32,7 @@ describe("self-reproduction default workflow adapter", () => {
       outputRoot: "/tmp/evidence",
       referenceUrl: "https://localhost:3001",
     });
-    const prepared = await reference?.prepare({} as Page, "app-creation");
+    const prepared = await reference?.prepare({}, "app-creation");
     expect(prepared).toEqual({
       disposition: "not-run",
       ready: false,
@@ -48,8 +47,10 @@ describe("candidate workflow evidence boundaries", () => {
       candidateUrl: "https://candidate.example/replica/",
       outputRoot: "/tmp/evidence",
     });
-    const goto = vi.fn().mockResolvedValue({ ok: () => true });
-    expect(await candidate?.prepare({ goto } as unknown as Page, "documentation")).toEqual({
+    const goto = vi
+      .fn<(url: string) => Promise<{ ok: () => boolean } | null>>()
+      .mockResolvedValue({ ok: () => true });
+    expect(await candidate?.prepare({ goto }, "documentation")).toEqual({
       ready: true,
     });
     expect(goto).toHaveBeenCalledWith("https://candidate.example/replica/");
@@ -62,8 +63,8 @@ describe("candidate workflow evidence boundaries", () => {
         candidateUrl: "https://candidate.example/replica/",
         outputRoot: "/tmp/evidence",
       });
-      const goto = vi.fn();
-      expect(await candidate?.prepare({ goto } as unknown as Page, workflow)).toMatchObject({
+      const goto = vi.fn<(url: string) => Promise<{ ok: () => boolean } | null>>();
+      expect(await candidate?.prepare({ goto }, workflow)).toMatchObject({
         disposition: "not-run",
         ready: false,
       });
@@ -76,7 +77,7 @@ describe("candidate workflow evidence boundaries", () => {
       outputRoot: "/tmp/evidence",
       referenceUrl: "https://localhost:3001",
     });
-    expect(await reference?.prepare({} as Page, "authentication")).toMatchObject({
+    expect(await reference?.prepare({}, "authentication")).toMatchObject({
       ready: true,
     });
   });
@@ -88,7 +89,7 @@ it("blocks authentication when the evaluator passkey fixture cannot be configure
     outputRoot: "/tmp/evidence",
     referenceUrl: "https://localhost:3001",
   });
-  expect(await reference?.prepare({} as Page, "authentication")).toMatchObject({
+  expect(await reference?.prepare({}, "authentication")).toMatchObject({
     disposition: "infrastructure-unavailable",
     ready: false,
   });
@@ -100,7 +101,7 @@ it("reads the isolated reference fixture flag secret", async () => {
     referenceFixtureRoot: "/tmp/isolated-reference",
     referenceUrl: "https://localhost:3001",
   });
-  await reference?.prepare({} as Page, "authentication");
+  await reference?.prepare({}, "authentication");
   expect(readFile).toHaveBeenCalledWith("/tmp/isolated-reference/.emulate/flags-secret", "utf-8");
 });
 
@@ -109,5 +110,5 @@ it("binds the real reference provider denial and replay fixture", async () => {
     outputRoot: "/tmp/evidence",
     referenceUrl: "https://localhost:3001",
   });
-  expect(await reference?.prepare({} as Page, "provider-return-error")).toEqual({ ready: true });
+  expect(await reference?.prepare({}, "provider-return-error")).toEqual({ ready: true });
 });

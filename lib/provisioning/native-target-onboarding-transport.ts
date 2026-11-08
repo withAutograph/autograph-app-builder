@@ -95,10 +95,10 @@ export const nativeTargetApprovalCandidateResultSchema = z.strictObject({
   status: z.literal("allowed"),
 });
 export const nativeTargetTransportResponseSchemas = {
+  "native-target-approval-candidate": nativeTargetApprovalCandidateResultSchema,
+  "native-target-approval-read": nativeTargetTerminalApprovalResultSchema,
   "native-target-plan": nativeTargetOnboardingResultSchema,
   "native-target-prepare": nativeTargetOnboardingResultSchema,
-  "native-target-approval-read": nativeTargetTerminalApprovalResultSchema,
-  "native-target-approval-candidate": nativeTargetApprovalCandidateResultSchema,
 } as const;
 
 export type NativeTargetTransportResponse =

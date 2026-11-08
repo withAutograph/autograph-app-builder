@@ -335,6 +335,16 @@ const sameDraft = (
   current.draft &&
   current.state === "open";
 
+const withInspectionRecovery = (
+  request: ExistingDraftInspectionRequest,
+  input: { recovery?: OwnedDraftInspectionRecovery },
+): ExistingDraftInspectionRequest => {
+  if (input.recovery !== undefined) {
+    request.recovery = input.recovery;
+  }
+  return request;
+};
+
 // oxlint-disable-next-line eslint/complexity -- Bind every original publication, current draft and reviewed merge field at the sealing boundary.
 export const sealExistingDraftReconciliation = async (input: {
   adapter: ExistingDraftReconciliationAdapter;
@@ -357,13 +367,17 @@ export const sealExistingDraftReconciliation = async (input: {
       "The selected GitHub installation cannot reconcile this repository's draft PR.",
     );
   }
-  const observed = await input.adapter.inspectExistingDraft({
-    name: input.repository.name,
-    number: input.pullRequestNumber,
-    owner: input.repository.owner,
-    repositoryId: input.repository.repositoryId,
-    ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
-  });
+  const observed = await input.adapter.inspectExistingDraft(
+    withInspectionRecovery(
+      {
+        name: input.repository.name,
+        number: input.pullRequestNumber,
+        owner: input.repository.owner,
+        repositoryId: input.repository.repositoryId,
+      },
+      input,
+    ),
+  );
   if (input.selectedSourceRef !== `refs/heads/${observed.headBranch}`) {
     throw new Error(
       "Builder's selected source is not the current draft PR branch. Reopen that branch and review its changes.",
@@ -484,14 +498,18 @@ const inspectDraftAfterWrite = async (input: {
   recovery?: OwnedDraftInspectionRecovery;
 }): Promise<ExistingDraftObservation> => {
   try {
-    return await input.adapter.inspectExistingDraft({
-      name: input.proposal.name,
-      number: input.proposal.pullRequestNumber,
-      owner: input.proposal.owner,
-      repositoryId: input.proposal.repositoryId,
-      reconciliation: input.proposal,
-      ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
-    });
+    return await input.adapter.inspectExistingDraft(
+      withInspectionRecovery(
+        {
+          name: input.proposal.name,
+          number: input.proposal.pullRequestNumber,
+          owner: input.proposal.owner,
+          repositoryId: input.proposal.repositoryId,
+          reconciliation: input.proposal,
+        },
+        input,
+      ),
+    );
   } catch (readbackError) {
     const prefix =
       input.writeError === undefined
@@ -544,14 +562,18 @@ export const inspectAppliedExistingDraftReconciliation = async (input: {
       "GitHub installation access changed before reconciliation. Reconnect and seal a new proposal.",
     );
   }
-  const current = await input.adapter.inspectExistingDraft({
-    name: proposal.name,
-    number: proposal.pullRequestNumber,
-    owner: proposal.owner,
-    repositoryId: proposal.repositoryId,
-    reconciliation: proposal,
-    ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
-  });
+  const current = await input.adapter.inspectExistingDraft(
+    withInspectionRecovery(
+      {
+        name: proposal.name,
+        number: proposal.pullRequestNumber,
+        owner: proposal.owner,
+        repositoryId: proposal.repositoryId,
+        reconciliation: proposal,
+      },
+      input,
+    ),
+  );
   if (!sameDraft(proposal, current)) {
     throw new Error(
       "The PR identity changed or is no longer an open draft. Reopen and review the current PR.",
@@ -599,12 +621,15 @@ export const reconcileExistingDraft = async (input: {
   try {
     result = await input.adapter.reconcileExistingDraft(proposal, content, input.recovery);
   } catch (error) {
-    const latest = await inspectDraftAfterWrite({
+    const readback: Parameters<typeof inspectDraftAfterWrite>[0] = {
       adapter: input.adapter,
       proposal,
       writeError: error,
-      ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
-    });
+    };
+    if (input.recovery !== undefined) {
+      readback.recovery = input.recovery;
+    }
+    const latest = await inspectDraftAfterWrite(readback);
     if (
       sameDraft(proposal, latest) &&
       (await input.adapter.inspectAppliedDraftReconciliation(proposal, latest, input.recovery))
@@ -619,11 +644,14 @@ export const reconcileExistingDraft = async (input: {
       `GitHub rejected the draft reconciliation (${result.code}${location}). Refresh both branch heads and the reviewed merge before retrying.`,
     );
   }
-  const updated = await inspectDraftAfterWrite({
+  const readback: Parameters<typeof inspectDraftAfterWrite>[0] = {
     adapter: input.adapter,
     proposal,
-    ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
-  });
+  };
+  if (input.recovery !== undefined) {
+    readback.recovery = input.recovery;
+  }
+  const updated = await inspectDraftAfterWrite(readback);
   if (
     !sameDraft(proposal, updated) ||
     !(await input.adapter.inspectAppliedDraftReconciliation(proposal, updated, input.recovery))

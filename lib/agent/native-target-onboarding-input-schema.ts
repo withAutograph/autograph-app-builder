@@ -3,7 +3,7 @@ import { z } from "zod";
 import { nativeTargetOnboardingPlanSchema } from "../provisioning/native-target-onboarding-plan-schema";
 import { nativeTargetProviderAuthorizationSchema } from "../provisioning/native-target-vercel-authorization";
 
-const appId = nativeTargetOnboardingPlanSchema.shape.appId;
+const { appId } = nativeTargetOnboardingPlanSchema.shape;
 export const nativeTargetPlanRequestSchema = z.strictObject({
   appId,
   resourceProfileId: nativeTargetOnboardingPlanSchema.shape.resourceProfileId,

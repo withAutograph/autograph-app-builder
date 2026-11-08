@@ -267,9 +267,9 @@ export const readHostedOperatorProviderInventory = async (input: {
     await readWithDiagnostic(
       target.sessionId,
       {
-        target: "inventory",
         operation: "owner",
         phase: "owner",
+        target: "inventory",
       },
       input.diagnosticSink,
       () => input.assertCurrentOwner(),
@@ -277,9 +277,9 @@ export const readHostedOperatorProviderInventory = async (input: {
     const credential = await readWithDiagnostic(
       target.sessionId,
       {
-        target: "inventory",
         operation: "credential",
         phase: "credential",
+        target: "inventory",
       },
       input.diagnosticSink,
       () =>
@@ -293,9 +293,9 @@ export const readHostedOperatorProviderInventory = async (input: {
       reportOperatorInventoryReadFailure(
         target.sessionId,
         {
-          target: "inventory",
           operation: "credential",
           phase: "credential",
+          target: "inventory",
         },
         error,
         input.diagnosticSink,

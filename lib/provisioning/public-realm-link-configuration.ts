@@ -84,8 +84,8 @@ const open = (record: z.infer<typeof savedSchema>, keyring: VercelTokenKeyringCo
     JSON.parse(
       decryptVersionedVercelToken({
         ...record.sealedConfiguration,
-        config: keyring,
         associatedData: `public-realm-enrollment-v1:${record.scopeDigest}`,
+        config: keyring,
       }),
     ),
   );
@@ -144,7 +144,7 @@ export const resolvePublicRealmEnrollment = async (input: {
     .parse(input.originalSetup);
   const authority = hostedTenantAuthoritySchema.parse(input.owner.authority);
   const resource = publicRealmResourceSchema.parse(input.authResource);
-  const configuration = input.configuration;
+  const { configuration } = input;
   const workload = sender.parse(
     z.object({ standardRuntime: z.object({ publicRealmWorkload: sender }) }).parse(configuration)
       .standardRuntime.publicRealmWorkload,
@@ -216,7 +216,7 @@ export const resolvePublicRealmEnrollment = async (input: {
       .where(and(ownerPredicate(authority), eq(builderProvisioningJournals.requestId, requestId)))
       .limit(1);
     await input.assertCurrentOwner();
-    const row = rows[0];
+    const [row] = rows;
     if (row === undefined) {
       // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing enrollment metadata is an explicit optional result, not an activated realm.
       return undefined;
@@ -241,28 +241,28 @@ export const resolvePublicRealmEnrollment = async (input: {
   if (linkConfiguration === undefined) {
     const enrollment = publicRealmEnrollmentSchema.parse({
       ...scope,
+      enrollmentRef: randomUUID(),
       kind: "public-isolated-realm-v1",
       version: 1,
-      enrollmentRef: randomUUID(),
     });
     const proposed = publicRealmLinkConfigurationSchema.parse({
-      publicEnrollment: enrollment,
       browserOrigin: scope.publicOrigin,
-      builderCallbackOrigin: context.builderCallbackOrigin,
-      builderCallbackPath: "/api/hosted-operator/realm-identity",
-      operatorOrigin: context.operatorOrigin,
-      identityHandoff: { sender: workload },
       browserSessionCapture: {
         path: "/api/hosted-operator/realm-browser-session",
         sender: workload,
       },
+      builderCallbackOrigin: context.builderCallbackOrigin,
+      builderCallbackPath: "/api/hosted-operator/realm-identity",
+      identityHandoff: { sender: workload },
+      operatorOrigin: context.operatorOrigin,
+      publicEnrollment: enrollment,
       readonlyAttesters,
     });
     const sealedConfiguration = {
       ...encryptVercelToken({
+        associatedData: `public-realm-enrollment-v1:${digest}`,
         key: input.keyring.tokenKey,
         token: JSON.stringify(proposed),
-        associatedData: `public-realm-enrollment-v1:${digest}`,
       }),
       keyVersion: input.keyring.tokenKeyVersion,
     };
@@ -277,9 +277,9 @@ export const resolvePublicRealmEnrollment = async (input: {
         state: "pending",
         revision: 1,
         record: savedSchema.parse({
+          enrollment,
           kind: "public-realm-enrollment-v1",
           scopeDigest: digest,
-          enrollment,
           sealedConfiguration,
         }),
         createdAt: now,

@@ -35,7 +35,7 @@ const harness = (
   const effects: unknown[] = [];
   const graphql = (body: string) => {
     if (draft && body.includes("mutation ReadyForReview")) {
-      effects.push({ path: "/graphql", body });
+      effects.push({ body, path: "/graphql" });
       if (input.readyDenied === true) {
         return {
           data: { markPullRequestReadyForReview: null },
@@ -66,7 +66,7 @@ const harness = (
   // oxlint-disable-next-line eslint/require-await -- In-memory provider double implements the asynchronous transport.
   const provider = createGitHubPrDeliveryProvider(async () => async ({ path, method, body }) => {
     if (method === "PUT") {
-      effects.push({ path, body });
+      effects.push({ body, path });
       merged = true;
       return { merged, sha: merge };
     }
@@ -147,19 +147,19 @@ describe("GitHub pull request delivery", () => {
   it("recognizes only the bound PR's current ready-cycle Check and guards the merge by SHA", async () => {
     const { effects, provider } = harness();
     await expect(provider.inspect(ref)).resolves.toMatchObject({
-      checks: "passed",
       checkRunId: 11,
+      checks: "passed",
     });
     await expect(provider.merge(ref, readyAt)).resolves.toMatchObject({
-      state: "merged",
       mergeCommitSha: merge,
+      state: "merged",
     });
     await expect(provider.merge(ref, readyAt)).resolves.toMatchObject({
-      state: "merged",
       mergeCommitSha: merge,
+      state: "merged",
     });
     expect(effects).toEqual([
-      { path: "/repos/owner/app/pulls/7/merge", body: { sha: head, merge_method: "squash" } },
+      { body: { merge_method: "squash", sha: head }, path: "/repos/owner/app/pulls/7/merge" },
     ]);
   });
 
@@ -205,8 +205,8 @@ describe("GitHub pull request delivery", () => {
 
   it("marks a bound draft ready once and reads back the result", async () => {
     const { effects, provider } = harness({ draft: true });
-    await expect(provider.markReady(ref)).resolves.toMatchObject({ state: "open", draft: false });
-    await expect(provider.markReady(ref)).resolves.toMatchObject({ state: "open", draft: false });
+    await expect(provider.markReady(ref)).resolves.toMatchObject({ draft: false, state: "open" });
+    await expect(provider.markReady(ref)).resolves.toMatchObject({ draft: false, state: "open" });
     expect(effects).toHaveLength(1);
   });
 });

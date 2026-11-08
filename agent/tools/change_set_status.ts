@@ -70,6 +70,11 @@ interface ExportOmission {
   path: string;
   reason: string;
 }
+interface ExportTextPathChunk {
+  contentCursor?: ChangeSetExportCursor;
+  file?: ExportFile;
+  omission?: ExportOmission;
+}
 
 const exportTextPathChunk = async (input: {
   contentCursor?: ChangeSetExportCursor;
@@ -81,11 +86,7 @@ const exportTextPathChunk = async (input: {
   index: number;
   path: string;
   readText: (path: string) => PromiseLike<string | null>;
-}): Promise<{
-  contentCursor?: ChangeSetExportCursor;
-  file?: ExportFile;
-  omission?: ExportOmission;
-}> => {
+}): Promise<ExportTextPathChunk> => {
   const content = await input.readText(input.path);
   if (content === null) {
     return { omission: { path: input.path, reason: "changed text file could not be read" } };
@@ -127,14 +128,12 @@ const exportTextPathChunk = async (input: {
     }),
     offsetBytes,
   });
-  return {
-    ...(chunk.nextOffsetBytes < contentBytes
-      ? {
-          contentCursor: { digest, offsetBytes: chunk.nextOffsetBytes, path: input.path },
-        }
-      : {}),
-    file: { content: chunk.content, digest, offsetBytes, path: input.path },
-  };
+  const result: ExportTextPathChunk = {};
+  if (chunk.nextOffsetBytes < contentBytes) {
+    result.contentCursor = { digest, offsetBytes: chunk.nextOffsetBytes, path: input.path };
+  }
+  result.file = { content: chunk.content, digest, offsetBytes, path: input.path };
+  return result;
 };
 
 export const changedAppTextPaths = (
@@ -486,17 +485,16 @@ export const observeNormalizedChangeSet = async (input: {
           includeBaselinePlanningSpecs,
           input.state.proposal.target.frameworkUpgrade !== undefined,
         );
+  const applyReceipt = { ...input.state.applyReceipt };
+  if (selectedBaseline !== undefined || destination !== undefined) {
+    applyReceipt.preTree = preTree;
+    applyReceipt.preTreeDigest = createHash("sha256")
+      .update(JSON.stringify(canonicalOverlayFiles(preTree)))
+      .digest("hex");
+  }
   const changeSet = deriveNormalizedChangeSet(
     {
-      ...input.state.applyReceipt,
-      ...(selectedBaseline === undefined && destination === undefined
-        ? {}
-        : {
-            preTree,
-            preTreeDigest: createHash("sha256")
-              .update(JSON.stringify(canonicalOverlayFiles(preTree)))
-              .digest("hex"),
-          }),
+      ...applyReceipt,
       changedContentDigest: createHash("sha256").update(JSON.stringify(changes)).digest("hex"),
       changes,
       postTree: observed.files,

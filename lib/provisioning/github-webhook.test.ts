@@ -1,9 +1,8 @@
 import { createHmac } from "node:crypto";
 
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { describe, expect, it } from "vitest";
 
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { createGitHubProvisioningWebhookHandler } from "./github-webhook";
 
 const secret = "github-webhook-secret-that-is-long-enough";
@@ -49,7 +48,7 @@ function database() {
   };
   return {
     updates,
-    value: value as unknown as PostgresJsDatabase<typeof databaseSchema>,
+    value: value as unknown as HostedDatabase,
   };
 }
 

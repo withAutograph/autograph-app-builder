@@ -24,10 +24,10 @@ describe("unapproved app capture continuity", () => {
     const { record, added: baseAdded } = captureFixture();
     const added = normalActorProgramSchema.parse({
       ...baseAdded,
-      organizations: [
-        { organizationId: "qa-org", ownerActorKey: "reviewer", name: "QA", slug: "qa" },
-      ],
       memberships: [{ actorKey: "reviewer", organizationId: "qa-org", role: "owner" }],
+      organizations: [
+        { name: "QA", organizationId: "qa-org", ownerActorKey: "reviewer", slug: "qa" },
+      ],
     });
     const previous = requiredFixture(record.operator);
     const gateway = structuredClone(requiredFixture(record.retainedAuth));
@@ -37,12 +37,17 @@ describe("unapproved app capture continuity", () => {
     gateway.plan = previous.plan;
     gateway.planDigest = operatorPlanDigest(gateway.plan);
     gateway.fenceGeneration = 1;
-    gateway.receipts = gateway.plan.effects.map((effect) => ({
-      effectId: effect.id,
-      observedAt,
-      resourceVersion: "actual-readback",
-      ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
-    }));
+    gateway.receipts = gateway.plan.effects.map((effect) => {
+      const receipt: (typeof gateway.receipts)[number] = {
+        effectId: effect.id,
+        observedAt,
+        resourceVersion: "actual-readback",
+      };
+      if (effect.kind === "access") {
+        receipt.fenceGeneration = 1;
+      }
+      return receipt;
+    });
     const gatewayCandidate = {
       ...requiredFixture(previous.gatewayDeliveryCandidates?.[0]),
       operationRef: gateway.operationRef,
@@ -80,7 +85,7 @@ describe("unapproved app capture continuity", () => {
     );
     const nextPlan = createUnapprovedParticipantPlan(candidate, added);
     const pointer = requiredFixture(nextPlan.normalActorCapturePredecessor);
-    const auth = candidate.bootstrap.auth;
+    const { auth } = candidate.bootstrap;
     const old = structuredClone(requiredFixture(record.operator));
     record.unapprovedAppProposalHistory = [
       {
@@ -104,22 +109,21 @@ describe("unapproved app capture continuity", () => {
       receipts: [],
     };
     record.approvedByCallId = "new-call";
-    let row: HostedRuntimeJournalRow = { revision: 1, record };
+    let row: HostedRuntimeJournalRow = { record, revision: 1 };
     const checks: string[] = [];
     let revoked = "";
     const journal = createNormalActorJournal({
-      keyring,
-      now,
-      assertAuthorized: async () => {},
-      assertMutationAuthority: async () => {},
       assertAccountApproval: async (_context, preparation) => {
         checks.push(preparation.accountApprovalId);
         if (preparation.accountApprovalId === revoked) {
           throw new Error("approval_revoked");
         }
       },
+      assertAuthorized: async () => {},
+      assertMutationAuthority: async () => {},
+      keyring,
+      now,
       store: {
-        read: async () => structuredClone(row),
         compareAndSet: async (input) => {
           if (input.expectedRevision !== row.revision) {
             return undefined;
@@ -127,6 +131,7 @@ describe("unapproved app capture continuity", () => {
           row = { record: input.record, revision: row.revision + 1 };
           return structuredClone(row);
         },
+        read: async () => structuredClone(row),
       },
     });
     const input = {
@@ -215,13 +220,13 @@ describe("unapproved app capture continuity", () => {
         activeOrganizationId: "existing-organization",
       };
       await journal.capture(context, {
-        version: 1,
         actorKey: "owner",
         nonceSha256: nonce,
-        proofSha256,
-        proof,
-        session,
         normalCookie: cookie,
+        proof,
+        proofSha256,
+        session,
+        version: 1,
       });
       const { hostOnly, ...storageCookie } = cookie;
       void hostOnly;

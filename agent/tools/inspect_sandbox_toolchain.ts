@@ -45,6 +45,10 @@ export const inspectSandboxCommand = async (
   };
 };
 
+interface SandboxRuntimeResources {
+  runtimeResources?: Awaited<ReturnType<typeof inspectSandboxRuntimeResources>>;
+}
+
 export default defineTool({
   description:
     "Read advisory Sandbox command availability/version and image/cache observations without installing packages or mutating the workspace. toolchainReady and required.matches describe this inspector's configuration comparisons, not repository access, workspace readiness or build admission. Optional image/cache metadata or version mismatches alone do not require installation, reconnection or source re-resolution. Retain and diagnose actual backend blockers and command failures. computeState=true reads only the saved provider resource metadata and pending journal, without opening or resuming a VM. Set runtimeDiagnostics to read bounded CPU/memory/process-limit facts and installed repository-local Oxlint/Vite+ versions when an actual tool crashes; this never changes resource limits, dependencies, lint rules or build admission.",
@@ -100,7 +104,7 @@ export default defineTool({
         version: observed?.available === true ? observed.version : "",
       };
     });
-    return {
+    const observation = {
       backend: backend.kind,
       backendBlockers: backend.blockers,
       dependencyCacheDigest:
@@ -114,10 +118,12 @@ export default defineTool({
       toolchainReady:
         execution !== undefined && cache !== undefined && required.every((tool) => tool.matches),
       tools,
-      ...(input.runtimeDiagnostics === true
-        ? { runtimeResources: await inspectSandboxRuntimeResources(sandbox) }
-        : {}),
     };
+    const resources: SandboxRuntimeResources = {};
+    if (input.runtimeDiagnostics === true) {
+      resources.runtimeResources = await inspectSandboxRuntimeResources(sandbox);
+    }
+    return { ...observation, ...resources };
   },
   inputSchema: z.object({
     computeState: z.boolean().optional(),

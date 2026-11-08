@@ -80,7 +80,7 @@ export function ApprovalRequest({
               </details>
             ) : (
               <section key={section}>
-                {heading ? <h3>{heading}</h3> : null}
+                {heading !== undefined && heading !== "" ? <h3>{heading}</h3> : null}
                 {content}
               </section>
             );

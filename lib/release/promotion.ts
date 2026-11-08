@@ -32,104 +32,84 @@ const localImageTag = z
   .string()
   .regex(/^ghcr[.]io\/withautograph\/autograph-app-builder-sandbox:candidate-[0-9a-f]{16}$/u);
 
-const proofSchema = z
-  .object({
-    browserPreview: z.literal(true),
-    eval: z.union([
-      z.literal("sandbox-reviewed-change-set"),
-      z.literal("sandbox-existing-iteration"),
-    ]),
-    outputSha256: hash,
-    publicationAttempted: z.literal(false),
-    terminalPhase: z.literal("reviewed"),
-  })
-  .strict();
+const proofSchema = z.strictObject({
+  browserPreview: z.literal(true),
+  eval: z.union([
+    z.literal("sandbox-reviewed-change-set"),
+    z.literal("sandbox-existing-iteration"),
+  ]),
+  outputSha256: hash,
+  publicationAttempted: z.literal(false),
+  terminalPhase: z.literal("reviewed"),
+});
 
-const promotionReceiptUnsignedSchema = z
-  .object({
-    arrusted: z.object({ clean: z.literal(true), commit: gitObject, tree: gitObject }).strict(),
-    bindings: z
-      .object({
-        deployment: z.literal("production"),
-        endpoint: z.literal("deployed"),
-        execution: z.literal("release"),
-        marketplace: z.literal("release"),
-        oauth: z.literal("hosted"),
-      })
-      .strict(),
-    builder: z
-      .object({
-        clean: z.literal(true),
-        commit: gitObject,
-        repository: z.literal("https://github.com/withAutograph/autograph-app-builder"),
-        tree: gitObject,
-      })
-      .strict(),
-    deployment: z
-      .object({
-        outputTreeSha256: hash,
-        projectBindingSha256: hash,
-        root: safePath,
-      })
-      .strict(),
-    endpoint: z.string().url().startsWith("https://").endsWith("/mcp"),
-    format: z.literal("autograph-release-promotion-v1"),
-    image: z
-      .object({
-        archive: safePath,
-        archiveSha256: hash,
-        localTag: localImageTag,
-        manifestDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
-        publicationTag: imageTag,
-        reference: exactImageReference,
-      })
-      .strict(),
-    package: z
-      .object({
-        archive: safePath,
-        archiveSha256: hash,
-        checksums: safePath,
-        checksumsSha256: hash,
-        marketplaceArchive: safePath,
-        marketplaceArchiveSha256: hash,
-        receipt: safePath,
-        receiptSha256: hash,
-        root: safePath,
-        version: z.string().min(1),
-      })
-      .strict(),
-    platform: z
-      .object({
-        closureSha256: hash,
-        dockerfileSha256: hash,
-        image: z.literal(IMAGE_PLATFORM),
-        sanitizedSourceEntriesSha256: hash,
-        sanitizedSourceEntryCount: z.number().int().positive(),
-      })
-      .strict(),
-    proofs: z
-      .object({
-        create: proofSchema.extend({
-          eval: z.literal("sandbox-reviewed-change-set"),
-        }),
-        iteration: proofSchema.extend({
-          eval: z.literal("sandbox-existing-iteration"),
-        }),
-      })
-      .strict(),
-    tools: z.tuple([
-      z.literal("autograph_start"),
-      z.literal("autograph_get"),
-      z.literal("autograph_send"),
-      z.literal("autograph_respond"),
-      z.literal("autograph_cancel"),
-    ]),
-  })
-  .strict();
+const promotionReceiptUnsignedSchema = z.strictObject({
+  arrusted: z.strictObject({ clean: z.literal(true), commit: gitObject, tree: gitObject }),
+  bindings: z.strictObject({
+    deployment: z.literal("production"),
+    endpoint: z.literal("deployed"),
+    execution: z.literal("release"),
+    marketplace: z.literal("release"),
+    oauth: z.literal("hosted"),
+  }),
+  builder: z.strictObject({
+    clean: z.literal(true),
+    commit: gitObject,
+    repository: z.literal("https://github.com/withAutograph/autograph-app-builder"),
+    tree: gitObject,
+  }),
+  deployment: z.strictObject({
+    outputTreeSha256: hash,
+    projectBindingSha256: hash,
+    root: safePath,
+  }),
+  endpoint: z.url().startsWith("https://").endsWith("/mcp"),
+  format: z.literal("autograph-release-promotion-v1"),
+  image: z.strictObject({
+    archive: safePath,
+    archiveSha256: hash,
+    localTag: localImageTag,
+    manifestDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+    publicationTag: imageTag,
+    reference: exactImageReference,
+  }),
+  package: z.strictObject({
+    archive: safePath,
+    archiveSha256: hash,
+    checksums: safePath,
+    checksumsSha256: hash,
+    marketplaceArchive: safePath,
+    marketplaceArchiveSha256: hash,
+    receipt: safePath,
+    receiptSha256: hash,
+    root: safePath,
+    version: z.string().min(1),
+  }),
+  platform: z.strictObject({
+    closureSha256: hash,
+    dockerfileSha256: hash,
+    image: z.literal(IMAGE_PLATFORM),
+    sanitizedSourceEntriesSha256: hash,
+    sanitizedSourceEntryCount: z.number().int().positive(),
+  }),
+  proofs: z.strictObject({
+    create: proofSchema.extend({
+      eval: z.literal("sandbox-reviewed-change-set"),
+    }),
+    iteration: proofSchema.extend({
+      eval: z.literal("sandbox-existing-iteration"),
+    }),
+  }),
+  tools: z.tuple([
+    z.literal("autograph_start"),
+    z.literal("autograph_get"),
+    z.literal("autograph_send"),
+    z.literal("autograph_respond"),
+    z.literal("autograph_cancel"),
+  ]),
+});
 
-export const promotionReceiptSchema = promotionReceiptUnsignedSchema
-  .extend({ digest: hash })
-  .strict();
+export const promotionReceiptSchema = promotionReceiptUnsignedSchema.extend({ digest: hash });
 
 export type PromotionReceipt = z.infer<typeof promotionReceiptSchema>;
 export type PromotionReceiptUnsigned = z.infer<typeof promotionReceiptUnsignedSchema>;
@@ -186,7 +166,13 @@ export async function exactCleanGitSource(rootInput: string, label: string) {
     root !== rootInput ||
     requested !== rootInput ||
     !info.isDirectory() ||
-    info.isSymbolicLink() ||
+    info.isSymbolicLink()
+  ) {
+    throw new Error(
+      `${label} root must be canonical, current-user-owned, and not writable by another account.`,
+    );
+  }
+  if (
     info.uid !== process.getuid?.() ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o022) !== 0
@@ -248,28 +234,40 @@ export async function inspectOciCandidateArchive(path: string) {
   if (index.schemaVersion !== 2 || !Array.isArray(index.manifests)) {
     throw new Error("Release OCI archive index was invalid.");
   }
-  const candidates = index.manifests.filter(
+  const manifests: unknown[] = index.manifests;
+  const candidates = manifests.filter(
     (
       entry,
     ): entry is {
       digest: string;
       mediaType: string;
       platform: { os: string; architecture: string };
-    } =>
-      typeof entry === "object" &&
-      entry !== null &&
-      "digest" in entry &&
-      typeof entry.digest === "string" &&
-      /^sha256:[0-9a-f]{64}$/u.test(entry.digest) &&
-      "mediaType" in entry &&
-      entry.mediaType === "application/vnd.oci.image.manifest.v1+json" &&
-      "platform" in entry &&
-      typeof entry.platform === "object" &&
-      entry.platform !== null &&
-      "os" in entry.platform &&
-      entry.platform.os === "linux" &&
-      "architecture" in entry.platform &&
-      entry.platform.architecture === "arm64",
+    } => {
+      if (typeof entry !== "object" || entry === null || !("digest" in entry)) {
+        return false;
+      }
+      if (
+        typeof entry.digest !== "string" ||
+        !/^sha256:[0-9a-f]{64}$/u.test(entry.digest) ||
+        !("mediaType" in entry) ||
+        entry.mediaType !== "application/vnd.oci.image.manifest.v1+json"
+      ) {
+        return false;
+      }
+      if (
+        !("platform" in entry) ||
+        typeof entry.platform !== "object" ||
+        entry.platform === null ||
+        !("os" in entry.platform)
+      ) {
+        return false;
+      }
+      return (
+        entry.platform.os === "linux" &&
+        "architecture" in entry.platform &&
+        entry.platform.architecture === "arm64"
+      );
+    },
   );
   if (candidates.length !== 1) {
     throw new Error("Release OCI archive must contain one linux/arm64 image.");
@@ -293,10 +291,11 @@ export async function inspectOciCandidateArchive(path: string) {
   if (
     manifest.schemaVersion !== 2 ||
     typeof manifest.config?.digest !== "string" ||
-    !/^sha256:[0-9a-f]{64}$/u.test(manifest.config.digest) ||
-    !Array.isArray(manifest.layers) ||
-    manifest.layers.length === 0
+    !/^sha256:[0-9a-f]{64}$/u.test(manifest.config.digest)
   ) {
+    throw new Error("Release OCI platform manifest was incomplete.");
+  }
+  if (!Array.isArray(manifest.layers) || manifest.layers.length === 0) {
     throw new Error("Release OCI platform manifest was incomplete.");
   }
   return {
@@ -400,9 +399,16 @@ export async function verifyPromotionCandidate(input: {
     root !== nodePath.resolve(input.candidateRoot) ||
     !rootInfo.isDirectory() ||
     rootInfo.isSymbolicLink() ||
-    rootInfo.uid !== process.getuid?.() ||
+    rootInfo.uid !== process.getuid?.()
+  ) {
+    throw new Error(
+      "Release candidate root must be canonical, current-user-owned, and not writable by another account.",
+    );
+  }
+  if (
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (rootInfo.mode & 0o022) !== 0
+    (rootInfo.mode & 0o022) !==
+    0
   ) {
     throw new Error(
       "Release candidate root must be canonical, current-user-owned, and not writable by another account.",
@@ -431,9 +437,11 @@ export async function verifyPromotionCandidate(input: {
     packageReceipt.version !== receipt.package.version ||
     packageReceipt.source.sha !== receipt.builder.commit ||
     packageReceipt.source.tree !== receipt.builder.tree ||
-    packageReceipt.endpoint !== receipt.endpoint ||
-    JSON.stringify(packageReceipt.tools) !== JSON.stringify(receipt.tools)
+    packageReceipt.endpoint !== receipt.endpoint
   ) {
+    throw new Error("Portable package binding did not match promotion.");
+  }
+  if (JSON.stringify(packageReceipt.tools) !== JSON.stringify(receipt.tools)) {
     throw new Error("Portable package binding did not match promotion.");
   }
   await Promise.all([

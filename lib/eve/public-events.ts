@@ -13,6 +13,7 @@ import {
   publicWorkingPreviewSchema,
 } from "../mcp/contracts";
 import type {
+  EveSessionResult,
   EveSessionStatus,
   PublicEveEvent,
   PublicInputRequest,
@@ -29,6 +30,24 @@ import {
   githubRepositoryAccessSchema,
   githubRepositoryAccessViewModel,
 } from "../integrations/store-in-view-model";
+
+const preparingAppDataModelLabel = "Preparing the app's data model";
+const prepareHostedRuntimeTool = "prepare-app-hosted-runtime";
+const prepareAppProductionTool = "prepare-app-production";
+const actionsRequestedEvent = "actions.requested";
+const actionResultEvent = "action.result";
+const toolResultKind = "tool-result";
+const turnCancelledEvent = "turn.cancelled";
+const sessionFailedEvent = "session.failed";
+const toolApprovalKind = "tool-approval";
+const assistantMessageEvent = "assistant.message";
+const stepStartedEvent = "step.started";
+const publicErrorEvent = "error.public";
+const inputRequestedEvent = "input.requested";
+const inputResolvedEvent = "input.resolved";
+const approvalSettledEvent = "approval.settled";
+const authorizationRequiredEvent = "authorization.required";
+const authorizationCompletedEvent = "authorization.completed";
 
 export interface InternalEveEvent {
   type: string;
@@ -68,14 +87,16 @@ const authorizationRequestId = (data: unknown): string | undefined => {
 };
 
 const progressStates = new Set(["started", "completed", "failed"]);
+const isProgressState = (value: string): value is "started" | "completed" | "failed" =>
+  progressStates.has(value);
 const visibleOperations = new Map([
   ["apply_app_creation", "Building the app in its private workspace"],
-  ["compile-app-schema-release", "Preparing the app's data model"],
+  ["compile-app-schema-release", preparingAppDataModelLabel],
   ["install-app-integrations", "Installing the app's requested integrations"],
   ["prepare-app-local-preview", "Preparing the app's local preview dependencies"],
-  ["prepare-app-hosted-runtime", "Setting up your app’s data"],
+  [prepareHostedRuntimeTool, "Setting up your app’s data"],
   ["plan-app-production", "Preparing your app’s setup"],
-  ["prepare-app-production", "Setting up your app’s data and access"],
+  [prepareAppProductionTool, "Setting up your app’s data and access"],
   ["get-app-production", "Checking your app’s setup"],
   ["cleanup-app-hosted-runtime", "Removing the app's Preview resources"],
   ["export-app-hosted-data", "Exporting approved app data privately"],
@@ -90,7 +111,7 @@ const visibleOperations = new Map([
 const visibleOperationLabels = new Set([
   ...visibleOperations.values(),
   "Preparing the app's dependencies",
-  "Preparing the app's data model",
+  preparingAppDataModelLabel,
   "Checking the app's data model",
   "Running app tests",
   "Checking the app's workflow",
@@ -105,14 +126,14 @@ const draftValidationCommandLabel = (value: unknown): string | undefined => {
     return "Preparing the app's dependencies";
   }
   if (/^mise run (?:--no-deps )?app:compile [a-z][a-z0-9-]*$/u.test(value)) {
-    return "Preparing the app's data model";
+    return preparingAppDataModelLabel;
   }
   if (
     /^mise run (?:--no-deps )?--skip-tools schema:release -- compile --app [a-z][a-z0-9-]*$/u.test(
       value,
     )
   ) {
-    return "Preparing the app's data model";
+    return preparingAppDataModelLabel;
   }
   if (/^mise run (?:--no-deps )?--skip-tools app:check [a-z][a-z0-9-]*$/u.test(value)) {
     return "Checking the app's data model";
@@ -205,15 +226,15 @@ const publicFailureDetail = (value: string) =>
 const publicBuilderFailure = (failure: { code: string; message: string }, operation?: string) => {
   const operationLabels = {
     apply_app_creation: "the private build",
+    "cleanup-app-hosted-runtime": "Preview cleanup",
     "prepare-app-hosted-runtime": "Preview setup",
     "prepare-app-production": "app setup",
-    "cleanup-app-hosted-runtime": "Preview cleanup",
-    validate_app_creation: "app validation",
-    "validate-app-creation": "app validation",
-    start_app_preview: "the app preview",
-    publish_github_draft_pr: "draft pull request publication",
     "publish-github-draft-pr": "draft pull request publication",
+    publish_github_draft_pr: "draft pull request publication",
     reconcile_github_draft_pr: "draft pull request update",
+    start_app_preview: "the app preview",
+    "validate-app-creation": "app validation",
+    validate_app_creation: "app validation",
     validate_github_draft_pr_reconciliation: "draft pull request checks",
   } as const satisfies Record<string, string>;
   const name =
@@ -248,7 +269,7 @@ const prototypePathPattern = /^prototype\/(?<appId>[a-z][a-z0-9]*(?:-[a-z0-9]+)*
 const lowercaseSha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const sha256 = (value: string): string => createHash("sha256").update(value, "utf-8").digest("hex");
 const prototypeRequestSchema = z
-  .object({
+  .strictObject({
     baseRevision: lowercaseSha256Schema.optional(),
     chunkIndex: z.number().int().nonnegative().optional(),
     content: z.string().min(1),
@@ -257,7 +278,6 @@ const prototypeRequestSchema = z
     mediaType: z.literal("text/html"),
     path: z.string().regex(prototypePathPattern),
   })
-  .strict()
   .superRefine((input, context) => {
     if (input.chunkIndex === undefined && input.expectedDigest !== undefined) {
       context.addIssue({ code: "custom", message: "Missing chunk index.", path: ["chunkIndex"] });
@@ -277,22 +297,20 @@ const prototypeRequestSchema = z
       });
     }
   });
-const prototypeResultSchema = z
-  .object({
-    appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-    complete: z.boolean().optional(),
-    digest: lowercaseSha256Schema,
-    invalidated: z.boolean().optional(),
-    mediaType: z.literal("text/html"),
-    nextChunkIndex: z.number().int().nonnegative().optional(),
-    path: z.string().regex(prototypePathPattern),
-    recordedByCallId: z.string().min(1),
-    reused: z.boolean(),
-    revision: lowercaseSha256Schema,
-    sessionId: z.string().min(1),
-    size: z.number().int().min(1),
-  })
-  .strict();
+const prototypeResultSchema = z.strictObject({
+  appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+  complete: z.boolean().optional(),
+  digest: lowercaseSha256Schema,
+  invalidated: z.boolean().optional(),
+  mediaType: z.literal("text/html"),
+  nextChunkIndex: z.number().int().nonnegative().optional(),
+  path: z.string().regex(prototypePathPattern),
+  recordedByCallId: z.string().min(1),
+  reused: z.boolean(),
+  revision: lowercaseSha256Schema,
+  sessionId: z.string().min(1),
+  size: z.number().int().min(1),
+});
 
 const prototypeReferenceResultSchema = z
   .object({
@@ -308,7 +326,7 @@ const prototypeReferenceResultSchema = z
     sessionId: z.string().min(1),
     version: z.literal(2),
   })
-  .passthrough();
+  .loose();
 
 export const installedPrototypeReferenceStateSchema = z.strictObject({
   latest: publicPrototypeReferenceSchema.optional(),
@@ -389,17 +407,14 @@ export const createInstalledPrototypeReferenceReducer = (input: {
   let latest: PublicPrototypeReference | undefined = state?.latest;
   return {
     accept(candidate: unknown) {
-      const event = z
-        .object({ data: z.unknown(), type: z.string() })
-        .passthrough()
-        .safeParse(candidate);
+      const event = z.object({ data: z.unknown(), type: z.string() }).loose().safeParse(candidate);
       if (!event.success) {
         return;
       }
-      if (event.data.type === "actions.requested") {
+      if (event.data.type === actionsRequestedEvent) {
         const actions = z
           .object({ actions: z.array(z.unknown()) })
-          .passthrough()
+          .loose()
           .safeParse(event.data.data);
         if (!actions.success) {
           return;
@@ -412,7 +427,7 @@ export const createInstalledPrototypeReferenceReducer = (input: {
               kind: z.string(),
               toolName: z.string(),
             })
-            .passthrough()
+            .loose()
             .safeParse(candidateAction);
           if (!action.success || action.data.kind !== "tool-call") {
             continue;
@@ -422,7 +437,7 @@ export const createInstalledPrototypeReferenceReducer = (input: {
             if (action.data.toolName === "record_ui_preview") {
               const preview = z
                 .object({ appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u) })
-                .passthrough()
+                .loose()
                 .safeParse(action.data.input);
               if (preview.success) {
                 requestedUiPreview.set(action.data.callId, preview.data.appId);
@@ -440,7 +455,7 @@ export const createInstalledPrototypeReferenceReducer = (input: {
         }
         return;
       }
-      if (event.data.type !== "action.result") {
+      if (event.data.type !== actionResultEvent) {
         return;
       }
       const resultEvent = z
@@ -449,14 +464,14 @@ export const createInstalledPrototypeReferenceReducer = (input: {
             .object({
               callId: z.string(),
               isError: z.boolean().optional(),
-              kind: z.literal("tool-result"),
+              kind: z.literal(toolResultKind),
               output: z.unknown(),
               toolName: z.enum(["record_prototype_artifact", "record_ui_preview"]),
             })
-            .passthrough(),
+            .loose(),
           status: z.literal("completed"),
         })
-        .passthrough()
+        .loose()
         .safeParse(event.data.data);
       if (!resultEvent.success) {
         return;
@@ -483,7 +498,7 @@ export const createInstalledPrototypeReferenceReducer = (input: {
             sessionId: z.string(),
             version: z.literal(2),
           })
-          .passthrough()
+          .loose()
           .safeParse(receipt.output);
         if (!output.success) {
           return;
@@ -493,7 +508,11 @@ export const createInstalledPrototypeReferenceReducer = (input: {
           value.appId !== appId ||
           value.path !== `prototype/${appId}/index.html` ||
           value.sessionId !== input.sessionId ||
-          value.recordedByCallId !== receipt.callId ||
+          value.recordedByCallId !== receipt.callId
+        ) {
+          return;
+        }
+        if (
           value.digest !== value.artifactDigest ||
           value.artifactRevision !==
             sha256(
@@ -540,15 +559,27 @@ export const createInstalledPrototypeReferenceReducer = (input: {
         value.sessionId !== input.sessionId ||
         value.recordedByCallId !== receipt.callId ||
         value.appId !== prototypePathPattern.exec(request.path)?.groups?.appId ||
-        value.path !== request.path ||
+        value.path !== request.path
+      ) {
+        return;
+      }
+      if (
         value.mediaType !== request.mediaType ||
         value.revision !== revision ||
-        (request.expectedDigest !== undefined && value.digest !== request.expectedDigest) ||
-        (request.chunkIndex !== undefined &&
-          (request.finalChunk !== true || value.chunkCount !== request.chunkIndex + 1)) ||
-        (request.chunkIndex === undefined &&
-          (value.digest !== sha256(request.content) ||
-            value.contentBytes !== Buffer.byteLength(request.content, "utf-8")))
+        (request.expectedDigest !== undefined && value.digest !== request.expectedDigest)
+      ) {
+        return;
+      }
+      if (
+        request.chunkIndex !== undefined &&
+        (request.finalChunk !== true || value.chunkCount !== request.chunkIndex + 1)
+      ) {
+        return;
+      }
+      if (
+        request.chunkIndex === undefined &&
+        (value.digest !== sha256(request.content) ||
+          value.contentBytes !== Buffer.byteLength(request.content, "utf-8"))
       ) {
         return;
       }
@@ -568,12 +599,16 @@ export const createInstalledPrototypeReferenceReducer = (input: {
         latest = projected.data;
       }
     },
-    checkpoint: (): InstalledPrototypeReferenceState =>
-      installedPrototypeReferenceStateSchema.parse({
+    checkpoint: (): InstalledPrototypeReferenceState => {
+      const checkpoint: InstalledPrototypeReferenceState = {
         requested: [...requested],
         requestedUiPreview: [...requestedUiPreview],
-        ...(latest === undefined ? {} : { latest }),
-      }),
+      };
+      if (latest !== undefined) {
+        checkpoint.latest = latest;
+      }
+      return installedPrototypeReferenceStateSchema.parse(checkpoint);
+    },
     snapshot: () => latest,
   };
 };
@@ -592,7 +627,7 @@ const uiPreviewResultSchema = z
     routes: z.array(z.string().startsWith("/")).min(1),
     totalBytes: z.number().int().positive().optional(),
   })
-  .passthrough();
+  .loose();
 
 /**
  * Recovers only a successfully recorded HTML prototype from Eve's durable
@@ -645,7 +680,7 @@ export const createInstalledPrototypeProjector = (
   let latest: PublicPrototype | undefined = state?.latest;
 
   const observe = (event: MessageStreamEvent): void => {
-    if (event.type === "actions.requested") {
+    if (event.type === actionsRequestedEvent) {
       for (const action of event.data.actions) {
         if (action.kind !== "tool-call") {
           continue;
@@ -682,9 +717,9 @@ export const createInstalledPrototypeProjector = (
     }
 
     if (
-      event.type !== "action.result" ||
+      event.type !== actionResultEvent ||
       event.data.status !== "completed" ||
-      event.data.result.kind !== "tool-result" ||
+      event.data.result.kind !== toolResultKind ||
       event.data.result.isError === true
     ) {
       return;
@@ -736,10 +771,10 @@ export const createInstalledPrototypeProjector = (
           totalBytes: z.number().int().positive().optional(),
         })
         .safeParse(event.data.result.output);
+      if (input === undefined || !output.success || input.path !== output.data.path) {
+        return;
+      }
       if (
-        input === undefined ||
-        !output.success ||
-        input.path !== output.data.path ||
         input.digest !== output.data.digest ||
         (input.revision !== undefined && input.revision !== output.data.revision)
       ) {
@@ -753,10 +788,11 @@ export const createInstalledPrototypeProjector = (
         return;
       }
       const { byteOffset, nextOffsetBytes, totalBytes, chunkDigest } = output.data;
+      if (nextOffsetBytes === undefined || totalBytes === undefined || chunkDigest === undefined) {
+        readChunks.delete(output.data.path);
+        return;
+      }
       if (
-        nextOffsetBytes === undefined ||
-        totalBytes === undefined ||
-        chunkDigest === undefined ||
         input.offsetBytes !== byteOffset ||
         sha256(output.data.content) !== chunkDigest ||
         Buffer.byteLength(output.data.content, "utf-8") !== nextOffsetBytes - byteOffset
@@ -890,7 +926,12 @@ export const createInstalledPrototypeProjector = (
         if (
           output.data.revision !== revision ||
           output.data.appId !== appId ||
-          output.data.path !== input.path ||
+          output.data.path !== input.path
+        ) {
+          transfers.delete(input.path);
+          return;
+        }
+        if (
           output.data.mediaType !== input.mediaType ||
           output.data.size !== receivedBytes ||
           output.data.recordedByCallId !== callId
@@ -936,7 +977,12 @@ export const createInstalledPrototypeProjector = (
       if (
         output.data.appId !== appId ||
         output.data.path !== input.path ||
-        output.data.mediaType !== input.mediaType ||
+        output.data.mediaType !== input.mediaType
+      ) {
+        transfers.delete(input.path);
+        return;
+      }
+      if (
         output.data.digest !== (input.finalChunk === true ? input.expectedDigest : rollingDigest) ||
         output.data.size !== receivedBytes ||
         output.data.recordedByCallId !== callId
@@ -1011,7 +1057,11 @@ export const createInstalledPrototypeProjector = (
     if (
       output.data.appId !== appId ||
       output.data.path !== input.path ||
-      output.data.mediaType !== input.mediaType ||
+      output.data.mediaType !== input.mediaType
+    ) {
+      return;
+    }
+    if (
       output.data.digest !== digest ||
       output.data.revision !== revision ||
       output.data.size !== size ||
@@ -1030,15 +1080,21 @@ export const createInstalledPrototypeProjector = (
   };
 
   return {
-    checkpoint: () =>
-      installedPrototypeProjectorStateSchema.parse({
+    checkpoint: () => {
+      const checkpoint: InstalledPrototypeProjectorState = {
         artifactReadRequests: [...artifactReadRequests],
         readChunks: [...readChunks],
         requested: [...requested],
         transfers: [...transfers],
-        ...(expectedChunkedPreview === undefined ? {} : { expectedChunkedPreview }),
-        ...(latest === undefined ? {} : { latest }),
-      }),
+      };
+      if (expectedChunkedPreview !== undefined) {
+        checkpoint.expectedChunkedPreview = expectedChunkedPreview;
+      }
+      if (latest !== undefined) {
+        checkpoint.latest = latest;
+      }
+      return installedPrototypeProjectorStateSchema.parse(checkpoint);
+    },
     current: () => latest,
     observe,
   };
@@ -1060,19 +1116,21 @@ export const latestInstalledUiPreview = (
 ): PublicUiPreview | undefined => {
   let latest: PublicUiPreview | undefined;
   for (const event of events) {
+    if (event.type !== actionResultEvent || event.data.status !== "completed") {
+      continue;
+    }
     if (
-      event.type !== "action.result" ||
-      event.data.status !== "completed" ||
-      event.data.result.kind !== "tool-result" ||
+      event.data.result.kind !== toolResultKind ||
       event.data.result.isError === true ||
       event.data.result.toolName !== "record_ui_preview"
     ) {
       continue;
     }
     const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
+    if (!preview.success || preview.data.complete === false) {
+      continue;
+    }
     if (
-      !preview.success ||
-      preview.data.complete === false ||
       (preview.data.content !== undefined &&
         sha256(preview.data.content) !== preview.data.digest) ||
       (preview.data.content === undefined && preview.data.requiresChunkedRead !== true)
@@ -1104,14 +1162,14 @@ export const latestInstalledWorkingPreview = (
   let latest: PublicWorkingPreview | null | undefined;
   for (const event of events) {
     if (
-      event.type === "turn.cancelled" ||
+      event.type === turnCancelledEvent ||
       event.type === "turn.failed" ||
-      event.type === "session.failed"
+      event.type === sessionFailedEvent
     ) {
       latest = null;
       continue;
     }
-    if (event.type === "actions.requested") {
+    if (event.type === actionsRequestedEvent) {
       if (
         event.data.actions.some(
           (action) => action.kind === "tool-call" && action.toolName === "start_app_preview",
@@ -1122,8 +1180,8 @@ export const latestInstalledWorkingPreview = (
       continue;
     }
     if (
-      event.type !== "action.result" ||
-      event.data.result.kind !== "tool-result" ||
+      event.type !== actionResultEvent ||
+      event.data.result.kind !== toolResultKind ||
       event.data.result.toolName !== "start_app_preview"
     ) {
       continue;
@@ -1158,12 +1216,14 @@ export const createInstalledPreviewMetadataReducer = () => {
       }
     },
     snapshot() {
-      return {
-        ...(uiPreview === undefined ? {} : { uiPreview }),
-        ...(workingPreview === undefined
-          ? {}
-          : { workingPreview: currentWorkingPreview(workingPreview) }),
-      };
+      const snapshot: Pick<EveSessionResult, "uiPreview" | "workingPreview"> = {};
+      if (uiPreview !== undefined) {
+        snapshot.uiPreview = uiPreview;
+      }
+      if (workingPreview !== undefined) {
+        snapshot.workingPreview = currentWorkingPreview(workingPreview);
+      }
+      return snapshot;
     },
   };
 };
@@ -1183,31 +1243,31 @@ const inputRequest = (request: {
   const approvalTitles = {
     apply_app_creation: "Build this app?",
     "cleanup-app-hosted-runtime": "Remove this app's Preview resources?",
-    "prepare-app-hosted-runtime": "Do you approve creating a preview?",
-    "prepare-app-production": "Set up your app’s data and access?",
-    "prepare-app-native-target": "Create this app's Preview project?",
     "export-app-hosted-data": "Export this customer’s app data privately?",
-    "run-app-continuity-tests": "Run this app continuity suite?",
-    "publish-github-draft-pr": "Publish the reviewed changes?",
     "finish-github-pr-delivery": "Merge the reviewed changes when checks pass?",
+    "prepare-app-hosted-runtime": "Do you approve creating a preview?",
+    "prepare-app-native-target": "Create this app's Preview project?",
+    "prepare-app-production": "Set up your app’s data and access?",
+    "publish-github-draft-pr": "Publish the reviewed changes?",
     publish_github_draft_pr: "Publish the reviewed changes?",
-    update_github_draft_pr: "Update the draft pull request?",
     reconcile_github_draft_pr: "Update the draft pull request?",
+    "run-app-continuity-tests": "Run this app continuity suite?",
+    update_github_draft_pr: "Update the draft pull request?",
   } as const;
   const toolName = request.action?.toolName;
   if (
-    request.kind === "tool-approval" &&
+    request.kind === toolApprovalKind &&
     toolName !== undefined &&
     silentInternalApprovalTools.has(toolName)
   ) {
     return undefined;
   }
   const title =
-    request.kind === "tool-approval" && toolName !== undefined && toolName in approvalTitles
+    request.kind === toolApprovalKind && toolName !== undefined && toolName in approvalTitles
       ? approvalTitles[toolName as keyof typeof approvalTitles]
       : request.prompt;
   let description: string | undefined;
-  if (request.kind === "tool-approval" && toolName === "prepare-app-production") {
+  if (request.kind === toolApprovalKind && toolName === prepareAppProductionTool) {
     const setup = z
       .object({
         scope: z.object({ appId: z.string(), repositoryFullName: z.string() }),
@@ -1221,7 +1281,7 @@ const inputRequest = (request: {
       const { scope, intent } = setup.data;
       description = `Set up ${scope.appId} in ${scope.repositoryFullName}. ${intent.storage.kind === "postgres" ? "Builder prepares the app’s database and keeps it for future updates. " : "This app does not need a database. "}Connect your app account once to receive access. Other people get access only when invited.`;
     }
-  } else if (request.kind === "tool-approval" && toolName === "apply_app_creation") {
+  } else if (request.kind === toolApprovalKind && toolName === "apply_app_creation") {
     // Use the standard card copy when the optional summary does not fit the card.
     description =
       z
@@ -1236,14 +1296,14 @@ const inputRequest = (request: {
       description = `${description} ${privateComputeApprovalDescription}`;
     }
   } else if (
-    request.kind === "tool-approval" &&
+    request.kind === toolApprovalKind &&
     toolName !== undefined &&
     toolName in approvalTitles
   ) {
     description = publicApprovalDescription(request.action?.input, toolName);
   }
   if (
-    request.kind === "tool-approval" &&
+    request.kind === toolApprovalKind &&
     toolName !== undefined &&
     toolName in approvalTitles &&
     toolName !== "apply_app_creation" &&
@@ -1251,14 +1311,21 @@ const inputRequest = (request: {
   ) {
     return undefined;
   }
-  return {
+  const header: Pick<PublicInputRequest, "allowFreeform" | "kind" | "requestId"> = {
     allowFreeform: request.allowFreeform ?? false,
-    kind: request.kind === "tool-approval" ? "approval" : "question",
+    kind: request.kind === toolApprovalKind ? "approval" : "question",
     requestId: request.requestId,
-    ...(description === undefined ? {} : { description }),
-    ...(request.options === undefined
-      ? {}
-      : { options: request.options.map(({ id, label }) => ({ id, label })) }),
+  };
+  const details: Pick<PublicInputRequest, "description" | "options"> = {};
+  if (description !== undefined) {
+    details.description = description;
+  }
+  if (request.options !== undefined) {
+    details.options = request.options.map(({ id, label }) => ({ id, label }));
+  }
+  return {
+    ...header,
+    ...details,
     title,
   };
 };
@@ -1297,17 +1364,17 @@ const productionIdentityEvents = (
   index: number,
   turnId: string,
 ): InternalEveEvent[] => {
-  const isPrepare = result.toolName === "prepare-app-production";
+  const isPrepare = result.toolName === prepareAppProductionTool;
   if (!isPrepare && result.toolName !== "get-app-production") {
     return [];
   }
-  let output = result.output;
+  let { output } = result;
   let expiresAt: string | undefined;
   if (isPrepare) {
     const prepared = z
       .object({
-        setup: productionSetupStatusSchema,
         creator: z.object({ expiresAt: z.string().optional() }).optional(),
+        setup: productionSetupStatusSchema,
       })
       .safeParse(output);
     if (!prepared.success) {
@@ -1346,7 +1413,7 @@ const productionIdentityEvents = (
       index,
       text,
       turnId: `${turnId}:identity-invitation:${result.callId}`,
-      type: "assistant.message",
+      type: assistantMessageEvent,
     },
     { index, type: "auth_identity_invitation", identityInvitation: invitation.data },
   ];
@@ -1367,15 +1434,15 @@ export const projectInstalledEveEvent = (
               index,
               text: event.data.message,
               turnId: event.data.turnId,
-              type: "assistant.message",
+              type: assistantMessageEvent,
             },
           ];
     }
-    case "step.started":
+    case stepStartedEvent:
     case "step.completed":
     case "step.failed": {
       let state: "completed" | "failed" | "started";
-      if (event.type === "step.started") {
+      if (event.type === stepStartedEvent) {
         state = "started";
       } else if (event.type === "step.completed") {
         state = "completed";
@@ -1393,12 +1460,12 @@ export const projectInstalledEveEvent = (
         const failure = publicBuilderFailure(event.data, operation);
         return [
           progress,
-          { code: failure.code, index, message: failure.message, type: "error.public" },
+          { code: failure.code, index, message: failure.message, type: publicErrorEvent },
         ];
       }
       return [progress];
     }
-    case "actions.requested": {
+    case actionsRequestedEvent: {
       return event.data.actions.flatMap((action) => {
         if (action.kind !== "tool-call") {
           return [];
@@ -1410,8 +1477,8 @@ export const projectInstalledEveEvent = (
     case "action.partial": {
       const { result, turnId, sequence } = event.data;
       if (
-        result.kind !== "tool-result" ||
-        result.toolName !== "prepare-app-hosted-runtime" ||
+        result.kind !== toolResultKind ||
+        result.toolName !== prepareHostedRuntimeTool ||
         result.isError === true
       ) {
         return [];
@@ -1431,15 +1498,15 @@ export const projectInstalledEveEvent = (
           text,
           // Keep a yielded invitation distinct from the later model reply, stable on replay.
           turnId: `${turnId}:identity-invitation:${result.callId}:${sequence}`,
-          type: "assistant.message",
+          type: assistantMessageEvent,
         },
         ...(invitation.success
           ? [{ index, type: "auth_identity_invitation", identityInvitation: invitation.data }]
           : []),
       ];
     }
-    case "action.result": {
-      if (event.data.result?.kind !== "tool-result") {
+    case actionResultEvent: {
+      if (event.data.result?.kind !== toolResultKind) {
         return [];
       }
       const label = draftValidationLabel(
@@ -1449,8 +1516,7 @@ export const projectInstalledEveEvent = (
       );
       const returnedStatus = recordStringField(event.data.result.output, "status");
       const commandFailed =
-        (event.data.result.toolName === "prepare-app-hosted-runtime" &&
-          returnedStatus === "blocked") ||
+        (event.data.result.toolName === prepareHostedRuntimeTool && returnedStatus === "blocked") ||
         (event.data.result.toolName === "validate_github_draft_pr_reconciliation" &&
           (returnedStatus === "needs_repair" || returnedStatus === "needs_resolution")) ||
         (event.data.result.toolName === "install-app-integrations" && returnedStatus === "failed");
@@ -1470,7 +1536,7 @@ export const projectInstalledEveEvent = (
                 type: "progress",
               },
             ];
-      return event.data.result.toolName === "prepare-app-hosted-runtime"
+      return event.data.result.toolName === prepareHostedRuntimeTool
         ? [
             ...progress,
             { index, type: "auth_identity_invitation_resolved", callId: event.data.result.callId },
@@ -1482,7 +1548,7 @@ export const projectInstalledEveEvent = (
               : []),
           ];
     }
-    case "input.requested": {
+    case inputRequestedEvent: {
       const projectedRequests = event.data.requests.map(inputRequest);
       return projectedRequests.some((request) => request === undefined)
         ? [
@@ -1490,37 +1556,37 @@ export const projectInstalledEveEvent = (
               code: "confirmation_unavailable",
               index,
               message: unavailableConfirmationMessage,
-              type: "error.public",
+              type: publicErrorEvent,
             },
             { index, status: "failed", type: "status" },
           ]
         : projectedRequests.map((request, requestIndex) => {
-            const projected: InternalEveEvent = { index, request, type: "input.requested" };
+            const projected: InternalEveEvent = { index, request, type: inputRequestedEvent };
             if (isFrameworkSessionLimitInput(event.data.requests[requestIndex])) {
               projected.frameworkSessionLimit = true;
             }
             return projected;
           });
     }
-    case "input.resolved": {
+    case inputResolvedEvent: {
       return [
         {
           index,
           requestIds: event.data.resolutions.map(({ requestId }) => requestId),
-          type: "input.resolved",
+          type: inputResolvedEvent,
         },
       ];
     }
-    case "approval.settled": {
+    case approvalSettledEvent: {
       return [
         {
           index,
           requestIds: [event.data.requestId],
-          type: "input.resolved",
+          type: inputResolvedEvent,
         },
       ];
     }
-    case "authorization.required": {
+    case authorizationRequiredEvent: {
       const requestId = authorizationRequestId(event.data);
       if (requestId === undefined) {
         return [];
@@ -1533,51 +1599,49 @@ export const projectInstalledEveEvent = (
       const storeIn = repositoryAccess.success
         ? githubRepositoryAccessViewModel(repositoryAccess.data)
         : undefined;
+      const request: Pick<
+        PublicInputRequest,
+        "description" | "kind" | "requestId" | "title" | "presentation" | "authorization"
+      > = {
+        description: storeIn?.description ?? event.data.description,
+        kind: "authorization",
+        requestId,
+        title: storeIn?.title ?? event.data.name,
+      };
+      if (storeIn !== undefined) {
+        request.presentation = { control: "provider", section: "store-in" };
+      }
+      if (authorization !== undefined) {
+        const challenge: NonNullable<PublicInputRequest["authorization"]> = {};
+        if (authorization.url !== undefined) {
+          challenge.url = authorization.url;
+        }
+        if (authorization.userCode !== undefined) {
+          challenge.userCode = authorization.userCode;
+        }
+        if (authorization.expiresAt !== undefined) {
+          challenge.expiresAt = authorization.expiresAt;
+        }
+        if (authorization.instructions !== undefined) {
+          challenge.instructions = authorization.instructions;
+        }
+        if (authorization.displayName !== undefined) {
+          challenge.displayName = authorization.displayName;
+        }
+        if (repositoryAccess.success) {
+          challenge.repositoryAccess = repositoryAccess.data;
+        }
+        request.authorization = challenge;
+      }
       return [
         {
           index,
-          request: {
-            description: storeIn?.description ?? event.data.description,
-            kind: "authorization",
-            requestId,
-            title: storeIn?.title ?? event.data.name,
-            ...(storeIn === undefined
-              ? {}
-              : {
-                  presentation: {
-                    control: "provider" as const,
-                    section: "store-in" as const,
-                  },
-                }),
-            ...(authorization === undefined
-              ? {}
-              : {
-                  authorization: {
-                    ...(authorization.url === undefined ? {} : { url: authorization.url }),
-                    ...(authorization.userCode === undefined
-                      ? {}
-                      : { userCode: authorization.userCode }),
-                    ...(authorization.expiresAt === undefined
-                      ? {}
-                      : { expiresAt: authorization.expiresAt }),
-                    ...(authorization.instructions === undefined
-                      ? {}
-                      : { instructions: authorization.instructions }),
-                    ...(authorization.displayName === undefined
-                      ? {}
-                      : { displayName: authorization.displayName }),
-                    ...(repositoryAccess.success
-                      ? { repositoryAccess: repositoryAccess.data }
-                      : {}),
-                  },
-                }),
-            allowFreeform: false,
-          },
-          type: "input.requested",
+          request: { ...request, allowFreeform: false },
+          type: inputRequestedEvent,
         },
       ];
     }
-    case "authorization.completed": {
+    case authorizationCompletedEvent: {
       const requestId = authorizationRequestId(event.data);
       const outcome = z
         .enum(["authorized", "declined", "failed", "timed-out"])
@@ -1589,11 +1653,11 @@ export const projectInstalledEveEvent = (
               index,
               requestIds: [requestId],
               resolutionKind: "authorization",
-              type: "input.resolved",
+              type: inputResolvedEvent,
             },
           ];
     }
-    case "turn.cancelled": {
+    case turnCancelledEvent: {
       return [{ index, status: "cancelled", type: "status" }];
     }
     case "session.waiting": {
@@ -1604,16 +1668,16 @@ export const projectInstalledEveEvent = (
     }
     case "turn.failed": {
       const failure = publicBuilderFailure(event.data, operation);
-      return [{ code: failure.code, index, message: failure.message, type: "error.public" }];
+      return [{ code: failure.code, index, message: failure.message, type: publicErrorEvent }];
     }
-    case "session.failed": {
+    case sessionFailedEvent: {
       const failure = publicBuilderFailure(event.data, operation);
       return [
         {
           code: failure.code,
           index,
           message: failure.message,
-          type: "error.public",
+          type: publicErrorEvent,
         },
         { index, status: "failed", type: "status" },
       ];
@@ -1629,7 +1693,7 @@ export const outstandingInstalledEveRequests = (
 ): PublicInputRequest[] => {
   const outstanding = new Map<string, PublicInputRequest>();
   for (const event of events) {
-    if (event.type === "authorization.required" || event.type === "authorization.completed") {
+    if (event.type === authorizationRequiredEvent || event.type === authorizationCompletedEvent) {
       for (const projected of projectInstalledEveEvent(event, 0)) {
         if (projected.request !== undefined) {
           outstanding.set(projected.request.requestId, projected.request);
@@ -1641,7 +1705,7 @@ export const outstandingInstalledEveRequests = (
         }
       }
     }
-    if (event.type === "input.requested") {
+    if (event.type === inputRequestedEvent) {
       const projected = event.data.requests.map(inputRequest);
       if (projected.some((request) => request === undefined)) {
         return [];
@@ -1653,12 +1717,12 @@ export const outstandingInstalledEveRequests = (
         }
       }
     }
-    if (event.type === "input.resolved") {
+    if (event.type === inputResolvedEvent) {
       for (const resolution of event.data.resolutions) {
         outstanding.delete(resolution.requestId);
       }
     }
-    if (event.type === "approval.settled") {
+    if (event.type === approvalSettledEvent) {
       outstanding.delete(event.data.requestId);
     }
   }
@@ -1670,10 +1734,10 @@ export const outstandingInternalEveRequests = (
 ): PublicInputRequest[] => {
   const outstanding = new Map<string, PublicInputRequest>();
   for (const event of events) {
-    if (event.type === "input.requested" && event.request !== undefined) {
+    if (event.type === inputRequestedEvent && event.request !== undefined) {
       outstanding.set(event.request.requestId, event.request);
     }
-    if (event.type === "input.resolved") {
+    if (event.type === inputResolvedEvent) {
       for (const requestId of event.requestIds ?? []) {
         if (
           event.resolutionKind !== "authorization" ||
@@ -1693,7 +1757,7 @@ export const deriveInstalledEveStatus = (
   const outstanding = new Map<string, PublicInputRequest["kind"]>();
   let boundary: EveSessionStatus = "working";
   for (const event of events) {
-    if (event.type === "input.requested") {
+    if (event.type === inputRequestedEvent) {
       const projected = event.data.requests.map(inputRequest);
       if (projected.some((request) => request === undefined)) {
         return "failed";
@@ -1704,15 +1768,15 @@ export const deriveInstalledEveStatus = (
         }
       }
     }
-    if (event.type === "input.resolved") {
+    if (event.type === inputResolvedEvent) {
       for (const resolution of event.data.resolutions) {
         outstanding.delete(resolution.requestId);
       }
     }
-    if (event.type === "approval.settled") {
+    if (event.type === approvalSettledEvent) {
       outstanding.delete(event.data.requestId);
     }
-    if (event.type === "authorization.required" || event.type === "authorization.completed") {
+    if (event.type === authorizationRequiredEvent || event.type === authorizationCompletedEvent) {
       for (const projected of projectInstalledEveEvent(event, 0)) {
         if (projected.request !== undefined) {
           outstanding.set(projected.request.requestId, projected.request.kind);
@@ -1724,7 +1788,7 @@ export const deriveInstalledEveStatus = (
         }
       }
     }
-    if (event.type === "turn.cancelled") {
+    if (event.type === turnCancelledEvent) {
       boundary = "cancelled";
     }
     if (event.type === "session.waiting") {
@@ -1733,10 +1797,10 @@ export const deriveInstalledEveStatus = (
     if (event.type === "session.completed") {
       boundary = "completed";
     }
-    if (event.type === "session.failed") {
+    if (event.type === sessionFailedEvent) {
       boundary = "failed";
     }
-    if (event.type === "step.started") {
+    if (event.type === stepStartedEvent) {
       boundary = "working";
     }
   }
@@ -1766,7 +1830,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
         ? { ...resolved.data, index: event.index, type: "auth_identity_invitation_resolved" }
         : null;
     }
-    case "assistant.message": {
+    case assistantMessageEvent: {
       return event.turnId && event.text !== undefined
         ? {
             index: event.index,
@@ -1777,17 +1841,23 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
         : null;
     }
     case "progress": {
-      return event.label && event.state && progressStates.has(event.state)
-        ? {
-            index: event.index,
-            label: event.label,
-            state: event.state as "started" | "completed" | "failed",
-            ...(event.turnId === undefined ? {} : { turnId: event.turnId }),
-            type: "progress",
-          }
-        : null;
+      if (!(event.label && event.state && isProgressState(event.state))) {
+        return null;
+      }
+      const progress: Pick<
+        Extract<PublicEveEvent, { type: "progress" }>,
+        "index" | "label" | "state" | "turnId"
+      > = {
+        index: event.index,
+        label: event.label,
+        state: event.state,
+      };
+      if (event.turnId !== undefined) {
+        progress.turnId = event.turnId;
+      }
+      return { ...progress, type: "progress" };
     }
-    case "input.requested": {
+    case inputRequestedEvent: {
       return event.request && event.frameworkSessionLimit !== true
         ? { index: event.index, request: event.request, type: "input_required" }
         : null;
@@ -1795,7 +1865,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
     case "status": {
       return event.status ? { index: event.index, status: event.status, type: "status" } : null;
     }
-    case "error.public": {
+    case publicErrorEvent: {
       return event.code && event.message
         ? {
             code: event.code,
@@ -1817,7 +1887,7 @@ export const projectInstalledEveEvents = (
   let operation: string | undefined;
   return events
     .flatMap((event) => {
-      if (event.type === "actions.requested") {
+      if (event.type === actionsRequestedEvent) {
         const requested = event.data.actions.filter((action) => action.kind === "tool-call");
         operation = requested.at(-1)?.toolName ?? operation;
       }

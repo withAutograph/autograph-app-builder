@@ -5,11 +5,9 @@ import {
 } from "./native-target-resource-profile";
 import { isDeepStrictEqual } from "node:util";
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- The opened control-plane database uses the complete Drizzle schema.
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import { builderProvisioningJournals } from "../db/schema";
 import {
   readPrivateNativeTargetApproval,
@@ -52,8 +50,11 @@ import type {
   NativeTargetPlanRequest,
 } from "../agent/native-target-onboarding-runtime";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Current = NativeTargetCurrentOwner & { historyOwner: OperatorOwnerContext };
+const artifactContext = (owner: Current, appId: string) => ({
+  authority: owner.authority,
+  target: { appId, sessionId: owner.publicSessionId },
+});
 interface AppOwner {
   verifyWorkload: (request: Request) => Promise<void>;
   assertNoStandardBuilderDestination?: AppOwner["assertCanonicalAppOwner"];
@@ -166,7 +167,7 @@ export const createNativeTargetApprovalCheckpoint = (
       .from(builderProvisioningJournals)
       .where(predicate)
       .limit(1);
-    const row = rows[0];
+    const [row] = rows;
     if (row === undefined) {
       expected = null;
       return undefined;
@@ -175,7 +176,8 @@ export const createNativeTargetApprovalCheckpoint = (
     if (row.requestDigest !== planDigest || parsed.planDigest !== planDigest) {
       throw mismatch();
     }
-    expected = { revision: row.revision, observation: structuredClone(parsed.observation) };
+    const revision = row.revision;
+    expected = { observation: structuredClone(parsed.observation), revision };
     return parsed.observation;
   };
   const assertObservationBinding = (parsed: PrivateNativeTargetApprovalObservation) => {
@@ -219,7 +221,7 @@ export const createNativeTargetApprovalCheckpoint = (
       .from(builderProvisioningJournals)
       .where(predicate)
       .limit(1);
-    const inserted = rows[0];
+    const [inserted] = rows;
     if (inserted === undefined || inserted.requestDigest !== planDigest) {
       throw mismatch();
     }
@@ -229,7 +231,8 @@ export const createNativeTargetApprovalCheckpoint = (
     if (stored.planDigest !== planDigest || !isDeepStrictEqual(stored.observation, parsed)) {
       throw unavailable();
     }
-    expected = { revision: inserted.revision, observation: structuredClone(parsed) };
+    const revision = inserted.revision;
+    expected = { observation: structuredClone(parsed), revision };
   };
   const assertForwardObservation = (
     previous: PrivateNativeTargetApprovalObservation,
@@ -290,9 +293,10 @@ export const createNativeTargetApprovalCheckpoint = (
       throw unavailable();
     }
     if ((expected?.revision ?? 0) <= expectedSnapshot.revision) {
+      const revision = expectedSnapshot.revision + 1;
       expected = {
-        revision: expectedSnapshot.revision + 1,
         observation: structuredClone(parsed),
+        revision,
       };
     }
   };
@@ -380,10 +384,6 @@ export const createNativeTargetOnboardingDeployment = (input: {
       historyOwner,
     };
   };
-  const artifactContext = (owner: Current, appId: string) => ({
-    authority: owner.authority,
-    target: { appId, sessionId: owner.publicSessionId },
-  });
   const readCapturedRelease = async (
     owner: Current,
     appId: string,
@@ -397,8 +397,8 @@ export const createNativeTargetOnboardingDeployment = (input: {
         target: context.target,
       });
     };
-    const artifactStore = createPostgresOperatorArtifactStore({ database, assertCurrentOwner });
-    const selections = createPostgresOperatorArtifactSelections({ database, assertCurrentOwner });
+    const artifactStore = createPostgresOperatorArtifactStore({ assertCurrentOwner, database });
+    const selections = createPostgresOperatorArtifactSelections({ assertCurrentOwner, database });
     const selection = await selections.read(context, appSpecDigest);
     if (
       selection === undefined ||
@@ -408,8 +408,8 @@ export const createNativeTargetOnboardingDeployment = (input: {
       throw mismatch();
     }
     const publication = createOperatorArtifactPublication({
-      store: artifactStore,
       assertCurrentOwner,
+      store: artifactStore,
     });
     const captured = await publication.readGeneratedRelease(context, selection);
     if (
@@ -475,7 +475,7 @@ export const createNativeTargetOnboardingDeployment = (input: {
       proposal.appId,
       selectedConfiguration.sandbox.genericInstallerWorker,
     );
-    const nativeNeon = selectedConfiguration.nativeNeon;
+    const { nativeNeon } = selectedConfiguration;
     return nativeTargetOnboardingPlanSchema.parse({
       version: 1,
       appId: proposal.appId,
@@ -558,26 +558,41 @@ export const createNativeTargetOnboardingDeployment = (input: {
       },
     );
     const observation = await checkpoint.read();
-    const transport = createNativeTargetApprovalHistoryTransport({
+    const transportInput: Parameters<typeof createNativeTargetApprovalHistoryTransport>[0] = {
       builderOrigin: input.builderOrigin,
       owner,
       appId: record.appId,
       workload,
       assertCanonicalAppOwner: input.owner.assertCanonicalAppOwner,
-      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-    });
+    };
+    if (input.fetch !== undefined) {
+      transportInput.fetch = input.fetch;
+    }
+    const transport = createNativeTargetApprovalHistoryTransport(transportInput);
     if (transport.observePrivateHistory === undefined) {
       throw unavailable();
     }
-    const result = await readPrivateNativeTargetApproval({
+    const observationState: Pick<
+      NonNullable<Parameters<typeof readPrivateNativeTargetApproval>[0]["observation"]>,
+      "state"
+    > = {};
+    if (observation !== undefined) {
+      observationState.state = observation;
+    }
+    const approvalContext: Pick<
+      Parameters<typeof readPrivateNativeTargetApproval>[0],
+      "owner" | "record" | "historyOwner" | "callId"
+    > = {
       owner,
       record,
       historyOwner: owner.historyOwner,
-      ...(callId === undefined ? {} : { callId }),
-      observation: {
-        ...(observation === undefined ? {} : { state: observation }),
-        save: checkpoint.save,
-      },
+    };
+    if (callId !== undefined) {
+      approvalContext.callId = callId;
+    }
+    const result = await readPrivateNativeTargetApproval({
+      ...approvalContext,
+      observation: { ...observationState, save: checkpoint.save },
       readHistory: async (startIndex, onEvent) =>
         (await transport.observePrivateHistory?.({
           principal: owner.historyOwner.principal,
@@ -628,9 +643,9 @@ export const createNativeTargetOnboardingDeployment = (input: {
         );
       } catch {
         // This failure precedes the provider dispatch and is a definite non-creation.
-        return { status: "rejected", reason: "authorization_denied" };
+        return { reason: "authorization_denied", status: "rejected" };
       }
-      return await createNativeTargetVercelProject({
+      const projectInput: Parameters<typeof createNativeTargetVercelProject>[0] = {
         installation: credential.binding,
         token: credential.token,
         name,
@@ -638,8 +653,11 @@ export const createNativeTargetOnboardingDeployment = (input: {
         protection: plan.project.protection,
         authorizeAttempt,
         acceptProjectId,
-        ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-      });
+      };
+      if (input.fetch !== undefined) {
+        projectInput.fetch = input.fetch;
+      }
+      return await createNativeTargetVercelProject(projectInput);
     },
     observeProject: async ({ owner, plan, name, projectId }) => {
       const credential = await readInstallation(
@@ -647,15 +665,18 @@ export const createNativeTargetOnboardingDeployment = (input: {
         plan.project.installationId,
         plan.project.teamId,
       );
-      return await observeNativeTargetVercelProject({
+      const projectInput: Parameters<typeof observeNativeTargetVercelProject>[0] = {
         installation: credential.binding,
         token: credential.token,
         name,
         settings: plan.project.projectSettings,
         protection: plan.project.protection,
         projectId,
-        ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-      });
+      };
+      if (input.fetch !== undefined) {
+        projectInput.fetch = input.fetch;
+      }
+      return await observeNativeTargetVercelProject(projectInput);
     },
   });
 };

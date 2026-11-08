@@ -107,7 +107,7 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
     teamId: "team",
     app: { projectId: target.projectId, branch: target.branch, environment: "preview" },
     gateway: { projectId: gateway.projectId, branch: "gateway-main", environment: "preview" },
-    operator: { projectId: "prj_operator", deploymentId: "dpl_operator", environment: "preview" },
+    operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
     verification: {
       gatewayOrigin: gateway.publicOrigin,
       publicOrigin: gateway.publicOrigin,
@@ -115,15 +115,15 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
     },
   },
   effects: [
-    { id: "resources", kind: "resources", description: "resources" },
-    { id: "install", kind: "install", description: "install" },
-    { id: "access", kind: "access", description: "access" },
-    { id: "bindings", kind: "bindings", description: "bindings" },
-    { id: "delivery", kind: "delivery", description: "delivery" },
+    { description: "resources", id: "resources", kind: "resources" },
+    { description: "install", id: "install", kind: "install" },
+    { description: "access", id: "access", kind: "access" },
+    { description: "bindings", id: "bindings", kind: "bindings" },
+    { description: "delivery", id: "delivery", kind: "delivery" },
     {
+      description: "Deliver approved managed route",
       id: "gateway-delivery",
       kind: "gateway-delivery",
-      description: "Deliver approved managed route",
     },
   ],
 });
@@ -137,12 +137,12 @@ const ownerContext = {
 };
 const logicalRuntime = { sandboxId: "sandbox", root: "/owned/source" };
 const workloadPolicy = {
-  issuer: "https://oidc.vercel.com/fixture-team",
   audience: "https://vercel.com/fixture-team",
-  subject: "owner:fixture-team:project:builder:environment:production",
+  environment: "production" as const,
+  issuer: "https://oidc.vercel.com/fixture-team",
   ownerId: "team",
   projectId: "prj_builder",
-  environment: "production" as const,
+  subject: "owner:fixture-team:project:builder:environment:production",
 };
 const signing = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const publicJwk = {
@@ -196,24 +196,24 @@ const setup = () => {
   const requests: string[] = [];
   const bound: string[] = [];
   const stats = {
-    storeReads: 0,
-    reservations: 0,
     authorizations: 0,
-    readAuthorizations: 0,
-    starts: 0,
+    bound,
+    closes: 0,
     publishes: 0,
+    readAuthorizations: 0,
+    requests,
+    reservations: 0,
+    revokes: 0,
+    starts: 0,
+    storeReads: 0,
     suiteDispatches: 0,
     suiteInspections: 0,
-    closes: 0,
-    revokes: 0,
-    requests,
-    bound,
   };
   const faults = {
-    mutateCarrier: false,
+    invalidToken: false,
     loseExecuteResponse: false,
     loseSuiteResult: false,
-    invalidToken: false,
+    mutateCarrier: false,
   };
   const bindings = new WeakMap<
     HostedOperatorContext,
@@ -238,6 +238,15 @@ const setup = () => {
   };
   const dependencies: HostedContinuityDependencies = {
     store: {
+      async compareAndSet(input) {
+        if (record?.revision !== input.expectedRevision) {
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing rows and CAS conflicts are explicit optional store results.
+          return undefined;
+        }
+        record = continuityRecordSchema.parse(input.record);
+        snapshots.push(read());
+        return read();
+      },
       async read(input) {
         stats.storeReads += 1;
         if (
@@ -255,15 +264,6 @@ const setup = () => {
           throw new Error("Duplicate controlled reserve");
         }
         stats.reservations += 1;
-        record = continuityRecordSchema.parse(input.record);
-        snapshots.push(read());
-        return read();
-      },
-      async compareAndSet(input) {
-        if (record?.revision !== input.expectedRevision) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing rows and CAS conflicts are explicit optional store results.
-          return undefined;
-        }
         record = continuityRecordSchema.parse(input.record);
         snapshots.push(read());
         return read();
@@ -336,6 +336,39 @@ const setup = () => {
       }
     },
     runtime: {
+      async close(ctx) {
+        await assertOwner(ctx);
+        stats.closes += 1;
+        live = false;
+      },
+      async renew(ctx) {
+        await assertOwner(ctx);
+        if (!live) {
+          throw new Error("Renewed closed owned runtime");
+        }
+      },
+      async runSuite(ctx, current, capabilities, assertCurrent, checkpoint, allowDispatch) {
+        await assertOwner(ctx);
+        await assertCurrent();
+        expect(custody.unseal(current)).toEqual(capabilities);
+        if (allowDispatch) {
+          if (!live) {
+            throw new Error("Suite dispatched without live owned runtime");
+          }
+          stats.suiteDispatches += 1;
+          await checkpoint("suite-command");
+        } else {
+          stats.suiteInspections += 1;
+          if (current.suiteCommandId !== "suite-command") {
+            throw new HostedOperatorError("reconciliation_required");
+          }
+        }
+        if (faults.loseSuiteResult) {
+          faults.loseSuiteResult = false;
+          throw new Error("Controlled terminal observation unavailable");
+        }
+        return { exitCode: 0 };
+      },
       async start(ctx, current, capabilities, assertCurrent, checkpoint) {
         await assertOwner(ctx);
         await assertCurrent();
@@ -382,39 +415,6 @@ const setup = () => {
           },
           current: { ...identity, state: "ready", leaseExpiresAt: "2099-01-01T00:00:00Z" },
         });
-      },
-      async runSuite(ctx, current, capabilities, assertCurrent, checkpoint, allowDispatch) {
-        await assertOwner(ctx);
-        await assertCurrent();
-        expect(custody.unseal(current)).toEqual(capabilities);
-        if (allowDispatch) {
-          if (!live) {
-            throw new Error("Suite dispatched without live owned runtime");
-          }
-          stats.suiteDispatches += 1;
-          await checkpoint("suite-command");
-        } else {
-          stats.suiteInspections += 1;
-          if (current.suiteCommandId !== "suite-command") {
-            throw new HostedOperatorError("reconciliation_required");
-          }
-        }
-        if (faults.loseSuiteResult) {
-          faults.loseSuiteResult = false;
-          throw new Error("Controlled terminal observation unavailable");
-        }
-        return { exitCode: 0 };
-      },
-      async close(ctx) {
-        await assertOwner(ctx);
-        stats.closes += 1;
-        live = false;
-      },
-      async renew(ctx) {
-        await assertOwner(ctx);
-        if (!live) {
-          throw new Error("Renewed closed owned runtime");
-        }
       },
     },
     projection: {
@@ -501,22 +501,22 @@ const setup = () => {
     },
   });
   const handler = createProtectedHostedOperatorHandler({
-    authorize,
     assertAuthorized: rejectUnexpected,
+    authorize,
+    bindings: rejectUnexpected,
+    continuityRequest: dispatcher,
+    executeEffect: rejectUnexpected,
     plan: rejectUnexpected,
     readApproval: rejectUnexpected,
-    withResourceLease: rejectUnexpected,
     reconcile: rejectUnexpected,
-    executeEffect: rejectUnexpected,
-    verify: rejectUnexpected,
-    bindings: rejectUnexpected,
     store: {
+      compareAndSet: rejectUnexpected,
       read: rejectUnexpected,
       reserve: rejectUnexpected,
-      compareAndSet: rejectUnexpected,
       reserveFenceGeneration: rejectUnexpected,
     },
-    continuityRequest: dispatcher,
+    verify: rejectUnexpected,
+    withResourceLease: rejectUnexpected,
   });
   const transport: typeof fetch = async (url, init) => {
     expect(init).toHaveProperty("dispatcher");
@@ -536,9 +536,9 @@ const setup = () => {
   const clientFor = (hint = ownerContext) =>
     createHostedOperatorClient({
       endpoint: "https://operator.fixture.test",
+      fetch: transport,
       ownerContext: hint,
       sessionId: target.sessionId,
-      fetch: transport,
       token: async () => {
         const token = faults.invalidToken ? "invalid-signature" : await signedWorkload();
         tokens.push(token);
@@ -599,16 +599,16 @@ it("uses the real client/handler/dispatcher/service through exact approval and c
   expect(f.stats.revokes).toBe(1);
   expect(f.live).toBe(false);
   const counts = {
-    starts: f.stats.starts,
     publishes: f.stats.publishes,
+    starts: f.stats.starts,
     suite: f.stats.suiteDispatches,
   };
   const status = await f.client.continuityStatus(planned.plan.intentId);
   expect(status.state).toBe("settled");
   await f.client.runContinuity(planned.request, "execute-call");
   expect({
-    starts: f.stats.starts,
     publishes: f.stats.publishes,
+    starts: f.stats.starts,
     suite: f.stats.suiteDispatches,
   }).toEqual(counts);
   expect(f.record.plan.originalSetup).toEqual(planned.plan.originalSetup);
@@ -625,7 +625,7 @@ it("reads the exact saved continuity intent after the prepared target changes wi
   );
   const original = f.record;
   const writes = f.snapshots.length;
-  const authorizations = f.stats.authorizations;
+  const { authorizations } = f.stats;
   f.selectPreparedTarget({
     ...preparedPlan.selection,
     branch: "new-preview",
@@ -677,8 +677,8 @@ it.each(["initial", "owner-checked"] as const)(
     reads.mockRejectedValueOnce(new Error("private journal detail"));
     await expect(f.client.readContinuity(planned.plan.intentId)).rejects.toMatchObject({
       code: "operator_unavailable",
-      recoveryStage: "canonical_read",
       message: "operator_unavailable",
+      recoveryStage: "canonical_read",
     });
     expect(f.record).toEqual(before);
     expect(f.stats.reservations).toBe(1);
@@ -700,8 +700,8 @@ it("reads saved checkpoints and verified actor facts only for the owner without 
   expect(checkpoints.intentId).toBe(planned.plan.intentId);
   expect(checkpoints.checkpoints.suiteDispatch).toBe("unrecorded");
   expect(await f.client.readContinuityVerifiedActors(planned.plan.intentId)).toEqual({
-    requestCorrelation: "not_established",
     actors: [],
+    requestCorrelation: "not_established",
   });
   expect(f.record).toEqual(before);
   f.setOwner(false);
@@ -727,8 +727,8 @@ it("reads approved binding status through the owner-verified transport without d
   const result = await f.client.readContinuityBindings(planned.plan.intentId);
   expect(result.bindings).toEqual([
     {
-      appId: target.appId,
       actorId: "actor",
+      appId: target.appId,
       organizationId: "org",
       role: "ordinary_role",
       status: "actor_active",
@@ -779,9 +779,9 @@ it("rejects a continuity response belonging to a different requested intent or o
   const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(planned));
   const client = createHostedOperatorClient({
     endpoint: "https://operator.fixture.test",
+    fetch: fetcher,
     ownerContext,
     sessionId: target.sessionId,
-    fetch: fetcher,
     token: async () => "controlled-workload",
   });
   await expect(client.readContinuity(randomUUID())).rejects.toMatchObject({

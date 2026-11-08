@@ -18,30 +18,30 @@ import { assertNoConflictingCreatorRoleUpdate } from "./repository-production-ro
 import type { AppAccessCommand } from "../app-access/contracts";
 
 const scope: RepositoryProductionScope = {
+  appId: "request-log",
   authority: {
-    issuer: "https://builder.test/api/auth",
     audience: "https://builder.test/mcp",
+    issuer: "https://builder.test/api/auth",
     ownerUserId: "owner",
     workspaceId: "workspace",
   },
-  appId: "request-log",
-  repositoryId: "repository",
-  repositoryFullName: "example/apps",
-  projectId: "project",
-  organizationId: "organization",
-  publicOrigin: "https://apps.test",
   environment: "production",
+  organizationId: "organization",
+  projectId: "project",
+  publicOrigin: "https://apps.test",
+  repositoryFullName: "example/apps",
+  repositoryId: "repository",
 };
 const intent: RepositoryProductionIntent = {
+  creatorRoles: ["requester"],
   sessionId: "session",
   sourceSha: "a".repeat(40),
-  creatorRoles: ["requester"],
   storage: {
-    kind: "postgres",
-    releaseId: "release",
     artifactRef: "artifact",
-    manifestSha256: "b".repeat(64),
     databaseEnvironment: "REQUEST_LOG_DATABASE_URL",
+    kind: "postgres",
+    manifestSha256: "b".repeat(64),
+    releaseId: "release",
   },
 };
 const fixture = () => {
@@ -54,29 +54,66 @@ const fixture = () => {
   const calls: string[] = [];
   const actual = new Set<string>();
   const ports: RepositoryProductionSetupPorts = {
-    store: {
-      read: async () => (row === undefined ? undefined : structuredClone(row)),
-      reserve: async (record) => {
-        row ??= {
-          operationRef: repositoryProductionOperationRef(record.scope),
-          revision: 1,
-          record: structuredClone(record),
-        };
-        return structuredClone(row);
-      },
-      compareAndSet: async (before, record) => {
-        if (row?.revision !== before.revision) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Absence is the explicit optional-store result.
-          return undefined;
-        }
-        row = { ...before, revision: before.revision + 1, record: structuredClone(record) };
-        return structuredClone(row);
-      },
+    apply: async ({ effect, row: current }) => {
+      expect(current.record.effects[effect].state).toBe("pending");
+      if (effect === "allocate-storage") {
+        expect(current.record.privateState).toEqual({ sealed: "private" });
+      }
+      calls.push(effect);
+      actual.add(effect);
+      if (interrupt) {
+        interrupt = false;
+        throw new Error("connection lost");
+      }
     },
     assertAuthorized: async () => {
       if (!authorized) {
         throw new Error("not authorized");
       }
+    },
+    readCreatorIdentity: async () =>
+      identity
+        ? { actorId: "creator", state: "verified" }
+        : {
+            expiresAt: "2026-11-07T15:10:00.000Z",
+            signInUrl: "https://apps.test/sign-in",
+            state: "required",
+          },
+    reconcile: async ({ effect }): Promise<RepositoryProductionObservation> =>
+      unknown
+        ? { state: "unknown" }
+        : actual.has(effect)
+          ? { receipt: { effect }, state: "applied" }
+          : { state: "not-applied" },
+    reconcileCreatorRoles: async (context) => {
+      if (!actual.has("creator-access")) {
+        return "skipped";
+      }
+      calls.push(`roles:${context.row.record.creatorRoleUpdate?.roles.join(",")}`);
+      return "applied";
+    },
+    reservePrivateState: async () => {
+      calls.push("credentials");
+      return { sealed: "private" };
+    },
+    store: {
+      compareAndSet: async (before, record) => {
+        if (row?.revision !== before.revision) {
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Absence is the explicit optional-store result.
+          return undefined;
+        }
+        row = { ...before, record: structuredClone(record), revision: before.revision + 1 };
+        return structuredClone(row);
+      },
+      read: async () => (row === undefined ? undefined : structuredClone(row)),
+      reserve: async (record) => {
+        row ??= {
+          operationRef: repositoryProductionOperationRef(record.scope),
+          record: structuredClone(record),
+          revision: 1,
+        };
+        return structuredClone(row);
+      },
     },
     withLease: async (_scope, run) => {
       const previous = lock;
@@ -91,58 +128,21 @@ const fixture = () => {
         release();
       }
     },
-    reservePrivateState: async () => {
-      calls.push("credentials");
-      return { sealed: "private" };
-    },
-    readCreatorIdentity: async () =>
-      identity
-        ? { state: "verified", actorId: "creator" }
-        : {
-            state: "required",
-            signInUrl: "https://apps.test/sign-in",
-            expiresAt: "2026-11-07T15:10:00.000Z",
-          },
-    reconcile: async ({ effect }): Promise<RepositoryProductionObservation> =>
-      unknown
-        ? { state: "unknown" }
-        : actual.has(effect)
-          ? { state: "applied", receipt: { effect } }
-          : { state: "not-applied" },
-    reconcileCreatorRoles: async (context) => {
-      if (!actual.has("creator-access")) {
-        return "skipped";
-      }
-      calls.push(`roles:${context.row.record.creatorRoleUpdate?.roles.join(",")}`);
-      return "applied";
-    },
-    apply: async ({ effect, row: current }) => {
-      expect(current.record.effects[effect].state).toBe("pending");
-      if (effect === "allocate-storage") {
-        expect(current.record.privateState).toEqual({ sealed: "private" });
-      }
-      calls.push(effect);
-      actual.add(effect);
-      if (interrupt) {
-        interrupt = false;
-        throw new Error("connection lost");
-      }
-    },
   };
   return {
-    service: createRepositoryProductionSetup(ports),
-    ports,
-    calls,
     actual,
-    read: () => row,
-    setIdentity: (value: boolean) => {
-      identity = value;
+    calls,
+    interrupt: () => {
+      interrupt = true;
     },
+    ports,
+    read: () => row,
     revoke: () => {
       authorized = false;
     },
-    interrupt: () => {
-      interrupt = true;
+    service: createRepositoryProductionSetup(ports),
+    setIdentity: (value: boolean) => {
+      identity = value;
     },
     uncertain: () => {
       unknown = true;
@@ -167,7 +167,6 @@ describe("Builder-owned Production setup", () => {
       }
       const kernel = new Map<string, string[]>();
       f.ports.reconcileAppAccessUpgrade = createRepositoryProductionAccessUpgrader({
-        readMembers: async () => members,
         execute: async (context, command) => {
           expect(context.row.record.effects["install-schema"].state).toBe("applied");
           if (command.action !== "change-role") {
@@ -175,6 +174,7 @@ describe("Builder-owned Production setup", () => {
           }
           kernel.set(command.memberId, command.roles);
         },
+        readMembers: async () => members,
       });
       expect((await f.service.prepare(scope, intent)).state).toBe("ready");
       expect(kernel.get("invitee")).toEqual(["requester"]);
@@ -198,7 +198,6 @@ describe("Builder-owned Production setup", () => {
     const commands: AppAccessCommand[] = [];
     let interrupted = false;
     f.ports.reconcileAppAccessUpgrade = createRepositoryProductionAccessUpgrader({
-      readMembers: async () => members,
       execute: async (_context, command) => {
         if (command.action !== "change-role") {
           throw new Error("Unexpected upgrade operation");
@@ -213,6 +212,7 @@ describe("Builder-owned Production setup", () => {
           throw new Error("lost grant reply");
         }
       },
+      readMembers: async () => members,
     });
     const revised = { ...intent, creatorRoles: [] };
     await expect(f.service.prepare(scope, revised)).rejects.toThrow("lost grant reply");
@@ -221,9 +221,9 @@ describe("Builder-owned Production setup", () => {
     expect(current?.record.appAccessUpgrade?.state).toBe("pending");
     expect(() => {
       assertNoConflictingCreatorRoleUpdate({
-        row: current,
         commandId: "fresh-removal",
         pendingCommandIds: [],
+        row: current,
       });
     }).toThrow();
     expect(
@@ -246,15 +246,15 @@ describe("Builder-owned Production setup", () => {
     await f.service.prepare(scope, { ...intent, storage: { kind: "none" } });
     const upgraded: string[] = [];
     f.ports.reconcileAppAccessUpgrade = createRepositoryProductionAccessUpgrader({
-      readMembers: async () => [
-        { id: "creator", roles: ["requester"] },
-        { id: "invitee", roles: ["requester"] },
-      ],
       execute: async (_context, command) => {
         if (command.action === "change-role") {
           upgraded.push(command.memberId);
         }
       },
+      readMembers: async () => [
+        { id: "creator", roles: ["requester"] },
+        { id: "invitee", roles: ["requester"] },
+      ],
     });
     expect(
       (await f.service.prepare(scope, { ...intent, creatorRoles: ["requester", "approver"] }))
@@ -286,10 +286,10 @@ describe("Builder-owned Production setup", () => {
     const revision = f.read()?.revision;
     const status = await f.service.status(scope, intent);
     expect(status).toMatchObject({
-      operationRef: pending.operationRef,
-      state: "identity-required",
-      signInUrl: "https://apps.test/sign-in",
       expiresAt: "2026-11-07T15:10:00.000Z",
+      operationRef: pending.operationRef,
+      signInUrl: "https://apps.test/sign-in",
+      state: "identity-required",
     });
     expect(f.calls).toEqual(calls);
     expect(f.read()?.revision).toBe(revision);

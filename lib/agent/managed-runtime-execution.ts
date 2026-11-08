@@ -85,8 +85,8 @@ export const observeManagedRuntimePorts = async (
   provider: Pick<ManagedRuntimeSandboxPort, "runCommand" | "routes">,
 ) => {
   const command = await provider.runCommand({
-    cmd: "node",
     args: ["-e", portObservationSource, JSON.stringify(provider.routes.map((route) => route.port))],
+    cmd: "node",
     env: {},
   });
   if (command.exitCode !== 0) {
@@ -208,6 +208,25 @@ export const managedSuiteEnvironment = (input: {
   APP_TEST_MANAGED_LIFECYCLE_SOCKET: input.socketPath,
   APP_TEST_MANAGED_PUBLIC_PROFILE: JSON.stringify(input.publicProfile),
 });
+const writeCurrent = async (provider: ManagedRuntimeSandboxPort, record: ContinuityRecord) => {
+  if (record.current === undefined || record.locator === undefined) {
+    return;
+  }
+  const file = `${record.locator.rootDirectory}/current.json`;
+  const temporary = `${file}.${record.fence}.next`;
+  await provider.writeFiles([
+    {
+      content: JSON.stringify({
+        ...record.current,
+        leaseExpiresAt: managedRuntimeOwnerLease(record.current.leaseExpiresAt),
+      }),
+      mode: 0o600,
+      path: temporary,
+    },
+  ]);
+  await provider.fs.rename(temporary, file);
+};
+
 export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDependencies) => {
   const providers = new WeakMap<HostedOperatorContext, Promise<ManagedRuntimeSandboxPort>>();
   const providerFor = async (context: HostedOperatorContext, plan: HostedContinuityPlan) => {
@@ -226,7 +245,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
     return await pending;
   };
   const assertLocator = async (context: HostedOperatorContext, record: ContinuityRecord) => {
-    const locator = record.locator;
+    const { locator } = record;
     if (
       locator === undefined ||
       locator.attemptId !== record.attemptId ||
@@ -240,25 +259,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
     if (session.id !== locator.providerSessionId) {
       throw unavailable();
     }
-    return { provider, locator };
-  };
-  const writeCurrent = async (provider: ManagedRuntimeSandboxPort, record: ContinuityRecord) => {
-    if (record.current === undefined || record.locator === undefined) {
-      return;
-    }
-    const file = `${record.locator.rootDirectory}/current.json`;
-    const temporary = `${file}.${record.fence}.next`;
-    await provider.writeFiles([
-      {
-        path: temporary,
-        content: JSON.stringify({
-          ...record.current,
-          leaseExpiresAt: managedRuntimeOwnerLease(record.current.leaseExpiresAt),
-        }),
-        mode: 0o600,
-      },
-    ]);
-    await provider.fs.rename(temporary, file);
+    return { locator, provider };
   };
   const closeOwnedCommand = async (context: HostedOperatorContext, record: ContinuityRecord) => {
     if (record.locator === undefined) {
@@ -302,7 +303,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
     }
     const session = await currentSession(provider);
     if (session.id === locator.providerSessionId) {
-      return { locator, current: record.current };
+      return { current: record.current, locator };
     }
     if (!canRebindUndispatchedContinuityRuntime(record)) {
       throw unavailable();
@@ -314,12 +315,12 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
     const recoveredLocator = { ...locator, providerSessionId: session.id };
     const current = continuityCurrentSchema.parse({
       ...record.current,
-      providerSessionId: session.id,
       leaseExpiresAt: expiresAt,
+      providerSessionId: session.id,
     });
     await assertCurrent();
     await checkpoint({ locator: recoveredLocator, current });
-    return { locator: recoveredLocator, current };
+    return { current, locator: recoveredLocator };
   };
   const runtime: HostedContinuityDependencies["runtime"] = {
     async start(context, record, _capabilities, assertCurrent, checkpoint) {
@@ -329,7 +330,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
       const { appPort, bridgePort } = record.plan.runtime;
       await assertCurrent();
       const provider = await providerFor(context, record.plan);
-      let locator = record.locator;
+      let { locator } = record;
       let retainedCurrent = record.current;
       if (locator === undefined) {
         if (record.attemptId === undefined || record.approval === undefined) {
@@ -431,7 +432,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
         await provider.fs.mkdir(locator.rootDirectory, { recursive: true });
         await provider.fs.chmod(locator.rootDirectory, 0o700);
         const file = `${locator.rootDirectory}/input.json`;
-        await provider.writeFiles([{ path: file, content: JSON.stringify(input), mode: 0o600 }]);
+        await provider.writeFiles([{ content: JSON.stringify(input), mode: 0o600, path: file }]);
         await provider.update({
           networkPolicy: "allow-all",
           ports: [...new Set([...provider.routes.map((route) => route.port), bridgePort])],
@@ -440,10 +441,10 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
         locator = { ...locator, dispatchAttempted: true };
         await checkpoint({ locator });
         const command = await provider.runCommand({
-          cmd: descriptor.executablePath,
           args: [descriptor.subcommand, "--input-file", file],
-          env: {},
+          cmd: descriptor.executablePath,
           detached: true,
+          env: {},
           signal: deps.signal(context),
         });
         locator = { ...locator, commandId: command.cmdId };
@@ -515,9 +516,9 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
           branch: record.plan.target.branch,
           environment: material.environment,
           files: { "environment.json": JSON.stringify(material.environment) },
+          persistFiles: () => Promise.resolve(),
           projectId: record.plan.target.projectId,
           stateDirectory: `${locator.rootDirectory}/suite`,
-          persistFiles: () => Promise.resolve(),
         },
         observeInstallation: () => Promise.resolve(material.proof),
         resumeCommand: async (commandId) => await provider.getCommand(commandId),
@@ -525,26 +526,26 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
       });
       const privateEnvironment = managedSuiteEnvironment({
         capabilities,
-        socketPath: ready.socketPath,
         publicProfile: profile,
+        socketPath: ready.socketPath,
       });
-      const runTask = prepared.runTask;
+      const { runTask } = prepared;
       const managed = {
         ...prepared,
-        runTask: async (input: Parameters<typeof runTask>[0]) =>
-          await runTask({
-            ...input,
-            ...(record.plan.runtime.browserSelection === undefined
-              ? {}
-              : {
-                  browserSelection: record.plan.runtime.browserSelection,
-                  frozenBrowserSelection: true,
-                }),
+        runTask: async (input: Parameters<typeof runTask>[0]) => {
+          const taskInput: Parameters<typeof runTask>[0] = { ...input };
+          if (record.plan.runtime.browserSelection !== undefined) {
+            taskInput.browserSelection = record.plan.runtime.browserSelection;
+            taskInput.frozenBrowserSelection = true;
+          }
+          return await runTask({
+            ...taskInput,
             environment: { ...input.environment, ...privateEnvironment },
             commandId: record.suiteCommandId,
             commandCheckpoint: checkpoint,
             allowDispatch,
-          }),
+          });
+        },
       };
       const result = await runAppBrowserTests({
         appId: record.plan.target.appId,
@@ -555,9 +556,9 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
         runtime: managed,
         signal: deps.signal(context),
         continuation: {
-          commandId: record.suiteCommandId,
-          commandCheckpoint: checkpoint,
           allowDispatch,
+          commandCheckpoint: checkpoint,
+          commandId: record.suiteCommandId,
         },
       });
       if (result.exitCode === null) {
@@ -582,8 +583,8 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
           }
           await deps.disposeWorkerAsset({
             attemptId: record.attemptId,
-            state: record.workerAsset,
             checkpoint,
+            state: record.workerAsset,
           });
         } catch (error) {
           failure ??= error;

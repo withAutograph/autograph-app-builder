@@ -134,10 +134,10 @@ const fixture = async () => {
   const transport: HostedEveTransport = {
     activateRecovery,
     cancel: vi.fn(() => Promise.resolve({ events: [], status: "cancelled" as const })),
-    get: vi.fn(() => Promise.resolve(working)),
+    get: vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(working),
     observe,
-    respond: vi.fn(() => Promise.resolve(working)),
-    send: vi.fn(() => Promise.resolve(working)),
+    respond: vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(working),
+    send: vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(working),
     start,
   };
   const seed = createHostedEveSessionService({
@@ -293,12 +293,12 @@ describe("recovered child terminal read after activation transport failure", () 
     });
     f.beforeRead.mockResolvedValue();
     f.setMode("working");
-    const result = await f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 });
+    const result = await f.service.get({ cursor: 0, limit: 25, sessionId: f.childSessionId });
     expect(result.status).toBe("working");
     expect(f.beforeRead).toHaveBeenCalledOnce();
     expect(await f.base.getSession(principal, f.originalSessionId)).toMatchObject({
-      status: "failed",
       resumability: "terminal",
+      status: "failed",
     });
     expect(f.observeSessionPaged).toHaveBeenCalledOnce();
   });
@@ -308,7 +308,7 @@ describe("recovered child terminal read after activation transport failure", () 
     async (status) => {
       const f = await fixture();
       f.setMode(status);
-      const result = await f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 });
+      const result = await f.service.get({ cursor: 0, limit: 25, sessionId: f.childSessionId });
       expect(result.status).toBe(status);
       expect(result.events).toMatchObject([{ text: `Native ${status} terminal observation` }]);
       expect(f.observe).toHaveBeenCalledOnce();
@@ -327,7 +327,7 @@ describe("recovered child terminal read after activation transport failure", () 
       const f = await fixture();
       f.setMode(mode);
       await expect(
-        f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 }),
+        f.service.get({ cursor: 0, limit: 25, sessionId: f.childSessionId }),
       ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
       expect(f.beforeRead).not.toHaveBeenCalled();
       expect(f.observeSessionPaged).not.toHaveBeenCalled();
@@ -339,11 +339,11 @@ describe("recovered child terminal read after activation transport failure", () 
   it("does not substitute a cached terminal checkpoint when the fresh native read is unavailable", async () => {
     const f = await fixture();
     await expect(
-      f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 }),
+      f.service.get({ cursor: 0, limit: 25, sessionId: f.childSessionId }),
     ).resolves.toMatchObject({ status: "failed" });
     f.setMode("unavailable");
     await expect(
-      f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 }),
+      f.service.get({ cursor: 0, limit: 25, sessionId: f.childSessionId }),
     ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     expect(f.beforeRead).not.toHaveBeenCalled();
     expect(f.transport.get).not.toHaveBeenCalled();
@@ -353,7 +353,7 @@ describe("recovered child terminal read after activation transport failure", () 
     const f = await fixture();
     f.setOwnerAllowed(false);
     await expect(
-      f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 }),
+      f.service.get({ cursor: 0, limit: 25, sessionId: f.childSessionId }),
     ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     expect(f.observe).not.toHaveBeenCalled();
     expect(f.beforeRead).not.toHaveBeenCalled();
@@ -371,7 +371,7 @@ describe("recovered child terminal read after activation transport failure", () 
         });
       });
       await expect(
-        f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 }),
+        f.service.get({ cursor: 0, limit: 25, sessionId: f.childSessionId }),
       ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
       expect(f.observe).toHaveBeenCalledOnce();
       expect(f.observeSessionPaged).not.toHaveBeenCalled();
@@ -389,7 +389,7 @@ describe("recovered child terminal read after activation transport failure", () 
       });
     });
     await expect(
-      f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 }),
+      f.service.get({ cursor: 0, limit: 25, sessionId: f.childSessionId }),
     ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     expect(f.observeSessionPaged).toHaveBeenCalledOnce();
     expect(f.beforeRead).not.toHaveBeenCalled();

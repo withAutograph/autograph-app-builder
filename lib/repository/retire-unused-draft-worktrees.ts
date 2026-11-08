@@ -307,6 +307,8 @@ console.log(JSON.stringify({ status, retired, retained, reasons, ...(before || a
 main().catch(() => { console.log(JSON.stringify({ status: "unavailable", retired: 0, retained: 0, reasons: {} })); });
 `;
 
+const quoteRetirementArgument = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
+
 /** Retire only unreferenced, byte-clean registered worktrees; preserve their HEADs. */
 export const retireUnusedDraftWorktrees = async (input: {
   sandbox: Pick<SandboxSession, "run">;
@@ -314,11 +316,10 @@ export const retireUnusedDraftWorktrees = async (input: {
   workspaceRoot?: string;
   signal?: AbortSignal;
 }): Promise<DraftWorktreeRetirementAdvisory> => {
-  const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
   try {
     const result = await input.sandbox.run({
       abortSignal: input.signal,
-      command: `node -e ${quote(retirementProgram)} ${quote(
+      command: `node -e ${quoteRetirementArgument(retirementProgram)} ${quoteRetirementArgument(
         JSON.stringify({
           workspaceRoot: path.posix.resolve(input.workspaceRoot ?? "/workspace"),
           retainedRoots: input.retainedRoots,

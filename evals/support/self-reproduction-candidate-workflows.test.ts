@@ -14,11 +14,12 @@ const browserFixture = (
 ) => {
   const locator = {
     allTextContents: async () => ["Synthetic control"],
-    blur: vi.fn(),
-    click: vi.fn(),
+    blur: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    click: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     count: async () => 0,
-    fill: vi.fn(),
+    fill: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     first: () => locator,
+    getAttribute: async () => null,
     inputValue: async () => "Default draft value",
     isVisible: async () => visible,
     textContent: async () =>
@@ -35,7 +36,7 @@ const browserFixture = (
       return locator;
     },
     getByText: () => locator,
-    goBack: vi.fn(),
+    goBack: vi.fn<() => Promise<null>>().mockResolvedValue(null),
     goto: async () => ({ ok: () => reachable }),
     locator: () => locator,
     on: (
@@ -46,20 +47,24 @@ const browserFixture = (
         listener({ method: () => "POST", url: () => "https://candidate.example/api/create" });
       }
     },
-    reload: vi.fn(),
+    reload: vi.fn<() => Promise<null>>().mockResolvedValue(null),
+    request: { get: async () => ({ ok: () => false, text: async () => "" }) },
     setDefaultTimeout: vi.fn(),
     url: () => "https://candidate.example/app/",
-    waitForLoadState: vi.fn(),
-    waitForTimeout: vi.fn(),
+    waitForLoadState: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    waitForTimeout: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
   };
-  const context = { close: vi.fn(), newPage: async () => page };
+  const context = {
+    close: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    newPage: async () => page,
+  };
   return { newContext: async () => context };
 };
 
 it("leaves unfamiliar layouts unassessed and retains each partial outcome", async () => {
   const retain = vi.fn();
   const outcomes = await exerciseCandidateBrowserWorkflows(
-    browserFixture() as never,
+    browserFixture(),
     "https://candidate.example/app/",
     retain,
   );
@@ -70,7 +75,7 @@ it("leaves unfamiliar layouts unassessed and retains each partial outcome", asyn
 
 it("does not award readable documentation to an inert Docs button", async () => {
   const outcomes = await exerciseCandidateBrowserWorkflows(
-    browserFixture(true) as never,
+    browserFixture(true),
     "https://candidate.example/app/",
     vi.fn(),
   );
@@ -80,7 +85,7 @@ it("does not award readable documentation to an inert Docs button", async () => 
 
 it("blocks unavailable runtime separately from absent product controls", async () => {
   const outcomes = await exerciseCandidateBrowserWorkflows(
-    browserFixture(false, false) as never,
+    browserFixture(false, false),
     "https://candidate.example/app/",
     vi.fn(),
   );
@@ -96,7 +101,7 @@ it("provides standalone evaluator code without injecting candidate source", () =
 
 it("fails a draft whose edited values are lost on reload", async () => {
   const outcomes = await exerciseCandidateBrowserWorkflows(
-    browserFixture(true) as never,
+    browserFixture(true),
     "https://candidate.example/app/",
     vi.fn(),
   );
@@ -107,7 +112,7 @@ it("fails a draft whose edited values are lost on reload", async () => {
 
 it("fails an absent Docs control within the supported candidate layout", async () => {
   const outcomes = await exerciseCandidateBrowserWorkflows(
-    browserFixture(true, true, true) as never,
+    browserFixture(true, true, true),
     "https://candidate.example/app/",
     vi.fn(),
   );
@@ -135,7 +140,7 @@ it("preserves unknown assertions when converting retained evaluator outcomes", (
 
 it("does not fail an unfinished backend creation merely because no link appeared immediately", async () => {
   const outcomes = await exerciseCandidateBrowserWorkflows(
-    browserFixture(true, true, false, true) as never,
+    browserFixture(true, true, false, true),
     "https://candidate.example/app/",
     vi.fn(),
   );

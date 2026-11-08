@@ -35,6 +35,10 @@ import { ExistingApplicationChangesRequiredError } from "./target-planning-error
 import type { ApplicationFileChange } from "./application-file-change";
 import { applicationFilePathSchema } from "./application-file-change";
 
+const microfrontendsConfigPath = "microfrontends.json";
+const repositoryWorkspacePath = "/workspace/repository";
+const targetIdentityPlanningMarker = "target-identity-and-planning";
+
 export {
   ExistingApplicationChangesRequiredError,
   ExistingAppChangePreimageError,
@@ -116,7 +120,7 @@ const targetCreationProposalSchemaForTopology = (topologyOwner: string) =>
     });
 
 export const targetCreationProposalSchema =
-  targetCreationProposalSchemaForTopology("microfrontends.json");
+  targetCreationProposalSchemaForTopology(microfrontendsConfigPath);
 
 const iterationChangeSchema = z
   .strictObject({
@@ -163,9 +167,10 @@ const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
       applicationSourceImport: applicationSourceImportPlanningSchema.optional(),
     })
     .superRefine((proposal, context) => {
+      const noChangesOrUpgrade =
+        proposal.iteration.changes.length === 0 && proposal.frameworkUpgrade === undefined;
       if (
-        proposal.iteration.changes.length === 0 &&
-        proposal.frameworkUpgrade === undefined &&
+        noChangesOrUpgrade &&
         proposal.sourceReconciliation === undefined &&
         proposal.privateCompute === undefined &&
         proposal.applicationSourceImport === undefined
@@ -215,7 +220,7 @@ const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
     });
 
 export const targetIterationProposalSchema =
-  targetIterationProposalSchemaForTopology("microfrontends.json");
+  targetIterationProposalSchemaForTopology(microfrontendsConfigPath);
 
 export const targetProposalSchema = z.preprocess(
   (input) => {
@@ -314,7 +319,7 @@ const parseOutput = <T>(result: TargetCommandResult, schema: z.ZodType<T>, label
 };
 
 export const targetExecutionBinding = (
-  cache: ObservedDependencyCache | undefined,
+  cache: Pick<ObservedDependencyCache, "manifestDigest"> | undefined,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ) => {
   if (hasTestCapability("simulated-target", environment)) {
@@ -416,7 +421,7 @@ export const sandboxTargetCommandExecutor =
         MISE_NOT_FOUND_AUTO_INSTALL: "false",
         MISE_TASK_RUN_AUTO_INSTALL: "false",
       },
-      workingDirectory: "/workspace/repository",
+      workingDirectory: repositoryWorkspacePath,
     };
     const result = await sandbox.run(request);
     if (
@@ -431,7 +436,7 @@ export const sandboxTargetCommandExecutor =
     await setBuilderSandboxNetworkPolicy(sandbox, "allow-all");
     const setup = await sandbox.run({
       command: "bun install --ignore-scripts --filter @autograph/platform-microfrontends",
-      workingDirectory: "/workspace/repository",
+      workingDirectory: repositoryWorkspacePath,
     });
     if (setup.exitCode !== 0) {
       return setup;
@@ -463,7 +468,7 @@ const creationPlan = (
     },
     topology: {
       assetRoute: `/${identity.appId}/_next/:path*`,
-      configPath: "microfrontends.json",
+      configPath: microfrontendsConfigPath,
       packageName: identity.packageName,
       projectName: identity.projectName,
       routes: identity.baseRoutes,
@@ -514,7 +519,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
   environment?: Readonly<Record<string, string | undefined>>;
   onIdentity?: (identity: TargetIdentity) => void | Promise<void>;
 }) => {
-  planningMarker("target-identity-and-planning", "start");
+  planningMarker(targetIdentityPlanningMarker, "start");
   const privateCompute =
     input.privateCompute === undefined
       ? undefined
@@ -536,12 +541,15 @@ export const executeTargetIdentityAndPlanning = async (input: {
     input.localSourceReconciliation === undefined
       ? undefined
       : localSourceReconciliationSchema.parse(input.localSourceReconciliation);
-  if (
+  const unauthorizedLocalSource =
     sourceReconciliation !== undefined &&
     (!canAutoSelectDevelopmentSource(input.environment) ||
-      sourceReconciliation.appId !== input.appId ||
-      sourceReconciliation.appSpecDigest !== input.appSpecDigest ||
-      sourceReconciliation.sourceReceiptDigest !== input.sourceReceipt?.digest)
+      sourceReconciliation.appId !== input.appId);
+  if (
+    unauthorizedLocalSource ||
+    (sourceReconciliation !== undefined &&
+      (sourceReconciliation.appSpecDigest !== input.appSpecDigest ||
+        sourceReconciliation.sourceReceiptDigest !== input.sourceReceipt?.digest))
   ) {
     throw new Error("Local source reconciliation does not belong to this planning input.");
   }
@@ -575,10 +583,10 @@ export const executeTargetIdentityAndPlanning = async (input: {
           await (input.resolveFrameworkVersions ?? resolveLatestFrameworkVersions)(),
         )
       : undefined;
+  const noRequestedChangesOrUpgrade =
+    existingApplication && input.existingAppChanges === undefined && frameworkUpgrade === undefined;
   if (
-    existingApplication &&
-    input.existingAppChanges === undefined &&
-    frameworkUpgrade === undefined &&
+    noRequestedChangesOrUpgrade &&
     sourceReconciliation === undefined &&
     privateCompute === undefined &&
     applicationSourceImport === undefined
@@ -616,30 +624,25 @@ export const executeTargetIdentityAndPlanning = async (input: {
       if (requested.operation === "delete" && before === null) {
         continue;
       }
-      changes.push({
-        ...(requested.operation === "delete"
-          ? {}
-          : {
-              after: {
-                content: requested.content,
-                digest: sha256(requested.content),
-                mode,
-              },
-            }),
-        ...(before === null
-          ? {}
-          : {
-              before: {
-                digest: sha256(before),
-                mode,
-              },
-            }),
-        path: requested.path,
-      });
+      const content: Omit<TargetIterationChange, "path"> = {};
+      if (requested.operation !== "delete") {
+        content.after = {
+          content: requested.content,
+          digest: sha256(requested.content),
+          mode,
+        };
+      }
+      if (before !== null) {
+        content.before = {
+          digest: sha256(before),
+          mode,
+        };
+      }
+      changes.push({ ...content, path: requested.path });
     }
+    const noChangesOrUpgrade = changes.length === 0 && frameworkUpgrade === undefined;
     if (
-      changes.length === 0 &&
-      frameworkUpgrade === undefined &&
+      noChangesOrUpgrade &&
       sourceReconciliation === undefined &&
       privateCompute === undefined &&
       applicationSourceImport === undefined
@@ -662,13 +665,13 @@ export const executeTargetIdentityAndPlanning = async (input: {
         ? undefined
         : await input.sandbox.run({
             command: `test -f /workspace/repository/${identity.schemaCuePath}`,
-            workingDirectory: "/workspace/repository",
+            workingDirectory: repositoryWorkspacePath,
           });
     const description =
       schemaChange === undefined && applicationSourceImport === undefined
         ? await describeSelectedApp({
             appId: identity.appId,
-            root: "/workspace/repository",
+            root: repositoryWorkspacePath,
             sandbox: input.sandbox,
           })
         : undefined;
@@ -678,30 +681,47 @@ export const executeTargetIdentityAndPlanning = async (input: {
         : importedSchema?.exitCode === 0;
     const hasSchema =
       schemaChange === undefined ? observedSchema : schemaChange.operation !== "delete";
-    const proposal = targetIterationProposalSchemaForTopology("microfrontends.json").parse({
-      ...creationPlan(identity, input.appSpecDigest, hasSchema),
-      ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
+    const proposalSchema = targetIterationProposalSchemaForTopology(microfrontendsConfigPath);
+    const proposalBase = creationPlan(identity, input.appSpecDigest, hasSchema);
+    if (frameworkUpgrade !== undefined) {
+      proposalBase.frameworkUpgrade = frameworkUpgrade;
+    }
+    const proposalInput: z.input<typeof proposalSchema> = {
+      ...proposalBase,
       iteration: { changes, digest: iterationDigest },
       operation: "iterate-existing-app",
-      ...(applicationSourceImport === undefined ? {} : { applicationSourceImport }),
-      ...(sourceReconciliation === undefined ? {} : { sourceReconciliation }),
-      ...(privateCompute === undefined ? {} : { privateCompute }),
-    });
+    };
+    if (applicationSourceImport !== undefined) {
+      proposalInput.applicationSourceImport = applicationSourceImport;
+    }
+    if (sourceReconciliation !== undefined) {
+      proposalInput.sourceReconciliation = sourceReconciliation;
+    }
+    if (privateCompute !== undefined) {
+      proposalInput.privateCompute = privateCompute;
+    }
+    const proposal = proposalSchema.parse(proposalInput);
     const result = { identity, proposal, ...overlay };
-    planningMarker("target-identity-and-planning", "finish");
+    planningMarker(targetIdentityPlanningMarker, "finish");
     return result;
   }
   await input.onIdentity?.(identity);
   const cue = await input.sandbox.run({
     command: `test -f ${identity.cueSourcePath}`,
-    workingDirectory: "/workspace/repository",
+    workingDirectory: repositoryWorkspacePath,
   });
+  const initial: Pick<TargetProposal, "privateCompute"> = {};
+  if (privateCompute !== undefined) {
+    initial.privateCompute = privateCompute;
+  }
   const proposal = {
-    ...(privateCompute === undefined ? {} : { privateCompute }),
+    ...initial,
     ...creationPlan(identity, input.appSpecDigest, cue.exitCode === 0),
-    ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
   };
+  if (frameworkUpgrade !== undefined) {
+    proposal.frameworkUpgrade = frameworkUpgrade;
+  }
   const result = { identity, proposal, ...overlay };
-  planningMarker("target-identity-and-planning", "finish");
+  planningMarker(targetIdentityPlanningMarker, "finish");
   return result;
 };

@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { SandboxSession } from "eve/sandbox";
 
 import {
   readSandboxGitHubSourceSnapshot,
@@ -20,10 +22,27 @@ const expected = {
   sourceTree: tree,
 };
 
+const unexpectedSandboxOperation = () => {
+  throw new Error("Unexpected sandbox operation in source fixture.");
+};
+
+const sandboxWithRun = (run: SandboxSession["run"]): SandboxSession => ({
+  readBinaryFile: unexpectedSandboxOperation,
+  readFile: unexpectedSandboxOperation,
+  readTextFile: unexpectedSandboxOperation,
+  removePath: unexpectedSandboxOperation,
+  resolvePath: unexpectedSandboxOperation,
+  run,
+  spawn: unexpectedSandboxOperation,
+  writeBinaryFile: unexpectedSandboxOperation,
+  writeFile: unexpectedSandboxOperation,
+  writeTextFile: unexpectedSandboxOperation,
+});
+
 describe("provider-created sandbox GitHub source", () => {
   it("reads the selected checkout without cloning it again", async () => {
     const run = vi
-      .fn()
+      .fn<SandboxSession["run"]>()
       .mockResolvedValueOnce({
         exitCode: 0,
         stderr: "",
@@ -31,7 +50,7 @@ describe("provider-created sandbox GitHub source", () => {
       })
       .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" });
     await expect(
-      readSandboxGitHubSourceSnapshot({ run } as never, expected),
+      readSandboxGitHubSourceSnapshot(sandboxWithRun(run), expected),
     ).resolves.toMatchObject({
       sourcePath: "/workspace/repository",
       sourceSha: sha,
@@ -43,7 +62,7 @@ describe("provider-created sandbox GitHub source", () => {
 
   it("moves a verified provider-created checkout into the Builder workspace", async () => {
     const run = vi
-      .fn()
+      .fn<SandboxSession["run"]>()
       .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" })
       .mockResolvedValueOnce({
@@ -58,7 +77,7 @@ describe("provider-created sandbox GitHub source", () => {
         stdout: `${sha}\n${tree}\n${expected.repository}\n`,
       });
     await expect(
-      readSandboxGitHubSourceSnapshot({ run } as never, expected),
+      readSandboxGitHubSourceSnapshot(sandboxWithRun(run), expected),
     ).resolves.toMatchObject({ sourcePath: "/workspace/repository", sourceSha: sha });
     expect(run.mock.calls[2]?.[0].command).toContain("git -C '/workspace/private' rev-parse HEAD");
     expect(run.mock.calls[3]?.[0].command).toContain("renameSync");
@@ -69,7 +88,7 @@ describe("provider-created sandbox GitHub source", () => {
 
   it("uses the standard Vercel working directory when the Eve image path is absent", async () => {
     const run = vi
-      .fn()
+      .fn<SandboxSession["run"]>()
       .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
@@ -85,7 +104,7 @@ describe("provider-created sandbox GitHub source", () => {
         stdout: `${sha}\n${tree}\n${expected.repository}\n`,
       });
     await expect(
-      readSandboxGitHubSourceSnapshot({ run } as never, expected),
+      readSandboxGitHubSourceSnapshot(sandboxWithRun(run), expected),
     ).resolves.toMatchObject({ sourcePath: "/workspace/repository", sourceSha: sha });
     expect(run.mock.calls[3]?.[0].command).toContain("git -C '/vercel/sandbox' rev-parse HEAD");
     expect(run.mock.calls[4]?.[0].command).toContain("renameSync");
@@ -93,10 +112,10 @@ describe("provider-created sandbox GitHub source", () => {
 
   it("does not alter an occupied workspace that is not a Git checkout", async () => {
     const run = vi
-      .fn()
+      .fn<SandboxSession["run"]>()
       .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" });
-    await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
+    await expect(readSandboxGitHubSourceSnapshot(sandboxWithRun(run), expected)).rejects.toThrow(
       "occupied by a non-Git directory",
     );
     expect(run).toHaveBeenCalledTimes(2);
@@ -104,12 +123,12 @@ describe("provider-created sandbox GitHub source", () => {
 
   it("reports when Vercel did not create the selected Git checkout", async () => {
     const run = vi
-      .fn()
+      .fn<SandboxSession["run"]>()
       .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" });
-    await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
+    await expect(readSandboxGitHubSourceSnapshot(sandboxWithRun(run), expected)).rejects.toThrow(
       "Vercel did not materialize the selected GitHub source",
     );
     expect(run).toHaveBeenCalledTimes(4);
@@ -117,33 +136,33 @@ describe("provider-created sandbox GitHub source", () => {
 
   it("includes provider stderr and a recovery action when source discovery fails", async () => {
     const run = vi
-      .fn()
+      .fn<SandboxSession["run"]>()
       .mockResolvedValueOnce({ exitCode: 128, stderr: "not a git repository", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 128, stderr: "permission denied", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 128, stderr: "directory missing", stdout: "" });
-    await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
+    await expect(readSandboxGitHubSourceSnapshot(sandboxWithRun(run), expected)).rejects.toThrow(
       /Check the selected repository access.*permission denied.*directory missing/u,
     );
   });
 
   it("names a sandbox failure and redacts credentials while inspecting the checkout", async () => {
     const longDetail = `${"source inspection detail ".repeat(40)} token=github_pat_12345678901234567890 timeout`;
-    const run = vi.fn().mockRejectedValue(new Error(longDetail));
-    const operation = readSandboxGitHubSourceSnapshot({ run } as never, expected);
+    const run = vi.fn<SandboxSession["run"]>().mockRejectedValue(new Error(longDetail));
+    const operation = readSandboxGitHubSourceSnapshot(sandboxWithRun(run), expected);
     await expect(operation).rejects.toThrow("could not inspect the Builder checkout");
     await expect(operation).rejects.toThrow("token=[REDACTED]");
     await expect(operation).rejects.toThrow("source inspection detail ".repeat(40));
   });
 
   it("reports manifest command stderr, its exit code, and a recovery action", async () => {
-    const run = vi.fn().mockResolvedValue({
+    const run = vi.fn<SandboxSession["run"]>().mockResolvedValue({
       exitCode: 127,
       stderr: "node: command not found",
       stdout: "",
     });
     await expect(
-      writeSandboxGitHubSourceManifest({ run } as never, {
+      writeSandboxGitHubSourceManifest(sandboxWithRun(run), {
         sourceSha: sha,
         sourceTree: tree,
       }),
@@ -185,14 +204,18 @@ describe("provider-created sandbox GitHub source", () => {
         ["-e", sandboxGitHubSourceManifestProgram(root, appBuilder)],
         { encoding: "utf-8" },
       );
-      const result = JSON.parse(output) as {
-        sourceSha: string;
-        sourceTree: string;
-        workspaceDigest: string;
-      };
-      const files = JSON.parse(
+      const result = z
+        .looseObject({ sourceSha: z.string(), sourceTree: z.string(), workspaceDigest: z.string() })
+        .parse(JSON.parse(output));
+      const fileSchema = z.array(z.looseObject({ path: z.string(), sha256: z.string() }));
+      const isSourceFiles = (value: unknown): value is z.infer<typeof fileSchema> =>
+        fileSchema.safeParse(value).success;
+      const files: unknown = JSON.parse(
         readFileSync(path.join(appBuilder, "source-files.json"), "utf-8"),
-      ) as { path: string; sha256: string }[];
+      );
+      if (!isSourceFiles(files)) {
+        throw new Error("Expected a valid source file manifest.");
+      }
       const liveReadme = files.find(({ path: filePath }) => filePath === "README.md");
       expect(result).toMatchObject({ sourceSha, sourceTree });
       expect(files.map(({ path: filePath }) => filePath)).not.toContain(taskPath);
@@ -211,7 +234,7 @@ describe("provider-created sandbox GitHub source", () => {
 
   it("rejects a mismatched provider checkout before linking it", async () => {
     const run = vi
-      .fn()
+      .fn<SandboxSession["run"]>()
       .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" })
       .mockResolvedValueOnce({
@@ -219,7 +242,7 @@ describe("provider-created sandbox GitHub source", () => {
         stderr: "",
         stdout: `${sha}\n${tree}\nhttps://github.com/acme/other.git\n`,
       });
-    await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
+    await expect(readSandboxGitHubSourceSnapshot(sandboxWithRun(run), expected)).rejects.toThrow(
       "does not match the selected GitHub source",
     );
     expect(run).toHaveBeenCalledTimes(3);
@@ -227,28 +250,28 @@ describe("provider-created sandbox GitHub source", () => {
 
   it("rejects an occupied checkout from a different repository", async () => {
     const run = vi
-      .fn()
+      .fn<SandboxSession["run"]>()
       .mockResolvedValueOnce({
         exitCode: 0,
         stderr: "",
         stdout: `${sha}\n${tree}\nhttps://github.com/acme/other.git\n`,
       })
       .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" });
-    await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
+    await expect(readSandboxGitHubSourceSnapshot(sandboxWithRun(run), expected)).rejects.toThrow(
       "does not match the selected GitHub source",
     );
   });
 
   it("rejects a checkout at a different revision", async () => {
     const run = vi
-      .fn()
+      .fn<SandboxSession["run"]>()
       .mockResolvedValueOnce({
         exitCode: 0,
         stderr: "",
         stdout: `${"c".repeat(40)}\n${tree}\n${expected.repository}\n`,
       })
       .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" });
-    await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
+    await expect(readSandboxGitHubSourceSnapshot(sandboxWithRun(run), expected)).rejects.toThrow(
       "does not match the selected GitHub source",
     );
   });
@@ -257,7 +280,7 @@ describe("provider-created sandbox GitHub source", () => {
     const newerSha = "c".repeat(40);
     const newerTree = "d".repeat(40);
     const run = vi
-      .fn()
+      .fn<SandboxSession["run"]>()
       .mockResolvedValueOnce({
         exitCode: 0,
         stderr: "",
@@ -265,21 +288,21 @@ describe("provider-created sandbox GitHub source", () => {
       })
       .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" });
     await expect(
-      readSandboxGitHubSourceSnapshot({ run } as never, { repository: expected.repository }),
+      readSandboxGitHubSourceSnapshot(sandboxWithRun(run), { repository: expected.repository }),
     ).resolves.toMatchObject({ sourceSha: newerSha, sourceTree: newerTree });
     expect(run).toHaveBeenCalledTimes(2);
   });
 
   it("does not change a linked checkout left by an older Builder session", async () => {
     const run = vi
-      .fn()
+      .fn<SandboxSession["run"]>()
       .mockResolvedValueOnce({
         exitCode: 0,
         stderr: "",
         stdout: `${sha}\n${tree}\n${expected.repository}\n`,
       })
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" });
-    await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
+    await expect(readSandboxGitHubSourceSnapshot(sandboxWithRun(run), expected)).rejects.toThrow(
       "Start a new Builder session",
     );
     expect(run).toHaveBeenCalledTimes(2);

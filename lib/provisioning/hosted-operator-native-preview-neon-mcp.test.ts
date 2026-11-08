@@ -424,6 +424,11 @@ const fixture = (
       await Promise.resolve();
     },
   };
+  const approval: Pick<PreviewNeonMcpDependencies, "assertApprovedScope" | "assertApprovedOwner"> =
+    { assertApprovedScope: approved };
+  if (useLocalApprovedOwner) {
+    approval.assertApprovedOwner = approvedOwner;
+  }
   return {
     approved,
     approvedOwner,
@@ -433,8 +438,7 @@ const fixture = (
     planningOwner,
     planning,
     reader: createPreviewNeonMcpReader({
-      assertApprovedScope: approved,
-      ...(useLocalApprovedOwner ? { assertApprovedOwner: approvedOwner } : {}),
+      ...approval,
       assertPlanningScope: planning,
       assertPlanningOwner: useLocalPlanningOwner ? planningOwner : undefined,
       configuration,
@@ -466,7 +470,7 @@ describe("private Neon reader failure diagnostics", () => {
     );
     expect(diagnostics).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ planningFailure: { stage, errorClass: "validation_error" } }),
+        expect.objectContaining({ planningFailure: { errorClass: "validation_error", stage } }),
       ]),
     );
     expect(f.close).toHaveBeenCalledTimes(1);
@@ -492,7 +496,7 @@ describe("private Neon reader failure diagnostics", () => {
     expect(diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          planningFailure: { stage: "neon_configuration", errorClass: "validation_error" },
+          planningFailure: { errorClass: "validation_error", stage: "neon_configuration" },
         }),
       ]),
     );
@@ -504,9 +508,9 @@ describe("private Neon reader failure diagnostics", () => {
       expect.arrayContaining([
         expect.objectContaining({
           planningFailure: {
-            stage: "neon_owner_guard",
-            errorClass: "operator_error",
             code: "authorization_required",
+            errorClass: "operator_error",
+            stage: "neon_owner_guard",
           },
         }),
       ]),
@@ -534,7 +538,7 @@ describe("private Neon reader failure diagnostics", () => {
     expect(diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          planningFailure: { stage: "neon_mcp_client", errorClass: "unexpected" },
+          planningFailure: { errorClass: "unexpected", stage: "neon_mcp_client" },
         }),
       ]),
     );
@@ -563,9 +567,9 @@ describe("private Neon reader failure diagnostics", () => {
       expect.arrayContaining([
         expect.objectContaining({
           planningFailure: {
-            stage: "neon_connect_broker",
-            errorClass: "operator_error",
             code: "authorization_required",
+            errorClass: "operator_error",
+            stage: "neon_connect_broker",
           },
         }),
       ]),
@@ -585,7 +589,7 @@ describe("private Neon reader failure diagnostics", () => {
     expect(diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          planningFailure: { stage: "neon_oidc", errorClass: "unexpected" },
+          planningFailure: { errorClass: "unexpected", stage: "neon_oidc" },
         }),
       ]),
     );
@@ -605,7 +609,7 @@ describe("private Neon reader failure diagnostics", () => {
     expect(diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          planningFailure: { stage: "neon_branch_metadata", errorClass: "unexpected" },
+          planningFailure: { errorClass: "unexpected", stage: "neon_branch_metadata" },
         }),
       ]),
     );

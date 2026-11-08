@@ -56,11 +56,19 @@ export const recordPublishedAppSourceForSession = async (
     throw operatorArtifactUnavailable();
   }
   const publishedSource = publishedAppSourceFromResult(input.review, input.publication);
-  return await recordPublishedOperatorSourceForSession({
+  const recording: Omit<
+    Parameters<typeof recordPublishedOperatorSourceForSession>[0],
+    "publishedSource"
+  > = {
     ...input,
     // A retained initial receipt must reuse its original marker instead of becoming a newer source on retry.
     callId: "kind" in input.publication ? input.publication.approvedByCallId : input.callId,
-    ...("kind" in input.publication ? { initialPublication: true as const } : {}),
+  };
+  if ("kind" in input.publication) {
+    recording.initialPublication = true;
+  }
+  return await recordPublishedOperatorSourceForSession({
+    ...recording,
     // The app review identifies the compiled app; the reconciliation review identifies the approved merged source.
     publishedSource:
       input.reconciliationReview === undefined

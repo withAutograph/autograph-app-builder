@@ -23,17 +23,25 @@ const configuration = {
   sandbox: {
     authProposal: { executablePath: "/proposal", id: "proposal", sha256: digest },
     projectId: "owned-project",
-    teamId: "owned-team",
     source: { snapshotId: "owned-snapshot", type: "snapshot" },
+    teamId: "owned-team",
   },
 } as HostedOperatorSourceConfiguration;
+interface ProposalFixtureFrame {
+  version: number;
+  resource: typeof resource;
+  schemaPlan: { planDigest: string; targetDigest: string };
+  proposal?: "new-empty";
+}
 const fixture = (existing = true) => {
-  const frame = {
+  const frame: ProposalFixtureFrame = {
     version: 1,
     resource,
     schemaPlan: { planDigest: "b".repeat(64), targetDigest: "c".repeat(64) },
-    ...(existing ? {} : { proposal: "new-empty" }),
   };
+  if (!existing) {
+    frame.proposal = "new-empty";
+  }
   const sandbox = {
     delete: vi.fn(async () => {}),
     writeFiles: vi.fn<Pick<Sandbox, "writeFiles">["writeFiles"]>(async () => {}),
@@ -43,23 +51,23 @@ const fixture = (existing = true) => {
     })),
   } as unknown as Pick<Sandbox, "delete" | "writeFiles" | "runCommand">;
   const createSandbox = vi.fn(async (_options: Parameters<typeof Sandbox.create>[0]) => sandbox);
-  const getOidc = vi.fn(async () => "owned-oidc");
+  const getOidc = vi.fn<() => Promise<string>>().mockResolvedValue("owned-oidc");
   const assertCurrentOwner = vi.fn(async () => {});
   return {
-    sandbox,
+    assertCurrentOwner,
     createSandbox,
     getOidc,
-    assertCurrentOwner,
     propose: createHostedOperatorAuthProposal(configuration, { createSandbox, getOidc }),
+    sandbox,
   };
 };
 describe("private existing Auth proposal", () => {
   it("places the scoped credential in a separate 0600 file and publishes only the observed plan", async () => {
     const f = fixture();
     const result = await f.propose({
-      resource,
-      directMigrationUrl: migrationUrl,
       assertCurrentOwner: f.assertCurrentOwner,
+      directMigrationUrl: migrationUrl,
+      resource,
     });
     expect(result.planDigest).toBe("b".repeat(64));
     expect(result.content.toString()).not.toContain("private-fixture");
@@ -69,8 +77,8 @@ describe("private existing Auth proposal", () => {
     const input = files.find((file) => file !== credential);
     expect(input?.mode).toBe(0o600);
     expect(JSON.parse(input!.content.toString())).toMatchObject({
-      resource,
       directMigrationUrlFile: credential?.path,
+      resource,
     });
     expect(input!.content.toString()).not.toContain(migrationUrl);
     expect(JSON.stringify(vi.mocked(f.sandbox.runCommand).mock.calls)).not.toContain(migrationUrl);
@@ -85,7 +93,7 @@ describe("private existing Auth proposal", () => {
   });
   it("keeps new targets credential free", async () => {
     const f = fixture(false);
-    const result = await f.propose({ resource, assertCurrentOwner: f.assertCurrentOwner });
+    const result = await f.propose({ assertCurrentOwner: f.assertCurrentOwner, resource });
     expect(result.content.toString()).toContain('"proposal":"new-empty"');
     expect(vi.mocked(f.sandbox.writeFiles).mock.calls[0]?.[0]).toHaveLength(1);
   });
@@ -101,7 +109,7 @@ describe("private existing Auth proposal", () => {
     async (directMigrationUrl) => {
       const f = fixture();
       await expect(
-        f.propose({ resource, directMigrationUrl, assertCurrentOwner: f.assertCurrentOwner }),
+        f.propose({ assertCurrentOwner: f.assertCurrentOwner, directMigrationUrl, resource }),
       ).rejects.toMatchObject({ code: "resource_mismatch" });
       expect(f.createSandbox).not.toHaveBeenCalled();
     },
@@ -110,23 +118,21 @@ describe("private existing Auth proposal", () => {
     const f = fixture(false);
     await expect(
       f.propose({
-        resource,
-        directMigrationUrl: migrationUrl,
         assertCurrentOwner: f.assertCurrentOwner,
+        directMigrationUrl: migrationUrl,
+        resource,
       }),
     ).rejects.toMatchObject({ code: "resource_mismatch" });
     expect(f.sandbox.delete).toHaveBeenCalledOnce();
   });
   it("stops on lost owner authority and still deletes the sandbox", async () => {
     const f = fixture();
-    f.assertCurrentOwner
-      .mockImplementationOnce(() => Promise.resolve())
-      .mockRejectedValueOnce(new Error("ownership lost"));
+    f.assertCurrentOwner.mockResolvedValueOnce().mockRejectedValueOnce(new Error("ownership lost"));
     await expect(
       f.propose({
-        resource,
-        directMigrationUrl: migrationUrl,
         assertCurrentOwner: f.assertCurrentOwner,
+        directMigrationUrl: migrationUrl,
+        resource,
       }),
     ).rejects.toThrow("ownership lost");
     expect(f.sandbox.writeFiles).not.toHaveBeenCalled();

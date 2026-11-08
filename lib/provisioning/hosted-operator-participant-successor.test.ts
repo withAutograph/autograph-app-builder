@@ -13,6 +13,7 @@ import {
   HostedOperatorError,
   operatorOwnerContextSchema,
 } from "./hosted-operator-contract";
+import type { OperatorReceipt } from "./hosted-operator-contract";
 import {
   initialNormalActorState,
   normalActorProgramSchema,
@@ -40,8 +41,8 @@ import type { HostedRuntimeJournalRow } from "./hosted-runtime-journal";
 
 const accountOperationRef = "11111111-1111-4111-8111-111111111111";
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
@@ -49,23 +50,23 @@ const target = {
   appId: "normal-app",
   branch: "preview",
   environment: "preview" as const,
-  projectId: "prj_app",
-  sessionId: "owner-session",
   installationId: "installation",
+  projectId: "prj_app",
   scopeId: "team",
   scopeType: "team" as const,
+  sessionId: "owner-session",
 };
 const context = { authority, target };
 const program = normalActorProgramSchema.parse({
-  version: 1,
-  appId: target.appId,
-  origin: "https://apps.example.com",
   actors: [
-    { actorKey: "owner", email: "owner@example.test", name: "Owner", account: "capture-existing" },
+    { account: "capture-existing", actorKey: "owner", email: "owner@example.test", name: "Owner" },
   ],
-  organizations: [],
-  memberships: [],
   appAccess: [],
+  appId: target.appId,
+  memberships: [],
+  organizations: [],
+  origin: "https://apps.example.com",
+  version: 1,
 });
 const plan = hostedOperatorPlanSchema.parse({
   version: 1,
@@ -81,24 +82,24 @@ const plan = hostedOperatorPlanSchema.parse({
     sessionId: target.sessionId,
   },
   appDatabase: {
-    resourceId: "app-resource",
     database: "normal",
     migratorRole: "normal_owner",
+    resourceId: "app-resource",
     runtimeRole: "normal_runtime",
   },
   authDatabase: {
-    resourceId: "auth-resource",
     database: "auth",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
   effects: [
     {
+      description: "Capture approved actual accounts",
       id: "normal-accounts",
       kind: "normal-accounts",
-      description: "Capture approved actual accounts",
     },
   ],
   installer: { reference: "owned-worker", sha256: "a".repeat(64) },
@@ -156,17 +157,20 @@ const fixture = async (
   });
   const keyring = { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" };
   const state = initialNormalActorState(program, accountOperationRef);
+  const actorSession: NonNullable<(typeof state.actors)[number]["session"]> = {
+    reference: "33333333-3333-4333-8333-333333333333",
+    actorId: "real-owner",
+    realmSessionId: "real-session",
+    origin: program.origin,
+    expiresAt: "2030-01-01T00:00:00.000Z",
+  };
+  if (opaqueOrganization !== undefined) {
+    actorSession.activeOrganizationId = opaqueOrganization;
+  }
   state.actors[0] = {
     actorKey: "owner",
     signup: "complete",
-    session: {
-      reference: "33333333-3333-4333-8333-333333333333",
-      actorId: "real-owner",
-      realmSessionId: "real-session",
-      origin: program.origin,
-      expiresAt: "2030-01-01T00:00:00.000Z",
-      ...(opaqueOrganization === undefined ? {} : { activeOrganizationId: opaqueOrganization }),
-    },
+    session: actorSession,
     storageState: {
       cookies: [
         {
@@ -239,7 +243,6 @@ const fixture = async (
   };
   const ports = createNormalActorJournalAuthority({
     store: {
-      read: async () => structuredClone(row),
       compareAndSet: async (input) => {
         if (input.expectedRevision !== row.revision) {
           return undefined;
@@ -250,6 +253,7 @@ const fixture = async (
         };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
     },
     keyring,
     now: Date.now,
@@ -299,9 +303,9 @@ const fixture = async (
     },
     stage: "app",
     effects: ["resources", "install", "access", "bindings"].map((kind) => ({
+      description: "Observe approved phase",
       id: kind,
       kind,
-      description: "Observe approved phase",
     })),
     normalActorPreparation: normalActorPreparationSchema.strip().parse(original),
   });
@@ -324,18 +328,25 @@ const fixture = async (
     planDigest: operatorPlanDigest(appPlan),
     approvalId: "app-approval",
     fenceGeneration: 1,
-    receipts: appPlan.effects.map((effect) => ({
-      effectId: effect.id,
-      ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
-      observedAt: "2026-10-20T00:00:00.000Z",
-      resourceVersion: "observed",
-    })),
+    receipts: appPlan.effects.map((effect) => {
+      const receipt: Pick<OperatorReceipt, "effectId" | "fenceGeneration"> = {
+        effectId: effect.id,
+      };
+      if (effect.kind === "access") {
+        receipt.fenceGeneration = 1;
+      }
+      return {
+        ...receipt,
+        observedAt: "2026-10-20T00:00:00.000Z",
+        resourceVersion: "observed",
+      };
+    }),
   };
   const nextProgram = normalActorProgramSchema.parse({
     ...program,
     actors: [
       ...program.actors,
-      { actorKey: "qa", email: "qa@example.test", name: "QA", account: "create-email-password" },
+      { account: "create-email-password", actorKey: "qa", email: "qa@example.test", name: "QA" },
     ],
   });
   timing?.beforeProposal?.();
@@ -391,7 +402,7 @@ const fixture = async (
     expect(new URL(request.url).searchParams.get("disableRefresh")).toBe("true");
     expect(request.headers.get("cookie")).toContain("actual-retained-cookie");
     return Response.json({
-      user: { id: "real-owner", email: "owner@example.test" },
+      user: { email: "owner@example.test", id: "real-owner" },
       session: {
         id: "real-session",
         userId: "real-owner",
@@ -404,14 +415,14 @@ const fixture = async (
     throw new Error("unexpected account or organization effect");
   };
   const dependencies: NormalActorOperationsDependencies = {
-    journalPorts: ports,
-    assertPlanningAuthorized: owner,
     assertCurrentPlan: assertCurrent,
-    normalRealmFetch: async () => fetchSession,
-    prepareActorCapture: unused,
+    assertPlanningAuthorized: owner,
     collectOrganizationOwnerProof: unused,
     executeOrganization: unused,
     inspectOrganization: unused,
+    journalPorts: ports,
+    normalRealmFetch: async () => fetchSession,
+    prepareActorCapture: unused,
   };
   return {
     journal,
@@ -529,11 +540,11 @@ describe("approved additive capture participant state", () => {
       f.fetchSession.mockImplementation(async (url, init) => {
         if (new Request(url, init).headers.get("cookie")?.includes("qa-cookie") === true) {
           return Response.json({
-            user: { id: "qa-actor", email: "qa@example.test" },
+            user: { email: "qa@example.test", id: "qa-actor" },
             session: {
+              expiresAt: "2030-01-01T00:00:00.000Z",
               id: "qa-session",
               userId: "qa-actor",
-              expiresAt: "2030-01-01T00:00:00.000Z",
             },
           });
         }
@@ -550,9 +561,9 @@ describe("approved additive capture participant state", () => {
           .strip()
           .parse(f.row.record.accountPreparation),
         effects: ["resources", "install", "access", "bindings"].map((kind) => ({
+          description: "Approved current phase",
           id: kind,
           kind,
-          description: "Approved current phase",
         })),
       });
       const currentOperation = "77777777-7777-4777-8777-777777777777";
@@ -565,16 +576,21 @@ describe("approved additive capture participant state", () => {
         planDigest: operatorPlanDigest(current),
         approvalId: "current-app-approval",
         fenceGeneration: 2,
-        receipts: current.effects.map((effect) => ({
-          effectId: effect.id,
-          observedAt: "2026-10-29T03:01:00.000Z",
-          resourceVersion: "observed",
-          ...(effect.kind === "access" ? { fenceGeneration: 2 } : {}),
-        })),
+        receipts: current.effects.map((effect) => {
+          const receipt: OperatorReceipt = {
+            effectId: effect.id,
+            observedAt: "2026-10-29T03:01:00.000Z",
+            resourceVersion: "observed",
+          };
+          if (effect.kind === "access") {
+            receipt.fenceGeneration = 2;
+          }
+          return receipt;
+        }),
       });
       f.approvals.set("current-app-call", {
-        id: "current-app-approval",
         digest: operatorPlanDigest(current),
+        id: "current-app-approval",
       });
       clock.mockReturnValue(
         Date.parse(
@@ -598,45 +614,45 @@ describe("approved additive capture participant state", () => {
           const qa = new Request(url, init).headers.get("cookie")?.includes("qa-cookie") === true;
           const actorId = qa ? "qa-actor" : "real-owner";
           return Response.json({
-            user: { id: actorId, email: qa ? "qa@example.test" : "owner@example.test" },
+            user: { email: qa ? "qa@example.test" : "owner@example.test", id: actorId },
             session: {
+              expiresAt: "2026-10-29T22:19:00.000Z",
               id: qa ? "qa-session" : "real-session",
               userId: actorId,
-              expiresAt: "2026-10-29T22:19:00.000Z",
             },
           });
         });
       }
       const ownerContext = operatorOwnerContextSchema.parse({
-        kind: "direct",
+        adapterGeneration: 1,
+        adapterSessionId: "adapter",
         authority,
+        kind: "direct",
         principal: { ...authority, scopes: ["autograph:send"] },
         sessionId: target.sessionId,
-        adapterSessionId: "adapter",
-        adapterGeneration: 1,
       });
       const scopes = [
         {
-          callId: f.original.accountApprovedByCallId,
           approvalId: f.original.accountApprovalId,
+          callId: f.original.accountApprovedByCallId,
           operationRef: f.original.accountOperationRef,
           plan: f.original.accountPlan,
         },
         {
-          callId: f.predecessor.approvedByCallId,
           approvalId: f.predecessor.operator.approvalId,
+          callId: f.predecessor.approvedByCallId,
           operationRef: f.predecessor.operator.operationRef,
           plan: f.predecessor.operator.plan,
         },
         {
-          callId: f.input.callId,
           approvalId: f.input.approvalId,
+          callId: f.input.callId,
           operationRef: f.input.operationRef,
           plan: f.input.plan,
         },
         {
-          callId: "current-app-call",
           approvalId: "current-app-approval",
+          callId: "current-app-call",
           operationRef: currentOperation,
           plan: current,
         },
@@ -689,16 +705,14 @@ describe("approved additive capture participant state", () => {
         },
       });
       const canonical = createNormalActorJournalAuthority({
-        store: f.ports.store,
+        assertApprovedOwner: f.ports.assertAuthorized,
+        assertCanonicalOwner: f.ports.assertAuthorized,
         keyring: f.ports.keyring,
         now: Date.now,
-        assertCanonicalOwner: f.ports.assertAuthorized,
-        assertApprovedOwner: f.ports.assertAuthorized,
         readApproval,
+        store: f.ports.store,
       });
       const runtime = createNormalActorRuntimeBindings({
-        journalPorts: canonical,
-        normalRealmFetch: async () => f.fetchSession,
         assertCurrentPlan: async (input) => {
           if (
             input.operationRef !== currentOperation ||
@@ -719,20 +733,22 @@ describe("approved additive capture participant state", () => {
             },
           );
         },
+        journalPorts: canonical,
+        normalRealmFetch: async () => f.fetchSession,
       });
       if (outcome === "valid") {
         const projection = await runtime({
           ...context,
+          operationRef: currentOperation,
           ownerContext,
           plan: current,
-          operationRef: currentOperation,
         });
         expect(projection?.identities.actors).toHaveLength(2);
         const retained = await f.journal.read(context);
         expect(retained?.state.actors[0]).toEqual(f.state.actors[0]);
       } else {
         await expect(
-          runtime({ ...context, ownerContext, plan: current, operationRef: currentOperation }),
+          runtime({ ...context, operationRef: currentOperation, ownerContext, plan: current }),
         ).rejects.toMatchObject({
           code:
             outcome === "expired actual session"
@@ -760,8 +776,8 @@ describe("approved additive capture participant state", () => {
     );
     expect(f.row.record.privateState).toEqual(before.privateState);
     expect(await f.journal.readCapture(context, f.reference)).toMatchObject({
-      proof: "verified-capture",
       normalCookie: { value: "actual-retained-cookie" },
+      proof: "verified-capture",
     });
     expect(() =>
       decryptNormalActorState({
@@ -795,12 +811,12 @@ describe("approved additive capture participant state", () => {
     f.approve();
     f.fetchSession.mockImplementation(async () =>
       Response.json({
-        user: { id: "real-owner", email: "owner@example.test" },
+        user: { email: "owner@example.test", id: "real-owner" },
         session: {
+          activeOrganizationId: "changed-outside-program",
+          expiresAt: "2030-01-01T00:00:00.000Z",
           id: "real-session",
           userId: "real-owner",
-          expiresAt: "2030-01-01T00:00:00.000Z",
-          activeOrganizationId: "changed-outside-program",
         },
       }),
     );
@@ -848,7 +864,7 @@ describe("approved additive capture participant state", () => {
         const body = z.object({ email: z.email() }).parse(await request.json());
         signups.push(body.email);
         return Response.json(
-          { user: { id: "qa-actor", email: "qa@example.test" } },
+          { user: { email: "qa@example.test", id: "qa-actor" } },
           {
             headers: {
               "set-cookie": "__Secure-session=qa-cookie; Path=/; Secure; HttpOnly; SameSite=Lax",
@@ -858,12 +874,12 @@ describe("approved additive capture participant state", () => {
       }
       if (request.headers.get("cookie")?.includes("qa-cookie") === true) {
         return Response.json({
-          user: { id: "qa-actor", email: "qa@example.test" },
+          user: { email: "qa@example.test", id: "qa-actor" },
           session: {
+            activeOrganizationId: null,
+            expiresAt: "2030-01-01T00:00:00.000Z",
             id: "qa-session",
             userId: "qa-actor",
-            expiresAt: "2030-01-01T00:00:00.000Z",
-            activeOrganizationId: null,
           },
         });
       }
@@ -947,11 +963,11 @@ describe("approved additive capture participant state", () => {
     if (changed === "foreign session") {
       f.fetchSession.mockResolvedValue(
         Response.json({
-          user: { id: "foreign", email: "owner@example.test" },
+          user: { email: "owner@example.test", id: "foreign" },
           session: {
+            expiresAt: "2030-01-01T00:00:00.000Z",
             id: "foreign-session",
             userId: "foreign",
-            expiresAt: "2030-01-01T00:00:00.000Z",
           },
         }),
       );
@@ -964,11 +980,11 @@ describe("approved additive capture participant state", () => {
           requireFixture(f.row.record.operator).planDigest = "f".repeat(64);
         }
         return Response.json({
-          user: { id: "real-owner", email: "owner@example.test" },
+          user: { email: "owner@example.test", id: "real-owner" },
           session: {
+            expiresAt: "2030-01-01T00:00:00.000Z",
             id: "real-session",
             userId: "real-owner",
-            expiresAt: "2030-01-01T00:00:00.000Z",
           },
         });
       });
@@ -1025,25 +1041,25 @@ describe("approved additive capture participant state", () => {
       f.approve();
       await f.operations.ensureNormalActorCapture(f.input);
       const ownerContext = operatorOwnerContextSchema.parse({
-        kind: "direct",
+        adapterGeneration: 1,
+        adapterSessionId: "adapter",
         authority,
+        kind: "direct",
         principal: { ...authority, scopes: ["autograph:send"] },
         sessionId: target.sessionId,
-        adapterSessionId: "adapter",
-        adapterGeneration: 1,
       });
       const receipts = [
         {
           callId: f.original.accountApprovedByCallId,
           id: f.original.accountApprovalId,
-          plan: f.original.accountPlan,
           operationRef: f.original.accountOperationRef,
+          plan: f.original.accountPlan,
         },
         {
           callId: f.predecessor.approvedByCallId,
           id: f.predecessor.operator.approvalId,
-          plan: f.predecessor.operator.plan,
           operationRef: f.predecessor.operator.operationRef,
+          plan: f.predecessor.operator.plan,
         },
       ].map((entry, sequence) =>
         privateHostedApprovalReceiptSchema.parse({
@@ -1114,8 +1130,8 @@ describe("approved additive capture participant state", () => {
       };
       if (changed === "valid") {
         await expect(readApproval(input)).resolves.toMatchObject({
-          approved: true,
           approvalId: f.original.accountApprovalId,
+          approved: true,
         });
         await expect(
           readApproval({
@@ -1123,7 +1139,7 @@ describe("approved additive capture participant state", () => {
             callId: f.predecessor.approvedByCallId,
             planDigest: f.predecessor.operator.planDigest,
           }),
-        ).resolves.toMatchObject({ approved: true, approvalId: f.predecessor.operator.approvalId });
+        ).resolves.toMatchObject({ approvalId: f.predecessor.operator.approvalId, approved: true });
       } else {
         await expect(readApproval(input)).rejects.toMatchObject({ code: "authorization_required" });
       }
@@ -1141,12 +1157,12 @@ describe("approved additive capture participant state", () => {
     };
     expect(() =>
       createParticipantSuccessorPlan(record, f.input.plan.normalActorProgram, Date.now(), {
-        version: 1,
-        organizationId: "qa-org",
-        eligibility: "public",
         appPath: "/qa",
-        membershipRole: "member",
         appRoles: ["member"],
+        eligibility: "public",
+        membershipRole: "member",
+        organizationId: "qa-org",
+        version: 1,
       }),
     ).toThrow();
   });
@@ -1156,12 +1172,12 @@ describe("approved additive capture participant state", () => {
       ...program,
       actors: [
         ...program.actors,
-        { actorKey: "qa", email: "qa@example.test", name: "QA", account: "create-email-password" },
-      ],
-      organizations: [
-        { organizationId: "qa-org", name: "QA", slug: "qa-org", ownerActorKey: "owner" },
+        { account: "create-email-password", actorKey: "qa", email: "qa@example.test", name: "QA" },
       ],
       memberships: [{ actorKey: "owner", organizationId: "qa-org", role: "owner" }],
+      organizations: [
+        { name: "QA", organizationId: "qa-org", ownerActorKey: "owner", slug: "qa-org" },
+      ],
     });
     expect(isAdditiveCaptureParticipantProgram(program, next)).toBe(false);
   });

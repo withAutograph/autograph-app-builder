@@ -156,9 +156,9 @@ export const proveOwnedAppResourceCustody = async (input: {
           isDeepStrictEqual(context.target, source.target)
         ) {
           return {
-            approved: originalApproved,
             action: "prepare",
             approvalId: sourceApprovalId,
+            approved: originalApproved,
             callId: sourceCall,
             planDigest: sourceDigest,
           };
@@ -169,9 +169,9 @@ export const proveOwnedAppResourceCustody = async (input: {
           isDeepStrictEqual(context.target, revision.target)
         ) {
           return {
-            approved: currentApproved,
             action: "prepare",
             approvalId: currentApprovalId,
+            approved: currentApproved,
             callId: currentCall,
             planDigest: currentDigest,
           };

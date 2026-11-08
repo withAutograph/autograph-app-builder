@@ -223,7 +223,7 @@ export const grantRealOAuth = async (
     redirect: "manual",
   });
   const location = authorization.headers.get("location");
-  if (authorization.status !== 302 || !location) {
+  if (authorization.status !== 302 || location === null || location === "") {
     throw new Error("OAuth authorization failed.");
   }
   let callback = new URL(location, origin);
@@ -260,7 +260,8 @@ export const grantRealOAuth = async (
   if (
     callback.origin + callback.pathname !== client.redirectUri ||
     callback.searchParams.get("state") !== state ||
-    !code
+    code === null ||
+    code === ""
   ) {
     throw new Error("OAuth did not return the bound authorization code.");
   }

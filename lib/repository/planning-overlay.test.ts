@@ -16,6 +16,28 @@ import {
   targetExecutionBinding,
 } from "./target-planning";
 
+const unexpectedSandboxOperation = async () => {
+  throw new Error("Unexpected sandbox operation in test fixture");
+};
+const sandboxDefaults = {
+  readBinaryFile: unexpectedSandboxOperation,
+  readFile: unexpectedSandboxOperation,
+  readTextFile: unexpectedSandboxOperation,
+  removePath: unexpectedSandboxOperation,
+  resolvePath: () => {
+    throw new Error("Unexpected sandbox operation in test fixture");
+  },
+  run: unexpectedSandboxOperation,
+  spawn: unexpectedSandboxOperation,
+  writeBinaryFile: unexpectedSandboxOperation,
+  writeFile: unexpectedSandboxOperation,
+  writeTextFile: unexpectedSandboxOperation,
+} satisfies SandboxSession;
+const createSandbox = (overrides: Partial<SandboxSession> = {}): SandboxSession => ({
+  ...sandboxDefaults,
+  ...overrides,
+});
+
 const appDescription = (id: string) =>
   JSON.stringify({
     app: { id, routes: [`/${id}`], workspacePath: `apps/${id}` },
@@ -56,7 +78,7 @@ describe("planning from the current checkout", () => {
       const modeProgram =
         'process.stdout.write((require("node:fs").statSync(process.argv[1]).mode & 0o777).toString(8))';
       const quotedNode = `'${process.execPath.replaceAll("'", "'\\''")}'`;
-      const sandbox = {
+      const sandbox = createSandbox({
         readBinaryFile: async ({ path }: { path: string }) =>
           await Promise.resolve(
             readFileSync(nodePath.join(root, path.replace(/^repository\//u, ""))),
@@ -79,7 +101,7 @@ describe("planning from the current checkout", () => {
             : planningCommandOutput(command, "644");
           return await Promise.resolve({ exitCode: 0, stderr: "", stdout });
         },
-      } as unknown as SandboxSession;
+      });
       const result = await executeTargetIdentityAndPlanning({
         appId: "inventory-queue",
         appSpecContent: "Keep the existing authenticated app",
@@ -96,10 +118,10 @@ describe("planning from the current checkout", () => {
           before: change.before?.mode,
           after: change.after?.mode,
         })),
-      ).toEqual(files.map((path) => ({ path, before: "755", after: "755" })));
+      ).toEqual(files.map((path) => ({ after: "755", before: "755", path })));
       expect(readFileSync(nodePath.join(root, collider), "utf-8")).toBe(`original ${collider}`);
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      rmSync(root, { force: true, recursive: true });
     }
   });
   it("plans with checkout execution despite an irrelevant hosted image setting", () => {
@@ -121,7 +143,7 @@ describe("planning from the current checkout", () => {
     const content = "Product outcome. ".repeat(100_000);
     const pieces = content.match(/[\s\S]{1,65536}/gu) ?? [];
     const written: string[] = [];
-    const sandbox = {
+    const sandbox = createSandbox({
       // oxlint-disable-next-line eslint/require-await -- Sandbox fixture models an asynchronous remove.
       removePath: vi.fn(async () => {}),
       // oxlint-disable-next-line eslint/require-await -- Sandbox fixture models an asynchronous copy.
@@ -131,7 +153,7 @@ describe("planning from the current checkout", () => {
       },
       // oxlint-disable-next-line eslint/require-await -- Sandbox fixture models an asynchronous profile write.
       writeTextFile: vi.fn(async () => {}),
-    } as unknown as SandboxSession;
+    });
     await materializePlanningOverlay({
       appId: "inventory",
       appSpecDigest: "a".repeat(64),
@@ -153,7 +175,7 @@ describe("planning from the current checkout", () => {
     async (appId) => {
       // oxlint-disable-next-line eslint/require-await -- model the sandbox's async command API
       const run = vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: "{}" }));
-      const sandbox = { run } as unknown as SandboxSession;
+      const sandbox = createSandbox({ run });
 
       await sandboxTargetCommandExecutor(sandbox)({
         appId,
@@ -185,7 +207,7 @@ describe("planning from the current checkout", () => {
       return null;
     });
     const executor = vi.fn(fixtureTargetCommandExecutor());
-    const sandbox = {
+    const sandbox = createSandbox({
       readTextFile,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       removePath: vi.fn(async () => {}),
@@ -197,7 +219,7 @@ describe("planning from the current checkout", () => {
       })),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       writeTextFile: vi.fn(async () => {}),
-    } as unknown as SandboxSession;
+    });
     const result = await executeTargetIdentityAndPlanning({
       appId: "stock-exceptions",
       appSpecContent: "Stock Exceptions product design",
@@ -248,7 +270,7 @@ describe("planning from the current checkout", () => {
           stdout: JSON.stringify(Object.fromEntries(Object.entries(parsed).toReversed())),
         };
       });
-      const sandbox = {
+      const sandbox = createSandbox({
         // oxlint-disable-next-line eslint/require-await -- framework test double
         removePath: vi.fn(async () => {}),
         // oxlint-disable-next-line eslint/require-await -- framework test double
@@ -259,7 +281,7 @@ describe("planning from the current checkout", () => {
         })),
         // oxlint-disable-next-line eslint/require-await -- framework test double
         writeTextFile: vi.fn(async () => {}),
-      } as unknown as SandboxSession;
+      });
       const planning = executeTargetIdentityAndPlanning({
         appId: "stock-exceptions",
         appSpecContent: "Stock Exceptions product design",
@@ -292,7 +314,7 @@ describe("planning from the current checkout", () => {
 
   it("runs creation planning when new-app drafts are supplied", async () => {
     const executor = vi.fn(fixtureTargetCommandExecutor());
-    const sandbox = {
+    const sandbox = createSandbox({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       removePath: vi.fn(async () => {}),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -303,7 +325,7 @@ describe("planning from the current checkout", () => {
       })),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       writeTextFile: vi.fn(async () => {}),
-    } as unknown as SandboxSession;
+    });
 
     const result = await executeTargetIdentityAndPlanning({
       appId: "stock-exceptions",
@@ -345,7 +367,7 @@ describe("planning from the current checkout", () => {
         }),
       };
     };
-    const sandbox = {
+    const sandbox = createSandbox({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       readBinaryFile: vi.fn(async () => before),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -360,7 +382,7 @@ describe("planning from the current checkout", () => {
       })),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       writeTextFile: vi.fn(async () => {}),
-    } as unknown as SandboxSession;
+    });
     const result = await executeTargetIdentityAndPlanning({
       appId: "inventory-queue",
       appSpecContent: "Improve Inventory Queue",
@@ -390,7 +412,7 @@ describe("planning from the current checkout", () => {
     });
   });
   it("discovers an existing backend and plans removal plus replacement with original preimages", async () => {
-    const sandbox = {
+    const sandbox = createSandbox({
       // oxlint-disable-next-line eslint/require-await -- Sandbox fixture preserves its asynchronous file API.
       readBinaryFile: vi.fn(async ({ path }: { path: string }) =>
         path.endsWith("demo.ts") ? Buffer.from("demo") : null,
@@ -403,7 +425,7 @@ describe("planning from the current checkout", () => {
         stdout: planningCommandOutput(command, "644"),
       })),
       writeTextFile: vi.fn(async () => {}),
-    } as unknown as SandboxSession;
+    });
     const result = await executeTargetIdentityAndPlanning({
       appId: "example",
       appSpecContent: "Authenticated Example",
@@ -442,13 +464,13 @@ describe("planning from the current checkout", () => {
       const readTextFile = vi.fn(async () => manifest);
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const writeTextFile = vi.fn(async () => {});
-      const sandbox = {
+      const sandbox = createSandbox({
         readTextFile,
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         removePath: vi.fn(async () => {}),
         run,
         writeTextFile,
-      } as unknown as SandboxSession;
+      });
 
       const result = await materializePlanningOverlay({
         appId: "stock-exceptions",
@@ -505,7 +527,7 @@ describe("planning from the current checkout", () => {
       }
       throw new Error("Unexpected planning filesystem mutation or command");
     });
-    const sandbox = {
+    const sandbox = createSandbox({
       run,
       removePath: ({ path }: { path: string }) => {
         for (const file of files.keys()) {
@@ -523,7 +545,7 @@ describe("planning from the current checkout", () => {
         const content = files.get(`/workspace/${path}`);
         return Promise.resolve(content === undefined ? null : Buffer.from(content));
       },
-    } as unknown as SandboxSession;
+    });
     const plan = () =>
       executeTargetIdentityAndPlanning({
         appId: "example",
@@ -560,7 +582,7 @@ describe("planning from the current checkout", () => {
   it("preserves an actual repository identity failure", async () => {
     const failure = { exitCode: 128, stderr: "Git could not read this checkout", stdout: "" };
     const run = vi.fn<SandboxSession["run"]>().mockResolvedValue(failure);
-    const sandbox = { run } as unknown as SandboxSession;
+    const sandbox = createSandbox({ run });
     await expect(
       sandboxTargetCommandExecutor(sandbox)({
         appId: "stock-exceptions",
@@ -574,7 +596,7 @@ describe("planning from the current checkout", () => {
   it("preserves an actual sandbox rejection while inspecting identity", async () => {
     const failure = new Error("sandbox command timed out");
     const run = vi.fn<SandboxSession["run"]>().mockRejectedValue(failure);
-    const sandbox = { run } as unknown as SandboxSession;
+    const sandbox = createSandbox({ run });
     await expect(
       sandboxTargetCommandExecutor(sandbox)({
         appId: "stock-exceptions",
@@ -591,8 +613,8 @@ describe("planning from the current checkout", () => {
       .mockResolvedValueOnce({ exitCode: 1, stderr: "Cannot find module dependency", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "installed" })
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "identity" });
-    const setNetworkPolicy = vi.fn(() => Promise.resolve());
-    const sandbox = { run, setNetworkPolicy } as unknown as SandboxSession;
+    const setNetworkPolicy = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const sandbox = { ...createSandbox({ run }), setNetworkPolicy };
     const result = await sandboxTargetCommandExecutor(sandbox)({
       appId: "stock-exceptions",
       appSpecDigest: "b".repeat(64),
@@ -608,7 +630,7 @@ describe("planning from the current checkout", () => {
   });
 
   it("includes mkdir stderr when preparing the planning workspace fails", async () => {
-    const sandbox = {
+    const sandbox = createSandbox({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       removePath: vi.fn(async () => {}),
       run: vi.fn().mockResolvedValue({
@@ -616,7 +638,7 @@ describe("planning from the current checkout", () => {
         stderr: "mkdir: no space left on device",
         stdout: "",
       }),
-    } as unknown as SandboxSession;
+    });
     await expect(
       materializePlanningOverlay({
         appId: "stock-exceptions",

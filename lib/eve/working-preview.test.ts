@@ -16,20 +16,28 @@ const workingPreview = {
   url: "https://preview.example.test/app?access=opaque-signed-value",
   verifiedAt: "2026-09-13T17:00:00.000Z",
 };
-const resultEvent = (toolName = "start_app_preview", status = "completed", isError = false) =>
-  ({
-    data: {
-      result: {
-        callId: "launch",
-        isError,
-        kind: "tool-result",
-        output: { workingPreview },
-        toolName,
-      },
-      status,
+const eventMeta = { at: "2026-09-13T17:00:00.000Z", id: "event-one" };
+const resultEvent = (
+  toolName = "start_app_preview",
+  status: "completed" | "failed" = "completed",
+  isError = false,
+): MessageStreamEvent => ({
+  data: {
+    result: {
+      callId: "launch",
+      isError,
+      kind: "tool-result",
+      output: { workingPreview },
+      toolName,
     },
-    type: "action.result",
-  }) as unknown as MessageStreamEvent;
+    sequence: 0,
+    status,
+    stepIndex: 0,
+    turnId: "turn-one",
+  },
+  meta: eventMeta,
+  type: "action.result",
+});
 
 describe("public working app preview", () => {
   it("reduces a live preview receipt and its invalidation one event at a time", () => {
@@ -44,9 +52,16 @@ describe("public working app preview", () => {
     expect(
       latestInstalledWorkingPreview([
         {
-          data: { message: JSON.stringify({ workingPreview }) },
+          data: {
+            finishReason: "stop",
+            message: JSON.stringify({ workingPreview }),
+            sequence: 0,
+            stepIndex: 0,
+            turnId: "turn-one",
+          },
+          meta: eventMeta,
           type: "message.completed",
-        } as unknown as MessageStreamEvent,
+        },
         resultEvent("record_ui_preview"),
         resultEvent("record_prototype_artifact"),
         resultEvent("start_app_preview", "failed"),
@@ -95,14 +110,18 @@ describe("public working app preview", () => {
     expect(recovered.workingPreview?.expiresAt).toBe(workingPreview.expiresAt);
   });
   it("invalidates while a new preview is starting and installs only its successful result", () => {
-    const requested = {
+    const requested: MessageStreamEvent = {
       data: {
         actions: [
           { callId: "reopen", input: {}, kind: "tool-call", toolName: "start_app_preview" },
         ],
+        sequence: 0,
+        stepIndex: 0,
+        turnId: "turn-one",
       },
+      meta: eventMeta,
       type: "actions.requested",
-    } as unknown as MessageStreamEvent;
+    };
     expect(latestInstalledWorkingPreview([resultEvent(), requested])).toBeNull();
     expect(latestInstalledWorkingPreview([resultEvent(), requested, resultEvent()])).toEqual(
       workingPreview,
@@ -115,17 +134,22 @@ describe("public working app preview", () => {
   });
   it("returns null for expired receipts in current stream, snapshot, and checkpoint reads", () => {
     const expired = { ...workingPreview, expiresAt: "2000-01-01T00:00:00.000Z" };
-    const event = {
+    const event: MessageStreamEvent = {
       data: {
         result: {
+          callId: "launch",
           kind: "tool-result",
           output: { workingPreview: expired },
           toolName: "start_app_preview",
         },
+        sequence: 0,
         status: "completed",
+        stepIndex: 0,
+        turnId: "turn-one",
       },
+      meta: eventMeta,
       type: "action.result",
-    } as unknown as MessageStreamEvent;
+    };
     expect(latestInstalledWorkingPreview([event])).toBeNull();
     expect(
       projectHostedSnapshot("one", { events: [], status: "waiting", workingPreview: expired })

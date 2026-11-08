@@ -2,9 +2,10 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
 import { BuildWithSection } from "./builder-destination";
+import type { BuildDestination } from "./builder-types";
 
 const meta = {
-  args: { onChange: fn(), selected: "codex" },
+  args: { onChange: fn<(destination: BuildDestination) => void>(), selected: "codex" },
   component: BuildWithSection,
   decorators: [
     (Story) => (

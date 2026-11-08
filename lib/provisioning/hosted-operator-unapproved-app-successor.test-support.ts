@@ -17,6 +17,9 @@ import {
 } from "./hosted-operator-normal-actor-program";
 import { hostedOperatorRealmLinkConfigSha256 } from "./hosted-operator-realm-link-config";
 
+const TEST_APP_ORIGIN = "https://apps.example";
+const GATEWAY_DELIVERY_EFFECT = "gateway-delivery";
+
 export const requiredFixture = <T>(value: T | undefined): T => {
   if (value === undefined) {
     throw new Error("Missing fixture value");
@@ -113,35 +116,35 @@ const operationRef = "00000000-0000-4000-8000-000000000001";
 export const observedAt = "2026-10-14T12:00:00Z";
 const sourceWorkload = {
   audience: "https://vercel.com/team",
+  environment: "preview" as const,
   issuer: "https://oidc.vercel.com/team",
   ownerId: "team",
   projectId: "builder",
-  environment: "preview" as const,
   subject: "builder-workload",
 };
 const desiredPlan = () =>
   hostedOperatorPlanSchema.parse({
     ...bootstrapPlan(),
     normalActorProgram: normalActorProgramSchema.parse({
-      version: 1,
-      appId: context.target.appId,
-      origin: "https://apps.example",
       actors: [
         {
+          account: "create-email-password",
           actorKey: "owner",
           email: "owner@example.test",
           name: "Owner",
-          account: "create-email-password",
         },
       ],
-      organizations: [],
-      memberships: [],
       appAccess: [],
+      appId: context.target.appId,
+      memberships: [],
+      organizations: [],
+      origin: TEST_APP_ORIGIN,
+      version: 1,
     }),
     publicGateway: {
-      projectId: "gateway",
       branch: context.target.branch,
-      origin: "https://apps.example",
+      origin: TEST_APP_ORIGIN,
+      projectId: "gateway",
     },
     deploymentBoundary: {
       authority,
@@ -159,33 +162,37 @@ const desiredPlan = () =>
         environment: "preview",
       },
       operator: {
-        projectId: "operator",
         deploymentId: "operator-deployment",
         environment: "preview",
+        projectId: "operator",
       },
       verification: {
         gatewayOrigin: "https://gateway.example",
         jwksUrl: "https://gateway.example/_platform/jwks.json",
-        publicOrigin: "https://apps.example",
+        publicOrigin: TEST_APP_ORIGIN,
       },
     },
     gatewayBindings: {
-      authBrowserOrigin: "https://apps.example",
+      authBrowserOrigin: TEST_APP_ORIGIN,
       builderCallbackOrigin: "https://builder.example",
-      operatorOrigin: "https://operator.example",
       catalogAppIds: [context.target.appId],
+      operatorOrigin: "https://operator.example",
       sourceWorkload,
     },
     gatewayDelivery: {
-      projectId: "gateway",
       branch: context.target.branch,
-      repoId: "gateway-repo",
       gitSha: "c".repeat(40),
+      projectId: "gateway",
+      repoId: "gateway-repo",
     },
     effects: [
       ...bootstrapPlan().effects,
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
+      { description: "Gateway configuration", id: "gateway-bindings", kind: "gateway-bindings" },
+      {
+        description: "Gateway delivery",
+        id: GATEWAY_DELIVERY_EFFECT,
+        kind: GATEWAY_DELIVERY_EFFECT,
+      },
     ],
   });
 const completedRecord = (plan: HostedOperatorPlan = desiredPlan()) =>
@@ -239,11 +246,11 @@ const completedRecord = (plan: HostedOperatorPlan = desiredPlan()) =>
           repoId: "gateway-repo",
           operationRef,
           origin: "https://gateway.example",
-          deploymentId: "gateway-delivery",
+          deploymentId: GATEWAY_DELIVERY_EFFECT,
           readyState: "READY",
         },
       ],
-      deliveredGatewayDeploymentId: "gateway-delivery",
+      deliveredGatewayDeploymentId: GATEWAY_DELIVERY_EFFECT,
     },
   });
 
@@ -253,10 +260,10 @@ export const captureFixture = () => {
     ...template.normalActorProgram,
     actors: [
       {
+        account: "capture-existing",
         actorKey: "owner",
         email: "owner@example.test",
         name: "Owner",
-        account: "capture-existing",
       },
     ],
   });
@@ -265,10 +272,10 @@ export const captureFixture = () => {
     actors: [
       ...original.actors,
       {
+        account: "create-email-password",
         actorKey: "reviewer",
         email: "reviewer@example.test",
         name: "Reviewer",
-        account: "create-email-password",
       },
     ],
   });
@@ -281,8 +288,8 @@ export const captureFixture = () => {
   record.retainedAuth = retainedOperatorAuthFromJournal(record);
   const accountPlan = hostedOperatorPlanSchema.parse({
     ...authPlan,
+    effects: [{ description: "Accounts", id: "normal-accounts", kind: "normal-accounts" }],
     stage: "auth-participants",
-    effects: [{ id: "normal-accounts", kind: "normal-accounts", description: "Accounts" }],
   });
   const accountRef = "00000000-0000-4000-8000-000000000002";
   const preparation = {
@@ -312,8 +319,8 @@ export const captureFixture = () => {
     gatewayDelivery: { ...authPlan.gatewayDelivery, gitRef: undefined },
     effects: [
       ...authPlan.effects.slice(0, 3),
-      { id: "app-access", kind: "access", description: "Grant" },
-      { id: "app-bindings", kind: "bindings", description: "Bind" },
+      { description: "Grant", id: "app-access", kind: "access" },
+      { description: "Bind", id: "app-bindings", kind: "bindings" },
       ...authPlan.effects.slice(3),
     ],
   });
@@ -326,5 +333,5 @@ export const captureFixture = () => {
     ["auth-resources", "app-resources", "auth-schema"].includes(receipt.effectId),
   );
   record.approvedByCallId = "operator:unapproved-plan";
-  return { record, added };
+  return { added, record };
 };

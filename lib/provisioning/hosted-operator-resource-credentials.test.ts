@@ -306,18 +306,18 @@ const completedGatewayBindingObservation = (stage: "app" | "auth-bootstrap" = "a
       ? appPlan
       : hostedOperatorPlanSchema.parse({
           ...appPlan,
-          stage,
           access: [],
-          delivery: undefined,
           authSchema: {
             artifactRef: "auth-fixture",
             installer: { reference: "auth-worker", sha256: "f".repeat(64) },
             planDigest: "a".repeat(64),
             targetDigest: "b".repeat(64),
           },
+          delivery: undefined,
           effects: appPlan.effects.filter((effect) =>
             ["resources", "install", "gateway-bindings", "gateway-delivery"].includes(effect.kind),
           ),
+          stage,
         });
   const prepared = prepareHostedOperatorResourceCredentials({ ...input, plan: gatewayPlan });
   const attemptId = "00000000-0000-4000-8000-000000000022";

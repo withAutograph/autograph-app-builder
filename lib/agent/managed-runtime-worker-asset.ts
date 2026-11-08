@@ -181,7 +181,7 @@ export const createManagedRuntimeWorkerAsset = (dependencies: {
       const descriptor = descriptorSchema.parse(input.descriptor);
       const owned = ownedSourceState(input);
       const { attemptId, name } = owned;
-      let state = owned.state;
+      let { state } = owned;
       let source: ManagedRuntimeWorkerAssetSource | undefined;
       let failure: { error: unknown } | undefined;
       const save = async (next: ManagedRuntimeWorkerAssetState) => {

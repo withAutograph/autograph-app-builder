@@ -31,8 +31,8 @@ import { createVerifiedActorReadback } from "./hosted-operator-verified-actor-re
 
 const accountOperationRef = "11111111-1111-4111-8111-111111111111";
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
@@ -40,42 +40,40 @@ const target = {
   appId: "normal-app",
   branch: "preview",
   environment: "preview" as const,
-  projectId: "prj_app",
-  sessionId: "owner-session",
   installationId: "installation",
+  projectId: "prj_app",
   scopeId: "team",
   scopeType: "team" as const,
+  sessionId: "owner-session",
 };
 const context = { authority, target };
 const program = normalActorProgramSchema.parse({
-  version: 1,
-  appId: target.appId,
-  origin: "https://apps.example.com",
   actors: [
     {
+      account: "create-email-password",
       actorKey: "owner",
       email: "owner@example.com",
       name: "Owner",
-      account: "create-email-password",
     },
-    { actorKey: "peer", email: "peer@example.com", name: "Peer", account: "create-email-password" },
+    { account: "create-email-password", actorKey: "peer", email: "peer@example.com", name: "Peer" },
     {
+      account: "create-email-password",
       actorKey: "no-access",
       email: "no-access@example.com",
       name: "No access",
-      account: "create-email-password",
     },
     {
+      account: "capture-existing",
       actorKey: "unassigned",
       email: "unassigned@example.com",
       name: "Unassigned",
-      account: "capture-existing",
     },
   ],
-  organizations: [
-    { organizationId: "org-one", ownerActorKey: "owner", name: "One", slug: "one" },
-    { organizationId: "org-two", ownerActorKey: "owner", name: "Two", slug: "two" },
+  appAccess: [
+    { actorKey: "owner", organizationId: "org-one", roles: ["owner"] },
+    { actorKey: "peer", organizationId: "org-two", roles: ["member"] },
   ],
+  appId: target.appId,
   memberships: [
     { actorKey: "owner", organizationId: "org-one", role: "owner" },
     { actorKey: "peer", organizationId: "org-one", role: "member" },
@@ -83,56 +81,30 @@ const program = normalActorProgramSchema.parse({
     { actorKey: "peer", organizationId: "org-two", role: "member" },
     { actorKey: "no-access", organizationId: "org-one", role: "member" },
   ],
-  appAccess: [
-    { actorKey: "owner", organizationId: "org-one", roles: ["owner"] },
-    { actorKey: "peer", organizationId: "org-two", roles: ["member"] },
+  organizations: [
+    { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
+    { name: "Two", organizationId: "org-two", ownerActorKey: "owner", slug: "two" },
   ],
+  origin: "https://apps.example.com",
+  version: 1,
 });
 const plan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  stage: "auth-participants",
-  action: "prepare",
   access: [],
-  normalActorProgram: program,
-  selection: {
-    appId: target.appId,
-    branch: target.branch,
-    environment: target.environment,
-    projectId: target.projectId,
-    sessionId: target.sessionId,
-  },
+  action: "prepare",
   appDatabase: {
-    resourceId: "app-resource",
     database: "normal",
     migratorRole: "normal_owner",
+    resourceId: "app-resource",
     runtimeRole: "normal_runtime",
   },
   authDatabase: {
-    resourceId: "auth-resource",
     database: "auth",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
-  effects: [
-    {
-      id: "normal-accounts",
-      kind: "normal-accounts",
-      description: "Capture approved actual accounts",
-    },
-  ],
-  installer: { reference: "owned-worker", sha256: "a".repeat(64) },
-  neon: {
-    branchId: "br_fixture",
-    connectionRef: "owned-connection",
-    endpoint: "ep-owned.neon.tech",
-    projectId: "neon-owned",
-    source: "synthetic-only",
-  },
-  release: { artifactRef: "owned-release", id: "release", sha256: "b".repeat(64) },
-  retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain Auth" },
-  publicGateway: { branch: target.branch, origin: program.origin, projectId: "prj_gateway" },
   deploymentBoundary: {
     authority,
     teamId: "team",
@@ -155,6 +127,34 @@ const plan = hostedOperatorPlanSchema.parse({
       publicOrigin: program.origin,
     },
   },
+  effects: [
+    {
+      description: "Capture approved actual accounts",
+      id: "normal-accounts",
+      kind: "normal-accounts",
+    },
+  ],
+  installer: { reference: "owned-worker", sha256: "a".repeat(64) },
+  neon: {
+    branchId: "br_fixture",
+    connectionRef: "owned-connection",
+    endpoint: "ep-owned.neon.tech",
+    projectId: "neon-owned",
+    source: "synthetic-only",
+  },
+  normalActorProgram: program,
+  publicGateway: { branch: target.branch, origin: program.origin, projectId: "prj_gateway" },
+  release: { artifactRef: "owned-release", id: "release", sha256: "b".repeat(64) },
+  retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain Auth" },
+  selection: {
+    appId: target.appId,
+    branch: target.branch,
+    environment: target.environment,
+    projectId: target.projectId,
+    sessionId: target.sessionId,
+  },
+  stage: "auth-participants",
+  version: 1,
 });
 const faults = [
   "revoked",
@@ -215,11 +215,11 @@ const fixture = async (
       status: "pending",
       step: "reserved",
       operator: {
+        approvalId: "first-account-approval",
         mode: "protected-operator-v1",
         operationRef: accountOperationRef,
         plan,
         planDigest: operatorPlanDigest(plan),
-        approvalId: "first-account-approval",
         receipts: [],
       },
     }),
@@ -236,9 +236,6 @@ const fixture = async (
     }
   };
   const journalPorts: NormalActorJournalPorts = {
-    keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
-    now: () => Date.now(),
-    assertAuthorized: assertOwner,
     assertAccountApproval: async (_context, preparation) => {
       if (!firstApproval) {
         throw new HostedOperatorError("authorization_required");
@@ -247,17 +244,14 @@ const fixture = async (
       expect(preparation.accountApprovalId).toBe("first-account-approval");
       expect(preparation.accountPlanDigest).toBe(operatorPlanDigest(plan));
     },
+    assertAuthorized: assertOwner,
     assertMutationAuthority: async (_context, current) => {
       expect(current.revision).toBe(row.revision);
       expect(current.record.leaseId).toBeUndefined();
     },
+    keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
+    now: () => Date.now(),
     store: {
-      read: async () => {
-        if (journalFailure !== undefined) {
-          throw journalFailure;
-        }
-        return structuredClone(row);
-      },
       compareAndSet: async (input) => {
         if (input.expectedRevision !== row.revision) {
           return undefined;
@@ -266,6 +260,12 @@ const fixture = async (
           revision: row.revision + 1,
           record: hostedRuntimeJournalRecordSchema.parse(input.record),
         };
+        return structuredClone(row);
+      },
+      read: async () => {
+        if (journalFailure !== undefined) {
+          throw journalFailure;
+        }
         return structuredClone(row);
       },
     },
@@ -347,15 +347,15 @@ const fixture = async (
     },
     identityProof: { reference: `private-${entry.organizationId}-proof`, sha256: "f".repeat(64) },
     identityVerification: {
-      issuer: program.origin,
       audience: "https://operator.example.com",
+      issuer: program.origin,
       jwksUrl: "https://gateway.example.test/_platform/jwks.json",
       transportSource: {
-        issuer: "https://oidc.vercel.com",
         audience: "https://operator.example.com",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com",
         ownerId: "team",
         projectId: "prj_operator",
-        environment: "preview",
       },
     },
   }));
@@ -372,12 +372,12 @@ const fixture = async (
     access: proposeResolvedNormalActorAccess(program, state),
     authMembership: { kind: "create-owned-organizations", organizations: specs },
     effects: [
-      { kind: "resources", id: "resources", description: "Fixture resources" },
-      { kind: "install", id: "install", description: "Fixture app" },
-      { kind: "auth-membership", id: "auth-membership:org-one", description: "One" },
-      { kind: "auth-membership", id: "auth-membership:org-two", description: "Two" },
-      { kind: "access", id: "access", description: "Fixture roles" },
-      { kind: "bindings", id: "bindings", description: "Fixture runtime" },
+      { description: "Fixture resources", id: "resources", kind: "resources" },
+      { description: "Fixture app", id: "install", kind: "install" },
+      { description: "One", id: "auth-membership:org-one", kind: "auth-membership" },
+      { description: "Two", id: "auth-membership:org-two", kind: "auth-membership" },
+      { description: "Fixture roles", id: "access", kind: "access" },
+      { description: "Fixture runtime", id: "bindings", kind: "bindings" },
     ],
   });
   row = {
@@ -386,11 +386,11 @@ const fixture = async (
       ...row.record,
       approvedByCallId: "current-call",
       operator: {
+        approvalId: "current-approval",
         mode: "protected-operator-v1",
         operationRef: "22222222-2222-4222-8222-222222222222",
         plan: fullPlan,
         planDigest: operatorPlanDigest(fullPlan),
-        approvalId: "current-approval",
         receipts: [],
       },
     }),
@@ -405,9 +405,9 @@ const fixture = async (
       const [cookie] = actor.storageState.cookies;
       if (cookie !== undefined) {
         sessions.set(cookie.value, {
-          session: actor.session,
           actorKey: actor.actorKey,
           organizationId: null,
+          session: actor.session,
         });
       }
     }
@@ -416,9 +416,9 @@ const fixture = async (
     const [cookie] = actor.storageState.cookies;
     if (cookie !== undefined) {
       sessions.set(cookie.value, {
-        session: actor.session,
         actorKey: actor.actorKey,
         organizationId: actor.organizationId,
+        session: actor.session,
       });
     }
   }
@@ -462,7 +462,6 @@ const fixture = async (
       throw new Error("fixture_missing_membership");
     }
     return Response.json({
-      total: 1,
       members: [
         {
           id: `member-${saved.actorKey}-${saved.organizationId}`,
@@ -472,10 +471,10 @@ const fixture = async (
           user: { id: saved.session.actorId, email: actor.email },
         },
       ],
+      total: 1,
     });
   };
   const runtimeDeps: Parameters<typeof createNormalActorRuntimeBindings>[0] = {
-    journalPorts,
     assertCurrentPlan: async (input) => {
       currentChecks += 1;
       await assertOwner();
@@ -484,6 +483,7 @@ const fixture = async (
         throw new HostedOperatorError("authorization_required");
       }
     },
+    journalPorts,
     normalRealmFetch: async (input) => {
       if (transportFailure !== undefined) {
         throw transportFailure;
@@ -500,33 +500,33 @@ const fixture = async (
     operationRef: "22222222-2222-4222-8222-222222222222",
   };
   return {
-    runtime,
-    verifiedReadback,
-    input,
+    get currentChecks() {
+      return currentChecks;
+    },
+    denyFinal() {
+      finalDenied = true;
+    },
     failJournal(error: Error) {
       journalFailure = error;
     },
     failTransport(error: Error) {
       transportFailure = error;
     },
-    state,
+    input,
     journal,
     requests,
-    get row() {
-      return row;
-    },
-    get currentChecks() {
-      return currentChecks;
+    revokeCurrent() {
+      currentPlan = false;
     },
     revokeFirst() {
       firstApproval = false;
     },
-    revokeCurrent() {
-      currentPlan = false;
+    get row() {
+      return row;
     },
-    denyFinal() {
-      finalDenied = true;
-    },
+    runtime,
+    state,
+    verifiedReadback,
   };
 };
 
@@ -593,7 +593,7 @@ describe("fresh authenticated normal actor runtime bindings", () => {
       result.actors.find(
         (entry) => entry.actorKey === "owner" && entry.organizationId === "org-one",
       ),
-    ).toMatchObject({ actorId: "id-owner", membershipRole: "owner", appRoles: ["owner"] });
+    ).toMatchObject({ actorId: "id-owner", appRoles: ["owner"], membershipRole: "owner" });
     const publicText = JSON.stringify(result);
     expect(publicText).not.toContain("storageState");
     expect(publicText).not.toContain("cookie");
@@ -707,10 +707,10 @@ describe("fresh authenticated normal actor runtime bindings", () => {
       stage: "app",
       normalActorProgram: undefined,
       effects: [
-        { kind: "resources", id: "resources", description: "Fixture resources" },
-        { kind: "install", id: "install", description: "Fixture app" },
-        { kind: "access", id: "access", description: "Fixture access" },
-        { kind: "bindings", id: "bindings", description: "Fixture binding" },
+        { description: "Fixture resources", id: "resources", kind: "resources" },
+        { description: "Fixture app", id: "install", kind: "install" },
+        { description: "Fixture access", id: "access", kind: "access" },
+        { description: "Fixture binding", id: "bindings", kind: "bindings" },
       ],
     });
     expect(await f.runtime({ ...f.input, plan: legacy })).toBeUndefined();
@@ -719,18 +719,19 @@ describe("fresh authenticated normal actor runtime bindings", () => {
   });
 });
 
+const observe = () => {
+  const report = diagnostics.reportOperatorRuntimeIdentityFailure;
+  const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+  vi.spyOn(diagnostics, "reportOperatorRuntimeIdentityFailure").mockImplementation(
+    (sessionId, failure) => {
+      report(sessionId, failure, sink);
+    },
+  );
+  return sink;
+};
+
 describe("closed runtime identity refusal diagnostics", () => {
   afterEach(() => vi.restoreAllMocks());
-  const observe = () => {
-    const report = diagnostics.reportOperatorRuntimeIdentityFailure;
-    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
-    vi.spyOn(diagnostics, "reportOperatorRuntimeIdentityFailure").mockImplementation(
-      (sessionId, failure) => {
-        report(sessionId, failure, sink);
-      },
-    );
-    return sink;
-  };
   it.each([
     ["revoked", "get_session", "unavailable"],
     ["wrong-actor", "identity", "actor_mismatch"],
@@ -746,7 +747,7 @@ describe("closed runtime identity refusal diagnostics", () => {
       const f = await fixture(fault);
       await denied(f.runtime(f.input), "auth_identity_required");
       expect(sink).toHaveBeenCalledTimes(1);
-      expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({ stage, reason });
+      expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({ reason, stage });
     },
   );
   it.each(["journal", "transport"] as const)(
@@ -763,8 +764,8 @@ describe("closed runtime identity refusal diagnostics", () => {
       }
       await expect(f.runtime(f.input)).rejects.toBe(error);
       expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({
-        stage,
         reason: "read_failed",
+        stage,
       });
       expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
     },
@@ -781,7 +782,7 @@ describe("closed runtime identity refusal diagnostics", () => {
         f.input.plan.normalActorPreparation.accountPlanDigest = "f".repeat(64);
       }
       if (stage === "projection") {
-        const actor = f.state.actors[0];
+        const [actor] = f.state.actors;
         if (actor === undefined) {
           throw new Error("missing fixture actor");
         }
@@ -793,8 +794,8 @@ describe("closed runtime identity refusal diagnostics", () => {
       }
       await expect(f.runtime(f.input)).rejects.toBeDefined();
       expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({
-        stage,
         reason: stage === "preparation" ? "scope_mismatch" : "read_failed",
+        stage,
       });
       expect(f.requests).toHaveLength(stage === "final_authority" ? 11 : 0);
     },
@@ -829,8 +830,8 @@ describe("closed runtime identity refusal diagnostics", () => {
     );
     await expect(f.runtime(f.input)).rejects.toBe(shared);
     expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({
-      stage: "get_session",
       reason: "read_failed",
+      stage: "get_session",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(shared.message);
   });

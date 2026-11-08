@@ -201,12 +201,12 @@ const fixture = async (staticApp = false) => {
     record.privateState = await workers.reservePrivateState(context.row);
   }
   return {
-    workers,
-    context,
     calls,
+    context,
     revoke: () => {
       valid = false;
     },
+    workers,
   };
 };
 describe("concrete protected Production worker composition", () => {
@@ -287,9 +287,9 @@ describe("concrete protected Production worker composition", () => {
     const plan = planFrom(grant.startupFiles["approved-access-plan.json"]);
     expect(plan.access).toEqual([
       {
-        organizationId: "org",
         actorId: "verified-actor",
         actorKind: "human",
+        organizationId: "org",
         roles: ["requester"],
       },
     ]);

@@ -37,7 +37,9 @@ describe("high-fidelity design guidance", () => {
       manifest: JSON.parse(manifest),
       routes: ["/"],
     });
-    expect(() => validateUiPreview(input)).not.toThrow();
+    expect(() => {
+      validateUiPreview(input);
+    }).not.toThrow();
   });
 
   it.each([

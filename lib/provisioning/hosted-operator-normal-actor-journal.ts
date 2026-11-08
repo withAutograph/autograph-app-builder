@@ -161,19 +161,29 @@ export interface NormalActorJournalPorts {
   ) => Promise<void>;
   now: () => number;
 }
-const provenance = (preparation: NormalActorAccountPreparation): NormalActorAccountProvenance => ({
-  program: preparation.program,
-  ...(preparation.predecessor === undefined ? {} : { predecessor: preparation.predecessor }),
-  ...(preparation.capturePredecessor === undefined
-    ? {}
-    : { capturePredecessor: preparation.capturePredecessor }),
-  programDigest: preparation.programDigest,
-  accountOperationRef: preparation.accountOperationRef,
-  accountPlan: preparation.accountPlan,
-  accountPlanDigest: preparation.accountPlanDigest,
-  accountApprovalId: preparation.accountApprovalId,
-  accountApprovedByCallId: preparation.accountApprovedByCallId,
-});
+const provenance = (preparation: NormalActorAccountPreparation): NormalActorAccountProvenance => {
+  const initial: Pick<
+    NormalActorAccountProvenance,
+    "program" | "predecessor" | "capturePredecessor"
+  > = {
+    program: preparation.program,
+  };
+  if (preparation.predecessor !== undefined) {
+    initial.predecessor = preparation.predecessor;
+  }
+  if (preparation.capturePredecessor !== undefined) {
+    initial.capturePredecessor = preparation.capturePredecessor;
+  }
+  return {
+    ...initial,
+    programDigest: preparation.programDigest,
+    accountOperationRef: preparation.accountOperationRef,
+    accountPlan: preparation.accountPlan,
+    accountPlanDigest: preparation.accountPlanDigest,
+    accountApprovalId: preparation.accountApprovalId,
+    accountApprovedByCallId: preparation.accountApprovedByCallId,
+  };
+};
 const validateProvenance = (
   context: HostedOperatorContext,
   input: NormalActorAccountProvenance,
@@ -203,8 +213,20 @@ const captureAad = (
   context: HostedOperatorContext,
   preparation: NormalActorAccountProvenance,
   capture: z.infer<typeof captureReferenceSchema>,
-) =>
-  JSON.stringify({
+) => {
+  const aad: typeof context.authority & {
+    ownerSessionId: string;
+    appId: string;
+    accountOperationRef: string;
+    programDigest: string;
+    origin: string;
+    nonceSha256: string;
+    proofSha256: string;
+    actorKey: string;
+    organizationId?: string;
+    reference?: string;
+    purpose?: string;
+  } = {
     ...context.authority,
     ownerSessionId: context.target.sessionId,
     appId: preparation.program.appId,
@@ -214,10 +236,14 @@ const captureAad = (
     nonceSha256: capture.nonceSha256,
     proofSha256: capture.proofSha256,
     actorKey: capture.actorKey,
-    ...(capture.organizationId === undefined ? {} : { organizationId: capture.organizationId }),
-    reference: capture.reference,
-    purpose: "normal-auth-capture-v1",
-  });
+  };
+  if (capture.organizationId !== undefined) {
+    aad.organizationId = capture.organizationId;
+  }
+  aad.reference = capture.reference;
+  aad.purpose = "normal-auth-capture-v1";
+  return JSON.stringify(aad);
+};
 export const normalActorCaptureCookieDigest = (
   cookie: Pick<NormalActorCaptureCookie, "name" | "value">,
 ) => createHash("sha256").update(`${cookie.name}=${cookie.value}`).digest("hex");
@@ -449,19 +475,19 @@ const sameOrganizationProofBinding = (
     existing.transportSource.projectId === input.binding.transportSource.projectId,
     existing.transportSource.environment === input.binding.transportSource.environment,
   ].every(Boolean);
+const guarded = async <T>(action: () => Promise<T>, guard?: () => Promise<void>) => {
+  await guard?.();
+  const result = await action();
+  await guard?.();
+  return result;
+};
 /** Actual owner journal CAS; raw normal sessions are decrypted only in this private capability. */
 export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
-  const guarded = async <T>(action: () => Promise<T>, guard?: () => Promise<void>) => {
-    await guard?.();
-    const result = await action();
-    await guard?.();
-    return result;
-  };
   const assertPredecessorApprovals = async (
     context: HostedOperatorContext,
     prior: NonNullable<HostedRuntimeJournalRow["record"]["participantPreparationHistory"]>[number],
   ) => {
-    const approvalId = prior.operator.approvalId;
+    const { approvalId } = prior.operator;
     if (approvalId === undefined) {
       throw new Error("normal_actor_journal_authority_mismatch");
     }
@@ -509,7 +535,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     }
     const preparation = row.record.accountPreparation;
     if (preparation === undefined) {
-      return { row, preparation: undefined, state: undefined };
+      return { preparation: undefined, row, state: undefined };
     }
     validateProvenance(context, preparation);
     await guarded(() => ports.assertAccountApproval(context, provenance(preparation)), guard);
@@ -546,7 +572,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     if (!sameJournalAfterLeaseRenewal(row, latest, ports.now()) || latest === undefined) {
       throw new Error("normal_actor_journal_changed");
     }
-    return { row: latest, preparation, state };
+    return { preparation, row: latest, state };
   };
   const mutate = async (
     context: HostedOperatorContext,
@@ -890,9 +916,14 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
             throw new Error("normal_actor_session_required");
           }
           const { transportSource, ...linkBinding } = input.binding;
-          const next = normalActorOrganizationProofSchema.parse({
+          const initial: Pick<NormalActorOrganizationProof, "transportSource" | "bootstrap"> = {
             transportSource,
-            ...(input.bootstrap === undefined ? {} : { bootstrap: input.bootstrap }),
+          };
+          if (input.bootstrap !== undefined) {
+            initial.bootstrap = input.bootstrap;
+          }
+          const next = normalActorOrganizationProofSchema.parse({
+            ...initial,
             organizationId: input.organizationId,
             ownerActorKey: input.ownerActorKey,
             owner: input.owner,
@@ -912,23 +943,20 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
               },
             },
           });
-          return {
-            ...current,
-            ...(changedEndpoint && existing !== undefined
-              ? {
-                  supersededOrganizationProofs: [
-                    ...(current.supersededOrganizationProofs ?? []),
-                    existing,
-                  ],
-                }
-              : {}),
-            organizationProofs: [
-              ...(current.organizationProofs ?? []).filter(
-                (entry) => entry.organizationId !== input.organizationId,
-              ),
-              next,
-            ],
-          };
+          const updated: NormalActorAccountPreparation = { ...current };
+          if (changedEndpoint && existing !== undefined) {
+            updated.supersededOrganizationProofs = [
+              ...(current.supersededOrganizationProofs ?? []),
+              existing,
+            ];
+          }
+          updated.organizationProofs = [
+            ...(current.organizationProofs ?? []).filter(
+              (entry) => entry.organizationId !== input.organizationId,
+            ),
+            next,
+          ];
+          return updated;
         },
         input.assertBootstrapCurrent,
       );
@@ -1058,13 +1086,11 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
             config: ports.keyring,
             state: checked,
           }),
-          ...(complete
-            ? {
-                accountsCompletedAt:
-                  preparation.accountsCompletedAt ?? new Date(ports.now()).toISOString(),
-              }
-            : {}),
         };
+        if (complete) {
+          next.accountsCompletedAt =
+            preparation.accountsCompletedAt ?? new Date(ports.now()).toISOString();
+        }
         if (!complete) {
           delete next.accountsCompletedAt;
         }
@@ -1168,7 +1194,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       reference: string,
     ): Promise<NormalActorCapturedPayload | undefined> {
       const result = await read(context);
-      let preparation = result.preparation;
+      let { preparation } = result;
       if (preparation?.captures.some((entry) => entry.reference === reference) !== true) {
         preparation = result.row.record.participantPreparationHistory
           ?.map((entry) => entry.preparation)

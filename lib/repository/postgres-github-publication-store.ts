@@ -1,9 +1,8 @@
 import { isDeepStrictEqual } from "node:util";
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { hostedGitHubPublicationProposals } from "../db/schema";
 import {
@@ -20,7 +19,6 @@ import type {
 import { createPostgresGitHubPublicationReceiptStore } from "./postgres-github-publication-receipt-store";
 import type { HostedGitHubTenantAuthority } from "./postgres-github-installation-store";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 export type GitHubPublicationProposal = FreshRepositoryProposal | DraftPullRequestProposal;
 
 export interface GitHubPublicationProposalStore {
@@ -28,15 +26,18 @@ export interface GitHubPublicationProposalStore {
   save: (proposal: GitHubPublicationProposal) => Promise<GitHubPublicationProposal>;
 }
 
-const proposalRowSchema = z
-  .object({
-    createdAt: z.date(),
-    idempotencyKey: z.string(),
-    kind: z.enum(["fresh-repository", "draft-pull-request"]),
-    proposal: z.unknown(),
-    proposalDigest: z.string(),
-  })
-  .strict();
+export interface GitHubPublicationStores {
+  proposals: GitHubPublicationProposalStore;
+  receipts: GitHubPublicationReceiptStore;
+}
+
+const proposalRowSchema = z.strictObject({
+  createdAt: z.date(),
+  idempotencyKey: z.string(),
+  kind: z.enum(["fresh-repository", "draft-pull-request"]),
+  proposal: z.unknown(),
+  proposalDigest: z.string(),
+});
 
 // Project exactly the closed receipt fields. The database row also contains
 // tenant columns used by the SQL predicate, but those are not proposal data.
@@ -57,9 +58,10 @@ function proposalKind(
     : "draft-pull-request";
 }
 
-const releaseGateSchema = z
-  .object({ configured: z.boolean(), name: z.literal("REPOSITORY_RELEASE_ENABLED") })
-  .strict();
+const releaseGateSchema = z.strictObject({
+  configured: z.boolean(),
+  name: z.literal("REPOSITORY_RELEASE_ENABLED"),
+});
 
 const hasExactStoredKeys = (value: GitHubPublicationProposal, keys: readonly string[]): boolean =>
   JSON.stringify(Object.keys(value).toSorted()) === JSON.stringify([...keys].toSorted());
@@ -110,7 +112,7 @@ function parseProposal(input: unknown): GitHubPublicationProposal {
   ) {
     throw new Error("Stored draft pull-request proposal fields are missing or unexpected.");
   }
-  const draft = stored as DraftPullRequestProposal;
+  const draft = stored;
   // oxlint-disable-next-line eslint/sort-keys -- legacy digest depends on constructor field order.
   const proposal: DraftPullRequestProposal = {
     approvedPaths: draft.approvedPaths,
@@ -189,10 +191,7 @@ export function createPostgresGitHubPublicationStores(
   database: Database,
   authorityInput: HostedGitHubTenantAuthority,
   now: () => Date = () => new Date(),
-): {
-  proposals: GitHubPublicationProposalStore;
-  receipts: GitHubPublicationReceiptStore;
-} {
+): GitHubPublicationStores {
   const authority = hostedTenantAuthoritySchema.parse(authorityInput);
   const tenantPredicate = and(
     eq(hostedGitHubPublicationProposals.issuer, authority.issuer),

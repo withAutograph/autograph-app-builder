@@ -10,6 +10,8 @@ import type { PublicReleaseInvocation, PublicReleaseEffectContext } from "./publ
 import { vercelProvisionDiagnosticSchema } from "./contracts";
 import { PublicReleaseProviderError } from "./public-release-provider-error";
 
+const VERCEL_API_ORIGIN = "https://api.vercel.com";
+
 const id = z.string().min(1);
 const rowSchema = z.object({
   id,
@@ -161,24 +163,28 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
     ) {
       throw fail();
     }
-    const url = new URL(route, "https://api.vercel.com");
-    if (url.origin !== "https://api.vercel.com") {
+    const url = new URL(route, VERCEL_API_ORIGIN);
+    if (url.origin !== VERCEL_API_ORIGIN) {
       throw fail();
     }
     url.searchParams.set("teamId", plan.project.teamId);
-    const response = await (deps.fetch ?? fetch)(url, {
-      method,
+    const fetchRequest = deps.fetch ?? fetch;
+    const options: RequestInit = {
       headers: { authorization: `Bearer ${credential.token}`, "content-type": "application/json" },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      redirect: "error",
-      signal: invocation.signal,
-    });
+      method,
+    };
+    if (body !== undefined) {
+      options.body = JSON.stringify(body);
+    }
+    options.redirect = "error";
+    options.signal = invocation.signal;
+    const response = await fetchRequest(url, options);
     await check(invocation, plan, approval);
     if (!response.ok) {
       const requestRef = vercelProvisionDiagnosticSchema.shape.requestRef.safeParse(
         response.headers.get("x-vercel-id"),
       );
-      let code: string | undefined;
+      let code: z.output<typeof vercelProvisionDiagnosticSchema.shape.code>;
       try {
         // Error bodies are untrusted diagnostic input; read only a bounded projection.
         const errorBody = await boundedJson(response, invocation.signal, 16_384);
@@ -186,18 +192,26 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
           .object({ error: z.object({ code: vercelProvisionDiagnosticSchema.shape.code }) })
           .safeParse(errorBody);
         if (parsed.success) {
-          code = parsed.data.error.code;
+          ({ code } = parsed.data.error);
         }
       } catch {
         invocation.signal.throwIfAborted();
         // Non-JSON, oversized and malformed errors still preserve safe HTTP facts.
       }
       await check(invocation, plan, approval);
-      const diagnostic = vercelProvisionDiagnosticSchema.parse({
+      const parseDiagnostic = vercelProvisionDiagnosticSchema.parse.bind(
+        vercelProvisionDiagnosticSchema,
+      );
+      const diagnosticInput: z.input<typeof vercelProvisionDiagnosticSchema> = {
         statusCode: response.status,
-        ...(code === undefined ? {} : { code }),
-        ...(requestRef.success ? { requestRef: requestRef.data } : {}),
-      });
+      };
+      if (code !== undefined) {
+        diagnosticInput.code = code;
+      }
+      if (requestRef.success) {
+        diagnosticInput.requestRef = requestRef.data;
+      }
+      const diagnostic = parseDiagnostic(diagnosticInput);
       throw new PublicReleaseProviderError(diagnostic);
     }
     const result = await boundedJson(response, invocation.signal);
@@ -253,7 +267,7 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
       // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing provider state is a distinct reconciliation observation.
       return undefined;
     }
-    const row = matches[0];
+    const [row] = matches;
     const entry = context.plan.environment.find((item) => item.key === key);
     const owned =
       row.comment === marker(context.operationRef) ||
@@ -593,11 +607,11 @@ export const createPublicReleaseVercelBindingSnapshot =
       ) {
         throw fail();
       }
-      const url = new URL(route, "https://api.vercel.com");
+      const url = new URL(route, VERCEL_API_ORIGIN);
       url.searchParams.set("teamId", scope.teamId);
       const response = await (deps.fetch ?? fetch)(url, {
-        method: "GET",
         headers: { authorization: `Bearer ${credential.token}` },
+        method: "GET",
         redirect: "error",
         signal: scope.signal,
       });
@@ -641,7 +655,7 @@ export const createPublicReleaseVercelBindingSnapshot =
       if (rows.length !== 1) {
         throw fail();
       }
-      const row = rows[0];
+      const [row] = rows;
       const markerMatch = /^autograph:public-app-release:(?<operationRef>[0-9a-f-]{36})$/u.exec(
         row.comment ?? "",
       );
@@ -656,13 +670,13 @@ export const createPublicReleaseVercelBindingSnapshot =
       ) {
         throw fail();
       }
-      const value = z
+      const { value } = z
         .object({ value: z.string() })
         .parse(
           await read(
             `/v1/projects/${encodeURIComponent(scope.projectId)}/env/${encodeURIComponent(row.id)}`,
           ),
-        ).value;
+        );
       snapshots.push({
         key,
         id: row.id,
@@ -703,14 +717,11 @@ export const createPublicReleaseVercelActiveDeploymentSnapshot =
     ) {
       throw fail();
     }
-    const url = new URL(
-      `/v9/projects/${encodeURIComponent(scope.projectId)}`,
-      "https://api.vercel.com",
-    );
+    const url = new URL(`/v9/projects/${encodeURIComponent(scope.projectId)}`, VERCEL_API_ORIGIN);
     url.searchParams.set("teamId", scope.teamId);
     const response = await (deps.fetch ?? fetch)(url, {
-      method: "GET",
       headers: { authorization: `Bearer ${credential.token}` },
+      method: "GET",
       redirect: "error",
       signal: scope.signal,
     });

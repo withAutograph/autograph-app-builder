@@ -6,8 +6,8 @@ import {
 } from "@/lib/handoff/source-artifacts";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owned",
   workspaceId: "workspace",
 };

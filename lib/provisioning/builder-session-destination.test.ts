@@ -110,8 +110,6 @@ const fixture = async () => {
     },
   );
   const journal: BuilderProvisioningDependencies["journal"] = {
-    reserve,
-    read: async (input) => await Promise.resolve(rows.get(input.requestId)),
     compareAndSet: async (input) => {
       const row = rows.get(input.requestId);
       if (row === undefined || row.revision !== input.expectedRevision) {
@@ -129,6 +127,8 @@ const fixture = async () => {
       rows.set(input.requestId, next);
       return await Promise.resolve(next);
     },
+    read: async (input) => await Promise.resolve(rows.get(input.requestId)),
+    reserve,
   };
   // The selected service delegates provider work unchanged; this fixture observes dispatch.
   const provisioning = { journal };
@@ -149,27 +149,27 @@ const fixture = async () => {
     () => Promise.resolve(undefined),
   );
   const service = createBuilderSessionDestinationService({
-    sessions,
-    provisioning,
-    execute,
     assertMember,
+    execute,
+    provisioning,
     readNativeTarget,
+    sessions,
   });
-  return { sessions, service, execute, assertMember, reserve, start, journal, readNativeTarget };
+  return { assertMember, execute, journal, readNativeTarget, reserve, service, sessions, start };
 };
 
 describe("saved-session destination selection", () => {
   it("attaches the normal journal reference before provider work and reuses it after unknown outcome", async () => {
     const f = await fixture();
     f.execute.mockRejectedValueOnce(new Error("provider transport interrupted"));
-    await expect(f.service.select({ principal, sessionId, expected, request })).rejects.toThrow(
+    await expect(f.service.select({ expected, principal, request, sessionId })).rejects.toThrow(
       "interrupted",
     );
     const saved = await readSession(f.sessions);
     expect(saved.builderDestination).toEqual(destination);
     expect(saved.sourceHandoffId).toBeUndefined();
     expect(saved.adapterSessionId).toBe(expected.adapterSessionId);
-    await f.service.select({ principal, sessionId, expected, request });
+    await f.service.select({ expected, principal, request, sessionId });
     expect(f.reserve).toHaveBeenCalledTimes(2);
     expect(f.execute).toHaveBeenCalledTimes(2);
     expect(f.execute.mock.calls[0]?.[0]?.request).toEqual(f.execute.mock.calls[1]?.[0]?.request);
@@ -177,13 +177,13 @@ describe("saved-session destination selection", () => {
 
   it("refuses a different destination after reservation instead of creating another project", async () => {
     const f = await fixture();
-    await f.service.select({ principal, sessionId, expected, request });
+    await f.service.select({ expected, principal, request, sessionId });
     await expect(
       f.service.select({
-        principal,
-        sessionId,
         expected,
+        principal,
         request: { ...request, requestId: "be05a1b9-92d0-4a16-832b-3309a5594245" },
+        sessionId,
       }),
     ).rejects.toThrow("already selected");
     expect(f.execute).toHaveBeenCalledOnce();
@@ -200,10 +200,10 @@ describe("saved-session destination selection", () => {
       }
       await expect(
         f.service.select({
-          principal: who,
-          sessionId,
           expected: epoch,
+          principal: who,
           request: kind === "app" ? { ...request, appName: "foreign-app" } : request,
+          sessionId,
         }),
       ).rejects.toThrow();
       expect(f.execute).not.toHaveBeenCalled();
@@ -228,7 +228,7 @@ describe("saved-session destination selection", () => {
       safeErrorCode: "submission_unknown",
       nowEpochMs: 2,
     });
-    await expect(f.service.select({ principal, sessionId, expected, request })).rejects.toThrow(
+    await expect(f.service.select({ expected, principal, request, sessionId })).rejects.toThrow(
       "settled session operations",
     );
     const unknown = await f.sessions.getPrivateOperation(principal, response.operationId);
@@ -238,8 +238,8 @@ describe("saved-session destination selection", () => {
 
   it("inherits the selected reference through recovery without changing creation authority", () => {
     const source = attachBuilderDestinationRecord(session(), {
-      expected,
       destination,
+      expected,
       nowEpochMs: 2,
     });
     const child = {
@@ -284,8 +284,8 @@ it("rechecks the saved epoch after real credential I/O before the Vercel POST", 
   );
   const dependencies: BuilderProvisioningDependencies = {
     journal: f.journal,
-    githubInstallations: { read: never, bind: never },
-    githubCredentials: { bind: never, read: never, rotate: never, deactivate: never },
+    githubInstallations: { bind: never, read: never },
+    githubCredentials: { bind: never, deactivate: never, read: never, rotate: never },
     githubConfig: {
       appId: "1",
       clientId: "unused",
@@ -313,7 +313,7 @@ it("rechecks the saved epoch after real credential I/O before the Vercel POST", 
     // oxlint-disable-next-line unicorn/no-useless-undefined -- No legacy onboarding is present in this cancellation fixture.
     readNativeTarget: () => Promise.resolve(undefined),
   });
-  const result = await service.select({ principal, sessionId, expected, request });
+  const result = await service.select({ expected, principal, request, sessionId });
   expect(credential).toHaveBeenCalledOnce();
   expect(result.provisioning.vercel.status).toBe("failed");
   expect(fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
@@ -327,7 +327,7 @@ it.each(["creating", "unknown", "ready"] as const)(
   async (stage) => {
     const f = await fixture();
     f.readNativeTarget.mockResolvedValue({ record: { stage } });
-    await expect(f.service.select({ principal, sessionId, expected, request })).rejects.toThrow(
+    await expect(f.service.select({ expected, principal, request, sessionId })).rejects.toThrow(
       "Reconcile",
     );
     expect(f.reserve).not.toHaveBeenCalled();
@@ -345,7 +345,7 @@ it.each(["creating", "unknown", "ready"] as const)(
       // oxlint-disable-next-line unicorn/no-useless-undefined -- The first lookup deliberately observes an absent native journal.
       .mockResolvedValueOnce(undefined)
       .mockResolvedValue({ record: { stage } });
-    await expect(f.service.select({ principal, sessionId, expected, request })).rejects.toThrow(
+    await expect(f.service.select({ expected, principal, request, sessionId })).rejects.toThrow(
       "Reconcile",
     );
     expect(f.execute).not.toHaveBeenCalled();

@@ -355,8 +355,8 @@ describe("approved hosted runtime consumers", () => {
       root: context.root,
     });
     await runtime.runTask({
+      browserSelection: { maxFailures: 1, retries: 0, testName: "@acceptance", workers: 1 },
       task: "test-e2e",
-      browserSelection: { testName: "@acceptance", workers: 1, retries: 0, maxFailures: 1 },
     });
     expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -378,13 +378,13 @@ describe("approved hosted runtime consumers", () => {
       }),
     );
     await expect(
-      runtime.runTask({ task: "repository-test", browserSelection: { testName: "x" } }),
+      runtime.runTask({ browserSelection: { testName: "x" }, task: "repository-test" }),
     ).rejects.toThrow();
     await expect(
       runtime.runTask({
-        task: "test-e2e",
-        commandId: "saved",
         browserSelection: { testName: "x" },
+        commandId: "saved",
+        task: "test-e2e",
       }),
     ).rejects.toThrow("cannot be resumed with a new test selection");
   });
@@ -426,6 +426,20 @@ describe("approved hosted runtime consumers", () => {
           APP_RUNTIME_ALREADY_COMPILED: "untrusted",
         },
       });
+      interface ExpectedCompiledEnvironment {
+        APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: string;
+        PATH: string;
+        APP_RUNTIME_STATE_DIR: string;
+        APP_RUNTIME_ALREADY_COMPILED?: string;
+      }
+      const expectedEnvironment: ExpectedCompiledEnvironment = {
+        APP_RUNTIME_STATE_DIR: "/private-state",
+        APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
+        PATH: "/sandbox/custom/bin:/usr/bin",
+      };
+      if (alreadyCompiled && task !== "test-e2e") {
+        expectedEnvironment.APP_RUNTIME_ALREADY_COMPILED = "1";
+      }
       expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
         expect.objectContaining({
           args: [
@@ -440,22 +454,15 @@ describe("approved hosted runtime consumers", () => {
           cmd: "/usr/bin/env",
           cwd: context.root,
           detached: true,
-          env: {
-            APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
-            PATH: "/sandbox/custom/bin:/usr/bin",
-            APP_RUNTIME_STATE_DIR: "/private-state",
-            ...(alreadyCompiled && task !== "test-e2e"
-              ? { APP_RUNTIME_ALREADY_COMPILED: "1" }
-              : {}),
-          },
+          env: expectedEnvironment,
         }),
       );
     },
   );
   it.each([
-    { publicOrigin: undefined, publicDelivery: false },
-    { publicOrigin: "https://apps-preview.example.test", publicDelivery: false },
-    { publicOrigin: "https://public-app.example.test", publicDelivery: true },
+    { publicDelivery: false, publicOrigin: undefined },
+    { publicDelivery: false, publicOrigin: "https://apps-preview.example.test" },
+    { publicDelivery: true, publicOrigin: "https://public-app.example.test" },
   ])(
     "preserves the verified browser destination $publicOrigin with publicDelivery=$publicDelivery",
     async ({ publicOrigin, publicDelivery }) => {
@@ -513,16 +520,23 @@ describe("approved hosted runtime consumers", () => {
         }),
       );
       await runtime?.runTask({
-        task: "test-e2e",
         environment: publicOrigin === undefined ? undefined : { APP_TEST_BASE_URL: publicOrigin },
+        task: "test-e2e",
       });
+      interface ExpectedBrowserEnvironment {
+        APP_RUNTIME_STATE_DIR: string;
+        APP_TEST_BASE_URL?: string;
+      }
+      const expectedEnvironment: ExpectedBrowserEnvironment = {
+        APP_RUNTIME_STATE_DIR: `/tmp/app-builder-operator/${operationRef}`,
+      };
+      if (publicOrigin !== undefined) {
+        expectedEnvironment.APP_TEST_BASE_URL = publicOrigin;
+      }
       expect(fixture.provider.runCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           args: ["mise", "run", "app:runtime", "run", context.appId, "test-e2e"],
-          env: {
-            APP_RUNTIME_STATE_DIR: `/tmp/app-builder-operator/${operationRef}`,
-            ...(publicOrigin === undefined ? {} : { APP_TEST_BASE_URL: publicOrigin }),
-          },
+          env: expectedEnvironment,
         }),
       );
     },
@@ -559,11 +573,11 @@ describe("approved hosted runtime consumers", () => {
           path: "/private-state/normal-actors/member.storage.json",
         });
         const result = await runtime.runTask({
-          task: "test-e2e",
           environment: {
             APP_TEST_BASE_URL: "https://untrusted.example.test",
             APP_TEST_IDENTITIES_FILE: "/untrusted",
           },
+          task: "test-e2e",
         });
         expect(result.stdout).not.toContain("captured-private-");
         expect(result.stdout).not.toContain("actual-member-id");
@@ -664,13 +678,13 @@ describe("approved hosted runtime consumers", () => {
       logs: () =>
         Object.assign(
           (async function* output() {
-            yield { stream: "stdout" as const, data: `out ${selector.slice(0, 14)}` };
-            yield { stream: "stderr" as const, data: `err ${lifecycle.slice(0, 13)}` };
+            yield { data: `out ${selector.slice(0, 14)}`, stream: "stdout" as const };
+            yield { data: `err ${lifecycle.slice(0, 13)}`, stream: "stderr" as const };
             yield {
-              stream: "stdout" as const,
               data: `${selector.slice(14)} captured-private-session done`,
+              stream: "stdout" as const,
             };
-            yield { stream: "stderr" as const, data: `${lifecycle.slice(13)} done` };
+            yield { data: `${lifecycle.slice(13)} done`, stream: "stderr" as const };
           })(),
           { close: fixture.close },
         ),
@@ -692,8 +706,8 @@ describe("approved hosted runtime consumers", () => {
       expect(result.stdout + result.stderr).not.toContain(secret);
     }
     expect(fixture.provider.runCommand.mock.calls.at(-1)?.[0].env).toMatchObject({
-      APP_TEST_MANAGED_SUITE_SELECTOR: selector,
       APP_TEST_MANAGED_LIFECYCLE_CAPABILITY: lifecycle,
+      APP_TEST_MANAGED_SUITE_SELECTOR: selector,
     });
   });
 
@@ -734,7 +748,7 @@ describe("approved hosted runtime consumers", () => {
         command.logs = () =>
           Object.assign(
             (async function* failedOutput() {
-              yield { stream: "stdout" as const, data: "before SDK failure" };
+              yield { data: "before SDK failure", stream: "stdout" as const };
               throw failure === "kill" ? new Error("controlled iteration failure") : privateError;
             })(),
             { close: fixture.close },
@@ -759,7 +773,7 @@ describe("approved hosted runtime consumers", () => {
       await expect(
         runtime.runTask({
           task: "test-e2e",
-          ...(failure === "resume" ? { commandId: "retained-command", allowDispatch: false } : {}),
+          ...(failure === "resume" ? { allowDispatch: false, commandId: "retained-command" } : {}),
         }),
       ).rejects.toThrow("SDK failure [REDACTED] and [REDACTED]");
       if (failure === "resume") {
@@ -789,7 +803,7 @@ describe("approved hosted runtime consumers", () => {
       root: context.root,
     });
     await expect(
-      runtime.runTask({ task: "test-e2e", commandId: "retained", allowDispatch: false }),
+      runtime.runTask({ allowDispatch: false, commandId: "retained", task: "test-e2e" }),
     ).rejects.toBe(closedError);
   });
 
@@ -813,10 +827,10 @@ describe("approved hosted runtime consumers", () => {
     });
     await expect(
       runtime.runTask({
-        task: "test-e2e",
-        commandId: "retained-command",
-        commandCheckpoint,
         allowDispatch: false,
+        commandCheckpoint,
+        commandId: "retained-command",
+        task: "test-e2e",
       }),
     ).resolves.toMatchObject({ exitCode: 0 });
     expect(resumeCommand).toHaveBeenCalledExactlyOnceWith("retained-command");
@@ -824,8 +838,8 @@ describe("approved hosted runtime consumers", () => {
     expect(fixture.provider.runCommand).toHaveBeenCalledTimes(1);
     expect(fixture.provider.runCommand).toHaveBeenCalledWith(
       expect.objectContaining({
-        cmd: "/usr/bin/env",
         args: ["mise", "run", "app:describe", context.appId],
+        cmd: "/usr/bin/env",
       }),
     );
   });
@@ -1030,21 +1044,20 @@ it("reports the failed description command stage without exposing its output", a
   });
   await expect(result).rejects.toBeInstanceOf(HostedRuntimeProviderError);
   await expect(result).rejects.toMatchObject({
-    name: "HostedRuntimeProviderError",
     code: "resource_mismatch",
     message: "resource_mismatch: runtime restore app-description-command (exit 23)",
+    name: "HostedRuntimeProviderError",
   });
   expect(stdout).not.toHaveBeenCalled();
 });
 
 it.each([
   {
-    stage: "app-identity",
     description: { ...descriptor, app: { ...descriptor.app, id: "private-app-canary" } },
+    stage: "app-identity",
   },
-  { stage: "backend-kind", description: { ...descriptor, backend: { kind: "static" } } },
+  { description: { ...descriptor, backend: { kind: "static" } }, stage: "backend-kind" },
   {
-    stage: "release-identity",
     description: {
       ...descriptor,
       backend: {
@@ -1052,9 +1065,9 @@ it.each([
         release: { ...descriptor.backend.release, id: "private-release-canary" },
       },
     },
+    stage: "release-identity",
   },
   {
-    stage: "artifact-identity",
     description: {
       ...descriptor,
       backend: {
@@ -1062,6 +1075,7 @@ it.each([
         release: { ...descriptor.backend.release, artifactHash: "sha256:private-artifact-canary" },
       },
     },
+    stage: "artifact-identity",
   },
 ])("reports only the closed $stage mismatch stage", async ({ stage, description }) => {
   const fixture = transport();
@@ -1083,9 +1097,9 @@ it.each([
   });
   await expect(result).rejects.toBeInstanceOf(HostedRuntimeProviderError);
   await expect(result).rejects.toMatchObject({
-    name: "HostedRuntimeProviderError",
     code: "resource_mismatch",
     message: `resource_mismatch: runtime restore ${stage}`,
+    name: "HostedRuntimeProviderError",
   });
 });
 
@@ -1094,9 +1108,9 @@ it("reports a selected project mismatch before restoring provider state", async 
   const result = resolvePreparedRuntimeExecution(context, selection, mocks);
   await expect(result).rejects.toBeInstanceOf(HostedRuntimeProviderError);
   await expect(result).rejects.toMatchObject({
-    name: "HostedRuntimeProviderError",
     code: "resource_mismatch",
     message: "resource_mismatch: runtime restore project-identity",
+    name: "HostedRuntimeProviderError",
   });
   expect(mocks.getProvider).not.toHaveBeenCalled();
 });

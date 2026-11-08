@@ -97,14 +97,14 @@ const deliveredSnapshot = (deliveryId = "fixture-delivery"): HostedEngineSnapsho
 
 const transport = function transport(overrides: Partial<HostedEveTransport> = {}) {
   const base: HostedEveTransport = {
-    cancel: vi.fn(() => Promise.resolve(snapshot)),
-    get: vi.fn(() => Promise.resolve(snapshot)),
-    respond: vi.fn(() => Promise.resolve(snapshot)),
+    cancel: vi.fn<HostedEveTransport["cancel"]>().mockResolvedValue(snapshot),
+    get: vi.fn<HostedEveTransport["get"]>().mockResolvedValue(snapshot),
+    respond: vi.fn<HostedEveTransport["respond"]>().mockResolvedValue(snapshot),
     send: vi.fn<HostedEveTransport["send"]>(async (input) => {
       await input.onAccepted?.("fixture-delivery");
       return deliveredSnapshot();
     }),
-    start: vi.fn(() => Promise.resolve({ adapterSessionId: "eve_1", snapshot })),
+    start: vi.fn(async () => ({ adapterSessionId: "eve_1", snapshot })),
   };
   return { ...base, ...overrides };
 };
@@ -183,7 +183,7 @@ describe("failed public session native recovery", () => {
             snapshot: { events: [], status: "failed" },
           })
           .mockImplementationOnce(async (request) => {
-            const recovery = request.recovery;
+            const { recovery } = request;
             if (recovery === undefined) {
               throw new Error("Expected typed native recovery.");
             }
@@ -212,7 +212,9 @@ describe("failed public session native recovery", () => {
           }),
       });
       const service = createHostedEveSessionService({
-        assertNativeRecoveryOwner: async () => await Promise.resolve(),
+        assertNativeRecoveryOwner: async () => {
+          await Promise.resolve();
+        },
         onSubmissionDiagnostic: diagnostics,
         principal,
         store,
@@ -249,18 +251,18 @@ describe("failed public session native recovery", () => {
           adapterSessionId: "run_child",
         });
         if (retry === "GET")
-          await service.get({ sessionId: committed.sessionId, cursor: 0, limit: 100 });
+          await service.get({ cursor: 0, limit: 100, sessionId: committed.sessionId });
         if (retry === "stop-before-activation") {
           expect(
-            await service.get({ sessionId: committed.sessionId, cursor: 0, limit: 100 }),
+            await service.get({ cursor: 0, limit: 100, sessionId: committed.sessionId }),
           ).toMatchObject({ status: "cancelled" });
           expect(await service.start(request)).toEqual(committed.result);
           expect(ownerEffects).toBe(0);
           expect(activatedReceipts.size).toBe(0);
           expect(adapter.start).toHaveBeenCalledTimes(2);
           expect(await readOriginal(principal, committed.sessionId)).toMatchObject({
-            status: "cancelled",
             cancellationRevision: 1,
+            status: "cancelled",
           });
           return;
         }
@@ -276,7 +278,7 @@ describe("failed public session native recovery", () => {
       expect(
         await service.start({ clientRequestId: "recover", resumeSessionId: first.sessionId }),
       ).toEqual(resumed);
-      await service.get({ sessionId: resumed.sessionId, cursor: 0, limit: 100 });
+      await service.get({ cursor: 0, limit: 100, sessionId: resumed.sessionId });
       expect(activatedReceipts.size).toBe(1);
       expect(ownerEffects).toBe(1);
       expect(resumed.sessionId).not.toBe(first.sessionId);
@@ -285,8 +287,8 @@ describe("failed public session native recovery", () => {
         expect.objectContaining({
           prompt: "",
           recovery: expect.objectContaining({
-            sourcePublicSessionId: first.sessionId,
             sourceOwnerRunId: "run_parent",
+            sourcePublicSessionId: first.sessionId,
           }),
         }),
       );
@@ -313,7 +315,7 @@ describe("failed public session native recovery", () => {
           cancellationRevision: 1,
           resumedCancellationRevision: 1,
         });
-        const observed = await service.get({ sessionId: resumed.sessionId, cursor: 0, limit: 100 });
+        const observed = await service.get({ cursor: 0, limit: 100, sessionId: resumed.sessionId });
         expect(observed.status).not.toBe("cancelled");
         expect(await service.start(request)).toEqual(resumed);
         expect(activatedReceipts.size).toBe(1);
@@ -321,7 +323,7 @@ describe("failed public session native recovery", () => {
         expect(adapter.start).toHaveBeenCalledTimes(2);
         await service.cancel({ sessionId: resumed.sessionId });
         expect(
-          await service.get({ sessionId: resumed.sessionId, cursor: 0, limit: 100 }),
+          await service.get({ cursor: 0, limit: 100, sessionId: resumed.sessionId }),
         ).toMatchObject({ status: "cancelled" });
         expect(await readOriginal(principal, resumed.sessionId)).toMatchObject({
           cancellationRevision: 2,
@@ -531,7 +533,9 @@ describe("prepared handoff session continuity", () => {
     let accept = false;
     const adapter = transport({
       start: vi.fn<HostedEveTransport["start"]>(async () => {
-        await vi.waitFor(() => expect(accept).toBe(true));
+        await vi.waitFor(() => {
+          expect(accept).toBe(true);
+        });
         return { adapterSessionId: "eve_prepared", snapshot };
       }),
     });
@@ -543,7 +547,9 @@ describe("prepared handoff session continuity", () => {
       sourceHandoffId,
     };
     const first = createService().start(request);
-    await vi.waitFor(() => expect(adapter.start).toHaveBeenCalledOnce());
+    await vi.waitFor(() => {
+      expect(adapter.start).toHaveBeenCalledOnce();
+    });
     await expect(createService().start(request)).rejects.toBeInstanceOf(
       HostedSubmissionUnknownError,
     );
@@ -577,7 +583,7 @@ describe("prepared handoff session continuity", () => {
         };
       }),
     });
-    const beforeRead = vi.fn(async () => {});
+    const beforeRead = vi.fn<() => Promise<void>>().mockResolvedValue();
     const createService = () =>
       createHostedEveSessionService({
         beforeRead,
@@ -782,16 +788,19 @@ const started = async function started(input?: {
 }) {
   const store = input?.store ?? new InMemoryHostedEveStore();
   const adapter = input?.transport ?? transport();
-  const service = createHostedEveSessionService({
+  const options: Parameters<typeof createHostedEveSessionService>[0] = {
     now: input?.now ?? (() => 1000),
     principal: input?.principal ?? principal,
     store,
     transport: adapter,
-    ...(input?.beforeRead === undefined ? {} : { beforeRead: input.beforeRead }),
-    ...(input?.sessionTimeoutPolicy === undefined
-      ? {}
-      : { sessionTimeoutPolicy: input.sessionTimeoutPolicy }),
-  });
+  };
+  if (input?.beforeRead !== undefined) {
+    options.beforeRead = input.beforeRead;
+  }
+  if (input?.sessionTimeoutPolicy !== undefined) {
+    options.sessionTimeoutPolicy = input.sessionTimeoutPolicy;
+  }
+  const service = createHostedEveSessionService(options);
   const result = await service.start({
     clientRequestId: "request_1",
     prompt: "Build an app",
@@ -814,7 +823,7 @@ describe("delayed durable session reads", () => {
       status: "working",
     };
     const adapter = transport({
-      get: vi.fn(() => Promise.resolve(working)),
+      get: vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(working),
       start: vi.fn(() => Promise.resolve({ adapterSessionId: "eve_build", snapshot: working })),
     });
     const { service, result } = await started({ now: () => now, transport: adapter });
@@ -928,7 +937,7 @@ describe("hosted Eve service core", () => {
         .fn()
         .mockResolvedValueOnce({ adapterSessionId: "eve_failed", snapshot: terminal })
         .mockImplementationOnce(async (request: Parameters<HostedEveTransport["start"]>[0]) => {
-          const recovery = request.recovery;
+          const { recovery } = request;
           if (recovery === undefined) {
             throw new Error("Expected typed native recovery.");
           }
@@ -998,7 +1007,9 @@ describe("hosted Eve service core", () => {
       settleSucceeded: (input) => baseStore.settleSucceeded(input),
       settleUnsuccessful: (input) => baseStore.settleUnsuccessful(input),
     };
-    const assertNativeRecoveryOwner = vi.fn(async () => await Promise.resolve());
+    const assertNativeRecoveryOwner = vi.fn(async () => {
+      await Promise.resolve();
+    });
     const service = createHostedEveSessionService({
       assertNativeRecoveryOwner,
       now: () => 2000,
@@ -1555,7 +1566,7 @@ describe("hosted Eve service core", () => {
         throw new HostedAdapterSessionUnavailableError();
       }),
       start: vi
-        .fn()
+        .fn<HostedEveTransport["start"]>()
         .mockResolvedValueOnce({
           adapterSessionId: "eve_input_old",
           snapshot: approvalSnapshot(["approve_one", "approve_two"]),
@@ -1814,7 +1825,9 @@ describe("hosted Eve service core", () => {
     const adapter = transport({
       send: vi.fn<HostedEveTransport["send"]>(async (input) => {
         await input.onAccepted?.("fixture-delivery");
-        await vi.waitFor(() => expect(completeSend).toBe(true));
+        await vi.waitFor(() => {
+          expect(completeSend).toBe(true);
+        });
         return deliveredSnapshot();
       }),
     });
@@ -1824,7 +1837,9 @@ describe("hosted Eve service core", () => {
       message: "First",
       sessionId: first.result.sessionId,
     });
-    await vi.waitFor(() => expect(adapter.send).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => {
+      expect(adapter.send).toHaveBeenCalledTimes(1);
+    });
     await expect(
       first.service.send({
         clientRequestId: "send_competing",
@@ -1850,7 +1865,9 @@ describe("hosted Eve service core", () => {
           snapshot: terminalSnapshot,
         })
         .mockImplementationOnce(async () => {
-          await vi.waitFor(() => expect(completeResume).toBe(true));
+          await vi.waitFor(() => {
+            expect(completeResume).toBe(true);
+          });
           return { adapterSessionId: "eve_child", snapshot };
         }),
     });
@@ -1859,7 +1876,9 @@ describe("hosted Eve service core", () => {
       clientRequestId: "resume_active",
       resumeSessionId: first.result.sessionId,
     });
-    await vi.waitFor(() => expect(adapter.start).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => {
+      expect(adapter.start).toHaveBeenCalledTimes(2);
+    });
     await expect(
       first.service.start({
         clientRequestId: "resume_competing",
@@ -2158,7 +2177,9 @@ describe("hosted Eve service core", () => {
     const firstRejected = expect(service.start(request)).rejects.toBeInstanceOf(
       HostedSubmissionUnknownError,
     );
-    await vi.waitFor(() => expect(start).toHaveBeenCalledOnce());
+    await vi.waitFor(() => {
+      expect(start).toHaveBeenCalledOnce();
+    });
     await expect(service.start(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     currentTime += 300_001;
     const recovered = await service.start(request);
@@ -2542,7 +2563,7 @@ describe("fallback mutation event pages", () => {
     const rejection = new HostedRejectedOperationError("send_preflight_unavailable");
     await expect(service.send(request)).rejects.toEqual(rejection);
     expect(adapter.send).not.toHaveBeenCalled();
-    adapter.get = vi.fn(() => Promise.resolve(snapshot));
+    adapter.get = vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(snapshot);
     await expect(service.send(request)).rejects.toEqual(rejection);
     expect(adapter.send).not.toHaveBeenCalled();
     await expect(
@@ -2588,8 +2609,12 @@ describe("fallback mutation event pages", () => {
       await input.onAccepted?.("fixture-delivery");
       return after;
     });
-    const respond = vi.fn(() => Promise.resolve(after));
-    const adapter = transport({ get: vi.fn(() => Promise.resolve(before)), send, respond });
+    const respond = vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(after);
+    const adapter = transport({
+      get: vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(before),
+      send,
+      respond,
+    });
     const store = new InMemoryHostedEveStore();
     const service = createHostedEveSessionService({ principal, store, transport: adapter });
     // The native history advanced since the saved session checkpoint.
@@ -2616,7 +2641,7 @@ describe("fallback mutation event pages", () => {
     expect(result.cursor).toBe(tail + Math.min(delta, 100));
     expect(await submit()).toEqual(result);
     expect(kind === "send" ? send : respond).toHaveBeenCalledOnce();
-    adapter.get = vi.fn(() => Promise.resolve(after));
+    adapter.get = vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(after);
     const remainder = await service.get({
       sessionId: initialSession.sessionId,
       cursor: result.cursor,

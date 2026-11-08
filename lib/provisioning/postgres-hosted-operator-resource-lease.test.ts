@@ -205,29 +205,29 @@ describe("dedicated-session protected resource lease", () => {
     hostedOperatorPlanSchema.parse({
       ...plan,
       publicGateway: {
-        projectId: "shared-gateway",
         branch: "gateway",
         origin: "https://apps.example.test",
+        projectId: "shared-gateway",
       },
       gatewayDelivery: {
-        projectId: "shared-gateway",
         branch: "gateway",
-        repoId: "shared-repo",
         gitSha: "d".repeat(40),
+        projectId: "shared-gateway",
+        repoId: "shared-repo",
       },
       deploymentBoundary: {
         authority,
         teamId: context.target.scopeId,
         app: {
-          projectId: plan.selection.projectId,
           branch: plan.selection.branch,
           environment: "preview",
+          projectId: plan.selection.projectId,
         },
-        gateway: { projectId: "shared-gateway", branch: "gateway", environment: "preview" },
+        gateway: { branch: "gateway", environment: "preview", projectId: "shared-gateway" },
         operator: {
-          projectId: "operator",
           deploymentId: "operator-deployment",
           environment: "preview",
+          projectId: "operator",
         },
         verification: {
           gatewayOrigin: "https://gateway.example.test",
@@ -238,9 +238,9 @@ describe("dedicated-session protected resource lease", () => {
       effects: [
         ...plan.effects,
         {
+          description: "Deliver the shared Gateway",
           id: "gateway-delivery",
           kind: "gateway-delivery",
-          description: "Deliver the shared Gateway",
         },
       ],
     });
@@ -249,25 +249,25 @@ describe("dedicated-session protected resource lease", () => {
     const external = hostedOperatorPlanSchema.parse({
       ...legacy,
       hostProtection: {
-        mode: "externally-managed-trusted-sources",
-        teamId: context.target.scopeId,
         appPreview: {
+          from: "preview",
           sourceProjectId: "shared-gateway",
           targetProjectId: legacy.selection.projectId,
-          from: "preview",
           to: "preview",
         },
         gatewayPreview: {
+          from: "preview",
           sourceProjectId: legacy.selection.projectId,
           targetProjectId: "shared-gateway",
-          from: "preview",
           to: "preview",
         },
+        mode: "externally-managed-trusted-sources",
         observedAt: "2026-10-19T12:00:00Z",
         provenance: {
           kind: "administrator-provider-readback",
           reference: "synthetic-independent-readback",
         },
+        teamId: context.target.scopeId,
       },
     });
     expect(hostedOperatorVercelProjectLockKeys(external, context.target.scopeId)).toEqual(
@@ -279,11 +279,11 @@ describe("dedicated-session protected resource lease", () => {
     }
     const otherApp = hostedOperatorPlanSchema.parse({
       ...legacy,
-      selection: { ...legacy.selection, projectId: "other-app" },
       deploymentBoundary: {
         ...boundary,
         app: { ...boundary.app, projectId: "other-app" },
       },
+      selection: { ...legacy.selection, projectId: "other-app" },
     });
     const shared = hostedOperatorVercelProjectLockKeys(legacy, context.target.scopeId).filter(
       (key) => hostedOperatorVercelProjectLockKeys(otherApp, context.target.scopeId).includes(key),
@@ -444,7 +444,7 @@ describe("dedicated-session protected resource lease", () => {
       waiting.resolve(null);
       await release.promise;
     });
-    const callback = vi.fn(async () => "must not run");
+    const callback = vi.fn<() => Promise<string>>().mockResolvedValue("must not run");
     const pending = test.lease(test.input, callback);
     await waiting.promise;
     const row = test.rows.get(keyFor(context));

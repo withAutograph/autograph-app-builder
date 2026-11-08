@@ -2,13 +2,15 @@ import { cp, lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promise
 import path from "node:path";
 import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
 
+const pluginDirectoryName = "app-builder";
+
 const argument = (name: string) => {
   const index = process.argv.indexOf(name);
   if (index === -1) {
     return;
   }
   const value = process.argv[index + 1];
-  if (!value || value.startsWith("--")) {
+  if (value === undefined || value === "" || value.startsWith("--")) {
     throw new Error(`Missing value for ${name}.`);
   }
   return value;
@@ -16,7 +18,16 @@ const argument = (name: string) => {
 const client = argument("--client");
 const sourceValue = argument("--source");
 const destinationValue = argument("--destination");
-if (!sourceValue || !destinationValue || !["vscode", "cursor", "codex"].includes(client ?? "")) {
+if (sourceValue === undefined || sourceValue === "") {
+  throw new Error(
+    "Usage: --client vscode|cursor|codex --source RELEASE_ROOT --destination DIRECTORY",
+  );
+}
+if (
+  destinationValue === undefined ||
+  destinationValue === "" ||
+  !["vscode", "cursor", "codex"].includes(client ?? "")
+) {
   throw new Error(
     "Usage: --client vscode|cursor|codex --source RELEASE_ROOT --destination DIRECTORY",
   );
@@ -31,7 +42,7 @@ await mkdir(requestedDestination, { mode: 0o700, recursive: true });
 const destination = await realpath(requestedDestination);
 await validateAgentPluginPackage({
   packageKind: "generated-artifact",
-  pluginRoot: path.join(source, "app-builder"),
+  pluginRoot: path.join(source, pluginDirectoryName),
   release: true,
   repositoryRoot: path.resolve("."),
 });
@@ -45,7 +56,7 @@ try {
   }
 }
 await mkdir(clientRoot, { mode: 0o700 });
-await cp(path.join(source, "app-builder"), path.join(clientRoot, "app-builder"), {
+await cp(path.join(source, pluginDirectoryName), path.join(clientRoot, pluginDirectoryName), {
   recursive: true,
 });
 const harness = JSON.parse(

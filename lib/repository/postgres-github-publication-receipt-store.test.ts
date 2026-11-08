@@ -1,10 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { describe, expect, it, vi } from "vitest";
 
-import type * as databaseSchema from "../db/schema";
 import { hostedGitHubPublicationJournals, hostedGitHubPublicationProposals } from "../db/schema";
 import type { DraftPullRequestProposal, GitHubMutationReceipt } from "./github-publication";
 import { GITHUB_PUBLICATION_VERSION, createRepositoryObservation } from "./github-publication";
@@ -17,7 +15,7 @@ import {
   sameProposalExceptTitle,
 } from "./postgres-github-publication-store";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = Parameters<typeof createPostgresGitHubPublicationReceiptStore>[0];
 const authority = {
   audience: "https://builder.example.test/mcp",
   issuer: "https://builder.example.test/api/auth",

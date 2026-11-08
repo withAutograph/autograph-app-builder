@@ -188,18 +188,22 @@ const fixture = async function fixture(options = {}) {
       },
     ],
   ]);
-  const event = (slot, eventType, stepId, eventData = {}) => ({
-    runId: ownerRunId,
-    eventId: slotToEventId(slot),
-    eventType,
-    ...(stepId === undefined ? {} : { correlationId: stepId }),
-    eventData: {
-      ...(steps.has(stepId) ? { stepName: steps.get(stepId).stepName } : {}),
-      ...(eventType === "step_completed" ? { result: steps.get(stepId)?.output } : {}),
-      ...eventData,
-    },
-    createdAt: new Date(10_000 - slot),
-  });
+  const event = (slot, eventType, stepId, eventData = {}) => {
+    const value = { runId: ownerRunId, eventId: slotToEventId(slot), eventType };
+    if (stepId !== undefined) {
+      value.correlationId = stepId;
+    }
+    const details = {};
+    if (steps.has(stepId)) {
+      details.stepName = steps.get(stepId).stepName;
+    }
+    if (eventType === "step_completed") {
+      details.result = steps.get(stepId)?.output;
+    }
+    value.eventData = { ...details, ...eventData };
+    value.createdAt = new Date(10_000 - slot);
+    return value;
+  };
   const events = [
     event(1, "run_created"),
     event(2, "step_started", "step-prior"),
@@ -224,13 +228,16 @@ const fixture = async function fixture(options = {}) {
     runs: {
       get: async (id, params) => {
         calls.push(["run", id, params]);
-        return {
+        const result = {
           runId: ownerRunId,
           status: options.status ?? "failed",
           deploymentId: "original-deployment",
           input: runInput,
-          ...(options.expired === true ? { expiredAt: new Date(0) } : {}),
         };
+        if (options.expired === true) {
+          result.expiredAt = new Date(0);
+        }
+        return result;
       },
     },
     events: {
@@ -367,11 +374,11 @@ test("native serialization preserves paired state, original approval, Drive and 
     ]),
   );
   assert.deepEqual(counts, {
-    run: 1,
-    key: 1,
-    step: 3,
     "hydrate-input": 2,
     "hydrate-output": 1,
+    key: 1,
+    run: 1,
+    step: 3,
     stream: 1,
   });
   assert.equal(new Set(f.calls.filter(([name]) => name === "step").map((call) => call[2])).size, 3);
@@ -394,7 +401,7 @@ test("actual native encryption and hydration preserve original typed state", asy
 });
 
 test("completed native terminal step preserves its original paired input and real approval/results despite corrupt output", async () => {
-  const f = await fixture({ status: "completed", encrypted: true });
+  const f = await fixture({ encrypted: true, status: "completed" });
   const corrupt = structuredClone(f.final);
   corrupt.sessionState.snapshot.session.history.push({
     role: "assistant",
@@ -621,7 +628,7 @@ test("inspection never exposes malformed authored phase text", async () => {
 });
 
 test("provider-cancelled terminal owner retains actual paired state and approval without effect authority", async () => {
-  const f = await fixture({ status: "cancelled", encrypted: true });
+  const f = await fixture({ encrypted: true, status: "cancelled" });
   const result = await f.collect(f.input);
   assert.equal(result.kind, "candidate");
   const payload = readTerminalRecoveryCandidate(result.candidate);
@@ -658,7 +665,7 @@ const frameNativeHistory = async (values, key) => {
   return frames.map((data, index) => ({ index, data }));
 };
 const snapshotFixture = async (fault, packing = "split") => {
-  const f = await fixture({ status: "cancelled", encrypted: true });
+  const f = await fixture({ encrypted: true, status: "cancelled" });
   const native = Array.from({ length: 5 }, (_, index) => ({
     type: "text.delta",
     data: { text: `original private native text ${index}` },
@@ -792,6 +799,16 @@ for (const fault of [
   });
 }
 
+const join = (parts) => {
+  const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    bytes.set(part, offset);
+    offset += part.length;
+  }
+  return bytes;
+};
+
 const reconnectingSnapshot = async (mode) => {
   const native = Array.from({ length: 5 }, (_, index) => ({
     type: "text.delta",
@@ -802,15 +819,6 @@ const reconnectingSnapshot = async (mode) => {
     native.map((event) => new TextEncoder().encode(`${JSON.stringify(event)}\n`)),
     key,
   );
-  const join = (parts) => {
-    const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
-    let offset = 0;
-    for (const part of parts) {
-      bytes.set(part, offset);
-      offset += part.length;
-    }
-    return bytes;
-  };
   let partial = new Uint8Array();
   if (mode === "partial-header") {
     partial = chunks[2].data.subarray(0, 2);
@@ -905,7 +913,7 @@ test("reconnect preserves a UTF-8 NDJSON value split across complete native fram
   const world = {
     streams: {
       async getInfo() {
-        return { tailIndex: 1, done: false };
+        return { done: false, tailIndex: 1 };
       },
       async get(_run, _name, startIndex) {
         starts.push(startIndex);
@@ -947,7 +955,7 @@ for (const interrupted of [false, true]) {
       streams: {
         async getInfo() {
           infos += 1;
-          return { tailIndex: frameCount - 1, done: false };
+          return { done: false, tailIndex: frameCount - 1 };
         },
         async get(_run, _name, startIndex) {
           starts.push(startIndex);
@@ -995,7 +1003,7 @@ test("an empty unclosed captured tail never opens a live stream", async () => {
     streams: {
       async getInfo() {
         infos += 1;
-        return { tailIndex: -1, done: false };
+        return { done: false, tailIndex: -1 };
       },
       get() {
         throw new Error("empty tail must not follow stream");
@@ -1013,7 +1021,7 @@ test("an empty unclosed captured tail never opens a live stream", async () => {
 for (const status of ["running", "pending"]) {
   test(`nonterminal ${status} owner never reads native snapshot`, async () => {
     const f = await snapshotFixture();
-    const get = f.world.runs.get;
+    const { get } = f.world.runs;
     f.world.runs.get = async (...args) => ({ ...(await get(...args)), status });
     const result = await f.collect(f.input);
     assert.partialDeepStrictEqual(result, { kind: "unavailable", reason: "source-not-terminal" });
@@ -1255,9 +1263,9 @@ test("context primitive canonicalization preserves mutable identities, descripto
   let getterReads = 0;
   const context = { permission: sharedPermission, array: ["same-issuer"], readonly: "same-issuer" };
   Object.defineProperty(context, "readonly", {
+    enumerable: true,
     value: "same-issuer",
     writable: false,
-    enumerable: true,
   });
   Object.defineProperty(context, "accessor", {
     get() {
@@ -1314,7 +1322,7 @@ test("independently decoded retained contexts use less heap after exact primitiv
     const result = spawnSync(
       process.execPath,
       ["--expose-gc", "--max-old-space-size=128", "--input-type=module", "-e", script, mode],
-      { env: { NODE_NO_WARNINGS: "1" }, encoding: "utf-8" },
+      { encoding: "utf-8", env: { NODE_NO_WARNINGS: "1" } },
     );
     assert.equal(result.status, 0, result.stderr);
     return JSON.parse(result.stdout);
@@ -1335,13 +1343,13 @@ test("actual collector identifies the exact authority-anchor status refusal with
       const f = await fixture({ status });
       const result = await f.collect({ ...f.input, allowParked: true });
       assert.deepEqual(result, {
-        kind: "unavailable",
-        reason: "source-not-terminal",
         boundary: {
+          allowParked: true,
           stage: "authority_anchor",
           status: status === "waiting" ? "waiting" : "other",
-          allowParked: true,
         },
+        kind: "unavailable",
+        reason: "source-not-terminal",
       });
       assert.equal(JSON.stringify(result).includes("private-canary"), false);
     }),

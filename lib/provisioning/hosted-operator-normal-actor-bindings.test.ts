@@ -303,11 +303,11 @@ const fixture = () => {
   };
   const handler = createProtectedHostedOperatorHandler(deps);
   const client = createHostedOperatorClient({
-    sessionId: selection.sessionId,
     endpoint: "https://operator.example",
     fetch: async (url, init) =>
       await handler(new Request(url instanceof Request ? url.url : url, init)),
     ownerContext,
+    sessionId: selection.sessionId,
     token: async () => "fixture-service-identity",
   });
   return {
@@ -351,20 +351,20 @@ const prepared = async (f: ReturnType<typeof fixture>) => {
 };
 
 const normalProgram = {
-  version: 1 as const,
-  appId: selection.appId,
-  origin: "https://apps-preview.example.test",
   actors: [
     {
+      account: "capture-existing" as const,
       actorKey: "owner",
       email: "owner@example.test",
       name: "Owner",
-      account: "capture-existing" as const,
     },
   ],
-  organizations: [],
-  memberships: [],
   appAccess: [],
+  appId: selection.appId,
+  memberships: [],
+  organizations: [],
+  origin: "https://apps-preview.example.test",
+  version: 1 as const,
 };
 const actorProjection = {
   origin: normalProgram.origin,
@@ -538,7 +538,7 @@ describe("private normal actor bindings producer", () => {
 
 const publicBoundFixture = async () => {
   const f = await boundFixture();
-  const row = f.base.row;
+  const { row } = f.base;
   if (!row?.record.operator) {
     throw new Error("Missing prepared fixture");
   }
@@ -600,7 +600,7 @@ const publicBoundFixture = async () => {
     bindings: Object.fromEntries(
       publicPlan.environment.map((entry) => [
         entry.key,
-        { state: "applied", acceptedEnvId: "provider-owned-env" },
+        { acceptedEnvId: "provider-owned-env", state: "applied" },
       ]),
     ),
     approvalReceipts: [
@@ -611,7 +611,7 @@ const publicBoundFixture = async () => {
   const readCandidates = vi.fn(async () => [
     { requestId: publicReleaseOperationRef(publicPlan), requestDigest: record.planDigest, record },
   ]);
-  const assertApproved = vi.fn(async () => {});
+  const assertApproved = vi.fn<() => Promise<void>>().mockResolvedValue();
   const observe = vi.fn(async () => ({ ...observation }));
   f.deps.publicRuntimeBinding = async (input) =>
     await readVerifiedPublicRuntimeBinding({
@@ -633,9 +633,9 @@ describe("normal public application runtime handoff", () => {
     const result = await f.client.bindings(f.request);
     expect(result.nativePreview).toBeUndefined();
     expect(result.publicDelivery).toMatchObject({
-      kind: "public-application-runtime-v1",
-      environment: "production",
       deploymentId: "dpl_public",
+      environment: "production",
+      kind: "public-application-runtime-v1",
       publicOrigin: actorProjection.origin,
     });
     expect(result.normalActors).toEqual(actorProjection);
@@ -706,10 +706,10 @@ describe("normal public application runtime handoff", () => {
         planDigest: operatorPlanDigest(f.selectedPlan),
       },
       {
-        operatorClient: async () => f.client,
         assertAuthority: async () => {},
         getProvider: async () => provider,
         observeInstallation: fallback,
+        operatorClient: async () => f.client,
         readBinding: fallback,
       },
     );

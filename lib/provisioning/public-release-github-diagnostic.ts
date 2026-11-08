@@ -70,10 +70,12 @@ export const githubReleaseGraphqlFailure = (
       break;
     }
   }
-  return new PublicReleaseProviderError({
-    provider: "github",
-    statusCode: 200,
-    ...(code === undefined ? {} : { code }),
-    ...requestRef(headers),
-  });
+  const diagnostic: Pick<
+    z.infer<typeof githubReleaseDiagnosticSchema>,
+    "provider" | "statusCode" | "code"
+  > = { provider: "github", statusCode: 200 };
+  if (code !== undefined) {
+    diagnostic.code = code;
+  }
+  return new PublicReleaseProviderError({ ...diagnostic, ...requestRef(headers) });
 };

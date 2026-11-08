@@ -41,6 +41,14 @@ const nativeFailureSqlState = z.enum([
   "08006",
 ]);
 
+interface NativeFailureLogEntry {
+  event: string;
+  stage: HostedOperatorNativeFailureStage;
+  errorClass: string;
+  code?: z.infer<typeof operatorPublicResultSchema>["code"];
+  sqlState?: z.infer<typeof nativeFailureSqlState>;
+}
+
 export const reportHostedOperatorNativeFailure = (
   stage: HostedOperatorNativeFailureStage,
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Project private failures into fixed diagnostic labels only.
@@ -76,17 +84,21 @@ export const reportHostedOperatorNativeFailure = (
           : undefined;
       sqlState = nativeFailureSqlState.safeParse(causeCode);
     }
-    console.warn(
-      JSON.stringify({
+    const diagnostic = () => {
+      const entry: NativeFailureLogEntry = {
         event: "builder.hosted_operator_native_failure",
         stage,
         errorClass,
-        ...(error instanceof HostedOperatorError && publicCode.success
-          ? { code: publicCode.data }
-          : {}),
-        ...(sqlState.success ? { sqlState: sqlState.data } : {}),
-      }),
-    );
+      };
+      if (error instanceof HostedOperatorError && publicCode.success) {
+        entry.code = publicCode.data;
+      }
+      if (sqlState.success) {
+        entry.sqlState = sqlState.data;
+      }
+      return entry;
+    };
+    console.warn(JSON.stringify(diagnostic()));
   } catch {
     // Diagnostic failures must preserve the original response, error and cleanup.
   }

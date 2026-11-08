@@ -219,13 +219,22 @@ describe("private read-only operator provider inventory", () => {
           id: configuration.operator.projectId,
         });
       } else {
-        f.payloads.set("/v13/deployments/operator-current.example.test", {
+        const deployment: Omit<typeof f.deployment, "target"> & { target: string | null } = {
           ...f.deployment,
-          ...(mismatch === "project" ? { projectId: "foreign-project" } : {}),
-          ...(mismatch === "owner" ? { ownerId: "foreign-team" } : {}),
-          ...(mismatch === "environment" ? { target: "production" } : {}),
-          ...(mismatch === "readiness" ? { readyState: "BUILDING" } : {}),
-        });
+        };
+        if (mismatch === "project") {
+          deployment.projectId = "foreign-project";
+        }
+        if (mismatch === "owner") {
+          deployment.ownerId = "foreign-team";
+        }
+        if (mismatch === "environment") {
+          deployment.target = "production";
+        }
+        if (mismatch === "readiness") {
+          deployment.readyState = "BUILDING";
+        }
+        f.payloads.set("/v13/deployments/operator-current.example.test", deployment);
       }
       await expect(
         readHostedOperatorProviderInventory({
@@ -287,13 +296,16 @@ describe("private read-only operator provider inventory", () => {
         ...f.deployment,
         id: configuration.operator.deploymentId,
       });
-      const inventory = await readHostedOperatorProviderInventory({
+      const inventoryInput: Parameters<typeof readHostedOperatorProviderInventory>[0] = {
         ...f.input,
-        ...(mode === "capture" ? { phase: "bootstrap-planning" as const } : {}),
-        ...(mode === "opt-in-without-planning"
-          ? { resolveOperatorByConfiguredOrigin: true as const }
-          : {}),
-      });
+      };
+      if (mode === "capture") {
+        inventoryInput.phase = "bootstrap-planning";
+      }
+      if (mode === "opt-in-without-planning") {
+        inventoryInput.resolveOperatorByConfiguredOrigin = true;
+      }
+      const inventory = await readHostedOperatorProviderInventory(inventoryInput);
       expect(inventory.operator.deploymentId).toBe(configuration.operator.deploymentId);
       expect(
         f.fetcher.mock.calls.some(
@@ -337,16 +349,19 @@ describe("private read-only operator provider inventory", () => {
     await expect(
       readHostedOperatorProviderInventory({ ...f.input, diagnosticSink: sink }),
     ).rejects.toThrow("operator_unavailable");
-    expect(sink.mock.calls.map(([event]) => event.inventoryReadFailure)).toContainEqual(
-      expect.objectContaining({
-        target: "app",
-        operation: "project",
-        phase,
-        ...(status && phase === "http_response"
-          ? { httpStatus: status, errorClass: "operator_error", publicCode: "operator_unavailable" }
-          : {}),
-      }),
-    );
+    const failures = sink.mock.calls.map(([event]) => event.inventoryReadFailure);
+    const expectedFailure =
+      status && phase === "http_response"
+        ? {
+            errorClass: "operator_error",
+            httpStatus: status,
+            operation: "project",
+            phase,
+            publicCode: "operator_unavailable",
+            target: "app",
+          }
+        : { operation: "project", phase, target: "app" };
+    expect(failures).toContainEqual(expect.objectContaining(expectedFailure));
     expect(
       sink.mock.calls.filter(([event]) => event.inventoryReadFailure !== undefined),
     ).toHaveLength(1);
@@ -363,9 +378,9 @@ describe("private read-only operator provider inventory", () => {
       readHostedOperatorProviderInventory({ ...owner.input, diagnosticSink: ownerSink }),
     ).rejects.toThrow("operator_unavailable");
     expect(ownerSink.mock.calls[0]?.[0].inventoryReadFailure).toMatchObject({
-      target: "inventory",
       operation: "owner",
       phase: "owner",
+      target: "inventory",
     });
     expect(owner.fetcher).not.toHaveBeenCalled();
 
@@ -376,9 +391,9 @@ describe("private read-only operator provider inventory", () => {
       readHostedOperatorProviderInventory({ ...credential.input, diagnosticSink: credentialSink }),
     ).rejects.toThrow("operator_unavailable");
     expect(credentialSink.mock.calls[0]?.[0].inventoryReadFailure).toMatchObject({
-      target: "inventory",
       operation: "credential",
       phase: "credential",
+      target: "inventory",
     });
     expect(credential.fetcher).not.toHaveBeenCalled();
 
@@ -402,9 +417,9 @@ describe("private read-only operator provider inventory", () => {
     await expect(
       readHostedOperatorProviderInventory({
         ...alias.input,
+        diagnosticSink: aliasSink,
         phase: "bootstrap-planning",
         resolveGatewayByPublicOrigin: true,
-        diagnosticSink: aliasSink,
       }),
     ).resolves.toBeDefined();
     expect(aliasSink.mock.calls.some(([event]) => event.inventoryReadFailure)).toBe(false);
@@ -439,8 +454,8 @@ describe("private read-only operator provider inventory", () => {
     expect(observed).toHaveLength(2);
     expect(sink.mock.calls.map(([event]) => event.inventoryReadFailure)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ target: "app", operation: "project", phase: "schema" }),
-        expect.objectContaining({ target: "gateway", operation: "project", phase: "schema" }),
+        expect.objectContaining({ operation: "project", phase: "schema", target: "app" }),
+        expect.objectContaining({ operation: "project", phase: "schema", target: "gateway" }),
       ]),
     );
     const projectReads = f.fetcher.mock.calls
@@ -472,8 +487,8 @@ describe("private read-only operator provider inventory", () => {
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           executionFailure: {
-            stage: "final_inventory_readback",
             errorClass: "validation_error",
+            stage: "final_inventory_readback",
           },
         }),
       ]);
@@ -956,8 +971,8 @@ describe("private read-only operator provider inventory", () => {
     ).rejects.toThrow("resource_mismatch");
     const observed = await readHostedOperatorProviderInventory({
       ...f.input,
-      configuration: configured,
       approvedAppBranch: branch,
+      configuration: configured,
     });
     expect(observed.app.branch).toBe(branch);
     expect(context.target.branch).toBe("feature/preview");

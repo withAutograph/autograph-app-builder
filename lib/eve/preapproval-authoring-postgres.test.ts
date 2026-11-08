@@ -18,10 +18,10 @@ import { authoringScopeDigest } from "../agent/preapproval-authoring";
 
 // An explicit local tool directory is only a fixture executable selection, never a connection URL.
 const fixtureEnvironment = {
-  NODE_ENV: "test" as const,
-  PATH: process.env.PATH,
   LANG: "C",
   LC_ALL: "C",
+  NODE_ENV: "test" as const,
+  PATH: process.env.PATH,
 };
 const tools = [
   process.env.BUILDER_TEST_POSTGRES_BIN,
@@ -82,7 +82,7 @@ const command = (name: string, args: string[]) => {
   if (tools === undefined) {
     throw new Error("Owned PostgreSQL17 tools required.");
   }
-  execFileSync(path.join(tools, name), args, { stdio: "pipe", env: fixtureEnvironment });
+  execFileSync(path.join(tools, name), args, { env: fixtureEnvironment, stdio: "pipe" });
 };
 const operation = (id: string) =>
   hostedOperationRecordSchema.parse({
@@ -164,15 +164,15 @@ describe.skipIf(tools === undefined)("authoring custody against actual PostgreSQ
     });
     store = createPostgresHostedEveStore(database);
     const start = hostedOperationRecordSchema.parse({
-      version: 1,
-      principal,
-      operationId: "start",
       clientRequestId: "start",
-      kind: "start",
-      state: "reserved",
-      requestDigest: `sha256:${"a".repeat(64)}`,
       createdAtEpochMs: 1,
+      kind: "start",
+      operationId: "start",
+      principal,
+      requestDigest: `sha256:${"a".repeat(64)}`,
+      state: "reserved",
       updatedAtEpochMs: 1,
+      version: 1,
     });
     await store.reserveOperation(principal, start);
     await store.settleSucceeded({
@@ -198,7 +198,7 @@ describe.skipIf(tools === undefined)("authoring custody against actual PostgreSQ
       command("pg_ctl", ["-D", path.join(root, "data"), "-m", "immediate", "-w", "stop"]);
     }
     if (root !== undefined) {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
   it("persists actual decision, ignores older turn, and rejects foreign owner/adapter", async () => {
@@ -207,27 +207,27 @@ describe.skipIf(tools === undefined)("authoring custody against actual PostgreSQ
     if (record === undefined) {
       throw new Error("Actual authoring store port required.");
     }
-    await record({ principal, sessionId: "public", decision });
+    await record({ decision, principal, sessionId: "public" });
     await record({
+      decision: { ...decision, turnSequence: 0, decision: "blocked" },
       principal,
       sessionId: "public",
-      decision: { ...decision, turnSequence: 0, decision: "blocked" },
     });
     const current = await store.getSession(principal, "public");
     assert.ok(current);
     expect(toDurableHostedSessionRecord(current).privateAuthoringDecision).toEqual(decision);
     await expect(
       record({
+        decision,
         principal: { ...principal, ownerUserId: "foreign" },
         sessionId: "public",
-        decision,
       }),
     ).rejects.toThrow();
     await expect(
       record({
+        decision: { ...decision, adapterSessionId: "foreign" },
         principal,
         sessionId: "public",
-        decision: { ...decision, adapterSessionId: "foreign" },
       }),
     ).rejects.toThrow();
     const unchanged = await store.getSession(principal, "public");
@@ -305,7 +305,7 @@ describe.skipIf(tools === undefined)("authoring custody against actual PostgreSQ
     const accept = store.claimInternalAuthoringMessage;
     assert.ok(cancel);
     assert.ok(accept);
-    await cancel({ principal, sessionId: "public", nowEpochMs: 6 });
+    await cancel({ nowEpochMs: 6, principal, sessionId: "public" });
     expect(await accept(claim(op.operationId))).toBe(false);
     const retained = await store.getPrivateOperation?.(principal, op.operationId);
     expect(retained?.state).toBe("submission_unknown");
@@ -315,15 +315,15 @@ describe.skipIf(tools === undefined)("authoring custody against actual PostgreSQ
     const sessionId = "correction-public";
     const logicalSessionId = "correction-logical";
     const start = hostedOperationRecordSchema.parse({
-      version: 1,
-      principal,
-      operationId: "correction-start",
       clientRequestId: "correction-start",
-      kind: "start",
-      state: "reserved",
-      requestDigest: `sha256:${"a".repeat(64)}`,
       createdAtEpochMs: 1,
+      kind: "start",
+      operationId: "correction-start",
+      principal,
+      requestDigest: `sha256:${"a".repeat(64)}`,
+      state: "reserved",
       updatedAtEpochMs: 1,
+      version: 1,
     });
     await store.reserveOperation(principal, start);
     await store.settleSucceeded({
@@ -362,7 +362,7 @@ describe.skipIf(tools === undefined)("authoring custody against actual PostgreSQ
     const accept = store.claimInternalAuthoringMessage;
     assert.ok(retain);
     assert.ok(accept);
-    await retain({ principal, sessionId, decision: correctedDecision });
+    await retain({ decision: correctedDecision, principal, sessionId });
     const op = hostedOperationRecordSchema.parse({
       ...operation("correction-send"),
       sessionId,

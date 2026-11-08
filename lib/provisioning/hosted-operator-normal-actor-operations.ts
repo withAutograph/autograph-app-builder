@@ -35,7 +35,10 @@ import {
   prepareNormalActorAccounts,
   prepareNormalActorMemberships,
 } from "./hosted-operator-normal-actors";
-import type { NormalActorOrganizationOwnerProof } from "./hosted-operator-normal-actors";
+import type {
+  NormalActorAccountPorts,
+  NormalActorOrganizationOwnerProof,
+} from "./hosted-operator-normal-actors";
 
 interface OrganizationWorkerInput {
   effect: HostedOperatorEffectContext;
@@ -242,9 +245,9 @@ export const createHostedOperatorNormalActorOperations = (
           return;
         }
         const client = createHostedOperatorNormalAuthClient({
+          fetch,
           origin: preparation.program.origin,
           storageState: checkpoint.storageState,
-          fetch,
         });
         assertSession(
           await client.getSession(),
@@ -279,7 +282,7 @@ export const createHostedOperatorNormalActorOperations = (
   ) => {
     const fetch = await transport(input, preparation.program);
     const assertObservation = input.assertCurrentObservation;
-    return {
+    const authority: Pick<NormalActorAccountPorts, "assertCurrent" | "assertCurrentObservation"> = {
       assertCurrent: async (scope: { operationRef: string; programDigest: string }) => {
         if (
           scope.operationRef !== preparation.accountOperationRef ||
@@ -290,23 +293,21 @@ export const createHostedOperatorNormalActorOperations = (
         await deps.assertCurrentPlan(input);
         await input.assertCurrent();
       },
-      ...(assertObservation === undefined
-        ? {}
-        : {
-            assertCurrentObservation: async (scope: {
-              operationRef: string;
-              programDigest: string;
-            }) => {
-              if (
-                scope.operationRef !== preparation.accountOperationRef ||
-                scope.programDigest !== preparation.programDigest
-              ) {
-                throw mismatch();
-              }
-              await deps.assertCurrentPlan(input);
-              await assertObservation();
-            },
-          }),
+    };
+    if (assertObservation !== undefined) {
+      authority.assertCurrentObservation = async (scope) => {
+        if (
+          scope.operationRef !== preparation.accountOperationRef ||
+          scope.programDigest !== preparation.programDigest
+        ) {
+          throw mismatch();
+        }
+        await deps.assertCurrentPlan(input);
+        await assertObservation();
+      };
+    }
+    return {
+      ...authority,
       checkpoint: async (state: NormalActorState) => {
         await checkpoint(input, state);
       },
@@ -358,9 +359,9 @@ export const createHostedOperatorNormalActorOperations = (
           return false;
         }
         const client = createHostedOperatorNormalAuthClient({
+          fetch,
           origin: program.origin,
           storageState: scoped.storageState,
-          fetch,
         });
         assertSession(
           await client.getSession(),
@@ -414,9 +415,9 @@ export const createHostedOperatorNormalActorOperations = (
           throw required();
         }
         const client = createHostedOperatorNormalAuthClient({
+          fetch,
           origin: preparation.program.origin,
           storageState: candidate.storageState,
-          fetch,
         });
         assertSession(await client.getSession(), actor, candidate.session, deps.journalPorts.now());
       }),
@@ -445,9 +446,9 @@ export const createHostedOperatorNormalActorOperations = (
         return { actorKey: actor.actorKey };
       }
       const normal = createHostedOperatorNormalAuthClient({
+        fetch,
         origin: program.origin,
         storageState: saved.storageState,
-        fetch,
       });
       // oxlint-disable-next-line react-doctor/async-await-in-loop -- Stop at the first needed capture; issuing multiple owner capture requests would overwrite the pending namespace.
       const session = await normal.getSession();
@@ -472,9 +473,9 @@ export const createHostedOperatorNormalActorOperations = (
         }
         usedSessions.add(candidate.session.realmSessionId);
         const scoped = createHostedOperatorNormalAuthClient({
+          fetch,
           origin: program.origin,
           storageState: candidate.storageState,
-          fetch,
         });
         // oxlint-disable-next-line react-doctor/async-await-in-loop -- Capture preflight stops at one pending reconnect without creating multiple nonce requests.
         const actual = await scoped.getSession();

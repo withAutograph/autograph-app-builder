@@ -14,7 +14,7 @@ const run = async (
       body += chunk;
     }
     requests.push({ body, cookie: request.headers.cookie, path: request.url ?? "" });
-    if (request.url?.startsWith("/__autograph_preview_launch")) {
+    if (request.url?.startsWith("/__autograph_preview_launch") === true) {
       response.writeHead(303, { location: "/", "set-cookie": "preview=private; HttpOnly; Path=/" });
     } else if (request.method === "POST") {
       if (mode === "auth") {
@@ -47,7 +47,7 @@ const run = async (
     server.listen(0, "127.0.0.1", resolve);
   });
   const address = server.address();
-  if (!address || typeof address === "string") {
+  if (address === null || typeof address === "string") {
     throw new Error("Missing server address");
   }
   const transport: typeof fetch = (url, options) => {

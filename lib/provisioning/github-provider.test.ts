@@ -1,6 +1,7 @@
 import { createHash, generateKeyPairSync } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import { provisionGitHubRepository, starterSourceBinding } from "./github-provider";
 import type { GitHubUserCredentialStore } from "./github-user-credential";
@@ -50,15 +51,14 @@ const config = {
   appId: "123",
   clientId: "client-id",
   clientSecret: "client-secret-value-long-enough",
-  privateKey: privateKey.export({ format: "pem", type: "pkcs8" }).toString(),
+  privateKey: privateKey.export({ format: "pem", type: "pkcs8" }),
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function credentialStore(): GitHubUserCredentialStore {
   return {
     bind: vi.fn(),
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    deactivate: vi.fn(async () => 1),
+    deactivate: vi.fn<() => Promise<number>>().mockResolvedValue(1),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     read: vi.fn(async () => ({
       active: true,
@@ -153,7 +153,7 @@ describe("GitHub starter repository provisioning", () => {
         const parsedUrl = new URL(String(url));
         const path = `${parsedUrl.pathname}${parsedUrl.search}`;
         const method = init?.method ?? "GET";
-        const body =
+        const body: unknown =
           init?.body && parsedUrl.origin === "https://api.github.com"
             ? JSON.parse(String(init.body))
             : undefined;
@@ -187,7 +187,7 @@ describe("GitHub starter repository provisioning", () => {
         if (path.endsWith("/access_tokens")) {
           return Response.json(
             {
-              permissions: body.permissions,
+              permissions: z.looseObject({ permissions: z.unknown() }).parse(body).permissions,
               token: "github-installation-access-token",
             },
             { status: 201 },

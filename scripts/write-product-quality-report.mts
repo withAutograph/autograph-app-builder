@@ -22,8 +22,9 @@ import { ARRUSTED_COMPONENT_COMPOSITION_MANIFEST } from "../evals/support/suppor
 const reportRoot = path.resolve(
   process.env.APP_BUILDER_PRODUCT_EVAL_REPORT_DIR ?? ".artifacts/product-quality",
 );
-const vendorEvidenceRoot = path.resolve(reportRoot, "vendor-onboarding");
-const vendor = productQualityScenario("vendor-onboarding");
+const vendorOnboardingId = "vendor-onboarding";
+const vendorEvidenceRoot = path.resolve(reportRoot, vendorOnboardingId);
+const vendor = productQualityScenario(vendorOnboardingId);
 const prototype = evaluatePrototypeQuality({
   appSpec: vendorOnboardingCompleteAppSpec,
   html: vendorOnboardingPrototype,
@@ -38,7 +39,7 @@ if (policy.status === "unavailable") {
   throw new Error(`Fixture composition policy unavailable: ${policy.reasons.join(" ")}`);
 }
 const composition = auditAppliedAppComposition({
-  appId: vendor.expected.prototype?.appId ?? "vendor-onboarding",
+  appId: vendor.expected.prototype?.appId ?? vendorOnboardingId,
   binding: policy.binding,
   files: [
     {

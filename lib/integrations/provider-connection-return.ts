@@ -1,14 +1,11 @@
 import { z } from "zod";
 
-const resumeKeySchema = z.string().uuid();
+const resumeKeySchema = z.uuid();
 export const providerConnectionReturnToSchema = z.union([
   z.literal("/"),
   z
     .string()
-    .refine(
-      (value) =>
-        value.startsWith("/handoff/") && z.string().uuid().safeParse(value.slice(9)).success,
-    )
+    .refine((value) => value.startsWith("/handoff/") && z.uuid().safeParse(value.slice(9)).success)
     .transform((value) => value as `/handoff/${string}`),
 ]);
 
@@ -29,10 +26,13 @@ export function parseProviderConnectionReturn(input: {
 }): ProviderConnectionReturn {
   const returnTo = first(input.returnTo);
   const resumeKey = first(input.resumeKey);
-  return {
+  const result: ProviderConnectionReturn = {
     returnTo: providerConnectionReturnToSchema.parse(returnTo ?? "/"),
-    ...(resumeKey === undefined ? {} : { resumeKey: resumeKeySchema.parse(resumeKey) }),
   };
+  if (resumeKey !== undefined) {
+    result.resumeKey = resumeKeySchema.parse(resumeKey);
+  }
+  return result;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

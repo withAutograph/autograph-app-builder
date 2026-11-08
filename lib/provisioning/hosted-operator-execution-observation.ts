@@ -6,7 +6,7 @@ export const readOperatorExecutionObservation = (
   record: HostedRuntimeJournalRecord,
   now: number,
 ): NonNullable<OperatorPublicResult["execution"]> => {
-  const operator = record.operator;
+  const { operator } = record;
   const saved = record.executionObservation;
   const matching =
     // oxlint-disable-next-line sonarjs/expression-complexity -- Match all original approval identity dimensions before exposing private settlement.

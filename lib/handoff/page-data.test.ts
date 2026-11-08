@@ -1,45 +1,51 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { drizzle } from "drizzle-orm/postgres-js";
+import type { HostedDatabase } from "../db/hosted-postgres";
+import type { isCursorClientReady } from "../auth/cursor-client";
 
 import { activeBuilderModelId } from "../integrations/active-model";
 import { builderHandoffRecordSchema } from "./contracts";
 import type { BuilderHandoffRecord } from "./contracts";
 import { BuilderHandoffUnavailableError } from "./service";
 import {
-  findAuthenticatedPendingBuilderHandoff,
-  getBuilderHandoffPageData,
-  getBuilderHandoffStatusDeploymentHandler,
+  findAuthenticatedPendingBuilderHandoff as findPending,
+  getBuilderHandoffPageData as getPageData,
+  getBuilderHandoffStatusDeploymentHandler as getStatusHandler,
 } from "./deployment";
+import type { BuilderHandoffPageDependencies } from "./deployment";
+import type { BuilderHandoffStore } from "./service";
 
-const mocks = vi.hoisted(() => ({
-  cursorReady: vi.fn(),
-  database: {},
-  findLatestPending: vi.fn(),
-  read: vi.fn(),
-  session: vi.fn(),
-}));
-
-vi.mock("../auth/preview-oauth-deployment", () => ({
-  ensurePreviewOAuthDeploymentSessionOrganization: mocks.session,
-}));
-vi.mock("../auth/preview-oauth-runtime", () => ({
-  readPreviewOAuthRuntimeConfig: () => ({
+const mocks = {
+  cursorReady: vi.fn<typeof isCursorClientReady>(),
+  database: drizzle.mock<HostedDatabase["_"]["fullSchema"]>(),
+  findLatestPending: vi.fn<NonNullable<BuilderHandoffStore["findLatestPending"]>>(),
+  read: vi.fn<BuilderHandoffStore["read"]>(),
+  session: vi.fn<BuilderHandoffPageDependencies["session"]>(),
+};
+const dependencies: BuilderHandoffPageDependencies = {
+  databases: new Map(),
+  readConfig: () => ({
     databaseUrl: "postgres://test:private-password@localhost/handoff-page",
     issuer: "https://builder.example.test/api/auth",
     resource: "https://builder.example.test/mcp",
   }),
-}));
-vi.mock("../mcp/hosted-route", () => ({
-  openHostedPostgresDatabase: () => mocks.database,
-}));
-vi.mock("../auth/cursor-client", () => ({
-  isCursorClientReady: mocks.cursorReady,
-}));
-vi.mock("./postgres-store", () => ({
-  createPostgresBuilderHandoffStore: () => ({
+  openDatabase: () => mocks.database,
+  session: mocks.session,
+  createStore: () => ({
     findLatestPending: mocks.findLatestPending,
     read: mocks.read,
+    reserve: vi.fn<BuilderHandoffStore["reserve"]>(),
+    bindSession: vi.fn<BuilderHandoffStore["bindSession"]>(),
   }),
-}));
+  loadCursorClient: async () => ({ isCursorClientReady: mocks.cursorReady }),
+};
+const getBuilderHandoffPageData = (input: Parameters<typeof getPageData>[0]) =>
+  getPageData(input, dependencies);
+const findAuthenticatedPendingBuilderHandoff = (input: Parameters<typeof findPending>[0]) =>
+  findPending(input, dependencies);
+const getBuilderHandoffStatusDeploymentHandler = (
+  environment: Parameters<typeof getStatusHandler>[0],
+) => getStatusHandler(environment, dependencies);
 
 const handoffId = "123e4567-e89b-42d3-a456-426614174001";
 const authority = {
@@ -86,7 +92,7 @@ describe("owner-only handoff browser data", () => {
       user: { id: authority.ownerUserId },
     });
     mocks.cursorReady.mockReset().mockResolvedValue(false);
-    mocks.findLatestPending.mockReset().mockImplementation(() => Promise.resolve());
+    mocks.findLatestPending.mockReset().mockResolvedValue(undefined);
     mocks.read.mockReset().mockImplementation(
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async (input: { authority: BuilderHandoffRecord["authority"]; handoffId: string }) =>
@@ -121,7 +127,7 @@ describe("owner-only handoff browser data", () => {
   });
 
   it("returns undefined without login before reading any handoff or checking Cursor readiness", async () => {
-    mocks.session.mockImplementation(() => Promise.resolve());
+    mocks.session.mockResolvedValue(undefined);
     expect(await getBuilderHandoffPageData(pageInput)).toBeUndefined();
     expect(mocks.read).not.toHaveBeenCalled();
     expect(mocks.cursorReady).not.toHaveBeenCalled();
@@ -145,7 +151,7 @@ describe("owner-only handoff browser data", () => {
   });
 
   it("does not expose pending handoffs without an authenticated authority", async () => {
-    mocks.session.mockImplementation(() => Promise.resolve());
+    mocks.session.mockResolvedValue(undefined);
     await expect(
       findAuthenticatedPendingBuilderHandoff({
         environment: pageInput.environment,
