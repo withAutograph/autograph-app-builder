@@ -51,7 +51,9 @@ const isRecord = (value) => typeof value === "object" && value !== null;
 /** @param {unknown} value @param {string[]} keys @returns {value is UnknownRecord} */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactKeys(value, keys) {
-  return isRecord(value) && Object.keys(value).toSorted().join(",") === [...keys].toSorted().join(",");
+  return (
+    isRecord(value) && Object.keys(value).toSorted().join(",") === [...keys].toSorted().join(",")
+  );
 }
 
 /** @param {string} root @param {string} candidate */
@@ -71,11 +73,7 @@ function observeRoot(path, repositoryRoot) {
     const resolved = resolve(path);
     const canonical = realpathSync(resolved);
     const state = lstatSync(resolved, { bigint: true });
-    if (
-      canonical !== resolved ||
-      !state.isDirectory() ||
-      state.isSymbolicLink()
-    ) {
+    if (canonical !== resolved || !state.isDirectory() || state.isSymbolicLink()) {
       fail("root");
     }
     if (
@@ -86,9 +84,7 @@ function observeRoot(path, repositoryRoot) {
     ) {
       fail("root");
     }
-    if (
-      within(canonical, repositoryRoot)
-    ) {
+    if (within(canonical, repositoryRoot)) {
       fail("root");
     }
     return Object.freeze({
@@ -118,11 +114,7 @@ function observeReadOnlyRoot(path, repositoryRoot) {
     const resolved = resolve(path);
     const canonical = realpathSync(resolved);
     const state = lstatSync(resolved, { bigint: true });
-    if (
-      canonical !== resolved ||
-      !state.isDirectory() ||
-      state.isSymbolicLink()
-    ) {
+    if (canonical !== resolved || !state.isDirectory() || state.isSymbolicLink()) {
       fail(sourceRootField);
     }
     if (
@@ -133,9 +125,7 @@ function observeReadOnlyRoot(path, repositoryRoot) {
     ) {
       fail(sourceRootField);
     }
-    if (
-      within(canonical, repositoryRoot)
-    ) {
+    if (within(canonical, repositoryRoot)) {
       fail(sourceRootField);
     }
     return Object.freeze({

@@ -58,6 +58,12 @@ export default defineConfig({
   ],
   rules: {
     // Temporary migration baseline; remove these as findings are fixed.
+    "sonarjs/no-unused-function-argument": "off",
+    "typescript/await-thenable": "off",
+    "typescript/no-floating-promises": "off",
+    "typescript/no-useless-default-assignment": "off",
+    "typescript/non-nullable-type-assertion-style": "off",
+    "typescript/prefer-regexp-exec": "off",
     "typescript/use-unknown-in-catch-callback-variable": "off",
     "anti-slop/no-chained-type-assertions": "off",
     "anti-slop/no-conditional-empty-object-spread": "off",
