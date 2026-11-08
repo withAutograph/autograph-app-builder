@@ -2,7 +2,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import path from "node:path";
-import type { Duplex } from "node:stream";
+import { Duplex } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
@@ -216,7 +216,7 @@ describe("test capability preload", () => {
         env: { NODE_ENV: "test", PATH: "/usr/bin:/bin" },
         stdio: ["ignore", "pipe", "pipe", "pipe"],
       });
-      const authorization = child.stdio[3] as Duplex;
+      const authorization = z.instanceof(Duplex).parse(child.stdio[3]);
       const authorizationErrors: string[] = [];
       authorization.on("error", (error: NodeJS.ErrnoException) => {
         authorizationErrors.push(error.code ?? error.message);
@@ -231,8 +231,12 @@ describe("test capability preload", () => {
       );
       let stdout = "";
       let stderr = "";
-      child.stdout?.setEncoding("utf-8").on("data", (chunk) => (stdout += chunk));
-      child.stderr?.setEncoding("utf-8").on("data", (chunk) => (stderr += chunk));
+      child.stdout?.setEncoding("utf-8").on("data", (chunk) => {
+        stdout += chunk;
+      });
+      child.stderr?.setEncoding("utf-8").on("data", (chunk) => {
+        stderr += chunk;
+      });
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const exitArguments: unknown[] = await once(child, "exit");
       const [status] = exitArguments;

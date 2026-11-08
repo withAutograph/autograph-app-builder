@@ -34,10 +34,53 @@ const response = {
   version: 1,
 } as const;
 
+const unexpected = () => {
+  throw new Error("Unexpected provisioning dependency call");
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function dependencies() {
-  return { journal: {} } as BuilderProvisioningDependencies;
+function dependencies(
+  journal: Partial<BuilderProvisioningDependencies["journal"]> = {},
+): BuilderProvisioningDependencies {
+  return {
+    deactivateVercelInstallation: unexpected,
+    githubConfig: {
+      appId: "101",
+      clientId: "fixture-client",
+      clientSecret: "fixture-client-secret",
+      privateKey: "fixture-private-key",
+    },
+    githubCredentials: {
+      bind: unexpected,
+      deactivate: unexpected,
+      read: unexpected,
+      rotate: unexpected,
+    },
+    githubInstallations: { bind: unexpected, read: unexpected },
+    journal: { compareAndSet: unexpected, read: unexpected, reserve: unexpected, ...journal },
+    readVercelCredential: unexpected,
+    vercelConfig: {
+      clientId: "fixture-client",
+      clientSecret: "fixture-secret",
+      issuer: origin,
+      resource: `${origin}/mcp`,
+      slug: "fixture",
+      tokenKey: Buffer.alloc(32),
+      tokenKeyVersion: "v1",
+    },
+  };
 }
+
+const journalRow = (record: ReturnType<typeof initialBuilderProvisionJournalRecord>) => ({
+  authority,
+  createdAt: new Date(response.updatedAt),
+  record,
+  requestDigest: response.requestDigest,
+  requestId: request.requestId,
+  revision: 7,
+  state: "pending" as const,
+  updatedAt: new Date(response.updatedAt),
+});
 
 describe("authenticated builder provisioning route", () => {
   it("requires a same-origin JSON POST and fails closed with the feature flag", async () => {
@@ -118,16 +161,11 @@ describe("authenticated builder provisioning route", () => {
     record.operations.github.attempted = true;
     record.operations.github.failureDetail = "provider_rejected";
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const read = vi.fn(async () => ({
-      record,
-      revision: 7,
-    }));
+    const read = vi.fn(async () => journalRow(record));
     const handler = createBuilderProvisioningRouteHandler({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       authorityForRequest: async () => authority,
-      dependencies: {
-        journal: { read },
-      } as unknown as BuilderProvisioningDependencies,
+      dependencies: dependencies({ read }),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       enabled: async () => true,
       execute: vi.fn(),
@@ -162,14 +200,14 @@ describe("authenticated builder provisioning route", () => {
   });
 
   it("reserves a durable journal before the provider operation begins", async () => {
+    const record = initialBuilderProvisionJournalRecord(request, new Date(response.updatedAt));
+    record.response = response;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const reserve = vi.fn(async () => ({ record: { response } }));
+    const reserve = vi.fn(async () => journalRow(record));
     const handler = createBuilderProvisioningRouteHandler({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       authorityForRequest: async () => authority,
-      dependencies: {
-        journal: { reserve },
-      } as unknown as BuilderProvisioningDependencies,
+      dependencies: dependencies({ reserve }),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       enabled: async () => true,
       execute: vi.fn(),

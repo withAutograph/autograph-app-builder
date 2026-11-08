@@ -1,4 +1,5 @@
 import postgres from "postgres";
+import { z } from "zod";
 import { expect, test } from "playwright/test";
 import type { Page } from "playwright/test";
 
@@ -732,7 +733,7 @@ test("a session created after context issuance blocks registration", async ({ co
   try {
     await page.route(/\/api\/auth\/passkey\/generate-register-options(?:\?|$)/u, async (route) => {
       const response = await route.fetch();
-      markOptionsGenerated(undefined as undefined);
+      markOptionsGenerated(undefined);
       await optionsResponseMayContinue;
       await route.fulfill({ response });
     });
@@ -750,7 +751,7 @@ test("a session created after context issuance blocks registration", async ({ co
     const verificationResponsePromise = page.waitForResponse(
       (response) => new URL(response.url()).pathname === "/api/auth/passkey/verify-registration",
     );
-    releaseOptionsResponse(undefined as undefined);
+    releaseOptionsResponse(undefined);
     await clickPromise;
     const verificationResponse = await verificationResponsePromise;
 
@@ -764,7 +765,7 @@ test("a session created after context issuance blocks registration", async ({ co
     const finalCounts = await authCounts();
     expect(finalCounts.passkeys).toBe(0);
   } finally {
-    releaseOptionsResponse(undefined as undefined);
+    releaseOptionsResponse(undefined);
     await sessionPage?.close();
     await authenticator.dispose();
   }
@@ -918,7 +919,7 @@ test("provider account supports multiple passkeys but retains its final passkey"
 
     const list = await page.request.get("/api/auth/passkey/list-user-passkeys");
     expect(list.ok()).toBeTruthy();
-    const credentials = (await list.json()) as { id: string }[];
+    const credentials = z.array(z.looseObject({ id: z.string() })).parse(await list.json());
     expect(credentials).toHaveLength(2);
     const deletePasskey = (id: string) =>
       page.evaluate(async (passkeyId) => {

@@ -109,8 +109,10 @@ describe("Eve durable turn execution envelope", () => {
         throw new Error("fixture_missing_hook_events");
       }
 
-      await events["turn.started"]?.({} as never, context);
-      await events["turn.completed"]?.({} as never, context);
+      const meta = { at: "2026-01-01T00:00:00.000Z", id: "event-1" };
+      const data = { sequence: 1, turnId: "turn-1" };
+      await events["turn.started"]?.({ data, meta, type: "turn.started" }, context);
+      await events["turn.completed"]?.({ data, meta, type: "turn.completed" }, context);
 
       expect(getSandbox).not.toHaveBeenCalled();
       expect(stop).not.toHaveBeenCalled();

@@ -249,7 +249,7 @@ describe("preview command working directory", () => {
         dependencies: { status: ready ? "reused" : "installed" },
       });
       expect(mocks.dependencies).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ root: "/workspace/repository", checkoutIdentity: "prior-apply" }),
+        expect.objectContaining({ checkoutIdentity: "prior-apply", root: "/workspace/repository" }),
       );
       expect(mocks.dependencies).not.toHaveBeenCalledWith(
         expect.objectContaining({ reconcileWorkspace: true }),

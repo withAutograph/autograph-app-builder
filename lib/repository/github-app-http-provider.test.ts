@@ -792,10 +792,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     });
     const adapter = createGitHubAppPublicationAdapter(createProvider(mock.implementation));
 
-    await expect(adapter.inspectInstallation("resolve-existing-source")).resolves.toMatchObject({
-      repositorySelection: "all",
-      selectedRepositoryIds: expect.arrayContaining(["1", "500", "501"]),
-    });
+    const observed = await adapter.inspectInstallation("resolve-existing-source");
+    expect(observed).toMatchObject({ repositorySelection: "all" });
+    expect(observed.selectedRepositoryIds).toEqual(expect.arrayContaining(["1", "500", "501"]));
     expect(
       mock.calls.filter(({ url }) => url.includes("/installation/repositories?")),
     ).toHaveLength(6);
