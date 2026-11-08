@@ -134,20 +134,27 @@ const memoryStore = () => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning journal fixture.
     async reserve(input) {
       const key = hostedRuntimeIdentity(input.authority, input.target).digest;
-      const row = rows.get(key) ?? {
-        record: {
-          approvedByCallId: input.approvedByCallId,
-          ...(input.environmentGitBranch === undefined
-            ? {}
-            : { environmentGitBranch: input.environmentGitBranch }),
-          kind: "app-runtime",
-          request: input.target,
-          status: "pending",
-          step: "reserved",
-          version: 1,
-        } satisfies HostedRuntimeJournalRecord,
-        revision: 1,
-      };
+      let row = rows.get(key);
+      if (row === undefined || row === null) {
+        const initial: Pick<
+          HostedRuntimeJournalRecord,
+          "approvedByCallId" | "environmentGitBranch"
+        > = { approvedByCallId: input.approvedByCallId };
+        if (input.environmentGitBranch !== undefined) {
+          initial.environmentGitBranch = input.environmentGitBranch;
+        }
+        row = {
+          record: {
+            ...initial,
+            kind: "app-runtime",
+            request: input.target,
+            status: "pending",
+            step: "reserved",
+            version: 1,
+          },
+          revision: 1,
+        };
+      }
       rows.set(key, row);
       return structuredClone(row);
     },

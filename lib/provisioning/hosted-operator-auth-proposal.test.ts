@@ -27,13 +27,21 @@ const configuration = {
     source: { snapshotId: "owned-snapshot", type: "snapshot" },
   },
 } as HostedOperatorSourceConfiguration;
+interface ProposalFixtureFrame {
+  version: number;
+  resource: typeof resource;
+  schemaPlan: { planDigest: string; targetDigest: string };
+  proposal?: "new-empty";
+}
 const fixture = (existing = true) => {
-  const frame = {
+  const frame: ProposalFixtureFrame = {
     version: 1,
     resource,
     schemaPlan: { planDigest: "b".repeat(64), targetDigest: "c".repeat(64) },
-    ...(existing ? {} : { proposal: "new-empty" }),
   };
+  if (!existing) {
+    frame.proposal = "new-empty";
+  }
   const sandbox = {
     delete: vi.fn(async () => {}),
     writeFiles: vi.fn<Pick<Sandbox, "writeFiles">["writeFiles"]>(async () => {}),

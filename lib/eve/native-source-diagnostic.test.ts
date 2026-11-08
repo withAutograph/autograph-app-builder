@@ -2,6 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { createSameOriginEveTransport } from "./same-origin-http";
 import { nativeSourceDiagnosticSchema } from "./native-source-diagnostic";
 
+interface SourceDiagnosticResponse<T> {
+  ok: boolean;
+  sessionId: string;
+  sourceDiagnostic?: T;
+  status: string;
+}
+
 const principal = {
   issuer: "https://owner.example",
   audience: "builder",
@@ -63,19 +70,17 @@ describe("private source diagnostic transport relay", () => {
   ])(
     "parses actual postMutation response without exposing $label data",
     async ({ diagnostic, outcome, reason }) => {
-      const request = vi.fn<typeof fetch>(() =>
-        Promise.resolve(
-          Response.json(
-            {
-              ok: true,
-              status: "accepted",
-              sessionId: "anchor",
-              ...(diagnostic === undefined ? {} : { sourceDiagnostic: diagnostic }),
-            },
-            { status: 202 },
-          ),
-        ),
-      );
+      const request = vi.fn<typeof fetch>(() => {
+        const response: SourceDiagnosticResponse<typeof diagnostic> = {
+          ok: true,
+          status: "accepted",
+          sessionId: "anchor",
+        };
+        if (diagnostic !== undefined) {
+          response.sourceDiagnostic = diagnostic;
+        }
+        return Promise.resolve(Response.json(response, { status: 202 }));
+      });
       const adapter = createSameOriginEveTransport({
         config: { baseUrl: "https://builder.example.test" },
         workloadIdentity: { token: () => Promise.resolve("synthetic-token") },

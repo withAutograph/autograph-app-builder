@@ -4862,10 +4862,13 @@ export function createHostedEveSessionService(input: {
               const { appId: existingAppId } = existing;
               const { appId: implementationAppId } = result.uiPreview ?? {};
               const appId = implementationAppId ?? existingAppId;
+              const sessionWithApp = { ...sessionBase };
+              if (appId !== undefined) {
+                sessionWithApp.appId = appId;
+              }
               return {
                 newSession: durableHostedSessionRecordSchema.parse({
-                  ...sessionBase,
-                  ...(appId === undefined ? {} : { appId }),
+                  ...sessionWithApp,
                   checkpoint,
                   checkpointDigest: hostedSessionCheckpointDigest(checkpoint),
                   checkpointProgressDigest: hostedSessionCheckpointProgressDigest(checkpoint),

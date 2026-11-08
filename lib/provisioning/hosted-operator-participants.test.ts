@@ -10,7 +10,7 @@ import {
   hostedOperatorPlanSchema,
   operatorPlanDigest,
 } from "./hosted-operator-contract";
-import type { OperatorSelection } from "./hosted-operator-contract";
+import type { OperatorReceipt, OperatorSelection } from "./hosted-operator-contract";
 import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
 import type { HostedRuntimeJournalRow, HostedRuntimeJournalStore } from "./hosted-runtime-journal";
 import {
@@ -689,12 +689,17 @@ const captureSuccessorFixture = () => {
         planDigest: operatorPlanDigest(appPlan),
         approvalId: "durable-human-decision",
         fenceGeneration: 1,
-        receipts: appPlan.effects.map((effect) => ({
-          effectId: effect.id,
-          observedAt: "2026-10-14T12:00:00.000Z",
-          resourceVersion: "observed",
-          ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
-        })),
+        receipts: appPlan.effects.map((effect) => {
+          const receipt: OperatorReceipt = {
+            effectId: effect.id,
+            observedAt: "2026-10-14T12:00:00.000Z",
+            resourceVersion: "observed",
+          };
+          if (effect.kind === "access") {
+            receipt.fenceGeneration = 1;
+          }
+          return receipt;
+        }),
       },
     }),
   };

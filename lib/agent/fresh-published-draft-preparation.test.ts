@@ -219,19 +219,20 @@ describe("owned fresh-template draft preparation after review recovery", () => {
         restoreInitialAppSource: true,
         state,
       });
-      expect(mocks.prepare.mock.calls[0]?.[0]).toMatchObject({
-        forceFreshCandidate: true,
-        ownedPublication: { proposal: mocks.owned.proposal, publication: mocks.owned.publication },
-        unpublished: {
-          restoreInitialAppSource: true,
-          ...(sameRepository
-            ? {
-                initialSourceRevision: {
-                  sha: state.sourceReceipt.sourceSha,
-                  tree: state.sourceReceipt.sourceTree,
-                },
-              }
-            : {}),
+      const expectedUnpublished = () => {
+        interface ExpectedUnpublishedSource {
+          restoreInitialAppSource: boolean;
+          initialSourceRevision?: { sha: string; tree: string };
+        }
+        const source: ExpectedUnpublishedSource = { restoreInitialAppSource: true };
+        if (sameRepository) {
+          source.initialSourceRevision = {
+            sha: state.sourceReceipt.sourceSha,
+            tree: state.sourceReceipt.sourceTree,
+          };
+        }
+        return {
+          ...source,
           changes: [
             { kind: "added", path: `${appRoot}/app/page.tsx` },
             { kind: "added", path: `${appRoot}/package.json` },
@@ -243,7 +244,12 @@ describe("owned fresh-template draft preparation after review recovery", () => {
                   path: "microfrontends.json",
                 },
           ],
-        },
+        };
+      };
+      expect(mocks.prepare.mock.calls[0]?.[0]).toMatchObject({
+        forceFreshCandidate: true,
+        ownedPublication: { proposal: mocks.owned.proposal, publication: mocks.owned.publication },
+        unpublished: expectedUnpublished(),
       });
     },
   );

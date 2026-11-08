@@ -123,10 +123,10 @@ const ownedFixture = (
       updatedAtEpochMs: 1000,
       version: 2,
     }),
-    ...(options.nativeRecoveryBinding === undefined
-      ? {}
-      : { nativeRecoveryBinding: options.nativeRecoveryBinding }),
   };
+  if (options.nativeRecoveryBinding !== undefined) {
+    record.nativeRecoveryBinding = options.nativeRecoveryBinding;
+  }
   const metadata: HostedPagedCheckpointMetadata = {
     capturedAtEpochMs: 1000,
     status: "completed",

@@ -66,19 +66,23 @@ const fixture = (withoutDestination = false) => {
       if (drift) {
         epoch += 1;
       }
-      return {
+      type Selection = Awaited<
+        ReturnType<Parameters<typeof createBuilderPublicationDestinationReader>[0]["readSelection"]>
+      >;
+      const selected: Pick<Selection, "authority" | "appId" | "publicSessionId" | "destination"> = {
         authority,
         appId: "saved-app",
         publicSessionId: "saved-public-session",
-        ...(withoutDestination
-          ? {}
-          : {
-              destination: {
-                appId: "saved-app",
-                requestId: request.requestId,
-                requestDigest: digest,
-              },
-            }),
+      };
+      if (!withoutDestination) {
+        selected.destination = {
+          appId: "saved-app",
+          requestId: request.requestId,
+          requestDigest: digest,
+        };
+      }
+      return {
+        ...selected,
         owner: { adapterGeneration: epoch },
       };
     },

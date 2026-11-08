@@ -10,6 +10,10 @@ import {
 import type { HostedOperationRecord, HostedSessionRecord } from "./hosted-store";
 import type { NativeRecoveryBinding, NativeRecoveryDescriptor } from "./native-recovery-contract";
 
+interface OperationErrorFields {
+  safeErrorCode?: "unknown";
+}
+
 const principal = {
   audience: "https://builder.example/mcp",
   issuer: "https://builder.example/api/auth",
@@ -177,13 +181,14 @@ describe("fresh authorization to close an immutable recovery loser", () => {
     "does not infer nonexecution from a %s holder without a committed winner",
     async (state) => {
       const f = fixture();
+      const record = { ...operation(holderDescriptor) };
+      const errorFields: OperationErrorFields = {};
+      if (state !== "reserved") {
+        errorFields.safeErrorCode = "unknown";
+      }
       f.operations.set(
         holderDescriptor.operationId,
-        hostedOperationRecordSchema.parse({
-          ...operation(holderDescriptor),
-          ...(state === "reserved" ? {} : { safeErrorCode: "unknown" }),
-          state,
-        }),
+        hostedOperationRecordSchema.parse({ ...record, ...errorFields, state }),
       );
       await expect(f.binding.authorizeRecoveryHolderClosure(call)).rejects.toThrow();
     },

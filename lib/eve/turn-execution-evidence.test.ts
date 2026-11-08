@@ -32,28 +32,38 @@ const request = (turnId: string, callId: string, toolName: string): MessageStrea
   },
   meta: meta(),
 });
+interface CommandOutputPrefix {
+  commandId?: string;
+}
+
 const result = (
   turnId: string,
   callId: string,
   toolName: string,
   status: "completed" | "failed" | "rejected",
   commandId?: string,
-): MessageStreamEvent => ({
-  type: "action.result",
-  data: {
-    turnId,
-    sequence: 1,
-    stepIndex: 1,
-    status,
-    result: {
-      kind: "tool-result",
-      callId,
-      toolName,
-      output: { ...(commandId === undefined ? {} : { commandId }), password: "never retained" },
+): MessageStreamEvent => {
+  const output: CommandOutputPrefix = {};
+  if (commandId !== undefined) {
+    output.commandId = commandId;
+  }
+  return {
+    type: "action.result",
+    data: {
+      turnId,
+      sequence: 1,
+      stepIndex: 1,
+      status,
+      result: {
+        kind: "tool-result",
+        callId,
+        toolName,
+        output: { ...output, password: "never retained" },
+      },
     },
-  },
-  meta: meta(),
-});
+    meta: meta(),
+  };
+};
 const complete = (turnId: string, sequence: number): MessageStreamEvent => ({
   type: "turn.completed",
   data: { turnId, sequence },
