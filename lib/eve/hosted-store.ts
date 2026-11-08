@@ -819,16 +819,17 @@ export const inheritRecoveryBuildDecision = (
   );
   if (latestDecision === undefined && latestAuthoring === undefined && destination === undefined)
     return child;
-  return durableHostedSessionRecordSchema.parse({
-    ...toDurableHostedSessionRecord(child),
-    ...(latestDecision === undefined
-      ? {}
-      : { privateBuildDecision: recoveredBuildDecision(latestDecision, child) }),
-    ...(latestAuthoring === undefined
-      ? {}
-      : { privateAuthoringDecision: recoveredAuthoringDecision(latestAuthoring, child) }),
-    ...(destination === undefined ? {} : { builderDestination: destination }),
-  });
+  const recovered = { ...toDurableHostedSessionRecord(child) };
+  if (latestDecision !== undefined) {
+    recovered.privateBuildDecision = recoveredBuildDecision(latestDecision, child);
+  }
+  if (latestAuthoring !== undefined) {
+    recovered.privateAuthoringDecision = recoveredAuthoringDecision(latestAuthoring, child);
+  }
+  if (destination !== undefined) {
+    recovered.builderDestination = destination;
+  }
+  return durableHostedSessionRecordSchema.parse(recovered);
 };
 export const unsettledSendAcknowledgementSchema = z.strictObject({
   operation: hostedOperationRecordSchema,
@@ -1858,12 +1859,16 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       );
     const page = operations.slice(0, limit);
     const last = page.at(-1);
-    return unsettledResponsePageSchema.parse({
+    const result: z.infer<typeof unsettledResponsePageSchema> = {
       operations: structuredClone(page),
-      ...(operations.length > page.length && last !== undefined
-        ? { nextCursor: { createdAtEpochMs: last.createdAtEpochMs, operationId: last.operationId } }
-        : {}),
-    });
+    };
+    if (operations.length > page.length && last !== undefined) {
+      result.nextCursor = {
+        createdAtEpochMs: last.createdAtEpochMs,
+        operationId: last.operationId,
+      };
+    }
+    return unsettledResponsePageSchema.parse(result);
   }
 
   // oxlint-disable-next-line eslint/complexity -- Settlement now checks the native recovery receipt alongside existing operation guards.

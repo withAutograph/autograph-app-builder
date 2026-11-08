@@ -360,7 +360,7 @@ export const summarizeNativeTurnExecution = (input: {
   }
   const attempts = [...selected.attempts.values()];
   const historical = historicalFailure(turns, selected);
-  return {
+  const evidence: NativeTurnExecutionEvidence = {
     version: 1,
     kind: "native-turn-execution-evidence-v1",
     sessionId: input.sessionId,
@@ -377,6 +377,9 @@ export const summarizeNativeTurnExecution = (input: {
       attempts,
       execution: disposition(attempts),
     },
-    ...(historical === undefined ? {} : { lastHistoricalFailedExecution: historical }),
   };
+  if (historical !== undefined) {
+    evidence.lastHistoricalFailedExecution = historical;
+  }
+  return evidence;
 };
