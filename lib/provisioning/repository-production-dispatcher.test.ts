@@ -1,5 +1,6 @@
 /* oxlint-disable eslint/require-await, unicorn/no-await-expression-member -- Async fixture ports retain rejection semantics; assertions inspect their awaited outcomes directly. */
-import type { z } from "zod";
+import { z } from "zod";
+import { createRepositoryProductionManagement } from "../app-access/native-management";
 import { RepositoryProductionDestinationRequiredError } from "./repository-production-destination";
 import { HostedOperatorError } from "./hosted-operator-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -19,6 +20,7 @@ import type { RepositoryProductionHandlerDependencies } from "./repository-produ
 import type {
   RepositoryProductionScope,
   RepositoryProductionIntent,
+  RepositoryProductionRow,
 } from "./repository-production-contract";
 
 afterEach(() => vi.restoreAllMocks());
@@ -113,6 +115,132 @@ const fixture = () => {
   return { deps, prepared, send };
 };
 describe("protected repository Production dispatcher", () => {
+  it.each(["idle", "pending"] as const)(
+    "projects the real initial sign-in before app schema exists (%s schema)",
+    async (schemaState) => {
+      const f = fixture();
+      const appIntent: RepositoryProductionIntent = {
+        ...intent,
+        creatorRoles: ["requester"],
+        storage: {
+          kind: "postgres",
+          artifactRef: "checked-release",
+          releaseId: "release",
+          manifestSha256: "b".repeat(64),
+          databaseEnvironment: "APP_DATABASE_URL",
+        },
+      };
+      let row: RepositoryProductionRow = {
+        operationRef: repositoryProductionOperationRef(scope),
+        revision: 1,
+        record: {
+          ...initialRepositoryProductionRecord(scope, appIntent),
+          privateState: { sealed: "existing-credentials" },
+          lease: { leaseId: "11111111-1111-4111-a111-111111111111", fenceGeneration: 1 },
+        },
+      };
+      row.record.effects["allocate-storage"] = { state: "applied", receipt: { owned: true } };
+      row.record.effects["install-schema"] = { state: schemaState };
+      const signInUrl = `${scope.publicOrigin}/api/auth/platform/app-invitation/accept?invitationId=${row.operationRef}`;
+      const unavailableAppDatabase = vi.fn(async () => {
+        throw new Error("app schema is not installed");
+      });
+      const prepareIdentity = vi.fn(async () => {});
+      const setup = createRepositoryProductionSetup({
+        store: {
+          read: async () => structuredClone(row),
+          reserve: unavailableAppDatabase,
+          compareAndSet: async (before, record) => {
+            expect(before.revision).toBe(row.revision);
+            row = { ...row, revision: row.revision + 1, record: structuredClone(record) };
+            return structuredClone(row);
+          },
+        },
+        assertAuthorized: async () => {},
+        withLease: async (_scope, run) => await run(async () => {}),
+        reservePrivateState: unavailableAppDatabase,
+        prepareCreatorIdentity: prepareIdentity,
+        readCreatorIdentity: async () => ({ state: "required", signInUrl }),
+        apply: unavailableAppDatabase,
+        reconcile: async ({ effect }) =>
+          effect === "allocate-storage"
+            ? { state: "applied", receipt: { owned: true } }
+            : await unavailableAppDatabase(),
+      });
+      const authReads: string[] = [];
+      const management = createRepositoryProductionManagement({
+        builderOrigin: "https://builder.test",
+        readSetup: async () => structuredClone(row),
+        realm: () => ({}),
+        appUrl: async () => `${scope.publicOrigin}/${scope.appId}`,
+        roles: async () => appIntent.creatorRoles,
+        assertAuthorized: async () => {},
+        withLease: async (_scope, run) => await run(async () => {}),
+        journal: {
+          pending: async () => [],
+          reserve: unavailableAppDatabase,
+          update: unavailableAppDatabase,
+          findInvitation: unavailableAppDatabase,
+        },
+        retrySetup: unavailableAppDatabase,
+        renewSignIn: unavailableAppDatabase,
+        resolve: async () => {
+          const state = await setup.status(scope, appIntent);
+          return {
+            scope,
+            appName: "Requests",
+            organizationName: "Dev",
+            canManage: true,
+            roles: appIntent.creatorRoles.map((id) => ({ id, label: id })),
+            creator: {
+              status: state.state === "identity-required" ? "sign_in_required" : "setting_up",
+              ...(state.signInUrl === undefined ? {} : { signInUrl: state.signInUrl }),
+            },
+          };
+        },
+        workers: () => ({
+          mutateAppAccess: unavailableAppDatabase,
+          inspectAppAccess: unavailableAppDatabase,
+          invokeAuthManagement: async (context, input, readOnly) => {
+            const { action } = z
+              .object({ request: z.object({ action: z.string() }) })
+              .parse(input).request;
+            expect(readOnly).toBe(true);
+            expect(["list-members", "list"]).toContain(action);
+            authReads.push(action);
+            return {
+              version: 1,
+              status: "applied",
+              operation_id: context.row.operationRef,
+              context_digest: "c".repeat(64),
+              fence_generation: 1,
+              readback_sha256: "d".repeat(64),
+              result: [],
+            };
+          },
+        }),
+      });
+      f.deps.management.read = management.read;
+      vi.mocked(f.deps.resolveSetup).mockResolvedValue({ scope, intent: appIntent, setup });
+      const response = await f.send({
+        version: 1,
+        ...owner,
+        action: "prepare",
+        approvedByCallId: "approved",
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        creator: { status: "sign_in_required", signInUrl },
+        members: [],
+        invitations: [],
+        setup: { state: "identity-required", signInUrl },
+      });
+      expect(prepareIdentity).toHaveBeenCalledOnce();
+      expect(authReads).toEqual(["list-members", "list"]);
+      expect(unavailableAppDatabase).not.toHaveBeenCalled();
+      expect(row.record.effects["install-schema"].state).toBe(schemaState);
+    },
+  );
   it("plans without provisioning and refuses a prepare with no saved approval", async () => {
     const f = fixture();
     const response = await f.send({ version: 1, ...owner, action: "plan" });

@@ -222,7 +222,10 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       authRuntime: connections.authRuntime,
     };
     const proof =
-      managedAccess === undefined && (operation === "membership" || operation === "access")
+      managedAccess === undefined &&
+      (operation === "membership" ||
+        operation === "access" ||
+        (operation === "schema" && row.record.effects["creator-access"].state !== "applied"))
         ? await creator(context)
         : undefined;
     const access =
