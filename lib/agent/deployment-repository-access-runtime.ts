@@ -67,6 +67,8 @@ import {
 } from "../integrations/local-provider-emulation";
 import { providerEmulationFetch } from "../integrations/provider-emulation-fetch";
 
+const PROVIDER_UNAVAILABLE = "provider-unavailable";
+
 const failed = (reason: string, message: string, retryable = false) =>
   new ConnectionAuthorizationFailedError("github-repository-access", {
     message,
@@ -248,7 +250,7 @@ export function createRepositoryAccessRuntime(input: {
         };
       },
     });
-    if (result.status === "provider-unavailable" && deniedInstallations.size > 0 && !unavailable) {
+    if (result.status === PROVIDER_UNAVAILABLE && deniedInstallations.size > 0 && !unavailable) {
       return {
         action: "update",
         repository: result.repository,
@@ -360,7 +362,7 @@ export function createRepositoryAccessRuntime(input: {
           if (access.status === "ready") {
             return { token: access.accessDigest };
           }
-          if (access.status === "provider-unavailable") {
+          if (access.status === PROVIDER_UNAVAILABLE) {
             throw failed(
               "provider_unavailable",
               "GitHub could not confirm access to this repository.",
@@ -384,7 +386,7 @@ export function createRepositoryAccessRuntime(input: {
               "Choose which connected GitHub account Autograph should use.",
             );
           }
-          if (access.status === "provider-unavailable") {
+          if (access.status === PROVIDER_UNAVAILABLE) {
             throw failed(
               "provider_unavailable",
               "GitHub could not confirm repository access.",

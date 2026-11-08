@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { hostedMcpAuthConfigSchema } from "../mcp/request-auth";
 
+const hostedPreviewRuntime = "hosted-preview";
 const sha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const gitObjectSchema = z.string().regex(/^[a-f0-9]{40}$/u);
 
@@ -64,7 +65,7 @@ export const hostedPreviewSourceConfigurationReceiptSchema = z.strictObject({
   databaseContractDigest: sha256Schema,
   evidenceLevel: z.literal("source-configuration-only"),
   forwarderContractDigest: sha256Schema,
-  runtime: z.literal("hosted-preview"),
+  runtime: z.literal(hostedPreviewRuntime),
   sameOriginContractDigest: sha256Schema,
   secrets: z.strictObject({
     databaseUrlTransport: z.literal("runtime-environment-only"),
@@ -97,7 +98,7 @@ export const hostedPreviewActivationReceiptSchema = z.strictObject({
   fiveToolLifecycleProofDigest: sha256Schema,
   mintedTokenContractDigest: sha256Schema,
   oauthMetadataReadbackDigest: sha256Schema,
-  runtime: z.literal("hosted-preview"),
+  runtime: z.literal(hostedPreviewRuntime),
   secrets: z.strictObject({ included: z.literal(false) }),
   sourceConfigurationReceiptDigest: sha256Schema,
   sourceSha: gitObjectSchema,
@@ -134,7 +135,7 @@ export function buildHostedPreviewSourceConfigurationReceipt(input: {
     databaseContractDigest: digest(configuration.database),
     evidenceLevel: "source-configuration-only",
     forwarderContractDigest: digest(configuration.forwarder),
-    runtime: "hosted-preview",
+    runtime: hostedPreviewRuntime,
     sameOriginContractDigest: digest({
       eveBaseUrl: configuration.eve.baseUrl,
       resourceOrigin: new URL(configuration.auth.resourceUrl).origin,

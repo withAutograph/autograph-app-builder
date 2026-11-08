@@ -24,6 +24,8 @@ import { assertReconciliationCompletionOwnerForSession } from "./compiled-operat
 import { recordPublishedDraftRepairForSession } from "./published-app-source";
 import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 
+const PUBLISHED_DRAFT_REPAIR = "published-draft-repair";
+
 const retainAndReturn = (
   completion: Parameters<typeof retainPublishedDraftRepairCompletion>[0],
 ) => {
@@ -45,7 +47,7 @@ export const sealPublishedDraftRepair = async (input: {
   const { ctx } = input;
   const state = appBuilderWorkflowState.get();
   const candidate = draftReconciliationState.get();
-  if (state.phase !== "reviewed" || candidate?.kind !== "published-draft-repair") {
+  if (state.phase !== "reviewed" || candidate?.kind !== PUBLISHED_DRAFT_REPAIR) {
     throw new Error("Prepare the current owned draft repair before sealing its update.");
   }
   if (
@@ -58,7 +60,7 @@ export const sealPublishedDraftRepair = async (input: {
     );
   }
   const { repair, repairReview: review, validation } = candidate;
-  const compilation = candidate.validation.compilation;
+  const { compilation } = candidate.validation;
   assertPublishedDraftRepairReview(review);
   const matches = [
     input.expectedGitHubSourceDigest === undefined ||
@@ -95,7 +97,7 @@ export const sealPublishedDraftRepair = async (input: {
     selectedCheckoutHeadTree: candidate.headTree,
   });
   const completion = {
-    kind: "published-draft-repair" as const,
+    kind: PUBLISHED_DRAFT_REPAIR,
     proposal,
     review,
     appReview: {
@@ -173,7 +175,7 @@ export const updatePublishedDraftRepair = async (input: {
   const state = appBuilderWorkflowState.get();
   const candidate = draftReconciliationState.get();
   if (
-    candidate?.kind !== "published-draft-repair" ||
+    candidate?.kind !== PUBLISHED_DRAFT_REPAIR ||
     state.phase !== "reviewed" ||
     candidate.validation === undefined
   ) {
