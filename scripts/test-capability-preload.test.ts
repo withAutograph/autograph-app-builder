@@ -47,9 +47,12 @@ describe("test capability preload", () => {
     const accessor = (process as unknown as Record<symbol, (() => unknown) | undefined>)[
       Symbol.for("withAutograph.autograph-app-builder.test-capability-registry.v2")
     ];
-    const capability = accessor?.() as
-      | { id: string; version: number; capabilities: string[] }
-      | undefined;
+    const capabilitySchema = z.object({
+      capabilities: z.array(z.string()),
+      id: z.string(),
+      version: z.number(),
+    });
+    const capability = capabilitySchema.optional().parse(accessor?.());
     expect(capability).toMatchObject({
       capabilities: fullCapabilities,
       version: 1,
@@ -77,27 +80,29 @@ describe("test capability preload", () => {
       },
       workerData: { spawnNested: true },
     });
-    const [result] = (await once(worker, "message")) as [
-      {
-        capability: typeof capability;
-        appRoot: string | null;
-        eveDev: string | null;
-        nestedCapability: typeof capability;
-        nestedAppRoot: string | null;
-        nestedEveDev: string | null;
-        nestedWorkflowBodyTimeout: string | null;
-        nestedWorkflowHeadersTimeout: string | null;
-        workflowBaseUrl: string | null;
-        workflowBodyTimeout: string | null;
-        workflowHeadersTimeout: string | null;
-        port: string | null;
-        hasTransportSecret: boolean;
-        sandboxRunId: string | null;
-        evaluation: string | null;
-        evaluationRunId: string | null;
-        hasGateAEnvironment: boolean;
-      },
-    ];
+    const messages: unknown[] = await once(worker, "message");
+    const [message] = messages;
+    const result = z
+      .object({
+        appRoot: z.string().nullable(),
+        capability: capabilitySchema.nullable(),
+        evaluation: z.string().nullable(),
+        evaluationRunId: z.string().nullable(),
+        eveDev: z.string().nullable(),
+        hasGateAEnvironment: z.boolean(),
+        hasTransportSecret: z.boolean(),
+        nestedAppRoot: z.string().nullable(),
+        nestedCapability: capabilitySchema.nullable(),
+        nestedEveDev: z.string().nullable(),
+        nestedWorkflowBodyTimeout: z.string().nullable(),
+        nestedWorkflowHeadersTimeout: z.string().nullable(),
+        port: z.string().nullable(),
+        sandboxRunId: z.string().nullable(),
+        workflowBaseUrl: z.string().nullable(),
+        workflowBodyTimeout: z.string().nullable(),
+        workflowHeadersTimeout: z.string().nullable(),
+      })
+      .parse(message);
     await worker.terminate();
     expect(result.capability).toMatchObject({ version: 1 });
     expect(result.capability?.id).not.toBe(capability?.id);

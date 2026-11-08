@@ -104,10 +104,10 @@ describe("Eve durable turn execution envelope", () => {
         getSandbox,
         session: { auth: {}, id: "session_1" },
       } as never;
-      const events = hook.events as Record<
-        string,
-        (event: never, context: never) => void | Promise<void>
-      >;
+      const { events } = hook;
+      if (events === undefined) {
+        throw new Error("fixture_missing_hook_events");
+      }
 
       await events["turn.started"]?.({} as never, context);
       await events["turn.completed"]?.({} as never, context);

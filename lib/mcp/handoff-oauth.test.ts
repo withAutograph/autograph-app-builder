@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { activeBuilderModelId } from "../integrations/active-model";
 import {
   createRealOAuthHarness,
@@ -213,7 +214,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
         }),
       );
       expect(create.status).toBe(200);
-      const { handoffId } = (await create.json()) as { handoffId: string };
+      const { handoffId } = z.object({ handoffId: z.string() }).parse(await create.json());
       expect(journalRead).toHaveBeenCalledWith({
         authority,
         requestId: provisioningRequestId,

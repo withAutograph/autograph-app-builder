@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import {
   hostedProofScenarioSchema,
@@ -401,16 +402,26 @@ describe("hosted portable fresh-client proof", () => {
     const leaking = hostedFixture();
     const fetcher: typeof fetch = async (url, init) => {
       const response = await leaking(url, init);
-      const body = JSON.parse(String(init?.body ?? "{}")) as {
-        method?: string;
-        params?: { name?: string };
-      };
+      const body = z
+        .looseObject({
+          method: z.string().optional(),
+          params: z.looseObject({ name: z.string().optional() }).optional(),
+        })
+        .parse(JSON.parse(String(init?.body ?? "{}")));
       if (body.method !== "tools/call" || body.params?.name !== "autograph_get") {
         return response;
       }
-      const payload = JSON.parse(await response.text()) as {
-        result?: { structuredContent?: { events?: unknown[] } };
-      };
+      const payload = z
+        .looseObject({
+          result: z
+            .looseObject({
+              structuredContent: z
+                .looseObject({ events: z.array(z.unknown()).optional() })
+                .optional(),
+            })
+            .optional(),
+        })
+        .parse(JSON.parse(await response.text()));
       payload.result?.structuredContent?.events?.push({
         index: 99,
         text: `private ${primaryToken} wrun_PRIVATE`,

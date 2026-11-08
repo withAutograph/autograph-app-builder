@@ -896,7 +896,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       const request: typeof fetch = async (input, init) => {
         const url = new URL(String(input));
         if (url.pathname === "/app/installations/456/access_tokens") {
-          const body = JSON.parse(String(init?.body)) as { permissions: unknown };
+          const body = z
+            .looseObject({ permissions: z.unknown() })
+            .parse(JSON.parse(String(init?.body)));
           tokenRequests.push(body);
           return json(
             {
@@ -1413,11 +1415,13 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         return json({ sha: "f".repeat(40) }, 201);
       }
       if (url.endsWith("/git/trees") && method === "POST") {
-        createdTreeBody = body as { base_tree?: string };
+        createdTreeBody = z.looseObject({ base_tree: z.string().optional() }).parse(body);
         return json({ sha: "e".repeat(40) }, 201);
       }
       if (url.endsWith("/git/commits") && method === "POST") {
-        createdCommitBody = body as { parents: string[]; tree: string };
+        createdCommitBody = z
+          .looseObject({ parents: z.array(z.string()), tree: z.string() })
+          .parse(body);
         return json({ sha: "9".repeat(40) }, 201);
       }
       if (url.endsWith("/git/refs") && method === "POST") {
@@ -1547,7 +1551,9 @@ describe("existing draft publication origin", () => {
         return json({ id: overrides.appId ?? 123, slug: "autograph-app-builder" });
       }
       if (url.endsWith("/app/installations/456/access_tokens")) {
-        const tokenRequest = JSON.parse(String(init.body)) as { permissions: unknown };
+        const tokenRequest = z
+          .looseObject({ permissions: z.unknown() })
+          .parse(JSON.parse(String(init.body)));
         return json(
           {
             permissions: tokenRequest.permissions,
