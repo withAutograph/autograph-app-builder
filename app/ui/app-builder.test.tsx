@@ -5,7 +5,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import axe from "axe-core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { appNameFromBrief, repositoryNameFromAppName } from "./builder-defaults";
 import { AnonymousBuilder } from "./anonymous-builder";
 import { AuthenticatedBuilder as AppBuilderComponent } from "./authenticated-builder";
@@ -335,6 +335,37 @@ const changeVisibility = (value: "hidden" | "visible") => {
   Object.defineProperty(document, "visibilityState", { configurable: true, value });
   document.dispatchEvent(new Event("visibilitychange"));
 };
+
+// jsdom has the dialog element and open state, but not these native methods.
+// Keep this test realm faithful to the production component's open/close effect.
+beforeAll(() => {
+  const { prototype } = window.HTMLDialogElement;
+  const original = Object.getOwnPropertyDescriptors(prototype);
+  Object.defineProperties(prototype, {
+    showModal: {
+      configurable: true,
+      value(this: HTMLDialogElement) {
+        this.open = true;
+      },
+    },
+    close: {
+      configurable: true,
+      value(this: HTMLDialogElement) {
+        this.open = false;
+      },
+    },
+  });
+  return () => {
+    for (const method of ["showModal", "close"] as const) {
+      const descriptor = original[method];
+      if (descriptor === undefined) {
+        Reflect.deleteProperty(prototype, method);
+      } else {
+        Object.defineProperty(prototype, method, descriptor);
+      }
+    }
+  };
+});
 
 afterEach(async () => {
   vi.useRealTimers();
@@ -1472,6 +1503,7 @@ describe("Vercel-faithful App Builder flow", () => {
   });
 
   it("runs the connection authorization, configuration, and customization flow", async () => {
+    const originalOverflow = document.body.style.overflow;
     const view = await render(
       <AppBuilder authenticated user={{ email: "taylor@example.com", name: "Taylor" }} />,
     );
@@ -1494,6 +1526,11 @@ describe("Vercel-faithful App Builder flow", () => {
       ),
     );
     expect(view.querySelector("#connection-drawer-title")?.textContent).toBe("Add Connection");
+    const dialog = requireElement(
+      view.querySelector<HTMLDialogElement>('dialog[aria-labelledby="connection-drawer-title"]'),
+    );
+    expect(dialog.open).toBe(true);
+    expect(document.body.style.overflow).toBe("hidden");
     expect(view.textContent).toContain("Connect QuickBooks");
 
     const drawerAccessibility = await axe.run(view, {
@@ -1509,6 +1546,9 @@ describe("Vercel-faithful App Builder flow", () => {
       ),
     );
     expect(view.textContent).toContain("Connection successful");
+    expect(
+      view.querySelector<HTMLDialogElement>('dialog[aria-label="Connection successful"]')?.open,
+    ).toBe(true);
     await click(
       requireElement(
         [...view.querySelectorAll("button")].find((button) => button.textContent === "Return"),
@@ -1532,6 +1572,8 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.querySelector('[aria-label="Added connections"]')).not.toBeNull();
     expect(view.querySelector('[aria-label="Remove QuickBooks"]')).not.toBeNull();
     expect(view.textContent).toContain("Customize");
+    expect(dialog.open).toBe(false);
+    expect(document.body.style.overflow).toBe(originalOverflow);
 
     await click(
       requireElement(view.querySelector<HTMLButtonElement>('[aria-label="Remove QuickBooks"]')),
