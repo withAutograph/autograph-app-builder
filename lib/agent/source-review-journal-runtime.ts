@@ -136,7 +136,7 @@ export const sourceReviewContextStoreForSession = async (input: {
       authority: localAuthority,
       assertCurrentOwner: assertArtifactOwner,
     });
-    store = local.store;
+    ({ store } = local);
   }
   return createApplicationReviewContextStore({
     store,

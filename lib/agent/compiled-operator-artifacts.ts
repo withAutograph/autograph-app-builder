@@ -179,7 +179,7 @@ const resolveCompiledArtifactSession = async (
         workspaceId: state.workspace.workspaceId,
       };
     } else {
-      privateApplyScope = completion.compilation.privateApplyScope;
+      ({ privateApplyScope } = completion.compilation);
     }
     assertCurrentOwner = async (current) => {
       assertCompilation();

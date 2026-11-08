@@ -258,8 +258,10 @@ const dependencyAttempt = async (
     exitCode: execution.exitCode,
     logs,
     truncated: out.omitted || err.omitted || combined.length > 2400,
-    ...(recoveryOfValidationFailure === undefined ? {} : { recoveryOfValidationFailure }),
   };
+  if (recoveryOfValidationFailure !== undefined) {
+    attempt.recoveryOfValidationFailure = recoveryOfValidationFailure;
+  }
   // Persist references before any failure is surfaced to the workflow.
   await input.onAttempt?.(attempt);
   if (

@@ -1290,7 +1290,7 @@ export const assessApplicationSource = async (
         roundOptions,
         continuation,
       );
-      continuation = result.continuation;
+      ({ continuation } = result);
       if (result.assessment !== undefined) {
         return result.assessment;
       }
