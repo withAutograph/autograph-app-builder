@@ -1,4 +1,5 @@
 /* oxlint-disable eslint/require-await -- Browser doubles preserve asynchronous Playwright operations. */
+import { compileFunction } from "node:vm";
 import { runtimeReceiptSchema } from "./self-reproduction-parity-evidence";
 import { expect, it, vi } from "vitest";
 import type {
@@ -55,8 +56,7 @@ it.each(["history", "local-state", "inert", "unknown", "unavailable"])(
         mode === "history" && view === "docs" ? "https://candidate/docs" : "https://candidate/",
     } satisfies CandidateNavigationPage;
     const capture = vi.fn(async () => {});
-    // oxlint-disable-next-line eslint/no-new-func -- Verify serialized portable function has no module closure dependencies.
-    const createPortable = new Function(
+    const createPortable = compileFunction(
       `return (${exerciseCandidateNavigation.toString()})`,
     ) as () => typeof exerciseCandidateNavigation;
     const portable = createPortable();

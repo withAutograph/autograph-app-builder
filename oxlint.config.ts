@@ -797,7 +797,6 @@ export default defineConfig({
         "anti-slop/no-module-mocking": "off",
         "sonarjs/code-eval": "off",
         "sonarjs/no-hardcoded-ip": "off",
-        "typescript/no-implied-eval": "off",
       },
     },
   ],
