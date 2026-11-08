@@ -239,12 +239,12 @@ export function createRepositoryAccessContinuationService(input: {
       if (!record) {
         return;
       }
-      return {
-        repository: record.repository,
-        ...(record.selectedInstallationId
-          ? { selectedInstallationId: record.selectedInstallationId }
-          : {}),
-      };
+      const response: Pick<RepositoryAccessContinuation, "repository" | "selectedInstallationId"> =
+        { repository: record.repository };
+      if (record.selectedInstallationId) {
+        response.selectedInstallationId = record.selectedInstallationId;
+      }
+      return response;
     },
   };
 }

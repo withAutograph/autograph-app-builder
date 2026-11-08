@@ -366,11 +366,16 @@ export const restorePreparedRuntimeExecution = async (input: {
         );
       }
     };
+  interface PreparedBrowserOptions {
+    browserTestEntryPath: typeof browserTestEntryPath;
+    browserTestBaseUrl?: string;
+  }
+  const browserOptions: PreparedBrowserOptions = { browserTestEntryPath };
+  if ((input.browserTestBaseUrl ?? input.normalActors?.origin) !== undefined) {
+    browserOptions.browserTestBaseUrl = input.browserTestBaseUrl ?? input.normalActors?.origin;
+  }
   return {
-    browserTestEntryPath,
-    ...((input.browserTestBaseUrl ?? input.normalActors?.origin) === undefined
-      ? {}
-      : { browserTestBaseUrl: input.browserTestBaseUrl ?? input.normalActors?.origin }),
+    ...browserOptions,
     environmentPath,
     installationProof: {
       ...proof,

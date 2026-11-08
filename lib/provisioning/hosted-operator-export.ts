@@ -242,12 +242,18 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
   };
   const approvalObservation = (
     record: HostedTenantExportExecutionRecord,
-  ): PrivateOperatorApprovalObservationPort => ({
-    ...(record.approvalObservation === undefined ? {} : { state: record.approvalObservation }),
-    save: async (state) => {
-      await update(record, (value) => ({ ...value, approvalObservation: state }));
-    },
-  });
+  ): PrivateOperatorApprovalObservationPort => {
+    const observation: Pick<PrivateOperatorApprovalObservationPort, "state"> = {};
+    if (record.approvalObservation !== undefined) {
+      observation.state = record.approvalObservation;
+    }
+    return {
+      ...observation,
+      save: async (state) => {
+        await update(record, (value) => ({ ...value, approvalObservation: state }));
+      },
+    };
+  };
   const assertApproval = async (
     context: HostedOperatorContext,
     record: HostedTenantExportExecutionRecord,

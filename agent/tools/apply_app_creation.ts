@@ -181,7 +181,7 @@ export default defineTool({
       workspaceDigest: current.workspace.workspaceDigest,
     };
     invalidateProductBehaviorEvidence("source-apply");
-    const result = await executeProposalBoundApply({
+    const applyInput: Parameters<typeof executeProposalBoundApply>[0] = {
       appliedByCallId: ctx.callId,
       artifactRevision: current.appSpec.artifactRevision,
       binding,
@@ -193,31 +193,43 @@ export default defineTool({
       ),
       proposal: current.proposal.target,
       sandbox,
-      ...(fixture
-        ? {
-            snapshotter: (fixtureSandbox, applyRoot) =>
-              inspectFixtureApplyOverlay(fixtureSandbox, applyRoot, current.appSpec.appId),
-          }
-        : {}),
-    });
+    };
+    if (fixture) {
+      applyInput.snapshotter = (fixtureSandbox, applyRoot) =>
+        inspectFixtureApplyOverlay(fixtureSandbox, applyRoot, current.appSpec.appId);
+    }
+    const result = await executeProposalBoundApply(applyInput);
     if (!result.ok) {
       updateExactWorkflow({
         expected: current,
         operation: "target apply failure recording",
-        transition: () => ({
-          appSpec: current.appSpec,
-          applyFailure: result.receipt,
-          artifacts: current.artifacts,
-          dependencyReceipt: current.dependencyReceipt,
-          ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-          identityReceipt: current.identityReceipt,
-          phase: "apply_failed",
-          preparedByCallId: current.preparedByCallId,
-          proposal: current.proposal,
-          sourceReceipt: current.sourceReceipt,
-          version: APP_BUILDER_WORKFLOW_VERSION,
-          workspace: current.workspace,
-        }),
+        transition: () => {
+          type AppliedState = Extract<
+            ReturnType<typeof appBuilderWorkflowState.get>,
+            { phase: "apply_failed" }
+          >;
+          const applied = {
+            appSpec: current.appSpec,
+            applyFailure: result.receipt,
+            artifacts: current.artifacts,
+            dependencyReceipt: current.dependencyReceipt,
+          };
+          const source: Pick<AppliedState, "githubSource"> = {};
+          if (current.githubSource !== undefined) {
+            source.githubSource = current.githubSource;
+          }
+          return {
+            ...applied,
+            ...source,
+            identityReceipt: current.identityReceipt,
+            phase: "apply_failed",
+            preparedByCallId: current.preparedByCallId,
+            proposal: current.proposal,
+            sourceReceipt: current.sourceReceipt,
+            version: APP_BUILDER_WORKFLOW_VERSION,
+            workspace: current.workspace,
+          };
+        },
       });
       const command = result.receipt.failedCommand ?? result.receipt.command.name;
       const diagnostics = [result.receipt.output?.stderr, result.receipt.output?.stdout]
@@ -242,20 +254,33 @@ export default defineTool({
     updateExactWorkflow({
       expected: current,
       operation: "target apply success recording",
-      transition: () => ({
-        appSpec: current.appSpec,
-        applyReceipt: result.receipt,
-        artifacts: current.artifacts,
-        dependencyReceipt: current.dependencyReceipt,
-        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-        identityReceipt: current.identityReceipt,
-        phase: "applied",
-        preparedByCallId: current.preparedByCallId,
-        proposal: current.proposal,
-        sourceReceipt: current.sourceReceipt,
-        version: APP_BUILDER_WORKFLOW_VERSION,
-        workspace: current.workspace,
-      }),
+      transition: () => {
+        type AppliedState = Extract<
+          ReturnType<typeof appBuilderWorkflowState.get>,
+          { phase: "applied" }
+        >;
+        const applied = {
+          appSpec: current.appSpec,
+          applyReceipt: result.receipt,
+          artifacts: current.artifacts,
+          dependencyReceipt: current.dependencyReceipt,
+        };
+        const source: Pick<AppliedState, "githubSource"> = {};
+        if (current.githubSource !== undefined) {
+          source.githubSource = current.githubSource;
+        }
+        return {
+          ...applied,
+          ...source,
+          identityReceipt: current.identityReceipt,
+          phase: "applied",
+          preparedByCallId: current.preparedByCallId,
+          proposal: current.proposal,
+          sourceReceipt: current.sourceReceipt,
+          version: APP_BUILDER_WORKFLOW_VERSION,
+          workspace: current.workspace,
+        };
+      },
     });
     return {
       appId: current.proposal.target.contract.appId,

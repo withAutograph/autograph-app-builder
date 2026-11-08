@@ -3931,24 +3931,26 @@ export function createHostedEveSessionService(input: {
         }
         const responseCursor =
           before === undefined ? mutationEventCursor(session) : publicSnapshotEventCount(before);
-        const responseInput = {
+        const responseDetails: Pick<
+          Parameters<HostedEveTransport["respond"]>[0],
+          "adapterSessionId"
+        > &
+          Partial<Parameters<HostedEveTransport["respond"]>[0]> = {
           adapterSessionId: session.adapterSessionId,
-          ...(session.version === 2 && session.nativeRecoveryBinding !== undefined
-            ? { logicalSessionId: session.nativeRecoveryBinding.logicalSessionId }
-            : {}),
-          ...(marker === undefined ? {} : { internalSessionLimitResponse: marker }),
-          ...(preflight?.nativeObservationState === undefined
-            ? {}
-            : {
-                nativeObservationState: preflight.nativeObservationState,
-              }),
-          operationId,
-          principal,
-          responses,
-          ...(session.version === 2 && session.sourceHandoffId
-            ? { sourceHandoffId: session.sourceHandoffId }
-            : {}),
         };
+        if (session.version === 2 && session.nativeRecoveryBinding !== undefined) {
+          responseDetails.logicalSessionId = session.nativeRecoveryBinding.logicalSessionId;
+        }
+        if (marker !== undefined) {
+          responseDetails.internalSessionLimitResponse = marker;
+        }
+        if (preflight?.nativeObservationState !== undefined) {
+          responseDetails.nativeObservationState = preflight.nativeObservationState;
+        }
+        const responseInput = { ...responseDetails, operationId, principal, responses };
+        if (session.version === 2 && session.sourceHandoffId) {
+          responseInput.sourceHandoffId = session.sourceHandoffId;
+        }
         if (nativePreflight) {
           await input.transport.respondAccepted?.(responseInput);
           const result = await readAcceptedMutation(
