@@ -123,7 +123,10 @@ export const createPublishedDraftRepairReview = (input: Input): PublishedDraftRe
     ...input,
     changes: canonicalChanges(input.changes),
   });
-  const changeSet = {
+  const changeSet: Omit<
+    PublishedDraftRepairReview,
+    "digest" | "changeSetDigest" | "reviewedByCallId"
+  > = {
     kind: publishedDraftRepairKind,
     version: 1 as const,
     ...evidence,

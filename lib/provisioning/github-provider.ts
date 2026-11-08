@@ -307,7 +307,7 @@ export async function provisionGitHubRepository(input: {
         authority: input.authority,
         providerUserId: input.installation.accountId,
       });
-      if (!(credential?.active ?? false)) {
+      if (credential === undefined || credential === null || !credential.active) {
         throw new Error(CREDENTIAL_UNAVAILABLE);
       }
       const expires = credential.tokens.accessTokenExpiresAt

@@ -462,7 +462,7 @@ describe("target validation", () => {
         onChunk,
         task,
       };
-      if (shard !== undefined && shard !== "") {
+      if (shard !== undefined) {
         expected.shard = shard;
       }
       if (alreadyCompiled) {
