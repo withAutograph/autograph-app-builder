@@ -134,10 +134,10 @@ const desiredPlan = () =>
       origin: "https://apps.example",
       actors: [
         {
+          account: "capture-existing",
           actorKey: "owner",
           email: "owner@example.test",
           name: "Owner",
-          account: "capture-existing",
         },
       ],
       organizations: [],
@@ -190,8 +190,8 @@ const desiredPlan = () =>
     },
     effects: [
       ...bootstrapPlan().effects,
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
+      { description: "Gateway configuration", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
     ],
   });
 const completedRecord = (plan: HostedOperatorPlan = desiredPlan()) =>
