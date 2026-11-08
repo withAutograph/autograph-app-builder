@@ -10,7 +10,9 @@ import {
 } from "../support/harness";
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-test.beforeEach(async () => resetApplicationState());
+test.beforeEach(async () => {
+  await resetApplicationState();
+});
 
 test("anonymous brief continues through passkey signup into the builder", async ({
   context,

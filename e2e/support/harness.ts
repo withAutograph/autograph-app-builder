@@ -121,7 +121,7 @@ export async function currentSession(page: Page) {
   try {
     const response = await page.request.get("/api/auth/get-session");
     if (!response.ok()) return null;
-    return response.json();
+    return await response.json();
   } catch {
     return null;
   }
@@ -131,7 +131,7 @@ export async function currentSession(page: Page) {
 export async function signOut(page: Page) {
   await page.goto("/auth/sign-out");
   await expect(page).toHaveURL(/\/auth\/sign-in/u);
-  await expect.poll(() => currentSession(page)).toBeNull();
+  await expect.poll(async () => await currentSession(page)).toBeNull();
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -152,7 +152,7 @@ export async function finishOAuth(page: Page, provider: EmulatedProvider, callba
   );
   await page.getByRole("button", { name: `Continue with ${provider}` }).click();
   await expect
-    .poll(() => currentSession(page), { timeout: 30_000 })
+    .poll(async () => await currentSession(page), { timeout: 30_000 })
     .toMatchObject({ user: { email: "dev@autograph.local" } });
   // Session creation precedes the setting-up route's final navigation. Do not
   // let a caller's goto interrupt that still-running OAuth continuation.
@@ -191,7 +191,7 @@ export async function registerPasskey(context: BrowserContext, page: Page, callb
   await page.goto(`/auth/sign-up?callbackURL=${encodeURIComponent(callbackURL)}`);
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
   await expect
-    .poll(() => currentSession(page), { timeout: 30_000 })
+    .poll(async () => await currentSession(page), { timeout: 30_000 })
     .toMatchObject({ user: { emailVerified: false } });
   // Session creation precedes the setting-up route's final navigation. Wait
   // for the callback before a caller navigates away, as finishOAuth does.
@@ -332,7 +332,7 @@ export async function installBrowserBoundaries(
 
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function browserBoundaryState(page: Page) {
-  return page.evaluate(() => {
+  return await page.evaluate(() => {
     const state = (
       window as typeof window & {
         __e2eBoundaries: { clipboard: string[]; opened: string[] };

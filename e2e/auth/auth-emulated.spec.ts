@@ -84,7 +84,9 @@ async function expectPasskeyFailure(page: Page) {
 }
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-test.beforeEach(async () => resetApplicationState());
+test.beforeEach(async () => {
+  await resetApplicationState();
+});
 
 test("passkey UI defaults off without a Vercel flag override", async ({ browser }) => {
   const context = await browser.newContext({
@@ -216,13 +218,13 @@ test("a sign-in challenge failure stays local without invoking WebAuthn", async 
       ).recordCredentialRequest();
     });
   });
-  await page.route("**/api/auth/passkey/generate-authenticate-options*", (route) =>
-    route.fulfill({
+  await page.route("**/api/auth/passkey/generate-authenticate-options*", async (route) => {
+    await route.fulfill({
       body: JSON.stringify({ code: "CHALLENGE_UNAVAILABLE" }),
       contentType: "application/json",
       status: 503,
-    }),
-  );
+    });
+  });
 
   await page.goto("/auth/sign-in");
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
@@ -293,7 +295,7 @@ test("passkey registration guards Sign Up and supports returning login", async (
       "platform",
     );
     await expect
-      .poll(() => authCounts(), { timeout: 30_000 })
+      .poll(async () => await authCounts(), { timeout: 30_000 })
       .toEqual({
         activeSessions: 1,
         githubInstallations: 0,
@@ -333,7 +335,7 @@ test("passkey registration guards Sign Up and supports returning login", async (
     await expect
       .poll(async () => {
         const response = await page.request.get("/api/auth/get-session");
-        return response.json();
+        return await response.json();
       })
       .toMatchObject({ user: { emailVerified: false } });
     expect(await authCounts()).toEqual(registeredCounts);
@@ -557,13 +559,13 @@ for (const contextFailure of [
     page,
   }) => {
     let registrationOptionsRequests = 0;
-    await page.route("**/api/auth/passkey/onboarding-context", (route) =>
-      route.fulfill({
+    await page.route("**/api/auth/passkey/onboarding-context", async (route) => {
+      await route.fulfill({
         body: JSON.stringify({ code: "ONBOARDING_CONTEXT_UNAVAILABLE" }),
         contentType: "application/json",
         status: contextFailure.status,
-      }),
-    );
+      });
+    });
     page.on("request", (request) => {
       if (new URL(request.url()).pathname === "/api/auth/passkey/generate-register-options") {
         registrationOptionsRequests += 1;
@@ -588,13 +590,13 @@ test("a registration-options failure retains only its bounded onboarding context
   reportPasskeyFailures(page);
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
-    await page.route("**/api/auth/passkey/generate-register-options*", (route) =>
-      route.fulfill({
+    await page.route("**/api/auth/passkey/generate-register-options*", async (route) => {
+      await route.fulfill({
         body: JSON.stringify({ code: "CHALLENGE_UNAVAILABLE" }),
         contentType: "application/json",
         status: 503,
-      }),
-    );
+      });
+    });
 
     await page.goto("/auth/sign-up");
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
@@ -621,9 +623,9 @@ test("verification transport loss stays on Sign In after an assertion", async ({
     await signOut(page);
     const baseline = await authCounts();
     let authenticationVerificationRequests = 0;
-    await page.route("**/api/auth/passkey/verify-authentication", (route) => {
+    await page.route("**/api/auth/passkey/verify-authentication", async (route) => {
       authenticationVerificationRequests += 1;
-      return route.abort("failed");
+      await route.abort("failed");
     });
 
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
@@ -639,7 +641,7 @@ test("verification transport loss stays on Sign In after an assertion", async ({
     await page.unroute("**/api/auth/passkey/verify-authentication");
     await page.getByRole("button", { name: "Couldn’t use your passkey. Try again." }).click();
     await expect
-      .poll(() => currentSession(page))
+      .poll(async () => await currentSession(page))
       .toMatchObject({
         user: { emailVerified: false },
       });
@@ -659,9 +661,9 @@ test("server rejection after an assertion stays on Sign In without changing iden
     await signOut(page);
     const baseline = await authCounts();
     let verificationRequests = 0;
-    await page.route("**/api/auth/passkey/verify-authentication", (route) => {
+    await page.route("**/api/auth/passkey/verify-authentication", async (route) => {
       verificationRequests += 1;
-      return route.fulfill({
+      await route.fulfill({
         body: JSON.stringify({ code: "INVALID_PASSKEY" }),
         contentType: "application/json",
         status: 401,
@@ -696,7 +698,7 @@ test("a session created after Sign Up renders blocks context issuance", async ({
 
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
     await expect
-      .poll(() => currentSession(page))
+      .poll(async () => await currentSession(page))
       .toMatchObject({ user: { id: expect.any(String) } });
     const baseline = await authCounts();
     const deviceCredentials = await authenticator.credentials();
@@ -733,7 +735,7 @@ test("a session created after context issuance blocks registration", async ({ co
   try {
     await page.route(/\/api\/auth\/passkey\/generate-register-options(?:\?|$)/u, async (route) => {
       const response = await route.fetch();
-      markOptionsGenerated(undefined);
+      markOptionsGenerated();
       await optionsResponseMayContinue;
       await route.fulfill({ response });
     });
@@ -751,7 +753,7 @@ test("a session created after context issuance blocks registration", async ({ co
     const verificationResponsePromise = page.waitForResponse(
       (response) => new URL(response.url()).pathname === "/api/auth/passkey/verify-registration",
     );
-    releaseOptionsResponse(undefined);
+    releaseOptionsResponse();
     await clickPromise;
     const verificationResponse = await verificationResponsePromise;
 
@@ -765,7 +767,7 @@ test("a session created after context issuance blocks registration", async ({ co
     const finalCounts = await authCounts();
     expect(finalCounts.passkeys).toBe(0);
   } finally {
-    releaseOptionsResponse(undefined);
+    releaseOptionsResponse();
     await sessionPage?.close();
     await authenticator.dispose();
   }
@@ -921,8 +923,8 @@ test("provider account supports multiple passkeys but retains its final passkey"
     expect(list.ok()).toBeTruthy();
     const credentials = z.array(z.looseObject({ id: z.string() })).parse(await list.json());
     expect(credentials).toHaveLength(2);
-    const deletePasskey = (id: string) =>
-      page.evaluate(async (passkeyId) => {
+    const deletePasskey = async (id: string) =>
+      await page.evaluate(async (passkeyId) => {
         const response = await fetch("/api/auth/passkey/delete-passkey", {
           body: JSON.stringify({ id: passkeyId }),
           headers: { "Content-Type": "application/json" },

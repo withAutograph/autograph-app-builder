@@ -44,7 +44,9 @@ test.use({ screenshot: "off", trace: "off", video: "off" });
 // or raw status responses. No native-client acceptance is claimed by this suite.
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-test.beforeEach(async () => resetApplicationState());
+test.beforeEach(async () => {
+  await resetApplicationState();
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function completeHandoff(page: Page) {
@@ -287,7 +289,9 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
     "Observe server-confirmed continuation only.",
   );
   await page.bringToFront();
-  await expect.poll(() => page.evaluate(() => document.visibilityState)).toBe("visible");
+  await expect
+    .poll(async () => await page.evaluate(() => document.visibilityState))
+    .toBe("visible");
   const continued = page.getByText("Continued in your app.", { exact: false });
   // The server-rendered handoff never initiates a custom-protocol navigation
   // on arrival. Launching a client is an explicit, user-owned action.

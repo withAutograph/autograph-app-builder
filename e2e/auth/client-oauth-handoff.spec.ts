@@ -27,14 +27,16 @@ import {
 // Authorization codes, browser cookies, and tokens must not enter artifacts.
 test.use({ screenshot: "off", trace: "off", video: "off" });
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-test.beforeEach(async () => resetApplicationState());
+test.beforeEach(async () => {
+  await resetApplicationState();
+});
 let callbackServer: Server | undefined;
 test.afterEach(async () => {
   const server = callbackServer;
   callbackServer = undefined;
   if (server?.listening) {
     server.closeAllConnections();
-    await server.close();
+    server.close();
   }
 });
 
@@ -302,7 +304,7 @@ test("web login and both emulated connections survive Cursor consent, token refr
     } catch {
       throw new Error("OAuth callback navigation failed; URL omitted.");
     }
-    return exchange(page, {
+    return await exchange(page, {
       code,
       code_verifier: verifier,
       grant_type: "authorization_code",

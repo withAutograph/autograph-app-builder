@@ -93,7 +93,9 @@ function expectGitHubControlAndNoOAuthLeak(page: Page, rawValues: readonly strin
 }
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-test.beforeEach(async () => resetApplicationState());
+test.beforeEach(async () => {
+  await resetApplicationState();
+});
 
 test("GitHub return preserves edits made while its checkpoint is in flight", async ({ page }) => {
   await finishOAuth(page, "GitHub");
@@ -108,8 +110,10 @@ test("GitHub return preserves edits made while its checkpoint is in flight", asy
       request.method() !== "POST" ||
       !request.headers()["next-action"] ||
       !request.postData()?.includes("clientMutationId")
-    )
-      return route.continue();
+    ) {
+      await route.continue();
+      return;
+    }
     held = true;
     checkpointIntercepted = true;
     const response = await route.fetch();
@@ -208,8 +212,10 @@ for (const provider of emulatedProviders) {
           request.method() !== "POST" ||
           !request.headers()["next-action"] ||
           !request.postData()?.includes("clientMutationId")
-        )
-          return route.continue();
+        ) {
+          await route.continue();
+          return;
+        }
         checkpointHeld = true;
         // Exercise the real durable save while delaying its acknowledgement
         // beyond the default five-second assertion budget. Callback query
