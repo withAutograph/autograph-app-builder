@@ -268,15 +268,40 @@ const canonicalFiles = (
   return [...input].toSorted((left, right) => compareOverlayPaths(left.path, right.path));
 };
 
-const permissionRequest = (permission: PermissionSnapshot) => ({
-  ...(permission.actions === "read" ? { actions: "read" as const } : {}),
-  ...(permission.variables === "read" ? { actions_variables: "read" as const } : {}),
-  contents: permission.contents,
-  metadata: "read" as const,
-  ...(permission.workflows === "write" ? { workflows: "write" as const } : {}),
-  ...(permission.pullRequests === "none" ? {} : { pull_requests: permission.pullRequests }),
-  ...(permission.administration === "write" ? { administration: "write" as const } : {}),
-});
+interface GitHubPermissionRequest {
+  actions?: "read";
+  actions_variables?: "read";
+  contents: PermissionSnapshot["contents"];
+  metadata: "read";
+  workflows?: "write";
+  pull_requests?: PermissionSnapshot["pullRequests"];
+  administration?: "write";
+}
+
+const permissionRequest = (permission: PermissionSnapshot): GitHubPermissionRequest => {
+  const optionalActions: Pick<GitHubPermissionRequest, "actions" | "actions_variables"> = {};
+  if (permission.actions === "read") {
+    optionalActions.actions = "read";
+  }
+  if (permission.variables === "read") {
+    optionalActions.actions_variables = "read";
+  }
+  const request: GitHubPermissionRequest = {
+    ...optionalActions,
+    contents: permission.contents,
+    metadata: "read",
+  };
+  if (permission.workflows === "write") {
+    request.workflows = "write";
+  }
+  if (permission.pullRequests !== "none") {
+    request.pull_requests = permission.pullRequests;
+  }
+  if (permission.administration === "write") {
+    request.administration = "write";
+  }
+  return request;
+};
 
 const normalizedPermissions = (value: unknown): PermissionSnapshot => {
   if (!record(value)) {
@@ -1683,20 +1708,20 @@ export const createGitHubAppHttpProvider = (input: {
       }[];
       try {
         assertExactGitHubDraftPullRequestContent({ content, proposal });
-        changes = content.changes.map((change) => ({
-          kind: change.kind,
-          path: change.path,
-          ...(change.kind === "added" ? {} : { before: change.before }),
-          ...(change.kind === "deleted"
-            ? {}
-            : {
-                after: Object.fromEntries([
-                  ["path", change.path],
-                  ["mode", change.after.mode === "755" ? "100755" : "100644"],
-                  ["content", change.after.bytes],
-                ]),
-              }),
-        }));
+        changes = content.changes.map((change) => {
+          const entry: (typeof changes)[number] = { kind: change.kind, path: change.path };
+          if (change.kind !== "added") {
+            entry.before = change.before;
+          }
+          if (change.kind !== "deleted") {
+            entry.after = Object.fromEntries([
+              ["path", change.path],
+              ["mode", change.after.mode === "755" ? "100755" : "100644"],
+              ["content", change.after.bytes],
+            ]);
+          }
+          return entry;
+        });
         if (changes.length === 0 || changes.some((change) => !safeSourcePath(change.path))) {
           throw new Error(invalidMaterialMessage);
         }

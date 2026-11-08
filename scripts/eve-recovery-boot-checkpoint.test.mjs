@@ -113,16 +113,18 @@ const fixture = async function fixture(change = () => {}) {
       { stepName: "step//eve@0.68.0//emitTerminalRecoveryWaitingStep", status: "failed" },
     ],
   ]);
-  const event = (slot, eventType, correlationId, eventData = {}) => ({
-    runId: ownerRunId,
-    eventId: eventId(slot),
-    eventType,
-    ...(correlationId === undefined ? {} : { correlationId }),
-    eventData: {
-      ...(steps.has(correlationId) ? { stepName: steps.get(correlationId).stepName } : {}),
-      ...eventData,
-    },
-  });
+  const event = (slot, eventType, correlationId, eventData = {}) => {
+    const value = { runId: ownerRunId, eventId: eventId(slot), eventType };
+    if (correlationId !== undefined) {
+      value.correlationId = correlationId;
+    }
+    const details = {};
+    if (steps.has(correlationId)) {
+      details.stepName = steps.get(correlationId).stepName;
+    }
+    value.eventData = { ...details, ...eventData };
+    return value;
+  };
   const events = [
     event(1, "run_created"),
     event(2, "step_created", "step-derive"),

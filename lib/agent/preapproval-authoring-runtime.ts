@@ -125,7 +125,7 @@ export const authenticatedInternalAuthoringMessage = async (
     ) {
       return false;
     }
-    const scopeDigest = reserved.decision.scopeDigest;
+    const { scopeDigest } = reserved.decision;
     const claimed =
       (await store.claimInternalAuthoringMessage?.({
         principal,

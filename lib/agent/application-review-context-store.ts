@@ -93,7 +93,7 @@ const completionSchema = z.strictObject({
 const chunkCharacters = 65_536;
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 const ownerDigest = (context: OperatorArtifactContext) => {
-  const authority = context.authority;
+  const { authority } = context;
   return hash(
     JSON.stringify(
       "kind" in authority

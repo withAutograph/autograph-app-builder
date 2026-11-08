@@ -188,18 +188,22 @@ const fixture = async function fixture(options = {}) {
       },
     ],
   ]);
-  const event = (slot, eventType, stepId, eventData = {}) => ({
-    runId: ownerRunId,
-    eventId: slotToEventId(slot),
-    eventType,
-    ...(stepId === undefined ? {} : { correlationId: stepId }),
-    eventData: {
-      ...(steps.has(stepId) ? { stepName: steps.get(stepId).stepName } : {}),
-      ...(eventType === "step_completed" ? { result: steps.get(stepId)?.output } : {}),
-      ...eventData,
-    },
-    createdAt: new Date(10_000 - slot),
-  });
+  const event = (slot, eventType, stepId, eventData = {}) => {
+    const value = { runId: ownerRunId, eventId: slotToEventId(slot), eventType };
+    if (stepId !== undefined) {
+      value.correlationId = stepId;
+    }
+    const details = {};
+    if (steps.has(stepId)) {
+      details.stepName = steps.get(stepId).stepName;
+    }
+    if (eventType === "step_completed") {
+      details.result = steps.get(stepId)?.output;
+    }
+    value.eventData = { ...details, ...eventData };
+    value.createdAt = new Date(10_000 - slot);
+    return value;
+  };
   const events = [
     event(1, "run_created"),
     event(2, "step_started", "step-prior"),
@@ -224,13 +228,16 @@ const fixture = async function fixture(options = {}) {
     runs: {
       get: async (id, params) => {
         calls.push(["run", id, params]);
-        return {
+        const result = {
           runId: ownerRunId,
           status: options.status ?? "failed",
           deploymentId: "original-deployment",
           input: runInput,
-          ...(options.expired === true ? { expiredAt: new Date(0) } : {}),
         };
+        if (options.expired === true) {
+          result.expiredAt = new Date(0);
+        }
+        return result;
       },
     },
     events: {

@@ -489,7 +489,7 @@ export const sandboxValidationCommandExecutor =
       });
     }
     const environmentPath = localRuntimeEnvironmentPath(validationRoot, appId);
-    const env = {
+    const env: NonNullable<Parameters<SandboxSession["run"]>[0]["env"]> = {
       ...Object.fromEntries(
         Object.entries(environment ?? {}).filter(
           (entry): entry is [string, string] =>
@@ -499,8 +499,10 @@ export const sandboxValidationCommandExecutor =
         ),
       ),
       APP_RUNTIME_STATE_DIR: nodePath.posix.dirname(environmentPath),
-      ...(options?.alreadyCompiled === true ? { APP_RUNTIME_ALREADY_COMPILED: "1" } : {}),
     };
+    if (options?.alreadyCompiled === true) {
+      env.APP_RUNTIME_ALREADY_COMPILED = "1";
+    }
     const executionCommand = `(
 set -e
 (

@@ -28,14 +28,13 @@ const event = (runId, slot, stepId, eventType = "step_completed", name = "turnSt
   eventType,
   eventData: { stepName: name },
 });
-const step = (runId, stepId, output, input) => ({
-  runId,
-  stepId,
-  stepName: "turnStep",
-  status: "completed",
-  output,
-  ...(input === undefined ? {} : { input: { args: [input] } }),
-});
+const step = (runId, stepId, output, input) => {
+  const value = { runId, stepId, stepName: "turnStep", status: "completed", output };
+  if (input !== undefined) {
+    value.input = { args: [input] };
+  }
+  return value;
+};
 
 const fixture = () => {
   const runId = "prior-owner";

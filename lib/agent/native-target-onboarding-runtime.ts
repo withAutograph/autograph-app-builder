@@ -258,7 +258,7 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     row: NativeTargetOnboardingRow,
     observed: NativeTargetVercelProjectObservation,
   ) => {
-    const record = row.record;
+    const { record } = row;
     if (!("attempt" in record)) {
       throw invalid();
     }

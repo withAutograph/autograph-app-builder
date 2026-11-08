@@ -954,7 +954,7 @@ const preserveVerifiedFindings = async (
   if (texts === undefined) {
     return context.blocked(reviewRedactionUnavailableMessage);
   }
-  const prior = context.prior;
+  const { prior } = context;
   const hasPrior =
     prior !== undefined && (prior.findings.length > 0 || prior.runtimeChecks.length > 0);
   const hasCurrent = context.state.findings.size > 0 || context.state.runtimeChecks.size > 0;

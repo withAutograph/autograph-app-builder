@@ -520,16 +520,18 @@ const fixture = async (options = {}) => {
       output: new Uint8Array([99, 1, 2, 3]),
     });
   }
-  const event = (slot, eventType, stepId, eventData = {}) => ({
-    runId: ownerRunId,
-    eventId: eventId(slot),
-    eventType,
-    ...(stepId === undefined ? {} : { correlationId: stepId }),
-    eventData: {
-      ...(steps.has(stepId) ? { stepName: steps.get(stepId).stepName } : {}),
-      ...eventData,
-    },
-  });
+  const event = (slot, eventType, stepId, eventData = {}) => {
+    const value = { runId: ownerRunId, eventId: eventId(slot), eventType };
+    if (stepId !== undefined) {
+      value.correlationId = stepId;
+    }
+    const details = {};
+    if (steps.has(stepId)) {
+      details.stepName = steps.get(stepId).stepName;
+    }
+    value.eventData = { ...details, ...eventData };
+    return value;
+  };
   const events = [
     ...(options.historicalFailure === true
       ? [event(1, "step_started", "historical"), event(2, "step_failed", "historical")]
