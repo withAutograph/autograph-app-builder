@@ -111,8 +111,7 @@ function sandboxFixture() {
       id: "sandbox",
       ...createSandbox({
         run,
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        writeTextFile: vi.fn(async () => {}),
+        writeTextFile: vi.fn<() => Promise<void>>().mockResolvedValue(),
       }),
     },
   };
