@@ -1,7 +1,6 @@
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { describe, expect, it, vi } from "vitest";
 
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
 import { createDeploymentMcpRequestHandler, readHostedDeploymentConfig } from "./hosted-route";
 
@@ -28,7 +27,7 @@ const workloadIdentity: HostedWorkloadIdentity = {
   },
 };
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function request() {

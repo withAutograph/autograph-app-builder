@@ -1,6 +1,4 @@
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { createPostgresWorkspaceMembership } from "../eve/postgres-workspace-membership";
 import { createSameOriginEveTransport } from "../eve/same-origin-http";
 import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
@@ -16,7 +14,7 @@ import type { HostedMcpRuntime } from "./request-handler";
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function composeHostedMcpRuntime(input: {
   auth: unknown;
-  database: PostgresJsDatabase<typeof databaseSchema>;
+  database: HostedDatabase;
   eve: {
     baseUrl: string;
     timeoutMs?: number;

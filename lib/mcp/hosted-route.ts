@@ -1,6 +1,5 @@
 import { createSourceCandidateValidator } from "../handoff/source-candidate-validation";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { openHostedPostgresDatabase } from "../db/hosted-postgres";
 import { parseHostedDatabaseUrl } from "../db/postgres-connection-policy";
 import { readHostedForwarderSubject } from "../eve/hosted-forwarder";
@@ -17,7 +16,7 @@ import type { ResumeRealmContinuation } from "./realm-continuation-read";
 
 export { openHostedPostgresDatabase } from "../db/hosted-postgres";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 type ResumeRepositoryAccess = (input: {
   sessionAuth: unknown;
   sessionId: string;

@@ -1,7 +1,5 @@
 import { and, eq, inArray, lte, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { sandboxExecutionLeases } from "../db/schema";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
 import type { HostedPrincipal } from "../eve/hosted-auth";
@@ -13,7 +11,7 @@ import type {
 } from "./execution-lease";
 import { sandboxExecutionPolicyDigest } from "./execution-policy";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 export const sandboxLeaseAdvisoryKey = (principal: HostedPrincipal, adapterSessionId: string) =>

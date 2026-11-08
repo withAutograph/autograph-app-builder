@@ -1,7 +1,5 @@
 import { and, asc, eq, gt, isNotNull, isNull } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { githubRepositoryAccessContinuations } from "../db/schema";
 import type { HostedGitHubTenantAuthority } from "../repository/postgres-github-installation-store";
 import { repositoryAccessContinuationSchema } from "./repository-access-continuation";
@@ -10,7 +8,7 @@ import type {
   RepositoryAccessContinuationStore,
 } from "./repository-access-continuation";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 
 const columns = {
   audience: githubRepositoryAccessContinuations.audience,

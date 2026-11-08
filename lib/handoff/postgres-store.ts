@@ -1,14 +1,12 @@
 import { and, desc, eq, gt, isNull, lte, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { builderHandoffs, builderProvisioningJournals } from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { builderHandoffIntentSchema, builderHandoffRecordSchema } from "./contracts";
 import type { BuilderHandoffRecord } from "./contracts";
 import type { BuilderHandoffStore } from "./service";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 type Authority = BuilderHandoffRecord["authority"];
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
