@@ -476,7 +476,6 @@ export default defineConfig({
         "components/create-app/provider-choice-section.tsx",
         "lib/mcp/session-app/approval-request.tsx",
         "lib/mcp/session-app/view.tsx",
-        productionSetupTestPath,
       ],
       rules: { "typescript/no-confusing-void-expression": "off" },
     },

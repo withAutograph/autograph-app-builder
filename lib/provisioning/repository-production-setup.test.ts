@@ -408,7 +408,9 @@ describe("Builder-owned Production setup", () => {
 
   it("stops before initial schema work if authority is revoked during identity setup", async () => {
     const f = fixture();
-    f.ports.prepareCreatorIdentity = async () => f.revoke();
+    f.ports.prepareCreatorIdentity = async () => {
+      f.revoke();
+    };
     await expect(f.service.prepare(scope, intent)).rejects.toThrow("not authorized");
     expect(f.calls).toEqual(["credentials", "allocate-storage"]);
     expect(f.read()?.record.creatorActorId).toBeUndefined();
