@@ -13,7 +13,7 @@ describe("non-authorizing structural test protocol relay", () => {
     // oxlint-disable promise/prefer-await-to-callbacks
     const target = new Writable({
       highWaterMark: 1,
-      write(chunk, _encoding, callback) {
+      write(chunk: Buffer, _encoding, callback) {
         writes += 1;
         setTimeout(() => {
           output += chunk.toString("utf-8");

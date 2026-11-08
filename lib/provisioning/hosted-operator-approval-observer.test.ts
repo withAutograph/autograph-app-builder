@@ -54,8 +54,8 @@ const stream = () =>
     },
   );
 const setup = (authorized = true) => {
-  const ambientToken = vi.fn(() => Promise.resolve("operator-token"));
-  const verifyReadAuthority = vi.fn(() => Promise.resolve(authorized));
+  const ambientToken = vi.fn<() => Promise<string>>().mockResolvedValue("operator-token");
+  const verifyReadAuthority = vi.fn<() => Promise<boolean>>().mockResolvedValue(authorized);
   const fetchImplementation = vi.fn<typeof fetch>(() => Promise.resolve(stream()));
   const observer = createHostedOperatorApprovalObserver({
     builderOrigin: "https://builder.example.test",

@@ -133,11 +133,13 @@ export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping)
     : 0;
   const needsReview = fixture.import.rows - ready;
   const ignored = Object.values(mapping).filter((value) => value === "ignore").length;
+  let mappingSummary = "All source columns are included.";
+  if (ignored !== 0) {
+    const columnDescription = ignored === 1 ? "column is" : "columns are";
+    mappingSummary = `${ignored} source ${columnDescription} excluded.`;
+  }
   return {
-    mappingSummary:
-      ignored === 0
-        ? "All source columns are included."
-        : `${ignored} source ${ignored === 1 ? "column is" : "columns are"} excluded.`,
+    mappingSummary,
     needsReview,
     ready,
     rows,

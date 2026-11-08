@@ -12,7 +12,9 @@ const metadata = () => ({
 const fixture = (response: Response = Response.json(metadata())) => {
   const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response);
   const controller = new AbortController();
-  const readInstallationToken = vi.fn(() => Promise.resolve("private-installation-token"));
+  const readInstallationToken = vi
+    .fn<() => Promise<string>>()
+    .mockResolvedValue("private-installation-token");
   const input = {
     expectedInstallationId: "icfg_expected",
     expectedTeamId: "team_expected",

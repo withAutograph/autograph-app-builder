@@ -1819,7 +1819,7 @@ describe("closed normal actor journal-change execution marker", () => {
 describe("continuity planning failure diagnostics", () => {
   it("preserves successful values and invokes the existing call once without logging", async () => {
     const result = { private: secret };
-    const run = vi.fn(() => Promise.resolve(result));
+    const run = vi.fn<() => Promise<typeof result>>().mockResolvedValue(result);
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     await expect(observeContinuityPlanningStage(secret, "sandbox_resume", run, sink)).resolves.toBe(
       result,
@@ -1837,7 +1837,7 @@ describe("continuity planning failure diagnostics", () => {
     "retains the original $errorClass rejection with only closed metadata",
     async ({ error, errorClass }) => {
       const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
-      const run = vi.fn(() => Promise.reject(error));
+      const run = vi.fn<() => Promise<never>>().mockRejectedValue(error);
       await expect(
         observeContinuityPlanningStage(secret, "port_observation", run, sink),
       ).rejects.toBe(error);

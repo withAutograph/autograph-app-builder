@@ -273,7 +273,7 @@ const setup = () => {
         order.push("workload");
         await Promise.resolve();
       }),
-      assertNoStandardBuilderDestination: vi.fn(() => Promise.resolve()),
+      assertNoStandardBuilderDestination: vi.fn<() => Promise<void>>().mockResolvedValue(),
 
       assertCanonicalAppOwner: vi.fn(async () => {
         order.push("owner");

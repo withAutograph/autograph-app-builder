@@ -130,7 +130,7 @@ describe("public origin Server Action boundary", () => {
   it("uses current authenticated owner authority and rejects foreign origins before opening data", async () => {
     const select = vi
       .fn<ReturnType<typeof createBuilderPublicOriginService>["select"]>()
-      .mockImplementation(() => Promise.resolve());
+      .mockResolvedValue();
     const open = vi.fn().mockResolvedValue({ principal, publicOrigins: { select } });
     const refresh = vi.fn<() => void>();
     const action = createBuilderPublicOriginAction({

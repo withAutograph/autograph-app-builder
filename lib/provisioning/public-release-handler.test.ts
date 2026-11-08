@@ -61,8 +61,8 @@ const fixture = () => {
   const ports: PublicReleasePorts = {
     store,
     resolve: vi.fn().mockResolvedValue(plan),
-    assertAuthorized: vi.fn<PublicReleasePorts["assertAuthorized"]>(() => Promise.resolve()),
-    assertApproved: vi.fn<PublicReleasePorts["assertApproved"]>(() => Promise.resolve()),
+    assertAuthorized: vi.fn<PublicReleasePorts["assertAuthorized"]>().mockResolvedValue(),
+    assertApproved: vi.fn<PublicReleasePorts["assertApproved"]>().mockResolvedValue(),
     withTargetLease: async (_ctx, _plan, run) => await run(),
     reconcileEffect: vi.fn<PublicReleasePorts["reconcileEffect"]>(async ({ effect }) =>
       applied.has(effect) ? "applied" : "not-applied",
