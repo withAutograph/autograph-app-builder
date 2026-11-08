@@ -30,7 +30,7 @@ function retryableProviderFailure(error: unknown): boolean {
     return true;
   }
   return /fetch failed|network|timed? ?out|econnreset|eai_again|socket/iu.test(
-    `${error.message} ${(error as Error & { cause?: unknown }).cause instanceof Error ? (error as Error & { cause: Error }).cause.message : ""}`,
+    `${error.message} ${error.cause instanceof Error ? error.cause.message : ""}`,
   );
 }
 

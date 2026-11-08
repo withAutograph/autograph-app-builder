@@ -358,7 +358,7 @@ const verifyState = (input: {
       ...diagnostic,
     });
   }
-  const [payload, providedSignature] = segments as [string, string];
+  const [payload, providedSignature] = segments;
   const expectedSignature = createHmac("sha256", input.stateSecret)
     .update("github-installation-state\n")
     .update(payload)
