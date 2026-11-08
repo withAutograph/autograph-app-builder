@@ -56,6 +56,14 @@ allowlisted SQLSTATE through at most four own-data cause nodes. Preparation may
 record the request's aborted boolean. Fixed started/completed progress for
 connection reads and worker input assembly distinguishes successful phases from
 later failures without recording inputs, credentials or exception content.
+Production transport failures also retain the existing launcher's last closed
+stage, such as worker pin verification, protocol handling or cleanup. This is
+stage metadata after the original cleanup, not proof that a provider effect
+occurred; the original rejection, authority and cancellation remain unchanged.
+Storage setup emits the resource worker's canonical bootstrap envelope before
+hashing its authority context, including the canonical resource field order.
+The first fence request must bind the same context digest for both execution and
+readback; this does not change resource, approval, credential or tenant values.
 
 Production requires an explicit `authOperatorRole` distinct from the Auth schema
 owner (`authResource.migratorRole`) and runtime role. Its restricted permissions

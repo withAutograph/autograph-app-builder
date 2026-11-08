@@ -11,7 +11,10 @@ import {
 import type { RepositoryProductionScope } from "./repository-production-contract";
 import type { RepositoryProductionEffectContext } from "./repository-production-setup";
 import { GENERATED_RELEASE_MEMBERS } from "./hosted-operator-sandbox-launcher";
-import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launcher";
+import type {
+  GeneratedAppReleaseFiles,
+  ResourceBootstrapContextWire,
+} from "./hosted-operator-sandbox-launcher";
 
 const defined = <T>(value: T | undefined): T => {
   if (value === undefined) {
@@ -52,6 +55,43 @@ const scope: RepositoryProductionScope = {
   publicOrigin: "https://apps.test",
   environment: "production",
 };
+// Frozen external wire contract: Arrusted 5f7a1e54 node-spool.ts
+// digestResourceBootstrapContext binds the first check_fence before any SQL or effect.
+const resourceWorkerContextDigest = (context: ResourceBootstrapContextWire) =>
+  createHash("sha256")
+    .update(
+      JSON.stringify({
+        kind: context.kind,
+        version: context.version,
+        operation: {
+          operation_id: context.operation.operation_id,
+          approval_digest: context.operation.approval_digest,
+          fence_generation: context.operation.fence_generation,
+        },
+        app_id: context.app_id,
+        resource: {
+          scope: context.resource.scope,
+          resource_id: context.resource.resource_id,
+          environment: context.resource.environment,
+          hostname: context.resource.hostname,
+          port: context.resource.port,
+          database: context.resource.database,
+          migrator_role: context.resource.migrator_role,
+          runtime_role: context.resource.runtime_role,
+          maintenance_database: context.resource.maintenance_database,
+          bootstrap_role: context.resource.bootstrap_role,
+          provider_project_id: context.resource.provider_project_id,
+          provider_branch_id: context.resource.provider_branch_id,
+          provider_endpoint_id: context.resource.provider_endpoint_id,
+          credentials_sha256: context.resource.credentials_sha256,
+        },
+        release: { id: context.release.id, sha256: context.release.sha256 },
+        installer: { id: context.installer.id, sha256: context.installer.sha256 },
+        tenant_targets: context.tenant_targets,
+      }),
+    )
+    .digest("hex");
+
 const fixture = async (staticApp = false) => {
   const record = initialRepositoryProductionRecord(scope, {
     sessionId: "session",
@@ -214,6 +254,36 @@ describe("concrete protected Production worker composition", () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
   });
   afterEach(() => vi.restoreAllMocks());
+
+  it("matches the resource worker's first authority frame for storage execution and readback", async () => {
+    const f = await fixture();
+    f.context.effect = "allocate-storage";
+    await f.workers.apply(f.context);
+    await expect(f.workers.reconcile(f.context)).resolves.toMatchObject({ state: "applied" });
+    expect(f.calls.map((call) => call.readOnly)).toEqual([false, true]);
+    for (const call of f.calls) {
+      const context = call.context;
+      if (!("kind" in context)) {
+        throw new Error("Fixture storage worker context is missing");
+      }
+      const workerFence = {
+        kind: "check_fence",
+        operation_id: context.operation.operation_id,
+        context_digest: resourceWorkerContextDigest(context),
+        fence_generation: context.operation.fence_generation,
+        resource_id: context.resource.resource_id,
+      };
+      const hostDigest = createHash("sha256").update(JSON.stringify(context)).digest("hex");
+      // The host's real requestMatchesContext predicate must accept this independently
+      // serialized worker digest; matching values with a different digest cannot authorize SQL.
+      expect(workerFence.context_digest).toBe(hostDigest);
+      expect(workerFence).toMatchObject({
+        operation_id: f.context.row.operationRef,
+        fence_generation: f.context.row.record.lease?.fenceGeneration,
+        resource_id: f.context.row.record.resource?.resourceId,
+      });
+    }
+  });
 
   it("identifies unavailable encrypted credentials without exposing or replacing private state", async () => {
     const f = await fixture();
