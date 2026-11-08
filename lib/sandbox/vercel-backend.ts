@@ -18,6 +18,7 @@ import { createVercelSdkSession } from "./vercel-sdk-session";
 import { materializeVercelGitSource } from "./vercel-git-source";
 
 const PROVIDER_RETRY_DELAY_MS = 250;
+const SANDBOX_WORKSPACE = "/workspace";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function retryableProviderFailure(error: unknown): boolean {
@@ -186,11 +187,11 @@ const initializeSeeds = async (input: {
   };
   for (const file of input.files) {
     const destination = path.posix.resolve(
-      "/workspace",
+      SANDBOX_WORKSPACE,
       file.path.replace(/^\$HOME(?=\/|$)/u, input.homePath),
     );
     const preserveExisting =
-      input.recovered || destination === "/workspace" || destination.startsWith("/workspace/");
+      input.recovered || destination === SANDBOX_WORKSPACE || destination.startsWith("/workspace/");
     // Preserve the original sequential first-seed-wins behavior for retained paths.
     if (preserveExisting && initialized.has(destination)) continue;
     if (!(await shouldInitializeSeed(input.native, destination, preserveExisting))) continue;
@@ -430,7 +431,7 @@ export const createBuilderVercelProvider = (
         sandboxName: native.name,
       };
       try {
-        await native.fs.mkdir("/workspace", { recursive: true });
+        await native.fs.mkdir(SANDBOX_WORKSPACE, { recursive: true });
         const home = await native.runCommand({ args: ["HOME"], cmd: "printenv" });
         if (home.exitCode !== 0)
           throw new Error("Vercel Sandbox did not expose its managed home directory.");

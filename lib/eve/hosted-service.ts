@@ -147,6 +147,8 @@ import type {
   SendReadFailureCategory,
 } from "./hosted-submission-diagnostic";
 
+const PREPARE_NATIVE_TARGET_TOOL = "prepare-app-native-target";
+
 const guardDecisions: readonly ("continue" | "stop")[] = ["continue", "stop"];
 const HOSTED_START_REQUEST_TIMEOUT_MS = 300_000;
 const HOSTED_IDLE_RESERVATION_GRACE_MS = 300_000;
@@ -1317,7 +1319,7 @@ export function createHostedEveSessionService(input: {
           (entry) =>
             entry.requestId === id &&
             entry.kind === "tool-approval" &&
-            entry.toolName === "prepare-app-native-target",
+            entry.toolName === PREPARE_NATIVE_TARGET_TOOL,
         ),
       )
     ) {
@@ -1547,7 +1549,7 @@ export function createHostedEveSessionService(input: {
       ...(metadata?.privateApprovalCaptureState?.receipts ?? []),
       ...observedRequests,
     ].some(
-      (entry) => responseIds.has(entry.requestId) && entry.toolName === "prepare-app-native-target",
+      (entry) => responseIds.has(entry.requestId) && entry.toolName === PREPARE_NATIVE_TARGET_TOOL,
     );
     const replayed = await replayNativeApprovalHistory(current, [...responseIds]);
     // A stale native receipt may predate a later cancellation. Even exact retries
@@ -1618,7 +1620,7 @@ export function createHostedEveSessionService(input: {
     const nativeIds: string[] = [];
     for (const batch of [...state.pending, ...state.resolved.map((entry) => entry.batch)]) {
       for (const entry of batch.requests) {
-        if (entry.kind === "tool-approval" && entry.toolName === "prepare-app-native-target") {
+        if (entry.kind === "tool-approval" && entry.toolName === PREPARE_NATIVE_TARGET_TOOL) {
           nativeIds.push(entry.requestId);
         }
       }
@@ -1686,7 +1688,7 @@ export function createHostedEveSessionService(input: {
           { appId: string; operationRef: string; planDigest: string }
         >();
         for (const receipt of capture.receipts) {
-          if (receipt.toolName !== "prepare-app-native-target") {
+          if (receipt.toolName !== PREPARE_NATIVE_TARGET_TOOL) {
             continue;
           }
           const target = {
@@ -4307,7 +4309,7 @@ export function createHostedEveSessionService(input: {
             receipt !== undefined &&
             // Native target response recovery requires proof of the complete original batch.
             // This legacy shortcut checks only the IDs supplied by its caller.
-            receipt.toolName !== "prepare-app-native-target" &&
+            receipt.toolName !== PREPARE_NATIVE_TARGET_TOOL &&
             privateResourceApprovalSessionId(receipt) === approvalSessionId &&
             receipt.responderPrincipalId === principal.ownerUserId &&
             receipt.outcome === (response.kind === "approve" ? "approved" : "cancelled")

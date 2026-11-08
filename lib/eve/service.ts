@@ -58,6 +58,9 @@ import {
   LocalSessionRecoveryUnavailableError,
 } from "./local-session-recovery";
 
+const CONTINUATION_ALREADY_ACTIVE_MESSAGE =
+  "Another continuation is already active for this session.";
+
 const DEVELOPMENT_BUNDLE = "local-development";
 const DEVELOPMENT_MODE = "development";
 
@@ -843,7 +846,7 @@ export function createLocalEveSessionService(
       if (resumeSessionId === undefined || options.recoverTerminal === undefined)
         throw new LocalSessionRecoveryUnavailableError();
       if (localActiveResponses.has(resumeSessionId) || state.continuationPumps.has(resumeSessionId))
-        throw new Error("Another continuation is already active for this session.");
+        throw new Error(CONTINUATION_ALREADY_ACTIVE_MESSAGE);
       await options.recoverTerminal(resumeSessionId, clientRequestId);
       state.unavailableSessions.delete(resumeSessionId);
       state.recoveryRequired.delete(resumeSessionId);
@@ -1275,7 +1278,7 @@ export function createLocalEveSessionService(
   service.send = async ({ sessionId, message, clientRequestId }) => {
     await refreshRecoveredTail(sessionId);
     if (state.continuationPumps.has(sessionId)) {
-      throw new Error("Another continuation is already active for this session.");
+      throw new Error(CONTINUATION_ALREADY_ACTIVE_MESSAGE);
     }
     if (state.unavailableSessions.has(sessionId)) {
       throw new LocalSessionRecoveryUnavailableError();
@@ -1370,7 +1373,7 @@ export function createLocalEveSessionService(
     let responses = requestedResponses;
     await refreshRecoveredTail(sessionId);
     if (state.continuationPumps.has(sessionId)) {
-      throw new Error("Another continuation is already active for this session.");
+      throw new Error(CONTINUATION_ALREADY_ACTIVE_MESSAGE);
     }
     if (state.unavailableSessions.has(sessionId)) {
       throw new LocalSessionRecoveryUnavailableError();
