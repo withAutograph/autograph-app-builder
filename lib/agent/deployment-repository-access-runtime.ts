@@ -649,6 +649,23 @@ export function createRepositoryAccessRuntime(input: {
   };
 }
 
+const continuationOptions = (): Pick<
+  Parameters<typeof createRepositoryAccessContinuationService>[0],
+  "callbackOrigin" | "protectionBypassSecret"
+> => {
+  const options: Pick<
+    Parameters<typeof createRepositoryAccessContinuationService>[0],
+    "callbackOrigin" | "protectionBypassSecret"
+  > = {};
+  if (process.env.VERCEL_ENV === "production" && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    options.callbackOrigin = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  }
+  if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) {
+    options.protectionBypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET.trim();
+  }
+  return options;
+};
+
 interface RepositoryAccessRuntimeConfiguration {
   database: ReturnType<typeof openHostedPostgresDatabase>;
   origin: string;
@@ -707,22 +724,24 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
     );
   }
   const installations = createPostgresHostedGitHubInstallationStore(input.database);
-  return createRepositoryAccessRuntime({
+  const runtimeConfiguration: Pick<
+    Parameters<typeof createRepositoryAccessRuntime>[0],
+    "authority" | "continuations" | "installations" | "origin" | "protectionBypassSecret"
+  > = {
     authority,
     continuations: createRepositoryAccessContinuationService({
-      ...(process.env.VERCEL_ENV === "production" && process.env.VERCEL_PROJECT_PRODUCTION_URL
-        ? { callbackOrigin: `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` }
-        : {}),
-      ...(process.env.VERCEL_AUTOMATION_BYPASS_SECRET
-        ? { protectionBypassSecret: process.env.VERCEL_AUTOMATION_BYPASS_SECRET.trim() }
-        : {}),
+      ...continuationOptions(),
       store: createPostgresRepositoryAccessContinuationStore(runtimeInput.database),
     }),
     installations,
     origin: input.origin,
-    ...(process.env.VERCEL_AUTOMATION_BYPASS_SECRET
-      ? { protectionBypassSecret: process.env.VERCEL_AUTOMATION_BYPASS_SECRET.trim() }
-      : {}),
+  };
+  if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) {
+    runtimeConfiguration.protectionBypassSecret =
+      process.env.VERCEL_AUTOMATION_BYPASS_SECRET.trim();
+  }
+  return createRepositoryAccessRuntime({
+    ...runtimeConfiguration,
     preparedIntent,
     providerFactory: ({ installation }) =>
       createGitHubAppHttpProvider({

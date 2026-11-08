@@ -32,46 +32,50 @@ export const createUnapprovedParticipantPlan = (
   const { gatewayBindings } = candidate.priorOperator.plan;
   const trustedSources = gatewayBindings?.trustedSources;
   const { auth } = candidate.bootstrap;
-  return hostedOperatorPlanSchema.parse({
+  const planSchema = hostedOperatorPlanSchema;
+  const parsePlan = planSchema.parse.bind(planSchema);
+  const planPrefix: Omit<typeof base, "gatewayBindings"> & { gatewayBindings?: unknown } = {
     ...base,
-    ...(gatewayBindings === undefined
-      ? {}
-      : {
-          gatewayBindings: {
-            ...gatewayBindings,
-            trustedSources:
-              trustedSources !== undefined && "gatewayPreview" in trustedSources
-                ? { gatewayPreview: trustedSources.gatewayPreview }
-                : undefined,
-          },
-        }),
+  };
+  if (gatewayBindings !== undefined) {
+    planPrefix.gatewayBindings = {
+      ...gatewayBindings,
+      trustedSources:
+        trustedSources !== undefined && "gatewayPreview" in trustedSources
+          ? { gatewayPreview: trustedSources.gatewayPreview }
+          : undefined,
+    };
+  }
+  const participantPlan: typeof planPrefix &
+    Pick<HostedOperatorPlan, "normalActorCapturePredecessor"> = {
+    ...planPrefix,
     stage: "auth-participants",
     access: [],
     normalActorProgram: program,
-    normalActorCapturePredecessor: {
-      preparation: normalActorPreparationSchema.strip().parse(candidate.account),
-      bootstrapOperationRef: auth.operationRef,
-      bootstrapPlanDigest: auth.planDigest,
-      bootstrapApprovalId: auth.approvalId,
-      bootstrapApprovedByCallId: auth.approvedByCallId,
-      ...(candidate.bootstrap.gateway === undefined
-        ? {}
-        : {
-            gateway: {
-              operationRef: candidate.bootstrap.gateway.operationRef,
-              planDigest: candidate.bootstrap.gateway.planDigest,
-              approvalId: candidate.bootstrap.gateway.approvalId,
-              approvedByCallId: candidate.bootstrap.gateway.approvedByCallId,
-            },
-          }),
+  };
+  const predecessor: NonNullable<HostedOperatorPlan["normalActorCapturePredecessor"]> = {
+    preparation: normalActorPreparationSchema.strip().parse(candidate.account),
+    bootstrapOperationRef: auth.operationRef,
+    bootstrapPlanDigest: auth.planDigest,
+    bootstrapApprovalId: auth.approvalId,
+    bootstrapApprovedByCallId: auth.approvedByCallId,
+  };
+  if (candidate.bootstrap.gateway !== undefined) {
+    predecessor.gateway = {
+      operationRef: candidate.bootstrap.gateway.operationRef,
+      planDigest: candidate.bootstrap.gateway.planDigest,
+      approvalId: candidate.bootstrap.gateway.approvalId,
+      approvedByCallId: candidate.bootstrap.gateway.approvedByCallId,
+    };
+  }
+  participantPlan.normalActorCapturePredecessor = predecessor;
+  participantPlan.effects = [
+    {
+      id: "normal-accounts",
+      kind: "normal-accounts",
+      description:
+        "Prepare the approved additional participants while preserving the existing account capture.",
     },
-    effects: [
-      {
-        id: "normal-accounts",
-        kind: "normal-accounts",
-        description:
-          "Prepare the approved additional participants while preserving the existing account capture.",
-      },
-    ],
-  });
+  ];
+  return parsePlan(participantPlan);
 };

@@ -4643,13 +4643,14 @@ describe("retained active schema installation scope", () => {
       if (kind === "session") {
         f.session.sessionId = "other-session";
       }
-      const plan = hostedOperatorPlanSchema.parse({
-        ...f.prior,
-        ...(kind === "database"
-          ? { appDatabase: { ...f.prior.appDatabase, database: "other_database" } }
-          : {}),
-        ...(kind === "app" ? { selection: { ...f.prior.selection, appId: "other-app" } } : {}),
-      });
+      const planInput = { ...f.prior };
+      if (kind === "database") {
+        planInput.appDatabase = { ...f.prior.appDatabase, database: "other_database" };
+      }
+      if (kind === "app") {
+        planInput.selection = { ...f.prior.selection, appId: "other-app" };
+      }
+      const plan = hostedOperatorPlanSchema.parse(planInput);
       f.session.privateApprovalReceipts = [
         {
           ...original,

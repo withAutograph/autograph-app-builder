@@ -479,9 +479,16 @@ export const sandboxValidationCommandExecutor =
       command === repositoryDeliveryBuildCommand(appId, options?.alreadyCompiled);
     const shard = isDeliveryBuild ? undefined : command.split(" ").at(-1);
     if (options?.runtime && !isDeliveryBuild) {
-      return await options.runtime.runTask({
+      const { runtime } = options;
+      const runTask = runtime.runTask.bind(runtime);
+      const task: Pick<Parameters<typeof runTask>[0], "task" | "alreadyCompiled"> = {
         task: "repository-test",
-        ...(options.alreadyCompiled === true ? { alreadyCompiled: true } : {}),
+      };
+      if (options.alreadyCompiled === true) {
+        task.alreadyCompiled = true;
+      }
+      return await runTask({
+        ...task,
         environment,
         shard,
         onChunk,
@@ -518,12 +525,16 @@ cat "$log"
 rm -f "$log"
 exit "$status"`;
     if (onChunk === undefined) {
-      return await sandbox.run({
+      const run = sandbox.run.bind(sandbox);
+      const commandInput: Parameters<SandboxSession["run"]>[0] = {
         command: detachedCommand,
         env,
         workingDirectory: validationRoot,
-        ...(abortSignal === undefined ? {} : { abortSignal }),
-      });
+      };
+      if (abortSignal !== undefined) {
+        commandInput.abortSignal = abortSignal;
+      }
+      return await run(commandInput);
     }
     const process = await sandbox.spawn({
       abortSignal,

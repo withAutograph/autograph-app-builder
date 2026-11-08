@@ -4204,15 +4204,31 @@ export function createHostedEveSessionService(input: {
                 })
               : result;
           }
-          await input.transport.cancelAccepted?.({
-            adapterSessionId: session.adapterSessionId,
-            ...(session.version === 2 && session.nativeRecoveryBinding !== undefined
-              ? { logicalSessionId: session.nativeRecoveryBinding.logicalSessionId }
-              : {}),
-            nativeObservationState: preflight.nativeObservationState,
-            principal,
-            ...(turnId === undefined ? {} : { turnId }),
-          });
+          const transport = input.transport;
+          const cancelAccepted = transport.cancelAccepted;
+          let cancellation: Promise<void> | undefined;
+          if (cancelAccepted != null) {
+            const cancelIdentity: Pick<
+              Parameters<NonNullable<HostedEveTransport["cancelAccepted"]>>[0],
+              "adapterSessionId"
+            > &
+              Partial<Parameters<NonNullable<HostedEveTransport["cancelAccepted"]>>[0]> = {
+              adapterSessionId: session.adapterSessionId,
+            };
+            if (session.version === 2 && session.nativeRecoveryBinding !== undefined) {
+              cancelIdentity.logicalSessionId = session.nativeRecoveryBinding.logicalSessionId;
+            }
+            const cancelInput = {
+              ...cancelIdentity,
+              nativeObservationState: preflight.nativeObservationState,
+              principal,
+            };
+            if (turnId !== undefined) {
+              cancelInput.turnId = turnId;
+            }
+            cancellation = cancelAccepted.call(transport, cancelInput);
+          }
+          await cancellation;
           return readAcceptedMutation(sessionId, session.checkpointDigest, 0);
         }
         const transport = input.transport;

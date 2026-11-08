@@ -375,25 +375,42 @@ export const createHostedOperatorNormalActorProofCollector = (
       }
       assertRealmBinding(input, preparation, binding);
       observe({ stage: "proof_preparation" });
-      const pending = await journal.prepareOrganizationProof(input, {
-        organizationId: organization.organizationId,
-        ownerActorKey: organization.ownerActorKey,
-        owner: candidate.session,
-        ...(binding.bootstrap === undefined || assertBootstrapCurrent === undefined
-          ? {}
-          : { bootstrap: binding.bootstrap, assertBootstrapCurrent }),
-        binding: {
+      const proofInput = () => {
+        const owner: Pick<
+          Parameters<typeof journal.prepareOrganizationProof>[1],
+          "organizationId" | "ownerActorKey" | "owner" | "bootstrap" | "assertBootstrapCurrent"
+        > = {
+          organizationId: organization.organizationId,
+          ownerActorKey: organization.ownerActorKey,
+          owner: candidate.session,
+        };
+        if (binding.bootstrap !== undefined && assertBootstrapCurrent !== undefined) {
+          owner.bootstrap = binding.bootstrap;
+          owner.assertBootstrapCurrent = assertBootstrapCurrent;
+        }
+        const scope: Pick<
+          NormalActorOrganizationProofBinding,
+          "audience" | "authResourceId" | "bootstrapPlanDigest" | "publicRelease"
+        > = {
           audience: binding.audience,
           authResourceId: binding.authResourceId,
           bootstrapPlanDigest: binding.bootstrapPlanDigest,
-          ...(binding.publicRelease === undefined ? {} : { publicRelease: binding.publicRelease }),
-
-          browserOrigin: preparation.program.origin,
-          endpointOrigin: binding.endpointOrigin,
-          issuer: binding.issuer,
-          transportSource: binding.transportSource,
-        },
-      });
+        };
+        if (binding.publicRelease !== undefined) {
+          scope.publicRelease = binding.publicRelease;
+        }
+        return {
+          ...owner,
+          binding: {
+            ...scope,
+            browserOrigin: preparation.program.origin,
+            endpointOrigin: binding.endpointOrigin,
+            issuer: binding.issuer,
+            transportSource: binding.transportSource,
+          },
+        };
+      };
+      const pending = await journal.prepareOrganizationProof(input, proofInput());
       observe({ stage: "artifact_context" });
       const artifacts = await deps.ownedArtifacts(input);
       if ("kind" in artifacts.context.authority) {
