@@ -206,7 +206,7 @@ describe("Preview OAuth deployment handlers", () => {
     const handler = vi.fn(async (request: Request) =>
       Response.json({ path: new URL(request.url).pathname }),
     );
-    const getAuth = vi.fn(() => ({ handler }) as never);
+    const getAuth = vi.fn(() => ({ handler }));
     const requestHandler = createPreviewOAuthRequestHandler({
       environment: {},
       getAuth,
@@ -224,7 +224,7 @@ describe("Preview OAuth deployment handlers", () => {
     const handler = vi.fn(async (request: Request) =>
       Response.json({ path: new URL(request.url).pathname }),
     );
-    const getAuth = vi.fn(() => ({ handler }) as never);
+    const getAuth = vi.fn(() => ({ handler }));
     const wellKnown = createPreviewOAuthWellKnownHandler({
       environment: {},
       getAuth,

@@ -238,10 +238,14 @@ export function ensurePreviewOAuthDeploymentSessionOrganization(input: {
   });
 }
 
+type PreviewOAuthAuthProvider = (
+  ...args: Parameters<typeof getPreviewOAuthDeploymentAuth>
+) => Pick<ReturnType<typeof getPreviewOAuthDeploymentAuth>, "handler">;
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreviewOAuthRequestHandler(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
-  getAuth?: typeof getPreviewOAuthDeploymentAuth;
+  getAuth?: PreviewOAuthAuthProvider;
 }) {
   return async (request: Request): Promise<Response> => {
     try {
@@ -290,7 +294,7 @@ export function createPreviewOAuthRequestHandler(input: {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreviewOAuthWellKnownHandler(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
-  getAuth?: typeof getPreviewOAuthDeploymentAuth;
+  getAuth?: PreviewOAuthAuthProvider;
 }) {
   const requestHandler = createPreviewOAuthRequestHandler(input);
   return (request: Request) => {

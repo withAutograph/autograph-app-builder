@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
+import type { ImmutableGitHubSourceReceipt } from "./github-publication";
 import type { PreparedSandboxWorkspace } from "./supported-template";
 import { samePreparedWorkspaceSourceContext } from "./supported-template";
 
@@ -200,6 +201,28 @@ describe("connected GitHub workspace inspection", () => {
   const repository = "https://github.com/acme/private.git";
   const originalSha = "a".repeat(40);
   const originalTree = "b".repeat(40);
+  const githubSource = (): ImmutableGitHubSourceReceipt => ({
+    digest: "c".repeat(64),
+    installationIdentityDigest: "d".repeat(64),
+    repository: {
+      defaultBranch: "main",
+      digest: "e".repeat(64),
+      headSha: originalSha,
+      headTree: originalTree,
+      installationIdentityDigest: "d".repeat(64),
+      name: "private",
+      owner: "acme",
+      releaseGate: { configured: false, name: "REPOSITORY_RELEASE_ENABLED" },
+      repositoryId: "1",
+      version: 2,
+      visibility: "private",
+    },
+    resolvedByCallId: "fixture",
+    resolvedRef: "main",
+    resolvedSha: originalSha,
+    resolvedTree: originalTree,
+    version: 2,
+  });
   const receipt = inspectExistingRepositorySnapshotReceipt({
     contents: {},
     contract: [],
@@ -235,7 +258,7 @@ describe("connected GitHub workspace inspection", () => {
         .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" });
       const observed = await inspectSourceBoundSandboxWorkspace({
         expectedWorkspace: originalWorkspace,
-        githubSource: { repository: { name: "private", owner: "acme" } } as never,
+        githubSource: githubSource(),
         receipt,
         sandbox: createSandbox({ id: "sandbox", run }),
       });
@@ -259,7 +282,7 @@ describe("connected GitHub workspace inspection", () => {
     await expect(
       inspectSourceBoundSandboxWorkspace({
         expectedWorkspace: originalWorkspace,
-        githubSource: { repository: { name: "private", owner: "acme" } } as never,
+        githubSource: githubSource(),
         receipt,
         sandbox: createSandbox({ id: "sandbox", run }),
       }),
