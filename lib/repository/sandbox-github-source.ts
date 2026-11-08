@@ -14,6 +14,8 @@ import type { PreparedSandboxWorkspace } from "./supported-template";
 import { parseCanonicalTemplateSnapshot } from "./source-receipt";
 import type { ImmutableGitHubSourceReceipt } from "./github-publication";
 
+const sandboxWorkingDirectory = "/workspace";
+
 const SHA = /^[0-9a-f]{40}$/u;
 const REPOSITORY = /^[A-Za-z0-9_.-]{1,100}$/u;
 const BRANCH =
@@ -53,7 +55,7 @@ const runSourceSandboxCommand = async (
   command: string,
 ) => {
   try {
-    return await sandbox.run({ command, workingDirectory: "/workspace" });
+    return await sandbox.run({ command, workingDirectory: sandboxWorkingDirectory });
   } catch (error) {
     const cause = sandboxFailureDetail(error instanceof Error ? error.message : String(error));
     throw new Error(
@@ -571,7 +573,7 @@ export const writeSandboxGitHubSourceManifest = async function writeSandboxGitHu
   try {
     result = await sandbox.run({
       command: `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 node -e ${shellQuote(sandboxGitHubSourceManifestProgram(SANDBOX_WORKSPACE, "/workspace/.app-builder"))}`,
-      workingDirectory: "/workspace",
+      workingDirectory: sandboxWorkingDirectory,
     });
   } catch (error) {
     const cause = sandboxFailureDetail(error instanceof Error ? error.message : String(error));
@@ -645,7 +647,7 @@ const reinspectGitHubSourceWorkspace = async function reinspectGitHubSourceWorks
   }
   const result = await input.sandbox.run({
     command: sandboxGitHubSourceReinspectionCommand(input),
-    workingDirectory: "/workspace",
+    workingDirectory: sandboxWorkingDirectory,
   });
   if (result.exitCode !== 0) {
     throw new Error("The GitHub source workspace could not be verified.");

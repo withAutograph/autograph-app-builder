@@ -3,6 +3,8 @@ import { rcompare, satisfies, valid } from "semver";
 import { z } from "zod";
 import type { SandboxSession } from "eve/sandbox";
 
+const reactTypesPackageName = "@types/react";
+
 const stableVersion = z.string().regex(/^\d+\.\d+\.\d+$/u);
 export const frameworkVersionsSchema = z.strictObject({
   next: stableVersion,
@@ -62,7 +64,7 @@ export const resolveLatestFrameworkVersions = async (
   const [next, latestReact, latestTypesReact, latestTypesReactDom] = await Promise.all([
     read("next"),
     read("react"),
-    read("@types/react"),
+    read(reactTypesPackageName),
     read("@types/react-dom"),
   ]);
   const supports = (metadata: z.infer<typeof metadataSchema>, name: string, version: string) =>
@@ -121,10 +123,10 @@ export const resolveLatestFrameworkVersions = async (
   if (
     !sameMajor(typesReact.version) ||
     !sameMajor(typesReactDom.version) ||
-    !supports(typesReactDom, "@types/react", typesReact.version)
+    !supports(typesReactDom, reactTypesPackageName, typesReact.version)
   ) {
     const [reactTypes, domTypes] = await Promise.all([
-      candidates("@types/react"),
+      candidates(reactTypesPackageName),
       candidates("@types/react-dom"),
     ]);
     const pair = domTypes.flatMap((dom) => {
@@ -132,7 +134,7 @@ export const resolveLatestFrameworkVersions = async (
         return [];
       }
       const types = reactTypes.find(
-        (value) => sameMajor(value.version) && supports(dom, "@types/react", value.version),
+        (value) => sameMajor(value.version) && supports(dom, reactTypesPackageName, value.version),
       );
       return types === undefined ? [] : [{ typesReact: types, typesReactDom: dom }];
     })[0];

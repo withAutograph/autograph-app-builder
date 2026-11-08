@@ -5,6 +5,8 @@ import { compareOverlayPaths } from "./target-apply";
 import type { OverlayChange } from "./target-apply";
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
 
+const publishedDraftRepairKind = "published-draft-repair";
+
 type DigestMaterial =
   | readonly OverlayChange[]
   | Omit<PublishedDraftRepairReview, "digest">
@@ -21,7 +23,7 @@ const change = z.strictObject({
   after: file.optional(),
 });
 const schema = z.strictObject({
-  kind: z.literal("published-draft-repair"),
+  kind: z.literal(publishedDraftRepairKind),
   version: z.literal(1),
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
   appSpecDigest: digest,
@@ -47,7 +49,7 @@ export type DraftUpdateReview = ReviewedChangeSetReceipt | PublishedDraftRepairR
 export const isPublishedDraftRepairReview = (
   review: DraftUpdateReview,
 ): review is PublishedDraftRepairReview =>
-  "kind" in review && review.kind === "published-draft-repair";
+  "kind" in review && review.kind === publishedDraftRepairKind;
 
 type Input = Omit<
   PublishedDraftRepairReview,
@@ -118,7 +120,7 @@ export const createPublishedDraftRepairReview = (input: Input): PublishedDraftRe
     changes: canonicalChanges(input.changes),
   });
   const changeSet = {
-    kind: "published-draft-repair" as const,
+    kind: publishedDraftRepairKind,
     version: 1 as const,
     ...evidence,
     changes,

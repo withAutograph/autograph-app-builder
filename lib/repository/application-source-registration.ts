@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { SandboxSession } from "eve/sandbox";
 
+const repositoryWorkingDirectory = "/workspace/repository";
+
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const applicationSourceRegistrationSchema = z.strictObject({
   oldDigest: digest,
@@ -27,7 +29,7 @@ export const planApplicationSourceRegistration = async (
   const source = `import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {planMicrofrontendRegistration} from './packages/platform-microfrontends/src/policy/config-registration.ts';const bytes=${configBytes === undefined ? "readFileSync('microfrontends.json','utf8')" : JSON.stringify(configBytes)}; console.log(JSON.stringify(planMicrofrontendRegistration(bytes,{projectName:${JSON.stringify(appId)},packageName:${JSON.stringify(packageName)},routes:${JSON.stringify(routes)},expectedDigest:createHash('sha256').update(bytes).digest('hex')})));`;
   let result = await sandbox.run({
     command: `bun -e ${quote(source)}`,
-    workingDirectory: "/workspace/repository",
+    workingDirectory: repositoryWorkingDirectory,
   });
   if (
     result.exitCode !== 0 &&
@@ -38,14 +40,14 @@ export const planApplicationSourceRegistration = async (
     await setBuilderSandboxNetworkPolicy(sandbox, "allow-all");
     const dependencies = await sandbox.run({
       command: "bun install --ignore-scripts --filter @autograph/platform-microfrontends",
-      workingDirectory: "/workspace/repository",
+      workingDirectory: repositoryWorkingDirectory,
     });
     if (dependencies.exitCode !== 0) {
       throw new Error("The platform registration planner dependencies are unavailable.");
     }
     result = await sandbox.run({
       command: `bun -e ${quote(source)}`,
-      workingDirectory: "/workspace/repository",
+      workingDirectory: repositoryWorkingDirectory,
     });
   }
   if (result.exitCode !== 0) {

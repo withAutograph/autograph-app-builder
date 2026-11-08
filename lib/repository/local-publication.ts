@@ -10,6 +10,8 @@ import { assertRepositoryReleasePolicyAtGitSnapshot } from "./supported-template
 
 export const LOCAL_PUBLICATION_VERSION = 2 as const;
 export const LOCAL_PUBLICATION_ALLOWED_MODES = ["644", "755"] as const;
+const noncanonicalFailureReceiptMessage = "The failed local-publication receipt is not canonical.";
+
 const topologyPath = "microfrontends.json";
 
 export const executionOrder = (paths: readonly string[]): readonly string[] => [
@@ -451,14 +453,14 @@ export const assertCanonicalLocalPublicationJournal = (journal: LocalPublication
     !isOrderedUniqueSubset(journal.conflictedPaths, journal.executionPaths) ||
     !isOrderedUniqueSubset(journal.uncertainPaths, journal.executionPaths)
   ) {
-    throw new Error("The failed local-publication receipt is not canonical.");
+    throw new Error(noncanonicalFailureReceiptMessage);
   }
   if (
     journal.reason !== "precondition-failed" &&
     journal.reason !== "mutation-failed" &&
     journal.reason !== "rollback-conflict"
   ) {
-    throw new Error("The failed local-publication receipt is not canonical.");
+    throw new Error(noncanonicalFailureReceiptMessage);
   }
   const applied = new Set(journal.appliedPaths);
   const accounted = [...journal.rolledBackPaths, ...journal.conflictedPaths];
@@ -477,12 +479,12 @@ export const assertCanonicalLocalPublicationJournal = (journal: LocalPublication
       journal.uncertainPaths.length !== 0 ||
       journal.recoveryRequired
     ) {
-      throw new Error("The failed local-publication receipt is not canonical.");
+      throw new Error(noncanonicalFailureReceiptMessage);
     }
     return;
   }
   if (!samePaths(journal.intentPaths, journal.executionPaths)) {
-    throw new Error("The failed local-publication receipt is not canonical.");
+    throw new Error(noncanonicalFailureReceiptMessage);
   }
   const uncertain = new Set(journal.uncertainPaths);
   const expectedRecovery = journal.conflictedPaths.length > 0 || journal.uncertainPaths.length > 0;
@@ -497,7 +499,7 @@ export const assertCanonicalLocalPublicationJournal = (journal: LocalPublication
     journal.recoveryRequired !== expectedRecovery ||
     journal.reason !== (expectedRecovery ? "rollback-conflict" : "mutation-failed")
   ) {
-    throw new Error("The failed local-publication receipt is not canonical.");
+    throw new Error(noncanonicalFailureReceiptMessage);
   }
 };
 

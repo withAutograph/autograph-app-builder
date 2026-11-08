@@ -5,6 +5,8 @@ import { assertExactReviewedChangeSet, stableDigest } from "./local-publication"
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 
+const emptyDirectoryKind = "empty-directory";
+
 export const FRESH_BOOTSTRAP_VERSION = 3 as const;
 
 export interface PathIdentity {
@@ -449,9 +451,9 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
     !isPathIdentity(proposal.capability.stateRoot) ||
     !isPathIdentity(proposal.capability.allowedRoot) ||
     !isPathIdentity(proposal.destinationPrestate.parent) ||
-    (proposal.destinationPrestate.kind === "empty-directory" &&
+    (proposal.destinationPrestate.kind === emptyDirectoryKind &&
       !isPathIdentity(proposal.destinationPrestate.destination)) ||
-    (proposal.destinationPrestate.kind !== "empty-directory" &&
+    (proposal.destinationPrestate.kind !== emptyDirectoryKind &&
       proposal.destinationPrestate.kind !== "absent") ||
     !isExecutableIdentity(proposal.capability.systemGitIdentity) ||
     !isExecutableIdentity(proposal.capability.systemPythonIdentity) ||
@@ -512,7 +514,7 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
       proposal.capability.stateRoot,
       proposal.capability.allowedRoot,
       proposal.destinationPrestate.parent,
-      ...(proposal.destinationPrestate.kind === "empty-directory"
+      ...(proposal.destinationPrestate.kind === emptyDirectoryKind
         ? [proposal.destinationPrestate.destination]
         : []),
     ].every((value) => hasExactKeys(value, pathIdentityKeys)) ||
@@ -733,7 +735,7 @@ export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJour
     (journal.status === "succeeded" &&
       (journal.recoveryRequired !== false ||
         journal.commitCount !== 1 ||
-        (journal.destinationPrestate.kind === "empty-directory") !==
+        (journal.destinationPrestate.kind === emptyDirectoryKind) !==
           (journal.swappedOldIdentity !== undefined))) ||
     digest !== freshBootstrapJournalDigest(unsigned) ||
     journal.proposalDigest !== proposal.digest

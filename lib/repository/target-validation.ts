@@ -150,6 +150,8 @@ export type TargetValidationResult =
   | { ok: true; receipt: TargetValidationReceipt }
   | { ok: false; receipt: TargetValidationFailureReceipt };
 
+const validationCommandEvent = "app_builder.validation_command";
+
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 const ansiPattern = new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
@@ -667,7 +669,7 @@ export const executeProposalBoundValidation = (input: {
         JSON.stringify({
           callId: input.attempt.startedByCallId,
           command: planned.name,
-          event: "app_builder.validation_command",
+          event: validationCommandEvent,
           phase: "started",
           startedAt,
         }),
@@ -702,7 +704,7 @@ export const executeProposalBoundValidation = (input: {
           callId: input.attempt.startedByCallId,
           command: planned.name,
           elapsedMs,
-          event: "app_builder.validation_command",
+          event: validationCommandEvent,
           exitCode: result.exitCode,
           finishedAt,
           phase: "finished",
@@ -717,7 +719,7 @@ export const executeProposalBoundValidation = (input: {
           command: planned.name,
           elapsedMs: Math.round(performance.now() - startedMonotonic),
           errorName: error instanceof Error ? error.name : "non_error_rejection",
-          event: "app_builder.validation_command",
+          event: validationCommandEvent,
           finishedAt: new Date().toISOString(),
           phase: "provider_error",
           startedAt,
