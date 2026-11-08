@@ -284,15 +284,15 @@ const bootstrapWithGatewayOrigin = (gatewayOrigin: string) =>
         environment: "preview",
       },
       gateway: {
-        projectId: "gateway",
-        deploymentId: "gateway-deployment",
         branch: "gateway",
+        deploymentId: "gateway-deployment",
         environment: "preview",
+        projectId: "gateway",
       },
       operator: {
-        projectId: "operator",
         deploymentId: "operator-deployment",
         environment: "preview",
+        projectId: "operator",
       },
       verification: {
         gatewayOrigin,
@@ -1006,23 +1006,23 @@ const participantResolutionFixture = (captureOnly = false) => {
     origin: f.configuration.gateway.publicOrigin,
     actors: [
       {
-        actorKey: "owner",
-        name: "Owner",
-        email: "owner@example.test",
         account: "create-email-password",
+        actorKey: "owner",
+        email: "owner@example.test",
+        name: "Owner",
       },
     ],
     organizations: [
-      { organizationId: "first-org", ownerActorKey: "owner", name: "First", slug: "first" },
-      { organizationId: "second-org", ownerActorKey: "owner", name: "Second", slug: "second" },
+      { name: "First", organizationId: "first-org", ownerActorKey: "owner", slug: "first" },
+      { name: "Second", organizationId: "second-org", ownerActorKey: "owner", slug: "second" },
     ],
     memberships: [
-      { organizationId: "first-org", actorKey: "owner", role: "owner" },
-      { organizationId: "second-org", actorKey: "owner", role: "owner" },
+      { actorKey: "owner", organizationId: "first-org", role: "owner" },
+      { actorKey: "owner", organizationId: "second-org", role: "owner" },
     ],
     appAccess: [
-      { organizationId: "first-org", actorKey: "owner", roles: ["member"] },
-      { organizationId: "second-org", actorKey: "owner", roles: ["member"] },
+      { actorKey: "owner", organizationId: "first-org", roles: ["member"] },
+      { actorKey: "owner", organizationId: "second-org", roles: ["member"] },
     ],
   });
   const program = captureOnly
@@ -1054,15 +1054,15 @@ const participantResolutionFixture = (captureOnly = false) => {
         environment: "preview",
       },
       gateway: {
-        projectId: "gateway",
-        deploymentId: "gateway-deployment",
         branch: "gateway-actual",
+        deploymentId: "gateway-deployment",
         environment: "preview",
+        projectId: "gateway",
       },
       operator: {
-        projectId: "operator",
         deploymentId: "operator-deployment",
         environment: "preview",
+        projectId: "operator",
       },
       verification: {
         gatewayOrigin: "https://gateway.example",
@@ -1074,7 +1074,7 @@ const participantResolutionFixture = (captureOnly = false) => {
   const accountPlan = hostedOperatorPlanSchema.parse({
     ...base,
     stage: "auth-participants",
-    effects: [{ id: "normal-accounts", kind: "normal-accounts", description: "Accounts only" }],
+    effects: [{ description: "Accounts only", id: "normal-accounts", kind: "normal-accounts" }],
   });
   const operation = "00000000-0000-4000-8000-000000000011";
   const state = initialNormalActorState(program, operation);
@@ -3136,8 +3136,8 @@ describe("existing populated Auth workflow planning", () => {
           operatorOrigin: "https://operator.example",
           sourceWorkload: f.configuration.gateway.workload,
           trustedSources: {
-            builderProduction: { projectId: "builder", from: "production", to: "preview" },
-            operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+            builderProduction: { from: "production", projectId: "builder", to: "preview" },
+            operatorPreview: { from: "preview", projectId: "operator", to: "preview" },
           },
         },
         deploymentBoundary: {
@@ -3162,8 +3162,8 @@ describe("existing populated Auth workflow planning", () => {
           teamId: "team",
           verification: {
             gatewayOrigin: "https://gateway.example",
-            publicOrigin: "https://apps.example",
             jwksUrl: "https://gateway.example/_platform/jwks.json",
+            publicOrigin: "https://apps.example",
           },
         },
         effects: [
@@ -3957,16 +3957,16 @@ describe("approved historical organization inspection", () => {
       retention: { expiresAt: "2026-10-01T00:00:00Z", policy: "Original approved retention" },
       effects: [
         ...bootstrapPlan().effects,
-        { id: "app-install", kind: "install", description: "Install app" },
+        { description: "Install app", id: "app-install", kind: "install" },
         {
+          description: "Create owned organization",
           id: "auth-membership",
           kind: "auth-membership",
-          description: "Create owned organization",
         },
-        { id: "access", kind: "access", description: "Grant approved access" },
-        { id: "bindings", kind: "bindings", description: "Bind app" },
-        { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind Gateway" },
-        { id: "gateway-delivery", kind: "gateway-delivery", description: "Deliver Gateway" },
+        { description: "Grant approved access", id: "access", kind: "access" },
+        { description: "Bind app", id: "bindings", kind: "bindings" },
+        { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+        { description: "Deliver Gateway", id: "gateway-delivery", kind: "gateway-delivery" },
       ],
       authMembership: {
         kind: "create-owned-organization",
@@ -3984,10 +3984,10 @@ describe("approved historical organization inspection", () => {
           jwksUrl: "https://gateway.example/_platform/jwks.json",
           transportSource: {
             audience: "https://vercel.com/team",
+            environment: "preview",
             issuer: "https://oidc.vercel.com/team",
             ownerId: "team",
             projectId: "operator",
-            environment: "preview",
           },
         },
       },
@@ -4129,8 +4129,8 @@ describe("retained active schema installation scope", () => {
       stage: undefined,
       effects: [
         ...bootstrapPlan().effects,
-        { id: "app-access", kind: "access", description: "Approved grants" },
-        { id: "app-bindings", kind: "bindings", description: "Approved bindings" },
+        { description: "Approved grants", id: "app-access", kind: "access" },
+        { description: "Approved bindings", id: "app-bindings", kind: "bindings" },
       ],
       access: [{ actorId: "qa-actor", organizationId: "qa-org", roles: ["member"] }],
     });
@@ -5131,7 +5131,7 @@ it("plans same-project resource preparation without Preview effects or an enviro
       ...result,
       effects: [
         ...result.effects,
-        { id: "bindings", kind: "bindings", description: "Not approved by a resource plan" },
+        { description: "Not approved by a resource plan", id: "bindings", kind: "bindings" },
       ],
     }),
   ).toThrow();
