@@ -7,6 +7,10 @@ import nextJsPlugins from "ultracite/oxlint/next/js-plugins";
 
 const previewActivationCli = "lib/db/preview-activation-cli.mts";
 
+const githubProviderPath = "lib/provisioning/github-provider.ts";
+const handoffProgressPath = "app/ui/handoff-provisioning-progress.tsx";
+const productionCreatorTestPath = "lib/provisioning/repository-production-creator.test.ts";
+
 export default defineConfig({
   extends: [core, next, jsPlugins, nextJsPlugins, antiSlop],
   ignorePatterns: core.ignorePatterns,
@@ -15,6 +19,85 @@ export default defineConfig({
     typeAware: true,
   },
   overrides: [
+    {
+      // Git object identity requires the existing SHA-1 format.
+      files: [
+        "lib/provisioning/github-provider.test.ts",
+        githubProviderPath,
+        "lib/repository/dependency-cache.test.ts",
+        "lib/repository/fresh-bootstrap.ts",
+        "lib/repository/github-publication.test.ts",
+        "lib/repository/node-fresh-bootstrap.ts",
+      ],
+      rules: { "sonarjs/hashing": "off" },
+    },
+    {
+      // Preserve existing provider and string lookup behavior pending review.
+      files: [
+        "evals/support/product-quality.ts",
+        "lib/auth/cursor-client.ts",
+        githubProviderPath,
+        "lib/provisioning/vercel-provider.ts",
+      ],
+      rules: { "react-doctor/js-set-map-lookups": "off" },
+    },
+    {
+      files: [
+        "evals/support/self-reproduction-runtime.ts",
+        "scripts/design-quality/archive.mts",
+        "scripts/design-quality/rescore.mts",
+        "scripts/smoke-portable-plugin.mts",
+        "scripts/test-capability-preload.mjs",
+      ],
+      rules: { "typescript/no-unsafe-call": "off" },
+    },
+    {
+      files: ["evals/support/self-reproduction-candidate-workflows.ts"],
+      rules: { "github/no-blur": "off" },
+    },
+    {
+      files: [githubProviderPath],
+      rules: { "react-doctor/js-cache-property-access": "off" },
+    },
+    {
+      files: ["components/auth/additional-field.tsx"],
+      rules: { "react-doctor/js-hoist-intl": "off" },
+    },
+    {
+      files: ["app/ui/handoff-controls.tsx"],
+      rules: { "react-doctor/no-fetch-in-effect": "off" },
+    },
+    {
+      files: [handoffProgressPath],
+      rules: { "react-doctor/no-derived-state": "off" },
+    },
+    {
+      files: [handoffProgressPath],
+      rules: { "react-doctor/no-derived-state-effect": "off" },
+    },
+    {
+      files: ["lib/mcp/session-app/index.tsx"],
+      rules: { "react-doctor/rerender-lazy-ref-init": "off" },
+    },
+    {
+      files: ["app/ui/use-builder-draft-autosave.ts"],
+      rules: { "sonarjs/pseudo-random": "off" },
+    },
+    {
+      // Preserve hoisting of exported environment setup functions.
+      files: ["scripts/eve-worker-environment.mjs", "scripts/gate-a-eval-profile.mjs"],
+      rules: { "eslint/func-style": "off" },
+    },
+    {
+      // Retain existing receiver and callback behavior pending review.
+      files: [
+        "lib/auth/preview-auth-ui.test.ts",
+        "lib/auth/preview-cimd-transport.ts",
+        "lib/image/ghcr-bound-helper.ts",
+        productionCreatorTestPath,
+      ],
+      rules: { "typescript/unbound-method": "off" },
+    },
     {
       // Preserve existing runtime contracts pending focused migration.
       files: ["lib/eve/same-origin-http.ts"],
@@ -119,7 +202,7 @@ export default defineConfig({
         "app/ui/app-builder.test.tsx",
         "app/ui/builder-draft-outbox.ts",
         "app/ui/handoff-controls.tsx",
-        "app/ui/handoff-provisioning-progress.tsx",
+        handoffProgressPath,
         "app/ui/use-builder-controller.ts",
         "components/auth/passkey/add-passkey-dialog.tsx",
         "lib/agent/deployment-repository-access-runtime.test.ts",
@@ -132,7 +215,7 @@ export default defineConfig({
         "lib/handoff/deployment.test.ts",
         "lib/handoff/page-data.test.ts",
         "lib/provisioning/hosted-operator-ready-delivery-replacement.test.ts",
-        "lib/provisioning/repository-production-creator.test.ts",
+        productionCreatorTestPath,
       ],
       rules: { "unicorn/no-useless-undefined": "off" },
     },
@@ -153,7 +236,7 @@ export default defineConfig({
         "lib/app-access/native-management.ts",
         "lib/eve/private-repository-production-approval.test.ts",
         "lib/provisioning/repository-production-creator.ts",
-        "lib/provisioning/repository-production-creator.test.ts",
+        productionCreatorTestPath,
         "lib/provisioning/repository-production-native.ts",
         "lib/provisioning/repository-production-setup.test.ts",
         "scripts/eve-eval-fetch-preload.mjs",
@@ -263,36 +346,25 @@ export default defineConfig({
     "anti-slop/no-unknown-returns": "off",
     "anti-slop/no-unsafe-dictionary-type": "off",
     "anti-slop/require-safety-comment-for-type-assertion": "off",
-    "eslint/func-style": "off",
     "eslint/no-await-in-loop": "off",
     "github/filenames-match-regex": "off",
-    "github/no-blur": "off",
     "github/no-then": "off",
     "react-doctor/async-await-in-loop": "off",
     "react-doctor/async-parallel": "off",
     "react-doctor/effect-needs-cleanup": "off",
-    "react-doctor/js-cache-property-access": "off",
-    "react-doctor/js-hoist-intl": "off",
     "react-doctor/js-index-maps": "off",
-    "react-doctor/js-set-map-lookups": "off",
     "react-doctor/nextjs-no-client-side-redirect": "off",
     "react-doctor/no-chain-state-updates": "off",
-    "react-doctor/no-derived-state": "off",
-    "react-doctor/no-derived-state-effect": "off",
-    "react-doctor/no-fetch-in-effect": "off",
     "react-doctor/no-giant-component": "off",
     "react-doctor/no-pass-data-to-parent": "off",
     "react-doctor/prefer-html-dialog": "off",
-    "react-doctor/rerender-lazy-ref-init": "off",
     "react-doctor/server-sequential-independent-await": "off",
     "sonarjs/cognitive-complexity": "off",
     "sonarjs/expression-complexity": "off",
     "sonarjs/function-name": "off",
-    "sonarjs/hashing": "off",
     "sonarjs/max-union-size": "off",
     "sonarjs/no-os-command-from-path": "off",
     "sonarjs/no-undefined-assignment": "off",
-    "sonarjs/pseudo-random": "off",
     "sonarjs/publicly-writable-directories": "off",
     "sonarjs/too-many-break-or-continue-in-loop": "off",
     "typescript/consistent-return": "off",
@@ -300,13 +372,11 @@ export default defineConfig({
     "typescript/no-confusing-void-expression": "off",
     "typescript/no-unsafe-argument": "off",
     "typescript/no-unsafe-assignment": "off",
-    "typescript/no-unsafe-call": "off",
     "typescript/no-unsafe-member-access": "off",
     "typescript/no-unsafe-type-assertion": "off",
     "typescript/prefer-nullish-coalescing": "off",
     "typescript/strict-boolean-expressions": "off",
     "typescript/strict-void-return": "off",
-    "typescript/unbound-method": "off",
     "eslint/complexity": "off",
     // Temporary migration items: re-enable after the existing findings are fixed.
     "eslint/sort-keys": "off",

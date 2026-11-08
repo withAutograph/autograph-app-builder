@@ -374,9 +374,11 @@ describe("opaque App Builder handoffs", () => {
       }
       vi.spyOn(store, "read").mockResolvedValue(forged);
       await Promise.all(
-        [service.read, service.status, service.resolve].map((read) =>
-          expect(read(lookup)).rejects.toBeInstanceOf(BuilderHandoffUnavailableError),
-        ),
+        [
+          () => service.read(lookup),
+          () => service.status(lookup),
+          () => service.resolve(lookup),
+        ].map((read) => expect(read()).rejects.toBeInstanceOf(BuilderHandoffUnavailableError)),
       );
       await expect(
         service.renew({ ...lookup, creationRequestId: randomUUID() }),
