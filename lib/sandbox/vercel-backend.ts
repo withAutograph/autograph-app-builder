@@ -40,10 +40,10 @@ function providerDiagnostic(error: unknown): string {
     return "unknown";
   }
   const { cause } = error as Error & { cause?: unknown };
-  const code =
-    typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
-      ? cause.code
-      : "provider_error";
+  if (typeof cause !== "object" || cause === null || !("code" in cause)) {
+    return "Vercel Sandbox request failed (provider_error)";
+  }
+  const code = typeof cause.code === "string" ? cause.code : "provider_error";
   return `Vercel Sandbox request failed (${code})`;
 }
 
