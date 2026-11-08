@@ -65,12 +65,14 @@ const fixture = (failure) => {
   let holderClosed = false;
   let readyHook;
   const ports = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     authorize() {
       if (failure === "source_authorization") {
         throw fault;
       }
       return Promise.resolve();
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     commitReceipt(input) {
       if (failure === "receipt_commit") {
         throw fault;
@@ -80,6 +82,7 @@ const fixture = (failure) => {
       }
       throw new Error("unexpected-commit");
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     readReceipt() {
       if (failure === "receipt_read" || (failure === "post_holder_receipt_read" && holderClosed)) {
         throw fault;
@@ -100,6 +103,7 @@ const fixture = (failure) => {
       await input.authorizeOwner(input.binding);
       return { kind: "candidate", candidate };
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     getHook() {
       if (failure === "initial_ready_lookup" || (failure === "owner_readiness_lookup" && started)) {
         throw fault;
@@ -115,9 +119,11 @@ const fixture = (failure) => {
       assert.equal(handle, candidate);
       return payload;
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     readEntry() {
       return Promise.resolve({ kind: "handoff", checkpoint });
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     reconcile() {
       return Promise.resolve({
         kind: "ready",
@@ -128,6 +134,7 @@ const fixture = (failure) => {
         provenance: { selectedOrigin: payload.candidates[0].origin },
       });
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     start(input) {
       if (failure === "owner_start") {
         throw fault;

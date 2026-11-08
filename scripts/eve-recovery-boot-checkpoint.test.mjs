@@ -10,6 +10,7 @@ import { test } from "vitest";
 
 const require = createRequire(import.meta.url);
 const sdk = pathToFileURL(`${path.dirname(require.resolve("eve/package.json"))}/dist/src/`).href;
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const load = (file) => import(`${sdk}${file}`);
 const { createTerminalRecoveryCandidateCollector, readTerminalRecoveryCandidate } = await load(
   "execution/session/recovery-candidate.js",
@@ -239,6 +240,7 @@ test("failed waiting boot retains the validated original app, owner, unapproved 
   // Reproduce failure after real boot validation/activation, before the first authored turn.
   await assert.rejects(
     bootTerminalRecoveryOwnerWithPorts(f.entry, {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       createHook: () =>
         Object.assign(
           Promise.resolve({

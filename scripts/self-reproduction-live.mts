@@ -118,6 +118,7 @@ const waitForEveAttempt = async (
   await waitForEveAttempt(url, signal, deadline);
 };
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const waitForEve = (url: string, signal: AbortSignal) =>
   waitForEveAttempt(url, signal, Date.now() + 120_000);
 

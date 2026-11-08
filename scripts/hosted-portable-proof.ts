@@ -470,6 +470,7 @@ export class HostedMcpProofClient {
     return result;
   }
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   rawInitialize(authenticate = true) {
     return this.post(
       "initialize",

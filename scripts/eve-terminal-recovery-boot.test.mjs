@@ -794,11 +794,13 @@ it("an idle recovery owner enters the actual inbox wait without admitting a mode
       enterWait();
       return parkedWait;
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     dispose: vi.fn(() => Promise.resolve()),
   };
   const ports = {
     createSessionInbox: () => inbox,
     getWorkflowMetadata: () => ({ workflowRunId: "idle-successor" }),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     validateCheckpoint: vi.fn(() => Promise.resolve()),
     emitIdleWaiting: emitTerminalRecoveryWaitingStep,
     getWritable: () => {
@@ -810,6 +812,7 @@ it("an idle recovery owner enters the actual inbox wait without admitting a mode
       });
     },
     createHook: () =>
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       Object.assign(activation, { getConflict: () => Promise.resolve(), dispose: vi.fn() }),
   };
   const input = {
@@ -872,6 +875,7 @@ it("keeps a brand-new prewarmed owner silent until its first message", async () 
   const chunks = [];
   const cp = checkpoint();
   const inbox = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     claimSessionHooks: vi.fn(() => Promise.resolve()),
     onInterrupt: () => vi.fn(),
     drain: () => [],
@@ -881,6 +885,7 @@ it("keeps a brand-new prewarmed owner silent until its first message", async () 
       enterWait();
       return parkedWait;
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     dispose: vi.fn(() => Promise.resolve()),
   };
   const running = runPreparedSession(

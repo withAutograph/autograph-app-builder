@@ -21,6 +21,7 @@ const { sessionCommandHookToken, sessionInboxHookToken } = await import(
   `${sdk}execution/session-inbox/address.js`
 );
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const noEffect = () => Promise.resolve();
 
 let sequence = 0;
@@ -75,6 +76,7 @@ const fixture = () => {
   let onDispose = noEffect;
   const input = {
     auth,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     authorizeCurrent() {
       if (currentError !== null) {
         throw new Error(currentError);
@@ -109,6 +111,7 @@ const fixture = () => {
       }
       await onDispose(request);
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     getHook(requestedToken) {
       reads.push({ kind: "token", requestedToken });
       const hook = hooksByToken.get(requestedToken);
@@ -117,6 +120,7 @@ const fixture = () => {
       }
       return Promise.resolve(hook);
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     getHookById(requestedHookId) {
       reads.push({ kind: "id", requestedHookId });
       const byId = hooksById.get(requestedHookId);
@@ -126,11 +130,13 @@ const fixture = () => {
       return Promise.resolve(byId);
     },
     isHookNotFound: (error) => error?.message === HOOK_NOT_FOUND_MESSAGE,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     readRun(runId) {
       reads.push({ kind: "run", runId });
       assert.equal(runId, holderOwnerRunId);
       return Promise.resolve({ runId, status });
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     readRunEntry(runId) {
       reads.push({ kind: "entry", runId });
       assert.equal(runId, holderOwnerRunId);
@@ -551,10 +557,12 @@ it("adopts an already committed receipt or a concurrent winner without entering 
       let receipt = phase === "already-committed" ? binding : null;
       const invoked = [];
       const ports = {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         authorize: () => Promise.resolve(),
         commitReceipt: () => {
           throw new Error("unexpected-commit");
         },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         readReceipt: () => Promise.resolve(receipt),
       };
       const dependencies = {

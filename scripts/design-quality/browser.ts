@@ -320,7 +320,7 @@ export async function settleFiniteMotion(page: Page) {
       const iterations = timing?.iterations ?? 1;
       return Number.isFinite(iterations) && Number.isFinite(timing?.duration);
     });
-    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+    // oxlint-disable-next-line github/no-then, typescript/promise-function-async -- Preserve the existing rejection handling and settlement behavior. Preserve the returned promise and synchronous throw behavior.
     await Promise.all(finite.map((motion) => motion.finished.catch(() => null)));
   });
 }
@@ -1205,7 +1205,7 @@ export async function capturePreview(input: {
         // oxlint-disable-next-line eslint/no-await-in-loop -- Each disposable viewport needs its own fixture.
         await input.preparePage(page);
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Preserve intentional sequential control flow.
+      // oxlint-disable-next-line eslint/no-await-in-loop, typescript/promise-function-async -- Preserve intentional sequential control flow. Preserve the returned promise and synchronous throw behavior.
       await page.evaluate(() => document.fonts.ready);
       await runSequentially(
         Array.from({ length: input.scenarios.length + 1 }, (_, index) => index),

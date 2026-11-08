@@ -15,6 +15,7 @@ const eve = path.resolve(
   process.env.EVE_RECOVERY_NATIVE_ROOT ?? path.dirname(require.resolve("eve/package.json")),
 );
 const nativePath = "dist/src/execution/session/recovery-candidate.js";
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const load = (file) => import(pathToFileURL(path.resolve(eve, file)).href);
 const {
   collectTerminalRecoveryCandidate,
@@ -512,6 +513,7 @@ test("foreign logical checkpoints fail before the native stream is read", async 
     f.collect({
       ...f.input,
       binding: { ...binding, logicalSessionId: "foreign" },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       authorizeOwner: () => Promise.resolve(),
     }),
     /logical identity differs/u,

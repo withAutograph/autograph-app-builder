@@ -176,6 +176,7 @@ it("serializes the idle waiting step after activation without capturing recovery
       calls.push("activation-hook");
       listen();
       return Object.assign(activation, {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         getConflict: () => Promise.resolve(),
         dispose() {
           // The queued durable step keeps this fixture suspended before disposal.
@@ -183,7 +184,9 @@ it("serializes the idle waiting step after activation without capturing recovery
       });
     },
     createSessionInbox: () => ({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       claimSessionHooks: () => Promise.resolve(),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       dispose: () => Promise.resolve(),
       drain: () => [],
       onInterrupt: () => () => {
@@ -195,6 +198,7 @@ it("serializes the idle waiting step after activation without capturing recovery
     }),
     getWorkflowMetadata: () => ({ workflowRunId: IDLE_OWNER_RUN_ID }),
     getWritable: () => writable,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     validateCheckpoint: () => Promise.resolve(),
     emitIdleWaiting: waitingStep,
   };

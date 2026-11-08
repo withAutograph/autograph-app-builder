@@ -119,6 +119,7 @@ test("actual Eve keeps in-flight A, dispatches idle B static/dynamic, restores t
       sessionId,
     });
     const held = collect(await created.session.send(staticHold));
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     await vi.waitFor(() => access(path.join(first.root, "started")), {
       interval: 20,
       timeout: 30_000,

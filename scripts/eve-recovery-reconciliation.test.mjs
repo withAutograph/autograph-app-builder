@@ -23,6 +23,7 @@ const require = createRequire(import.meta.url);
 const eve = path.resolve(
   process.env.EVE_RECOVERY_NATIVE_ROOT ?? path.dirname(require.resolve("eve/package.json")),
 );
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
 const {
   createTerminalRecoveryCandidateCollector,
@@ -193,10 +194,12 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
         },
       });
     }
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     world.runs.get = (id) => {
       readOperations.push(["runs.get", id]);
       return Promise.resolve(runs.get(id));
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     world.runs.list = () => {
       readOperations.push(["runs.list"]);
       return Promise.resolve({
@@ -206,6 +209,7 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
     };
     if (options.omitListedOwner === true) {
       world.hooks = {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         getByToken: (requestedToken) => {
           assert.equal(requestedToken, inbox);
           return Promise.resolve({ runId: ownerRunId });
@@ -213,6 +217,7 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
       };
     }
     let parentScans = 0;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     world.events.list = ({ runId, resolveData }) => {
       readOperations.push([eventsListOperation, runId, resolveData]);
       if (runId === anchorRunId) {
@@ -238,12 +243,14 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
         hasMore: false,
       });
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     world.events.get = (runId, id) => {
       readOperations.push(["events.get", runId]);
       return Promise.resolve(
         (runId === anchorRunId ? parentEvents : childEvents).find((event) => event.eventId === id),
       );
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     world.steps.get = (runId, id) => {
       readOperations.push(["steps.get", runId]);
       return Promise.resolve(
@@ -277,6 +284,7 @@ const attachNativeSnapshot = async (world, nativeEvents, enabled) => {
     chunks.push({ index: chunks.length, data });
   }
   world.streams = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     get: (_id, _name, startIndex) => {
       assert.equal(startIndex, 0);
       let index = 0;
@@ -295,6 +303,7 @@ const attachNativeSnapshot = async (world, nativeEvents, enabled) => {
     getChunks: () => {
       throw new Error("Serial native snapshot pagination is forbidden.");
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     getInfo: () => Promise.resolve({ tailIndex: chunks.length - 1, done: false }),
   };
   return snapshotKey;
@@ -596,6 +605,7 @@ const fixture = async (options = {}) => {
   ];
   const world = {
     events: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       get: (_runId, id) => Promise.resolve(events.find((value) => value.eventId === id)),
       list: async () => await Promise.resolve({ data: events, hasMore: false }),
     },

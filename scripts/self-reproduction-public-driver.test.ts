@@ -664,6 +664,7 @@ describe("public self-reproduction driver", () => {
       save: () => {
         savedCursors.push(current.session?.cursor ?? 0);
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       sleep: () => Promise.resolve(),
       state: current,
       timeoutMs: 1000,

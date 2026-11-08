@@ -335,6 +335,7 @@ it.each([
       ],
     ]);
     const model = new MockLanguageModelV4({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       doGenerate: ({ prompt }) => {
         requests += 1;
         if (requests === 1) {
@@ -382,6 +383,7 @@ it.each([
       },
     });
     const run = createToolLoopHarness({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       resolveModel: () => Promise.resolve(model),
       tools,
     });
@@ -418,6 +420,7 @@ it.each([
       abort.abort(new Error("cancelled before replay"));
       const cancelled = createToolLoopHarness({
         abortSignal: abort.signal,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         resolveModel: () => Promise.resolve(model),
         tools,
       });
@@ -553,6 +556,7 @@ it.each([400, 503])(
       ],
     ]);
     const model = new MockLanguageModelV4({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       doGenerate: ({ prompt }) => {
         generatedRequests += 1;
         if (generatedRequests > 1) {
@@ -586,6 +590,7 @@ it.each([400, 503])(
           warnings: [],
         });
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       doStream: () => {
         providerRequests += 1;
         return Promise.reject(
@@ -604,9 +609,11 @@ it.each([400, 503])(
       contextStorage.run(ctx, () => {
         const options = {
           tools,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           resolveModel: () => Promise.resolve(model),
         };
         if (events !== undefined) {
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           options.handleEvent = (event) => {
             events.push(event);
             return Promise.resolve();
@@ -770,6 +777,7 @@ it.each(["generic", "typed"])(
     const before = JSON.stringify(session.state);
     const run = createToolLoopHarness({
       abortSignal: abort.signal,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       resolveModel: () => {
         models += 1;
         return Promise.reject(new Error("must not resolve model"));

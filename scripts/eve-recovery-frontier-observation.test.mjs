@@ -7,6 +7,7 @@ import { afterAll, test } from "vitest";
 
 const require = createRequire(import.meta.url);
 const eve = path.dirname(require.resolve("eve/package.json"));
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
 const { recordTerminalRecoveryObservation, protocolIdentityHash } = await load(
   "harness/model-protocol-diagnostic.js",

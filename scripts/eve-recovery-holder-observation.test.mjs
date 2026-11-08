@@ -67,9 +67,9 @@ const fixture = () => {
       sessionState: { sessionId: descriptor.logicalSessionId },
     },
   };
-  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping, typescript/promise-function-async -- Keep this helper scoped to its fixture or invocation. Preserve the returned promise and synchronous throw behavior.
   let onRead = () => Promise.resolve();
-  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping, typescript/promise-function-async -- Keep this helper scoped to its fixture or invocation. Preserve the returned promise and synchronous throw behavior.
   let onBinding = () => Promise.resolve();
   const facts = {
     committedChildMatches: false,
@@ -93,6 +93,7 @@ const fixture = () => {
     },
   };
   const deps = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     getHook(requestedToken) {
       seen.tokens.push(requestedToken);
       assert.equal(requestedToken, token);
@@ -115,6 +116,7 @@ const fixture = () => {
   };
   const input = {
     auth,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     authorizeCurrent() {
       if (currentRejection !== null) {
         throw new Error(`current-${currentRejection}-canary`);
@@ -301,6 +303,7 @@ it("a missing holder stays read only and cannot emit stale absence after a new c
 
   const changed = fixture();
   let lookups = 0;
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   changed.deps.getHook = () => {
     lookups += 1;
     if (lookups === 1) {

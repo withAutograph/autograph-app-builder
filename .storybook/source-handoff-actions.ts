@@ -1,4 +1,5 @@
 /** Stories render client state without uploading or importing application source. */
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const unavailable = (): Promise<never> => {
   throw new Error("Source upload actions are unavailable in Storybook.");
 };

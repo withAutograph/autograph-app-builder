@@ -20,6 +20,7 @@ const MIXED_NATIVE_CALL_ID = "mixed-native";
 
 const require = createRequire(import.meta.url);
 const eve = path.dirname(require.resolve("eve/package.json"));
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
 const { createTerminalRecoveryCandidateCollector, readTerminalRecoveryCandidate } = await load(
   "execution/session/recovery-candidate.js",
@@ -682,6 +683,7 @@ test("actual SDK exposes retained mixed orphan without inventing or replaying it
     ],
   ]);
   const model = new MockLanguageModelV4({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     doGenerate: ({ prompt }) => {
       requests += 1;
       const summary = summarizeModelProtocol(prompt);
@@ -715,6 +717,7 @@ test("actual SDK exposes retained mixed orphan without inventing or replaying it
     turn: { id: ORIGINAL_TURN_ID },
   });
   await contextStorage.run(ctx, () =>
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     createToolLoopHarness({ resolveModel: () => Promise.resolve(model), tools })(session),
   );
   assert.equal(requests, 1);

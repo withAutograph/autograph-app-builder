@@ -319,13 +319,16 @@ try {
   const legacyNow = new Date("2026-10-21T15:00:00.000Z");
   const nativeRegistry = createNativeTargetOnboardingRegistry({
     store: nativeStore,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     authorize: () => Promise.resolve(legacyOwner),
     now: () => legacyNow,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     assertPlanOrigin: (owner, plan) => {
       assert.deepEqual(owner, legacyOwner);
       assert.deepEqual(plan, legacyPlan);
       return Promise.resolve();
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     readApproval: () =>
       Promise.resolve({
         requestId: "legacy-approval",

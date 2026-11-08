@@ -200,6 +200,7 @@ try {
     mutation(receipt);
     await writeFile(path, `${JSON.stringify(receipt, null, 2)}\n`);
     await expectRejected(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       () =>
         verifyPortableProofArtifact({
           installRoot: installs,
@@ -261,6 +262,7 @@ try {
   missingAssetReceipt.codexMarketplaceArchive.sha256 = sha256(missingAssetArchive);
   await writeFile(missingAssetReceiptPath, `${JSON.stringify(missingAssetReceipt, null, 2)}\n`);
   await expectRejected(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     () =>
       verifyPortableProofArtifact({
         installRoot: installs,
@@ -288,6 +290,7 @@ try {
   tamperedAssetReceipt.codexMarketplaceAssets[missingAssetPath] = sha256(tamperedAssetFile);
   await writeFile(tamperedAssetReceiptPath, `${JSON.stringify(tamperedAssetReceipt, null, 2)}\n`);
   await expectRejected(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     () =>
       verifyPortableProofArtifact({
         installRoot: installs,
@@ -337,6 +340,7 @@ try {
   await writeFile(treeDriftReceiptPath, `${JSON.stringify(treeDriftReceipt, null, 2)}\n`);
   await writeFile(join(checkoutDriftRepository, "assets", "autograph-icon.png"), treeDriftBytes);
   await expectRejected(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     () =>
       verifyPortableProofArtifact({
         installRoot: installs,
@@ -351,6 +355,7 @@ try {
   const archivePath = join(archiveTamper, archiveName);
   await writeFile(archivePath, Buffer.concat([await readFile(archivePath), Buffer.from("tamper")]));
   await expectRejected(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     () =>
       verifyPortableProofArtifact({
         installRoot: installs,
@@ -368,6 +373,7 @@ try {
   harness.transport.url = "https://wrong.autograph.dev/mcp";
   await writeFile(codexHarness, `${JSON.stringify(harness, null, 2)}\n`);
   await expectRejected(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     () =>
       verifyPortableProofArtifact({
         installRoot: installedTamper,

@@ -58,6 +58,7 @@ function principal(ownerUserId: string, workspaceId = "workspace_1") {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 function acquire(owner: string, session: string, workspace = "workspace_1") {
   return store.acquire({
     adapterSessionId: session,
@@ -138,6 +139,7 @@ try {
 
   await clear();
   const workspace = await Promise.all(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     Array.from({ length: 5 }, (_, index) => acquire(`user_${index}`, `session_${index}`)),
   );
   assert.equal(workspace.filter(({ disposition }) => disposition === "acquired").length, 5);
@@ -291,6 +293,7 @@ try {
   assert.equal(stoppedReacquired.disposition, "acquired");
   const retry = await reconcileExpiredSandboxLeases({
     nowEpochMs: 0,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     stopSandbox: () => Promise.resolve(),
     store,
   });

@@ -15,6 +15,7 @@ const ORIGINAL_TURN_ID = "original-turn";
 
 const require = createRequire(import.meta.url);
 const eve = path.dirname(require.resolve("eve/package.json"));
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
 const { createTerminalRecoveryCandidateCollector, readTerminalRecoveryCandidate } = await load(
   "execution/session/recovery-candidate.js",
@@ -139,6 +140,7 @@ const fixture = async (options = {}) => {
   };
   const world = {
     events: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       list: () =>
         Promise.resolve({
           data: [
@@ -153,10 +155,13 @@ const fixture = async (options = {}) => {
           hasMore: false,
         }),
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     runs: { get: () => Promise.resolve({ runId: owner, status: "completed" }) },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     steps: { get: () => Promise.resolve(step) },
   };
   const collect = createTerminalRecoveryCandidateCollector({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     getWorld: () => Promise.resolve(world),
     hydrateStepArguments: (value, runId, key) =>
       serialization.hydrateStepArguments(value, runId, key, []),
@@ -168,10 +173,12 @@ const fixture = async (options = {}) => {
       yield* options.nativeEvents ?? [];
     },
     requireEventSlot: (id) => Number(id.slice(5)),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     resolveRunEncryptionKey: () => Promise.resolve(),
   });
   const collected = await collect({
     binding: { ownerRunId: owner, logicalSessionId: logical },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     authorizeOwner: () => Promise.resolve(),
   });
   assert.equal(collected.kind, "candidate");
@@ -183,6 +190,7 @@ const runNextModel = async (ready) => {
   let executions = 0;
   let requests = 0;
   const model = new MockLanguageModelV4({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     doGenerate: ({ prompt }) => {
       requests += 1;
       const summary = summarizeModelProtocol(prompt);
@@ -424,12 +432,16 @@ test("trusted Builder call contract flows through actual native prepare and reco
       descriptor,
       auth: { authenticator: "fixture", principalType: "user", principalId: "owner" },
       ports: {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         authorize: () => Promise.resolve(),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         readReceipt: () => Promise.resolve(receipt),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         commitReceipt: ({ recoveryBinding }) => {
           receipt = recoveryBinding;
           return Promise.resolve(receipt);
         },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         authorizeRepeatableRecoveryCalls: (input) => {
           contractReads += 1;
           return Promise.resolve(authorizeRepeatablePrivateApplyCalls(input));
@@ -443,8 +455,10 @@ test("trusted Builder call contract flows through actual native prepare and reco
       },
       readCandidate: readTerminalRecoveryCandidate,
       reconcile: reconcileTerminalRecoveryCandidate,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readEntry: () =>
         Promise.resolve({ checkpoint: { sessionTimeoutMs: false }, kind: "handoff" }),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       start: (input) => {
         starts += 1;
         ({ checkpoint } = input);
@@ -454,10 +468,12 @@ test("trusted Builder call contract flows through actual native prepare and reco
         };
         return Promise.resolve();
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       getHook: () =>
         hook === undefined ? Promise.reject(new Error("missing hook")) : Promise.resolve(hook),
       isHookNotFound: (error) => error.message === "missing hook",
       now: () => 0,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       wait: () => Promise.reject(new Error("unexpected wait")),
     },
   );

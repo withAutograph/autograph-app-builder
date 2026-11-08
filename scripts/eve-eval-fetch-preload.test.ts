@@ -5,6 +5,7 @@ import { isolateAbortSignalPerFetch } from "./eve-eval-fetch-preload.mjs";
 describe("Eve eval fetch signal isolation", () => {
   it("derives one signal per request while retaining cancellation", async () => {
     const observedSignals: AbortSignal[] = [];
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const fetchImplementation = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.signal !== undefined && init.signal !== null) {
         observedSignals.push(init.signal);
@@ -15,6 +16,7 @@ describe("Eve eval fetch signal isolation", () => {
     const evaluation = new AbortController();
 
     await Promise.all(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       Array.from({ length: 12 }, (_, index) =>
         fetch(`http://127.0.0.1/${index}`, { signal: evaluation.signal }),
       ),
@@ -33,6 +35,7 @@ describe("Eve eval fetch signal isolation", () => {
   });
 
   it("leaves requests without an explicit signal unchanged", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const fetchImplementation = vi.fn(() => Promise.resolve(new Response(null)));
     const fetch = isolateAbortSignalPerFetch(fetchImplementation);
 

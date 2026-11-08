@@ -116,6 +116,7 @@ await writeFile(
 const clientRoot = path.join(output, "clients");
 await mkdir(clientRoot);
 await Promise.all(
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   (["vscode", "cursor", "codex"] as const).map((client) =>
     writeFile(
       path.join(clientRoot, `${client}.client-harness.json`),
