@@ -471,6 +471,7 @@ export const createRepositoryProductionNativeHandler =
               signal: effectSignal,
             })(),
           runtimeBinding: createRepositoryProductionRuntimeBinding({
+            runtimeEndpoint: { hostname: profile.neon.endpoint, port: 5432 },
             readCredential,
             signal: effectSignal,
             teamId: configuration.operator.ownerId,

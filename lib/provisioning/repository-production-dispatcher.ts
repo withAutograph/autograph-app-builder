@@ -173,7 +173,14 @@ export const createRepositoryProductionHandler =
         return reply({ version: 1, ...(await deps.readSetup(owner)) });
       }
       if (body.action === "access-status") {
-        return reply(appAccessSnapshotSchema.parse(await deps.management.read(owner, body.cursor)));
+        return reply(
+          await observeRepositoryProductionPhase(
+            "access_projection",
+            "binding_unavailable",
+            async () =>
+              appAccessSnapshotSchema.parse(await deps.management.read(owner, body.cursor)),
+          ),
+        );
       }
       if (body.action === "access-command") {
         return reply(

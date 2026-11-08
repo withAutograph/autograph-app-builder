@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRepositoryProductionRuntimeBinding } from "./repository-production-runtime-binding";
+import { repositoryProductionAppBoundaryKey } from "./repository-production-app-boundary";
 import {
   initialRepositoryProductionRecord,
   repositoryProductionOperationRef,
@@ -46,7 +47,16 @@ const fixture = () => {
     effect: "bind-runtime",
     row: { operationRef: repositoryProductionOperationRef(scope), record, revision: 1 },
   };
+  record.resource = {
+    resourceId: "fixture-resource",
+    database: "app_db",
+    runtimeRole: "app_role",
+    migratorRole: "app_migrator",
+  };
   let row: Record<string, string | string[]> | undefined;
+  let boundary: Record<string, string | string[]> | undefined;
+  let boundaryWrites = 0;
+  let loseBoundaryResponse = false;
   let loseResponse = false;
   let writes = 0;
   let detail: unknown;
@@ -56,7 +66,7 @@ const fixture = () => {
     const url = new URL(input instanceof Request ? input.url : input.toString());
     expect(url.searchParams.get("teamId")).toBe("team");
     expect(url.pathname).toContain("/projects/app-project/env");
-    const readPhase = url.pathname.endsWith("/env-id") ? "detail" : "list";
+    const readPhase = /\/(?:env-id|boundary-id)$/u.test(url.pathname) ? "detail" : "list";
     const phase = init?.method === "POST" ? "write" : readPhase;
     if (rejection !== undefined) {
       throw rejection;
@@ -65,19 +75,34 @@ const fixture = () => {
       return new Response("private-response-body", { status: httpFailure.status });
     }
     if (init?.method === "POST") {
-      writes += 1;
       const body = z.string().parse(init.body);
-      row = {
-        id: "env-id",
-        ...z.record(z.string(), z.union([z.string(), z.array(z.string())])).parse(JSON.parse(body)),
-      };
-      if (loseResponse) {
+      const parsed = z
+        .record(z.string(), z.union([z.string(), z.array(z.string())]))
+        .parse(JSON.parse(body));
+      if (parsed.key === "REQUESTS_DATABASE_URL") {
+        writes += 1;
+        row = { id: "env-id", ...parsed };
+      } else {
+        boundaryWrites += 1;
+        boundary = { id: "boundary-id", ...parsed };
+        if (loseBoundaryResponse) {
+          loseBoundaryResponse = false;
+          throw new Error("boundary response lost");
+        }
+      }
+      if (loseResponse && parsed.key === "REQUESTS_DATABASE_URL") {
+        loseResponse = false;
         throw new Error("response lost");
       }
       return Response.json({ created: row });
     }
+    if (url.pathname.endsWith("/boundary-id")) {
+      return Response.json({ ...boundary, decrypted: false });
+    }
     return Response.json(
-      url.pathname.endsWith("/env-id") ? (detail ?? row) : { envs: row ? [row] : [] },
+      url.pathname.endsWith("/env-id")
+        ? (detail ?? row)
+        : { envs: [row, boundary].filter((value) => value !== undefined) },
     );
   };
   return {
@@ -89,6 +114,14 @@ const fixture = () => {
       row = value;
     },
     row: () => row,
+    boundary: () => boundary,
+    replaceBoundary: (value?: Record<string, string | string[]>) => {
+      boundary = value;
+    },
+    loseBoundaryResponse: () => {
+      loseBoundaryResponse = true;
+    },
+    boundaryWrites: () => boundaryWrites,
     detail: (value: unknown) => {
       detail = value;
     },
@@ -100,6 +133,7 @@ const fixture = () => {
     },
     service: createRepositoryProductionRuntimeBinding({
       teamId: "team",
+      runtimeEndpoint: { hostname: "ep-test.neon.tech", port: 5432 },
       signal: new AbortController().signal,
       readCredential: async () => "provider-token",
       fetch: fetcher,
@@ -112,6 +146,125 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 describe("Production runtime credential binding", () => {
+  it.each([
+    ["requests", "REQUESTS_APP_BOUNDARY"],
+    ["builder-created-crm", "BUILDER_CREATED_CRM_APP_BOUNDARY"],
+    ["new-roleless-app", "NEW_ROLELESS_APP_APP_BOUNDARY"],
+  ])("isolates the public boundary key for app %s", (appId, key) => {
+    expect(repositoryProductionAppBoundaryKey(appId)).toBe(key);
+  });
+  it.each(["role", "database", "hostname", "port"])(
+    "rejects a credential for the wrong owned %s before binding public metadata",
+    async (part) => {
+      const f = fixture();
+      const wrong = new URL(runtimeUrl);
+      if (part === "role") {
+        wrong.username = "foreign_role";
+      }
+      if (part === "database") {
+        wrong.pathname = "/foreign_db";
+      }
+      if (part === "hostname") {
+        wrong.hostname = "foreign.neon.tech";
+      }
+      if (part === "port") {
+        wrong.port = "5433";
+      }
+      await expect(f.service.apply(f.context, wrong.toString())).rejects.toThrow(
+        "binding_conflict",
+      );
+      expect([f.writes(), f.boundaryWrites()]).toEqual([0, 0]);
+    },
+  );
+  it("publishes only public app-scoped boundary facts beside the unchanged credential", async () => {
+    const f = fixture();
+    await f.service.apply(f.context, runtimeUrl);
+    expect(f.boundary()).toMatchObject({
+      key: "REQUESTS_APP_BOUNDARY",
+      type: "plain",
+      target: ["production"],
+    });
+    const value = z.string().parse(f.boundary()?.value);
+    expect(JSON.parse(value)).toEqual({
+      version: 1,
+      mode: "protected-gateway-v1",
+      appId: "requests",
+      verification: {
+        publicOrigin: scope.publicOrigin,
+        jwksUrl: `${scope.publicOrigin}/_platform/jwks.json`,
+      },
+      runtime: {
+        hostname: "ep-test.neon.tech",
+        port: 5432,
+        database: "app_db",
+        runtimeRole: "app_role",
+        environment: "hosted",
+      },
+    });
+    expect(value).not.toContain("private");
+    expect(value).not.toContain("app_migrator");
+    expect(f.writes()).toBe(1);
+    expect(f.boundaryWrites()).toBe(1);
+    const observed = await f.service.reconcile(f.context, runtimeUrl);
+    if (observed.state !== "applied") {
+      throw new Error("missing fixture binding readback");
+    }
+    f.context.row.record.effects["bind-runtime"] = { state: "applied", receipt: observed.receipt };
+    expect(f.service.isReady(f.context.row, runtimeUrl)).toBe(true);
+  });
+  it("backfills an already completed legacy binding without replacing its credential or operation", async () => {
+    const f = fixture();
+    await f.service.apply(f.context, runtimeUrl);
+    const credential = structuredClone(f.row());
+    const operation = f.context.row.operationRef;
+    f.replaceBoundary();
+    f.context.row.record.workerCheckpoints = f.context.row.record.workerCheckpoints.filter(
+      (value) => !z.object({ key: z.literal("REQUESTS_APP_BOUNDARY") }).safeParse(value).success,
+    );
+    f.context.row.record.effects["bind-runtime"] = {
+      state: "applied",
+      receipt: { rowId: "env-id" },
+    };
+    expect(f.service.isReady(f.context.row, runtimeUrl)).toBe(false);
+    expect((await f.service.reconcile(f.context, runtimeUrl)).state).toBe("not-applied");
+    await f.service.apply(f.context, runtimeUrl);
+    expect(f.row()).toEqual(credential);
+    expect(f.context.row.operationRef).toBe(operation);
+    expect(f.writes()).toBe(1);
+    expect(f.boundaryWrites()).toBe(2);
+    expect((await f.service.reconcile(f.context, runtimeUrl)).state).toBe("applied");
+  });
+  it("reconciles a lost public-boundary acknowledgement without duplicating either write", async () => {
+    const f = fixture();
+    f.loseBoundaryResponse();
+    await expect(f.service.apply(f.context, runtimeUrl)).rejects.toThrow("boundary response lost");
+    expect((await f.service.reconcile(f.context, runtimeUrl)).state).toBe("applied");
+    await f.service.apply(f.context, runtimeUrl);
+    expect([f.writes(), f.boundaryWrites()]).toEqual([1, 1]);
+  });
+  it("retains uncertain boundary creation instead of rewriting its provider record", async () => {
+    const f = fixture();
+    f.loseBoundaryResponse();
+    await expect(f.service.apply(f.context, runtimeUrl)).rejects.toThrow();
+    f.replaceBoundary();
+    expect((await f.service.reconcile(f.context, runtimeUrl)).state).toBe("unknown");
+    await expect(f.service.apply(f.context, runtimeUrl)).rejects.toThrow("reconciliation_required");
+    expect([f.writes(), f.boundaryWrites()]).toEqual([1, 1]);
+  });
+  it("never adopts a foreign public boundary or changes another app's variable", async () => {
+    const f = fixture();
+    f.replaceBoundary({
+      id: "foreign",
+      key: "REQUESTS_APP_BOUNDARY",
+      type: "plain",
+      target: ["production"],
+      value: "{}",
+      comment: "foreign-owner",
+    });
+    await expect(f.service.apply(f.context, runtimeUrl)).rejects.toThrow("binding_conflict");
+    expect(f.boundaryWrites()).toBe(0);
+    expect(f.writes()).toBe(1);
+  });
   it.each(["dispatch", "owner", "recorded-row", "environment"] as const)(
     "requires retained list ownership and %s proof before accepting a minimal detail",
     async (variation) => {
@@ -276,8 +429,9 @@ describe("Production runtime credential binding", () => {
     const f = fixture();
     f.loseResponse();
     await expect(f.service.apply(f.context, runtimeUrl)).rejects.toThrow("response lost");
-    expect((await f.service.reconcile(f.context, runtimeUrl)).state).toBe("applied");
+    expect((await f.service.reconcile(f.context, runtimeUrl)).state).toBe("not-applied");
     await f.service.apply(f.context, runtimeUrl);
+    expect((await f.service.reconcile(f.context, runtimeUrl)).state).toBe("applied");
     expect(f.writes()).toBe(1);
   });
   it("never adopts or overwrites an existing unrelated secret", async () => {

@@ -150,6 +150,45 @@ const fixture = () => {
   };
 };
 describe("Builder-owned Production setup", () => {
+  it("backfills missing runtime metadata without replaying completed resources or restoring removed access", async () => {
+    const f = fixture();
+    await f.service.prepare(scope, intent);
+    const saved = structuredClone(f.read());
+    f.actual.delete("creator-access");
+    let ready = false;
+    f.ports.isRuntimeBindingReady = () => ready;
+    const { apply, reconcile } = f.ports;
+    f.ports.apply = async (context) => {
+      expect(context.effect).toBe("bind-runtime");
+      await apply(context);
+      ready = true;
+    };
+    f.ports.reconcile = async (context) =>
+      context.effect === "bind-runtime" && !ready
+        ? { state: "not-applied" }
+        : await reconcile(context);
+    expect((await f.service.status(scope, intent)).state).toBe("checking-access");
+    f.calls.length = 0;
+    expect((await f.service.prepare(scope, intent)).state).toBe("ready");
+    expect(f.calls).toEqual(["bind-runtime"]);
+    expect(f.actual.has("creator-access")).toBe(false);
+    expect(f.read()?.operationRef).toBe(saved?.operationRef);
+    expect(f.read()?.record.resource).toEqual(saved?.record.resource);
+    expect(f.read()?.record.privateState).toEqual(saved?.record.privateState);
+    expect((await f.service.status(scope, intent)).state).toBe("ready");
+  });
+  it("keeps a frontend-only roleless app ready without requesting database boundary metadata", async () => {
+    const f = fixture();
+    f.ports.isRuntimeBindingReady = () => {
+      throw new Error("frontend must not require database metadata");
+    };
+    const frontend = { ...intent, creatorRoles: [], storage: { kind: "none" as const } };
+    expect((await f.service.prepare(scope, frontend)).state).toBe("ready");
+    expect((await f.service.status(scope, frontend)).state).toBe("ready");
+    expect(f.calls).not.toContain("allocate-storage");
+    expect(f.calls).not.toContain("install-schema");
+    expect(f.calls).not.toContain("bind-runtime");
+  });
   it("retains allocation and its pending schema when an approved recipient is selected", async () => {
     const f = fixture();
     f.setIdentity(false);

@@ -1,6 +1,6 @@
 /* oxlint-disable eslint/require-await -- In-memory adapters implement asynchronous production ports. */
 import { randomUUID } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { AppAccessSnapshot } from "./contracts";
 import { appAccessCommandSchema } from "./contracts";
@@ -9,6 +9,12 @@ import { AppAccessError } from "./errors";
 import { createAppAccessOperatorClient } from "./operator-client";
 import type { AppAccessOwner } from "./operator-client";
 import { createAppAccessRouteHandler } from "./route";
+import { createRepositoryProductionHandler } from "../provisioning/repository-production-dispatcher";
+
+beforeEach(() => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+afterEach(() => vi.restoreAllMocks());
 
 const origin = "https://builder.example.test";
 const authority = {
@@ -53,8 +59,124 @@ const request = (value = command, source = origin) =>
     headers: { origin: source, "content-type": "application/json" },
     body: JSON.stringify(value),
   });
+const unusedProtectedPort = async () => {
+  throw new Error("unused fixture port");
+};
+const phaseByStage = {
+  owner: "access_owner_resolve",
+  read: "access_operator_read",
+  recheck: "access_owner_recheck",
+};
 
 describe("session-owned app access route", () => {
+  it.each(["owner", "read", "recheck"] as const)(
+    "reports a closed %s stage while preserving the actual GET failure response",
+    async (stage) => {
+      const secret = "private-token user@example.test https://private.example/path";
+      const access = vi.fn(() => {
+        throw new Error("private-accessor");
+      });
+      const failure = Object.defineProperties(new Error(secret), {
+        code: { get: access },
+        status: { get: access },
+        cause: { get: access },
+      });
+      let resolves = 0;
+      const handler = createAppAccessRouteHandler({
+        origin,
+        execute: vi.fn(),
+        resolveOwner: async () => {
+          resolves += 1;
+          if (stage === "owner" || (stage === "recheck" && resolves === 2)) {
+            throw failure;
+          }
+          return routeOwner;
+        },
+        read: async () => {
+          if (stage === "read") {
+            throw failure;
+          }
+          return snapshot;
+        },
+      });
+      const response = await handler(
+        new Request(`${origin}/api/builder/sessions/session/access`),
+        "session",
+      );
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        code: "app_access_unavailable",
+        message: "Builder could not finish setting up access. Your app and progress are saved.",
+      });
+      const output = vi.mocked(console.warn).mock.calls.flat().join("");
+      expect(output).toContain(`"phase":"${phaseByStage[stage]}"`);
+      for (const value of [
+        secret,
+        "user@example.test",
+        "private-accessor",
+        "session",
+        "workspace",
+      ]) {
+        expect(output).not.toContain(value);
+      }
+      expect(access).not.toHaveBeenCalled();
+    },
+  );
+  it("traces a real protected status rejection through the client and web GET without exposing its body", async () => {
+    const protectedHandler = createRepositoryProductionHandler({
+      verifyBuilderWorkload: async () => {},
+      verifyAuthWorkload: async () => {},
+      resolvePlan: unusedProtectedPort,
+      readSetup: unusedProtectedPort,
+      resolveSetup: unusedProtectedPort,
+      management: {
+        read: async () => {
+          throw new Error("repository_production_capture_unavailable");
+        },
+        execute: unusedProtectedPort,
+        completeInvitation: unusedProtectedPort,
+      },
+    });
+    const client = createAppAccessOperatorClient({
+      endpoint: "https://operator.example.test",
+      token: async () => "private-workload-token",
+      fetch: async (input, init) => await protectedHandler(new Request(input, init)),
+    });
+    const response = await createAppAccessRouteHandler({
+      origin,
+      resolveOwner: async () => routeOwner,
+      ...client,
+    })(new Request(`${origin}/api/builder/sessions/session/access`), "session");
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain("capture_unavailable");
+    const output = vi.mocked(console.warn).mock.calls.flat().join("");
+    expect(output).toContain('"phase":"access_projection"');
+    expect(output).toContain('"reason":"capture_unavailable"');
+    expect(output).toContain('"phase":"access_operator_http"');
+    expect(output).toContain('"httpStatus":503');
+    expect(output).toContain('"phase":"access_operator_read"');
+    expect(output).not.toContain("private-workload-token");
+    expect(output).not.toContain("operator.example.test");
+  });
+  it("keeps the GET response unchanged when diagnostic logging fails", async () => {
+    vi.mocked(console.warn).mockImplementation(() => {
+      throw new Error("logger unavailable");
+    });
+    const handler = createAppAccessRouteHandler({
+      origin,
+      resolveOwner: async () => routeOwner,
+      execute: vi.fn(),
+      read: async () => {
+        throw new Error("private-error");
+      },
+    });
+    const response = await handler(
+      new Request(`${origin}/api/builder/sessions/session/access`),
+      "session",
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: "app_access_unavailable" });
+  });
   it("rejects cross-origin commands before dispatching any effect", async () => {
     const execute = vi.fn();
     const handler = createAppAccessRouteHandler({

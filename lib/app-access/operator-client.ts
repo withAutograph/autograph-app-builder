@@ -3,6 +3,7 @@ import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contr
 import { appAccessSnapshotSchema } from "./contracts";
 import type { AppAccessCommand, AppAccessSnapshot } from "./contracts";
 import { AppAccessError } from "./errors";
+import { reportRepositoryProductionFailure } from "../provisioning/repository-production-diagnostic";
 
 export interface AppAccessOwner {
   appId: string;
@@ -71,12 +72,24 @@ export const createAppAccessOperatorClient = (input: {
         body: JSON.stringify(requestBody()),
         cache: "no-store",
       });
-    } catch {
+    } catch (error) {
+      if (command === undefined) {
+        reportRepositoryProductionFailure(
+          "access_operator_transport",
+          "provider_unavailable",
+          error,
+        );
+      }
       throw new AppAccessError(
         command === undefined ? "app_access_unavailable" : "app_access_unknown",
       );
     }
     if (!response.ok) {
+      if (command === undefined) {
+        reportRepositoryProductionFailure("access_operator_http", "provider_unavailable", {
+          status: response.status,
+        });
+      }
       if (response.status === 401 || response.status === 403) {
         throw new AppAccessError("app_access_denied");
       }

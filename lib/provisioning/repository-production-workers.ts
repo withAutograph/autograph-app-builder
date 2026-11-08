@@ -2,6 +2,7 @@
 /* oxlint-disable eslint/complexity, sonarjs/cognitive-complexity, sonarjs/max-union-size -- The closed worker protocol keeps each resource, command, and private startup file binding explicit. */
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
+import { repositoryProductionGatewayVerification } from "./repository-production-app-boundary";
 import {
   observeRepositoryProductionPhase,
   reportRepositoryProductionFailure,
@@ -112,6 +113,7 @@ export interface RepositoryProductionWorkerDependencies {
     oidcToken: string;
   }>;
   runtimeBinding: {
+    isReady: (row: RepositoryProductionRow, runtimeUrl: string) => boolean;
     apply: (context: RepositoryProductionEffectContext, runtimeUrl: string) => Promise<void>;
     reconcile: (
       context: RepositoryProductionEffectContext,
@@ -299,11 +301,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       deploymentBoundary: {
         teamId: deps.profile.operator.teamId,
         operator: deps.profile.operator,
-        verification: {
-          publicOrigin: scope.publicOrigin,
-          gatewayOrigin: scope.publicOrigin,
-          jwksUrl: `${scope.publicOrigin}/_platform/jwks.json`,
-        },
+        verification: repositoryProductionGatewayVerification(scope),
       },
     };
     const planBytes = Buffer.from(JSON.stringify(plan));
@@ -571,6 +569,9 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     );
   };
   return {
+    isRuntimeBindingReady: (row: RepositoryProductionRow) =>
+      row.record.intent.storage.kind === "none" ||
+      deps.runtimeBinding.isReady(row, appConnections(row).appRuntime),
     async mutateAppAccess(
       context: RepositoryProductionEffectContext,
       access: { actorId: string; roles: string[]; active: boolean },

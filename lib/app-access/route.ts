@@ -3,6 +3,7 @@ import { appAccessCommandSchema, appAccessSnapshotSchema } from "./contracts";
 import type { AppAccessCommand, AppAccessSnapshot } from "./contracts";
 import type { AppAccessOwner } from "./operator-client";
 import { AppAccessError, appAccessErrorStatus } from "./errors";
+import { reportRepositoryProductionFailure } from "../provisioning/repository-production-diagnostic";
 
 /** Public navigation remains separate from the canonical protected operator scope. */
 export interface AppAccessRouteOwner {
@@ -54,6 +55,7 @@ export const createAppAccessRouteHandler =
     execute: (owner: AppAccessOwner, command: AppAccessCommand) => Promise<AppAccessSnapshot>;
   }) =>
   async (request: Request, sessionId: string): Promise<Response> => {
+    let phase: Parameters<typeof reportRepositoryProductionFailure>[0] = "access_request";
     try {
       const url = new URL(request.url);
       if (url.origin !== input.origin || !sessionId) {
@@ -75,28 +77,35 @@ export const createAppAccessRouteHandler =
         }
         command = await readCommand(request);
       }
+      phase = "access_owner_resolve";
       const resolved = await input.resolveOwner(request, sessionId);
       if (resolved.publicSessionId !== sessionId) {
         throw new AppAccessError("app_access_denied");
       }
       const owner = resolved.operatorOwner;
       const cursor = url.searchParams.get("cursor") ?? undefined;
-      const snapshot = appAccessSnapshotSchema.parse(
+      phase = "access_operator_read";
+      const raw =
         command === undefined
           ? await input.read(owner, cursor)
-          : await input.execute(owner, command),
-      );
+          : await input.execute(owner, command);
+      phase = "access_projection";
+      const snapshot = appAccessSnapshotSchema.parse(raw);
       if (snapshot.sessionId !== owner.sessionId || snapshot.appId !== owner.appId) {
         throw new AppAccessError(
           command === undefined ? "app_access_unavailable" : "app_access_unknown",
         );
       }
+      phase = "access_owner_recheck";
       const current = await input.resolveOwner(request, sessionId);
       if (!isDeepStrictEqual(current, resolved)) {
         throw new AppAccessError("app_access_denied");
       }
       return Response.json({ ...snapshot, sessionId }, { headers: noStore });
     } catch (error) {
+      if (request.method === "GET") {
+        reportRepositoryProductionFailure(phase, "binding_unavailable", error);
+      }
       const safe =
         error instanceof AppAccessError ? error : new AppAccessError("app_access_unavailable");
       return Response.json(

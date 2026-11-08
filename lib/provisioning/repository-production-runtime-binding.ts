@@ -1,7 +1,14 @@
 /* oxlint-disable sonarjs/expression-complexity -- Credential adoption requires every owner, environment and dispatch identity to match. */
+/* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Reconcile the credential before publishing the dependent public boundary, checkpointing each write in order. */
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { repositoryProductionOperationRef } from "./repository-production-contract";
+import type { RepositoryProductionRow } from "./repository-production-contract";
+import {
+  repositoryProductionAppBoundary,
+  repositoryProductionAppBoundaryKey,
+} from "./repository-production-app-boundary";
+import type { RepositoryProductionRuntimeEndpoint } from "./repository-production-app-boundary";
 import {
   observeRepositoryProductionPhase,
   reportRepositoryProductionFailure,
@@ -44,6 +51,7 @@ const checkpointSchema = z.object({
 });
 export const createRepositoryProductionRuntimeBinding = (input: {
   teamId: string;
+  runtimeEndpoint: RepositoryProductionRuntimeEndpoint;
   readCredential: (context: RepositoryProductionEffectContext) => Promise<string>;
   signal: AbortSignal;
   fetch?: typeof fetch;
@@ -91,8 +99,8 @@ export const createRepositoryProductionRuntimeBinding = (input: {
     await context.assertCurrent();
     return value;
   };
-  const metadata = (context: RepositoryProductionEffectContext, runtimeUrl: string) => {
-    const { intent, scope } = context.row.record;
+  const metadata = (row: RepositoryProductionRow, runtimeUrl: string) => {
+    const { intent, scope } = row.record;
     if (intent.storage.kind !== "postgres") {
       throw new Error("repository_production_storage_unavailable");
     }
@@ -103,8 +111,25 @@ export const createRepositoryProductionRuntimeBinding = (input: {
       valueSha256: hash(runtimeUrl),
     };
   };
-  const inspect = async (context: RepositoryProductionEffectContext, runtimeUrl: string) => {
-    const expected = metadata(context, runtimeUrl);
+  const bindings = (row: RepositoryProductionRow, runtimeUrl: string) => {
+    const credential = metadata(row, runtimeUrl);
+    const value = JSON.stringify(
+      repositoryProductionAppBoundary(row, runtimeUrl, input.runtimeEndpoint),
+    );
+    const key = repositoryProductionAppBoundaryKey(row.record.scope.appId);
+    if (key === credential.key) {
+      conflict("runtime_binding_ownership");
+    }
+    return [
+      { expected: credential, value: runtimeUrl, type: "encrypted" },
+      { expected: { ...credential, key, valueSha256: hash(value) }, value, type: "plain" },
+    ] as const;
+  };
+  const inspect = async (
+    context: RepositoryProductionEffectContext,
+    binding: ReturnType<typeof bindings>[number],
+  ) => {
+    const { expected, type } = binding;
     const project = encodeURIComponent(context.row.record.scope.projectId);
     const { envs: rows } = await observeRepositoryProductionPhase(
       "runtime_binding_list",
@@ -139,7 +164,7 @@ export const createRepositoryProductionRuntimeBinding = (input: {
     }
     if (
       row.comment !== expected.marker ||
-      row.type !== "encrypted" ||
+      row.type !== type ||
       row.target.length !== 1 ||
       (row.gitBranch !== undefined && row.gitBranch !== null) ||
       (row.configurationId !== undefined && row.configurationId !== null) ||
@@ -158,7 +183,7 @@ export const createRepositoryProductionRuntimeBinding = (input: {
         ),
       input.signal,
     );
-    if (detail.decrypted === false) {
+    if (detail.decrypted === false && type === "encrypted") {
       const error = new Error("repository_production_runtime_value_unavailable");
       reportRepositoryProductionFailure(
         "runtime_binding_value",
@@ -187,43 +212,73 @@ export const createRepositoryProductionRuntimeBinding = (input: {
     return { dispatched: true, expected, row };
   };
   return {
-    async apply(context: RepositoryProductionEffectContext, runtimeUrl: string) {
-      const current = await inspect(context, runtimeUrl);
-      if (current.row !== undefined) {
-        return;
-      }
-      if (current.dispatched) {
-        throw new Error("repository_production_runtime_reconciliation_required");
-      }
-      await context.checkpoint(current.expected);
-      // The provider response is acknowledgement only; independent readback proves the binding.
-      await observeRepositoryProductionPhase(
-        "runtime_binding_write",
-        "provider_unavailable",
-        () =>
-          request(
-            context,
-            `/v10/projects/${encodeURIComponent(context.row.record.scope.projectId)}/env`,
-            {
-              key: current.expected.key,
-              value: runtimeUrl,
-              type: "encrypted",
-              target: ["production"],
-              comment: current.expected.marker,
-            },
-          ),
-        input.signal,
+    isReady(row: RepositoryProductionRow, runtimeUrl: string) {
+      const [credential, boundary] = bindings(row, runtimeUrl);
+      const proof = checkpointSchema.extend({ rowId: z.string().min(1) });
+      const receipt = proof
+        .extend({ boundary: proof })
+        .safeParse(row.record.effects["bind-runtime"].receipt);
+      return (
+        receipt.success &&
+        receipt.data.key === credential.expected.key &&
+        receipt.data.marker === credential.expected.marker &&
+        receipt.data.valueSha256 === credential.expected.valueSha256 &&
+        receipt.data.boundary.key === boundary.expected.key &&
+        receipt.data.boundary.marker === boundary.expected.marker &&
+        receipt.data.boundary.valueSha256 === boundary.expected.valueSha256
       );
+    },
+    async apply(context: RepositoryProductionEffectContext, runtimeUrl: string) {
+      for (const binding of bindings(context.row, runtimeUrl)) {
+        const current = await inspect(context, binding);
+        if (current.row !== undefined) {
+          continue;
+        }
+        if (current.dispatched) {
+          throw new Error("repository_production_runtime_reconciliation_required");
+        }
+        await context.checkpoint(current.expected);
+        // The provider response is acknowledgement only; independent readback proves the binding.
+        await observeRepositoryProductionPhase(
+          "runtime_binding_write",
+          "provider_unavailable",
+          () =>
+            request(
+              context,
+              `/v10/projects/${encodeURIComponent(context.row.record.scope.projectId)}/env`,
+              {
+                key: current.expected.key,
+                value: binding.value,
+                type: binding.type,
+                target: ["production"],
+                comment: current.expected.marker,
+              },
+            ),
+          input.signal,
+        );
+      }
     },
     async reconcile(
       context: RepositoryProductionEffectContext,
       runtimeUrl: string,
     ): Promise<RepositoryProductionObservation> {
-      const current = await inspect(context, runtimeUrl);
-      if (current.row !== undefined) {
-        return { state: "applied", receipt: { ...current.expected, rowId: current.row.id } };
+      const selected = bindings(context.row, runtimeUrl);
+      const credential = await inspect(context, selected[0]);
+      if (credential.row === undefined) {
+        return { state: credential.dispatched ? "unknown" : "not-applied" };
       }
-      return { state: current.dispatched ? "unknown" : "not-applied" };
+      const boundary = await inspect(context, selected[1]);
+      if (boundary.row === undefined) {
+        return { state: boundary.dispatched ? "unknown" : "not-applied" };
+      }
+      return {
+        state: "applied",
+        receipt: {
+          ...credential.expected,
+          rowId: credential.row.id,
+          boundary: { ...boundary.expected, rowId: boundary.row.id },
+        },
+      };
     },
   };
 };
