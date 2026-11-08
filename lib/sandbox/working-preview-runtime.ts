@@ -185,7 +185,7 @@ const openApp = async (input: {
   absorbCookies(cookies, launch);
   const location = launch.headers.get("location");
   await launch.body?.cancel();
-  if (launch.status !== 303 || cookies.size === 0 || !location) {
+  if (launch.status !== 303 || cookies.size === 0 || location === null || location === "") {
     input.observe(`Launch HTTP ${launch.status}; expected redirect with access cookie`);
     return false;
   }
@@ -215,7 +215,7 @@ const openApp = async (input: {
     if (ready ?? false) {
       return true;
     }
-    if (response.status < 300 || response.status >= 400 || !next) {
+    if (response.status < 300 || response.status >= 400 || next === null || next === "") {
       return false;
     }
     url = new URL(next, url);

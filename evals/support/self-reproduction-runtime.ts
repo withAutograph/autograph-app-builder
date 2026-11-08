@@ -64,7 +64,7 @@ const runtimeFailureObservations = (input: {
           ? requirement.kind === "capture"
           : requirement.kind !== "capture") &&
         requirement.id !== "anonymous-entry" &&
-        !input.existingRequirementIds?.has(requirement.id),
+        input.existingRequirementIds?.has(requirement.id) !== true,
     )
     .map((requirement) => ({
       artifacts: [artifact],

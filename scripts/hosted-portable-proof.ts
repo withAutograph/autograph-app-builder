@@ -344,11 +344,11 @@ export class HostedMcpProofClient {
     if (this.sessionId !== undefined) {
       headers.set("mcp-session-id", this.sessionId);
     }
-    if (!options.notification) {
+    if (options.notification !== true) {
       this.requestId += 1;
     }
     const prefix: ProofRpcPrefix = { jsonrpc: "2.0" };
-    if (!options.notification) {
+    if (options.notification !== true) {
       prefix.id = this.requestId;
     }
     const body = { ...prefix, method, params };
@@ -706,9 +706,9 @@ export async function runHostedProof(input: {
   if (
     missing.status !== 401 ||
     !/^Bearer(?:\s|$)/iu.test(missing.headers.get(WWW_AUTHENTICATE_HEADER) ?? "") ||
-    !missing.headers
+    missing.headers
       .get(WWW_AUTHENTICATE_HEADER)
-      ?.includes(`resource_metadata="${metadata.metadataUrl}"`)
+      ?.includes(`resource_metadata="${metadata.metadataUrl}"`) !== true
   ) {
     throw new Error("Hosted endpoint did not fail closed without OAuth.");
   }
@@ -717,9 +717,9 @@ export async function runHostedProof(input: {
   if (
     invalidResult.status !== 401 ||
     !/^Bearer(?:\s|$)/iu.test(invalidResult.headers.get(WWW_AUTHENTICATE_HEADER) ?? "") ||
-    !invalidResult.headers
+    invalidResult.headers
       .get(WWW_AUTHENTICATE_HEADER)
-      ?.includes(`resource_metadata="${metadata.metadataUrl}"`)
+      ?.includes(`resource_metadata="${metadata.metadataUrl}"`) !== true
   ) {
     throw new Error("Hosted endpoint did not reject an invalid bearer token.");
   }
