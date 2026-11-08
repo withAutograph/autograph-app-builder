@@ -20,17 +20,17 @@ describe("private app browser tests", () => {
   const marker = "[private browser prerequisite] private-preview-refresh-required";
 
   it.each([
-    { stdout: `other line\n${marker}\n[private browser] run failed`, exitCode: 1, refresh: true },
-    { stdout: `other line\r\n${marker}\r\n`, exitCode: 1, refresh: true },
+    { exitCode: 1, refresh: true, stdout: `other line\n${marker}\n[private browser] run failed` },
+    { exitCode: 1, refresh: true, stdout: `other line\r\n${marker}\r\n` },
     {
-      stdout: `[private browser] failed: ${marker} (tests/e2e/page.spec.ts:28)`,
       exitCode: 1,
       refresh: false,
+      stdout: `[private browser] failed: ${marker} (tests/e2e/page.spec.ts:28)`,
     },
-    { stdout: `\u001B${marker}`, exitCode: 1, refresh: false },
-    { stdout: `${marker} extra`, exitCode: 1, refresh: false },
-    { stdout: "[private browser stage] preview-refresh-required", exitCode: 1, refresh: false },
-    { stdout: marker, exitCode: 0, refresh: false },
+    { exitCode: 1, refresh: false, stdout: `\u001B${marker}` },
+    { exitCode: 1, refresh: false, stdout: `${marker} extra` },
+    { exitCode: 1, refresh: false, stdout: "[private browser stage] preview-refresh-required" },
+    { exitCode: 0, refresh: false, stdout: marker },
   ])(
     "only classifies an exact standalone failure marker ($stdout)",
     async ({ stdout, exitCode, refresh }) => {
@@ -52,12 +52,12 @@ describe("private app browser tests", () => {
     {
       origin: "https://stale-private.vercel.run",
       readExit: 0,
-      status: "failed",
       runBrowser: false,
+      status: "failed",
     },
-    { origin: "http://localhost:3000", readExit: 0, status: "passed", runBrowser: true },
-    { origin: null, readExit: 0, status: "passed", runBrowser: true },
-    { origin: null, readExit: 1, status: "failed", runBrowser: false },
+    { origin: "http://localhost:3000", readExit: 0, runBrowser: true, status: "passed" },
+    { origin: null, readExit: 0, runBrowser: true, status: "passed" },
+    { origin: null, readExit: 1, runBrowser: false, status: "failed" },
   ])(
     "uses the owned local Auth origin before unbound browser dispatch ($origin, $readExit)",
     async ({ origin, readExit, status, runBrowser }) => {
@@ -181,7 +181,7 @@ describe("private app browser tests", () => {
     });
     expect(result).toMatchObject({ status: "passed" });
     expect(runTask).toHaveBeenCalledWith(
-      expect.objectContaining({ task: "test-e2e", browserSelection: selection }),
+      expect.objectContaining({ browserSelection: selection, task: "test-e2e" }),
     );
   });
   it("passes a literal focused selection to the private browser task", async () => {
@@ -504,10 +504,10 @@ describe("private app browser tests", () => {
     expect(result).toMatchObject({ status: "passed", stdout: "scenario passed" });
     expect(runTask).toHaveBeenCalledWith(
       expect.objectContaining({
-        task: "test-e2e",
-        commandId: "retained-command",
-        commandCheckpoint: checkpoint,
         allowDispatch: false,
+        commandCheckpoint: checkpoint,
+        commandId: "retained-command",
+        task: "test-e2e",
       }),
     );
     expect(resolveRuntime).not.toHaveBeenCalled();

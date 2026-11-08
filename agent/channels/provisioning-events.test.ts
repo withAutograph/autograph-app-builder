@@ -130,7 +130,7 @@ describe("authored identity hook delivery", () => {
     const { dependencies } = fixture();
     const readIdentityWait = vi
       .fn<NonNullable<ProvisioningEventRouteDependencies["readIdentityWait"]>>()
-      .mockResolvedValue({ token: "private-hook", eventId: dispatchId, observed: false });
+      .mockResolvedValue({ eventId: dispatchId, observed: false, token: "private-hook" });
     const resumeIdentityWait = vi
       .fn<NonNullable<ProvisioningEventRouteDependencies["resumeIdentityWait"]>>()
       .mockResolvedValue();
@@ -153,9 +153,9 @@ describe("authored identity hook delivery", () => {
     await handlers.dispatch(request(), attachSession);
     expect(resumeIdentityWait).toHaveBeenCalledTimes(1);
     readIdentityWait.mockResolvedValue({
-      token: "private-hook",
       eventId: dispatchId,
       observed: true,
+      token: "private-hook",
     });
     const reconciled = await handlers.reconcile(request(), attachSession);
     expect(await reconciled.json()).toMatchObject({ status: "accepted" });
@@ -166,7 +166,7 @@ describe("authored identity hook delivery", () => {
     const { dependencies } = fixture();
     const readIdentityWait = vi
       .fn<NonNullable<ProvisioningEventRouteDependencies["readIdentityWait"]>>()
-      .mockResolvedValue({ token: "private-hook", eventId: dispatchId, observed: false });
+      .mockResolvedValue({ eventId: dispatchId, observed: false, token: "private-hook" });
     const resumeIdentityWait = vi
       .fn<NonNullable<ProvisioningEventRouteDependencies["resumeIdentityWait"]>>()
       .mockRejectedValue(new Error("hook delivery outcome unknown"));
@@ -192,7 +192,7 @@ describe("authored identity hook delivery", () => {
       ...dependencies,
       readIdentityWait: vi
         .fn<NonNullable<ProvisioningEventRouteDependencies["readIdentityWait"]>>()
-        .mockResolvedValue({ token: "private-hook", eventId: "f".repeat(64), observed: false }),
+        .mockResolvedValue({ eventId: "f".repeat(64), observed: false, token: "private-hook" }),
       resumeIdentityWait,
     });
     const response = await handlers.dispatch(request(), attachSession);
@@ -273,11 +273,11 @@ describe("private Realm continuation event handlers", () => {
     const { dependencies, handlers } = fixture();
     dependencies.respond.mockRejectedValue(new Error("connection interrupted after dispatch"));
     const first = await handlers.dispatch(request(), attachSession);
-    expect(await first.json()).toMatchObject({ status: "unknown", dispatchId });
+    expect(await first.json()).toMatchObject({ dispatchId, status: "unknown" });
     const readback = await handlers.reconcile(request(), attachSession);
-    expect(await readback.json()).toMatchObject({ status: "unknown", dispatchId });
+    expect(await readback.json()).toMatchObject({ dispatchId, status: "unknown" });
     const duplicate = await handlers.dispatch(request(), attachSession);
-    expect(await duplicate.json()).toMatchObject({ status: "unknown", dispatchId });
+    expect(await duplicate.json()).toMatchObject({ dispatchId, status: "unknown" });
     expect(dependencies.respond).toHaveBeenCalledTimes(1);
   });
 

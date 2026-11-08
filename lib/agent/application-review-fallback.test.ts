@@ -53,7 +53,7 @@ const policy: SourceReviewPolicy = {
   primary: { modelId: "terra", reasoningEffort: "low" },
   fallback: { modelId: "sol", reasoningEffort: null },
 };
-type Step = Error | { name: string; input: unknown }[];
+type Step = Error | { input: unknown; name: string }[];
 const model = (id: string, steps: Step[]) => {
   let index = 0;
   return new MockLanguageModelV4({
@@ -103,7 +103,7 @@ describe("durable application reviewer fallback", () => {
     const fallback = model("sol", [reads, complete]);
     const result = await assessApplicationSource(input, evidence, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
     expect(result).toMatchObject({
       modelId: "terra",
@@ -127,7 +127,7 @@ describe("durable application reviewer fallback", () => {
   it("does not credit primary references or findings to fallback completion", async () => {
     const primary = model("terra", [record, new Error("first")]);
     const fallback = model("sol", [complete, new Error("second")]);
-    const options = { policy, testModels: { terra: primary, sol: fallback } };
+    const options = { policy, testModels: { sol: fallback, terra: primary } };
     let round = await assessApplicationSourceRound(input, evidence, options);
     while (round.assessment === undefined) {
       // Each round depends on the preceding durable continuation.
@@ -162,7 +162,7 @@ describe("durable application reviewer fallback", () => {
     ]);
     const result = await assessApplicationSource(input, evidence, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
     expect(result).toMatchObject({ modelId: "multiple", reviewCompleted: false, status: "failed" });
     expect(result.findings).toHaveLength(2);
@@ -181,7 +181,7 @@ describe("durable application reviewer fallback", () => {
     const fallback = model("sol", [complete]);
     const result = await assessApplicationSource(input, evidence, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
     expect(result).toMatchObject({ modelId: "sol", reviewCompleted: true });
     expect(result.remainingRuntimeChecks).toContain("Verify server persistence.");
@@ -200,7 +200,7 @@ describe("durable application reviewer fallback", () => {
     const fallback = model("sol", [new Error("second")]);
     const result = await assessApplicationSource(input, evidence, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
     expect(result).toMatchObject({ modelId: "terra", reviewCompleted: false, status: "blocked" });
     expect(result.remainingRuntimeChecks).toContain("Verify server persistence.");
@@ -214,7 +214,7 @@ describe("durable application reviewer fallback", () => {
     };
     const result = await assessApplicationSource(input, failedEvidence, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
     expect(result).toMatchObject({ modelId: "terra", reviewCompleted: false, status: "failed" });
     expect(result.findings).toHaveLength(1);
@@ -224,7 +224,7 @@ describe("durable application reviewer fallback", () => {
     const fallback = model("sol", [complete]);
     const result = await assessApplicationSource(input, evidence, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
     expect(result).toMatchObject({
       modelId: "terra",
@@ -238,7 +238,7 @@ describe("durable application reviewer fallback", () => {
     const fallback = model("sol", [new Error("second")]);
     const result = await assessApplicationSource(input, evidence, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
     expect(result).toMatchObject({ modelId: "sol", reviewCompleted: false, status: "blocked" });
     expect(fallback.doGenerateCalls).toHaveLength(1);
@@ -248,7 +248,7 @@ describe("durable application reviewer fallback", () => {
     const fallback = model("sol", [new Error("second")]);
     const result = await assessApplicationSource(input, evidence, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
     expect(result).toMatchObject({
       modelId: "terra",
@@ -273,7 +273,7 @@ describe("durable application reviewer fallback", () => {
         policy,
         abortSignal: controller.signal,
         assertCurrentOwner: guard,
-        testModels: { terra: primary, sol: fallback },
+        testModels: { sol: fallback, terra: primary },
       }),
     ).rejects.toThrow();
     expect(fallback.doGenerateCalls).toHaveLength(0);
@@ -287,7 +287,7 @@ describe("durable application reviewer fallback", () => {
     };
     const result = await assessApplicationSource(input, inaccessible, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
     expect(result).toMatchObject({ reviewCompleted: false, status: "blocked" });
     expect(fallback.doGenerateCalls).toHaveLength(0);
@@ -305,7 +305,7 @@ describe("durable application reviewer fallback", () => {
       assessApplicationSource(input, evidence, {
         policy,
         assertCurrentOwner: guard,
-        testModels: { terra: primary, sol: fallback },
+        testModels: { sol: fallback, terra: primary },
       }),
     ).rejects.toThrow("owner revoked");
     expect(fallback.doGenerateCalls).toHaveLength(0);
@@ -331,7 +331,7 @@ describe("durable application reviewer fallback", () => {
     const result = await assessApplicationSourceRound(
       input,
       evidence,
-      { policy, testModels: { terra: primary, "openai/gpt-6.1-sol": fallback } },
+      { policy, testModels: { "openai/gpt-6.1-sol": fallback, terra: primary } },
       old,
     );
     expect(result.assessment).toMatchObject({
