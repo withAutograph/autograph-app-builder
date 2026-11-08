@@ -72,6 +72,8 @@ describe("private Production failure diagnostics", () => {
     ["Protected resource lease fence is stale.", "lease_fence_stale"],
     ["repository_production_destination_changed", "destination_changed"],
     ["repository_production_reconciliation_required", "reconciliation_required"],
+    ["repository_production_runtime_binding_conflict", "runtime_binding_conflict"],
+    ["repository_production_runtime_value_unavailable", "runtime_value_unavailable"],
   ])("classifies fixed failure %s without serializing exception data", (message, reason) => {
     const log = vi.spyOn(console, "warn").mockImplementation(() => {});
     const failure = new Error(message, { cause: "private-cause-token" });

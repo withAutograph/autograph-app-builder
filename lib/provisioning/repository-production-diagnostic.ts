@@ -24,6 +24,11 @@ const failureSchema = z.strictObject({
     "worker_transport_validation",
     "sandbox_oidc_acquire",
     "sandbox_create",
+    "runtime_binding_list",
+    "runtime_binding_detail",
+    "runtime_binding_write",
+    "runtime_binding_ownership",
+    "runtime_binding_value",
   ]),
   code: z.enum([
     "setup_unavailable",
@@ -63,6 +68,8 @@ const failureSchema = z.strictObject({
       "destination_changed",
       "reconciliation_required",
       "schema_invalid",
+      "runtime_binding_conflict",
+      "runtime_value_unavailable",
     ])
     .optional(),
   sqlState: z
@@ -89,6 +96,8 @@ const reasonByMessage = new Map<string, NonNullable<Failure["reason"]>>([
   ["repository_production_destination_changed", "destination_changed"],
   ["repository_production_reconciliation_required", "reconciliation_required"],
   ["repository_production_access_reconciliation_required", "reconciliation_required"],
+  ["repository_production_runtime_binding_conflict", "runtime_binding_conflict"],
+  ["repository_production_runtime_value_unavailable", "runtime_value_unavailable"],
 ]);
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- Exception fields remain untrusted until projected through closed schemas.

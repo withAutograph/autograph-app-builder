@@ -194,6 +194,15 @@ The runtime binding cannot adopt or overwrite an unrelated existing variable.
 An earlier delivery path's existing database must be reconciled to its original
 ownership before enabling this path for that app. A response lost after binding
 creation can be recovered from the owned provider record and expected value.
+The provider list must prove the exact owned row, encrypted Production-only scope
+and recorded dispatch before its value is read back. [Decrypted detail responses](https://vercel.com/docs/rest-api/projects/retrieve-the-decrypted-value-of-an-environment-variable-of-a-project-by-id)
+require the key, encrypted type and exact expected value hash; optional identity,
+owner or environment metadata must agree when present. Missing values and an
+explicit `decrypted: false` never prove a binding. Internal fixed-phase diagnostics
+separate list, detail and write HTTP failures from detail grammar, ownership and
+value mismatches, without recording provider bodies, validation inputs, URLs,
+credentials or values. Reconciliation reuses the existing owned row; it does not
+rewrite a conflicting or uncertain variable.
 
 The People page and public delivery tools use the same endpoint. Ordinary
 invitation completion accepts only an invitation ID from the authorized Auth
