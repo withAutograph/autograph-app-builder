@@ -896,18 +896,22 @@ describe("closed GitHub publication contract", () => {
               if (file === undefined) {
                 throw new Error("missing fixture file");
               }
-              return {
-                ...exact,
-                ...(drift === "tree" ? { sourceTree: "0".repeat(40) } : {}),
-                files: [
-                  {
-                    ...file,
-                    ...(drift === "mode" ? { mode: "100755" as const } : {}),
-                    ...(drift === "object" ? { objectId: "0".repeat(40) } : {}),
-                    ...(drift === "bytes" ? { bytes: new TextEncoder().encode("drift\n") } : {}),
-                  },
-                ],
-              };
+              const drifted: GitHubFreshRepositoryContent = { ...exact };
+              if (drift === "tree") {
+                drifted.sourceTree = "0".repeat(40);
+              }
+              const driftedFile: GitHubFreshRepositoryContent["files"][number] = { ...file };
+              if (drift === "mode") {
+                driftedFile.mode = "100755";
+              }
+              if (drift === "object") {
+                driftedFile.objectId = "0".repeat(40);
+              }
+              if (drift === "bytes") {
+                driftedFile.bytes = new TextEncoder().encode("drift\n");
+              }
+              drifted.files = [driftedFile];
+              return drifted;
             },
           },
         }),

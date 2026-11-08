@@ -156,19 +156,15 @@ describe("Production setup consent", () => {
     "actor",
     "cancelled",
   ])("rejects changed or unauthorised %s", (variation) => {
-    const changedScope = {
-      ...scope,
-      ...(variation === "organization" ? { organizationId: "other" } : {}),
-    };
-    const changedIntent = {
-      ...intent,
-      ...(variation === "role" ? { creatorRoles: ["admin"] } : {}),
-      ...(variation === "session" ? { sessionId: "other" } : {}),
-      ...(variation === "storage" ? { storage: { kind: "none" as const } } : {}),
-      ...(variation === "schema" && intent.storage.kind === "postgres"
-        ? { storage: { ...intent.storage, manifestSha256: "c".repeat(64) } }
-        : {}),
-    };
+    const changedScope = { ...scope };
+    if (variation === "organization") changedScope.organizationId = "other";
+    const changedIntent: RepositoryProductionIntent = { ...intent };
+    if (variation === "role") changedIntent.creatorRoles = ["admin"];
+    if (variation === "session") changedIntent.sessionId = "other";
+    if (variation === "storage") changedIntent.storage = { kind: "none" };
+    if (variation === "schema" && intent.storage.kind === "postgres") {
+      changedIntent.storage = { ...intent.storage, manifestSha256: "c".repeat(64) };
+    }
     const capture = createPrivateRepositoryProductionApprovalCapture({ plan, callId: "call" });
     capture.observe(
       request(

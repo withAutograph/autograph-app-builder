@@ -1244,12 +1244,16 @@ export function composeGitHubPublicationRuntime(input: {
         diagnostic.source = baseline.source;
         diagnostic.canonicalPublishedSourceMatched = baseline.canonicalPublishedSourceMatched;
         const publishedHeadSha = baseline.headSha;
-        return {
-          base,
-          draft,
-          ...(publishedHeadSha === undefined ? {} : { publishedHeadSha }),
-          ...(publishedReconciliation === undefined ? {} : { publishedReconciliation }),
-        };
+        const result: Awaited<
+          ReturnType<GitHubPublicationRuntime["inspectExistingDraftReconciliationSource"]>
+        > = { base, draft };
+        if (publishedHeadSha !== undefined) {
+          result.publishedHeadSha = publishedHeadSha;
+        }
+        if (publishedReconciliation !== undefined) {
+          result.publishedReconciliation = publishedReconciliation;
+        }
+        return result;
       } finally {
         reportReconciliationBaseline(diagnostic);
       }

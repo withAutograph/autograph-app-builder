@@ -144,12 +144,15 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
       if (failure !== undefined) {
         throw failure;
       }
-      return {
+      const receipt: Awaited<ReturnType<ProtectedHostedOperatorDependencies["executeEffect"]>> = {
         effectId: input.effect.id,
         observedAt: new Date(now).toISOString(),
         resourceVersion: "owned-readback",
-        ...(input.effect.kind === "access" ? { fenceGeneration: input.fenceGeneration } : {}),
       };
+      if (input.effect.kind === "access") {
+        receipt.fenceGeneration = input.fenceGeneration;
+      }
+      return receipt;
     },
   );
   const assertAuthorized = vi.fn(async () => {});

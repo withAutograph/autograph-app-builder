@@ -518,15 +518,16 @@ export const createHostedOperatorNormalAuthClient = (options: {
       if (value.session.userId !== value.user.id) {
         throw new NormalAuthClientError("invalid_response", { operation: "get_session" });
       }
-      return {
+      const session: NormalAuthSession = {
         actorId: value.user.id,
         sessionId: value.session.id,
         email: value.user.email,
         expiresAt: value.session.expiresAt,
-        ...(value.session.activeOrganizationId === undefined
-          ? {}
-          : { activeOrganizationId: value.session.activeOrganizationId }),
       };
+      if (value.session.activeOrganizationId !== undefined) {
+        session.activeOrganizationId = value.session.activeOrganizationId;
+      }
+      return session;
     },
     async setActiveOrganization(input) {
       const parsed = parseInput(organizationInput, input, "set_active_organization");

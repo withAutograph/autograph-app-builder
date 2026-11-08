@@ -172,13 +172,16 @@ export default defineTool({
       if (chunkIndex === undefined || finalChunk === undefined) {
         throw new Error("Chunked prototype artifact writes require chunkIndex and finalChunk.");
       }
-      recorded = recordPrototypeArtifactChunk({
+      const chunkInput: Parameters<typeof recordPrototypeArtifactChunk>[0] = {
         ...artifactInput,
         chunkIndex,
         expectedDigest,
         finalChunk,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
-      });
+      };
+      if (baseRevision !== undefined) {
+        chunkInput.baseRevision = baseRevision;
+      }
+      recorded = recordPrototypeArtifactChunk(chunkInput);
       ({ complete } = recorded);
     }
     if (!recorded.reused) {

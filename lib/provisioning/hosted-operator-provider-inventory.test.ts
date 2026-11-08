@@ -219,13 +219,22 @@ describe("private read-only operator provider inventory", () => {
           id: configuration.operator.projectId,
         });
       } else {
-        f.payloads.set("/v13/deployments/operator-current.example.test", {
+        const deployment: Omit<typeof f.deployment, "target"> & { target: string | null } = {
           ...f.deployment,
-          ...(mismatch === "project" ? { projectId: "foreign-project" } : {}),
-          ...(mismatch === "owner" ? { ownerId: "foreign-team" } : {}),
-          ...(mismatch === "environment" ? { target: "production" } : {}),
-          ...(mismatch === "readiness" ? { readyState: "BUILDING" } : {}),
-        });
+        };
+        if (mismatch === "project") {
+          deployment.projectId = "foreign-project";
+        }
+        if (mismatch === "owner") {
+          deployment.ownerId = "foreign-team";
+        }
+        if (mismatch === "environment") {
+          deployment.target = "production";
+        }
+        if (mismatch === "readiness") {
+          deployment.readyState = "BUILDING";
+        }
+        f.payloads.set("/v13/deployments/operator-current.example.test", deployment);
       }
       await expect(
         readHostedOperatorProviderInventory({
