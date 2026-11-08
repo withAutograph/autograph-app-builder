@@ -827,15 +827,21 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         const checkpointProgressDigest = hostedSessionCheckpointProgressDigest(input.checkpoint);
         const { checkpointRef: priorCheckpointRef, ...inlineBase } = current;
         void priorCheckpointRef;
-        const observed = durableHostedSessionRecordSchema.parse({
-          ...inlineBase,
-          ...(provedResume
-            ? { resumedCancellationRevision: current.cancellationRevision ?? 0 }
-            : {}),
+        const observedBase = { ...inlineBase };
+        if (provedResume) {
+          observedBase.resumedCancellationRevision = current.cancellationRevision ?? 0;
+        }
+        const observedCheckpoint = {
+          ...observedBase,
           checkpoint: input.checkpoint,
           checkpointDigest,
           checkpointProgressDigest,
-          ...(input.appId === undefined ? {} : { appId: input.appId }),
+        };
+        if (input.appId !== undefined) {
+          observedCheckpoint.appId = input.appId;
+        }
+        const observed = durableHostedSessionRecordSchema.parse({
+          ...observedCheckpoint,
           lastProgressAtEpochMs:
             current.checkpointProgressDigest === checkpointProgressDigest
               ? current.lastProgressAtEpochMs
@@ -925,20 +931,19 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           });
           const { checkpoint: priorInlineCheckpoint, ...pagedBase } = durable;
           void priorInlineCheckpoint;
-          const observed = durableHostedSessionRecordSchema.parse({
-            ...pagedBase,
-            ...(input.verifiedReplayReceipts === undefined
-              ? {}
-              : {
-                  privateApprovalReceipts: mergePrivateHostedApprovalReceipts(
-                    input.sessionId,
-                    durable.privateApprovalReceipts,
-                    input.verifiedReplayReceipts,
-                  ),
-                }),
-            ...(provedResume
-              ? { resumedCancellationRevision: durable.cancellationRevision ?? 0 }
-              : {}),
+          const observedBase = { ...pagedBase };
+          if (input.verifiedReplayReceipts !== undefined) {
+            observedBase.privateApprovalReceipts = mergePrivateHostedApprovalReceipts(
+              input.sessionId,
+              durable.privateApprovalReceipts,
+              input.verifiedReplayReceipts,
+            );
+          }
+          if (provedResume) {
+            observedBase.resumedCancellationRevision = durable.cancellationRevision ?? 0;
+          }
+          const observedCheckpoint = {
+            ...observedBase,
             checkpointDigest: staged.checkpointDigest,
             checkpointProgressDigest: staged.checkpointProgressDigest,
             checkpointRef: {
@@ -946,7 +951,12 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
               eventCount: staged.eventCount,
               id: staged.checkpointId,
             },
-            ...(input.appId === undefined ? {} : { appId: input.appId }),
+          };
+          if (input.appId !== undefined) {
+            observedCheckpoint.appId = input.appId;
+          }
+          const observed = durableHostedSessionRecordSchema.parse({
+            ...observedCheckpoint,
             lastProgressAtEpochMs:
               durable.checkpointProgressDigest === staged.checkpointProgressDigest
                 ? durable.lastProgressAtEpochMs
@@ -1327,14 +1337,19 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         }
         const { checkpointRef: priorCheckpointRef, ...inlineBase } = current;
         void priorCheckpointRef;
-        const replaced = durableHostedSessionRecordSchema.parse({
+        const replacedCheckpoint = {
           ...inlineBase,
           adapterGeneration: current.adapterGeneration + 1,
           adapterSessionId: input.adapterSessionId,
           checkpoint: input.checkpoint,
           checkpointDigest: hostedSessionCheckpointDigest(input.checkpoint),
           checkpointProgressDigest: hostedSessionCheckpointProgressDigest(input.checkpoint),
-          ...(input.appId === undefined ? {} : { appId: input.appId }),
+        };
+        if (input.appId !== undefined) {
+          replacedCheckpoint.appId = input.appId;
+        }
+        const replaced = durableHostedSessionRecordSchema.parse({
+          ...replacedCheckpoint,
           lastProgressAtEpochMs: input.nowEpochMs,
           resumability: input.resumability,
           stage: input.stage,
@@ -1396,7 +1411,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           });
           const { checkpoint: priorInlineCheckpoint, ...pagedBase } = current;
           void priorInlineCheckpoint;
-          const replaced = durableHostedSessionRecordSchema.parse({
+          const replacedCheckpoint = {
             ...pagedBase,
             adapterGeneration: current.adapterGeneration + 1,
             adapterSessionId: input.adapterSessionId,
@@ -1407,7 +1422,12 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
               eventCount: staged.eventCount,
               id: staged.checkpointId,
             },
-            ...(input.appId === undefined ? {} : { appId: input.appId }),
+          };
+          if (input.appId !== undefined) {
+            replacedCheckpoint.appId = input.appId;
+          }
+          const replaced = durableHostedSessionRecordSchema.parse({
+            ...replacedCheckpoint,
             lastProgressAtEpochMs: input.nowEpochMs,
             resumability: input.resumability,
             stage: input.stage,
@@ -1828,16 +1848,19 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         if (expectedSessionId === undefined || result.sessionId !== expectedSessionId) {
           throw new Error("Hosted operation result session mismatch.");
         }
-        const settled = hostedOperationRecordSchema.parse({
+        const settledBase = {
           ...withoutHostedOperationError(operation),
           result,
           sessionId: result.sessionId,
           state: "succeeded",
-          ...(session === undefined
-            ? {}
-            : {
-                sessionRecordDigest: hostedSessionCreationDigest(session),
-              }),
+        };
+        const sessionBinding: { sessionRecordDigest?: string } = {};
+        if (session !== undefined) {
+          sessionBinding.sessionRecordDigest = hostedSessionCreationDigest(session);
+        }
+        const settled = hostedOperationRecordSchema.parse({
+          ...settledBase,
+          ...sessionBinding,
           updatedAtEpochMs: input.nowEpochMs,
         });
         if (session !== undefined) {

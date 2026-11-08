@@ -456,19 +456,20 @@ const retainedInitialAppSource = async (input: {
     ({ path, kind }) => registrationPaths.has(path) && kind !== "deleted",
   );
   const changes = [...appFiles, ...registration];
-  return {
+  const unpublished: Omit<NonNullable<DraftReconciliationInput["unpublished"]>, "reviewDigest"> = {
     changes,
     contentSource: publicationContentSourceForReviewedWorkflow({ sandbox, state }),
     priorPublishedHeadSha: input.priorPublishedHeadSha,
     restoreInitialAppSource: true,
-    ...(sameRepository
-      ? {
-          initialSourceRevision: {
-            sha: state.sourceReceipt.sourceSha,
-            tree: state.sourceReceipt.sourceTree,
-          },
-        }
-      : {}),
+  };
+  if (sameRepository) {
+    unpublished.initialSourceRevision = {
+      sha: state.sourceReceipt.sourceSha,
+      tree: state.sourceReceipt.sourceTree,
+    };
+  }
+  return {
+    ...unpublished,
     reviewDigest: createHash("sha256")
       .update(JSON.stringify([state.reviewReceipt.digest, changes]))
       .digest("hex"),
@@ -616,12 +617,24 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
   const preservedWorkspaces = reopenCurrent
     ? preservedDraftWorkspaces(state, preservedPrevious, prepared.root, preservedCandidateRoot)
     : undefined;
-  const candidate = {
+  const candidateParts: typeof preparedCandidate &
+    Pick<
+      DraftReconciliationCandidate,
+      "recoveryMode" | "preservedWorkspaces" | "publishedReconciliation"
+    > & { kind: "reconciliation"; publishedOrigin: typeof repair } = {
     ...preparedCandidate,
     kind: "reconciliation" as const,
     publishedOrigin: repair,
-    ...(recoveryMode === undefined ? {} : { recoveryMode, preservedWorkspaces }),
-    ...(publishedReconciliation === undefined ? {} : { publishedReconciliation }),
+  };
+  if (recoveryMode !== undefined) {
+    candidateParts.recoveryMode = recoveryMode;
+    candidateParts.preservedWorkspaces = preservedWorkspaces;
+  }
+  if (publishedReconciliation !== undefined) {
+    candidateParts.publishedReconciliation = publishedReconciliation;
+  }
+  const candidate = {
+    ...candidateParts,
     version: 1 as const,
     repositoryId: owned.draft.repositoryId,
     pullRequestNumber: owned.draft.number,

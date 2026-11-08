@@ -72,6 +72,7 @@ import type { NormalActorProgram, NormalActorState } from "./hosted-operator-nor
 import type { NormalActorAccountPreparation } from "./hosted-operator-normal-actor-journal";
 import type {
   HostedOperatorContext,
+  HostedOperatorDeploymentContext,
   HostedOperatorEffectContext,
   HostedOperatorWorkerEffectContext,
   ProtectedHostedOperatorDependencies,
@@ -173,9 +174,14 @@ const gatewayDeliverySourceForPlan = (
     currentPlan?.stage !== "app" && currentPlan?.gatewayDelivery?.gitRef !== undefined
       ? currentPlan.gatewayDelivery
       : undefined;
-  return {
+  const source: Pick<AppGatewayDeliverySource, "branch" | "gitRef"> = {
     branch: configuration.gateway.branch,
-    ...(frozenBootstrapSource === undefined ? {} : { gitRef: frozenBootstrapSource.gitRef }),
+  };
+  if (frozenBootstrapSource !== undefined) {
+    source.gitRef = frozenBootstrapSource.gitRef;
+  }
+  return {
+    ...source,
     gitSha: publishedSha ?? frozenBootstrapSource?.gitSha ?? configuration.gateway.gitSha,
     projectId: configuration.gateway.projectId,
     repoId: configuration.gateway.repoId,
@@ -593,9 +599,13 @@ const deliveryContext = (input: HostedOperatorEffectContext) => {
   if (checkpointDelivery === undefined) {
     throw new HostedOperatorError(OPERATION_IN_PROGRESS);
   }
+  const candidates: HostedOperatorEffectContext &
+    Pick<HostedOperatorDeploymentContext, "appDeliveryCandidates"> = { ...input };
+  if (gateway) {
+    candidates.appDeliveryCandidates = input.deliveryCandidates;
+  }
   return {
-    ...input,
-    ...(gateway ? { appDeliveryCandidates: input.deliveryCandidates } : {}),
+    ...candidates,
     checkpointDelivery,
     deliveryCandidates: gateway ? input.gatewayDeliveryCandidates : input.deliveryCandidates,
   };

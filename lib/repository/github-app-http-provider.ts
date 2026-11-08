@@ -19,6 +19,7 @@ import type {
   DraftPullRequestProposal,
   GitHubDraftPullRequestContent,
   DraftPublicationReadBack,
+  GitHubMutationAcknowledgement,
 } from "./github-publication";
 import { createGitHubPrDeliveryProvider, GitHubPrEffectRejectedError } from "./github-pr-delivery";
 import type { GitHubPrDeliveryProvider } from "./github-pr-delivery";
@@ -1148,14 +1149,14 @@ export const createGitHubAppHttpProvider = (input: {
     const treeSha = objectId.parse(
       stringProperty(property(property(commit.body, "commit"), "tree"), "sha"),
     );
-    return {
-      commitSha,
-      name: repositoryName,
-      owner: repositoryOwner,
-      ...(pullRequestNumber === undefined ? {} : { pullRequestNumber }),
-      repositoryId,
-      treeSha,
-    };
+    const sourceObservation: Pick<
+      HistoricalAppSourceObservation,
+      "commitSha" | "name" | "owner" | "pullRequestNumber"
+    > = { commitSha, name: repositoryName, owner: repositoryOwner };
+    if (pullRequestNumber !== undefined) {
+      sourceObservation.pullRequestNumber = pullRequestNumber;
+    }
+    return { ...sourceObservation, repositoryId, treeSha };
   };
 
   const inspectedUpdateTree = async (
@@ -1789,13 +1790,15 @@ export const createGitHubAppHttpProvider = (input: {
         return { code: reviewedPathChangedCode, path: conflicts.at(0) ?? "", status: "rejected" };
       }
       for (const change of changes) {
+        const preimage: Pick<Parameters<typeof reviewedPreimageMatches>[0]["change"], "before"> =
+          {};
+        if (change.before !== undefined) {
+          preimage.before = change.before;
+        }
         // oxlint-disable-next-line eslint/no-await-in-loop -- each live preimage is checked before any mutation
         const matches = await reviewedPreimageMatches({
           accessToken,
-          change: {
-            ...(change.before === undefined ? {} : { before: change.before }),
-            path: change.path,
-          },
+          change: { ...preimage, path: change.path },
           headSha: snapshot.headSha,
           headTree: snapshot.headTree,
           owner: proposal.owner,
@@ -1821,14 +1824,19 @@ export const createGitHubAppHttpProvider = (input: {
         });
       } catch (error) {
         if (error instanceof GitHubBlobWriteFailureError) {
-          return {
+          const failure: Pick<
+            Extract<GitHubMutationAcknowledgement, { code: "github-file-write-failed" }>,
+            "bytes" | "code" | "operation" | "path" | "providerStatus"
+          > = {
             bytes: error.bytes,
             code: "github-file-write-failed",
             operation: "create-blob",
             path: error.path,
-            ...(error.providerStatus === undefined ? {} : { providerStatus: error.providerStatus }),
-            status: "rejected",
           };
+          if (error.providerStatus !== undefined) {
+            failure.providerStatus = error.providerStatus;
+          }
+          return { ...failure, status: "rejected" };
         }
         throw error;
       }

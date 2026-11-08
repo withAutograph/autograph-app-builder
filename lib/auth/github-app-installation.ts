@@ -917,18 +917,19 @@ export const createGitHubAppInstallationAuthorization = (input: {
         if (!(await input.membership.isActiveMember(authority))) {
           throw new Error(membershipInactive);
         }
-        return await beginUserAuthorization({
+        const authorization: Parameters<typeof beginUserAuthorization>[0] = {
           authority,
           returnState,
           setupAction: "update",
           via: "existing",
-          ...(target?.accountLogin
-            ? { targetAccountLogin: githubLoginSchema.parse(target.accountLogin) }
-            : {}),
-          ...(target?.installationId
-            ? { installationId: decimalSchema.parse(target.installationId) }
-            : {}),
-        });
+        };
+        if (target?.accountLogin) {
+          authorization.targetAccountLogin = githubLoginSchema.parse(target.accountLogin);
+        }
+        if (target?.installationId) {
+          authorization.installationId = decimalSchema.parse(target.installationId);
+        }
+        return await beginUserAuthorization(authorization);
       } catch {
         throw new Error(FAILURE_MESSAGE);
       }
@@ -954,17 +955,16 @@ export const createGitHubAppInstallationAuthorization = (input: {
         try {
           callback = callbackInput(inputUrl);
         } catch (error) {
+          const stateValidation: GitHubStateValidationDiagnostic = { substage: "callback-parse" };
+          if (error instanceof GitHubCallbackParseError) {
+            stateValidation.callbackParseReason = error.reason;
+          }
           throw new GitHubInstallationAuthorizationError(
             callbackStateValidation,
             undefined,
             undefined,
             callbackDiagnostic,
-            {
-              substage: "callback-parse",
-              ...(error instanceof GitHubCallbackParseError
-                ? { callbackParseReason: error.reason }
-                : {}),
-            },
+            stateValidation,
           );
         }
         try {
