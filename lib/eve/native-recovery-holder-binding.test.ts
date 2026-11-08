@@ -30,14 +30,14 @@ const auth = {
   subject: principal.ownerUserId,
 };
 const descriptor: NativeRecoveryDescriptor = {
-  version: 1,
-  operationId: "op_current",
-  sourcePublicSessionId: "ses_parent",
-  sourceOwnerRunId: "run_parent",
-  sourceAdapterGeneration: 1,
   logicalSessionId: "run_parent",
+  operationId: "op_current",
   originalAuthoritySessionId: "ses_parent",
   parentCancellationRevision: 0,
+  sourceAdapterGeneration: 1,
+  sourceOwnerRunId: "run_parent",
+  sourcePublicSessionId: "ses_parent",
+  version: 1,
 };
 const holderDescriptor: NativeRecoveryDescriptor = {
   ...descriptor,
@@ -47,11 +47,11 @@ const holderReceipt: NativeRecoveryBinding = {
   ...holderDescriptor,
   ownerRunId: "run_holder",
   provenance: {
+    checkpointVersion: 1,
     kind: "completed-terminal-turn-input",
-    sourceStepId: "step_1",
     sourceEventId: "event_1",
     sourceSlot: 0,
-    checkpointVersion: 1,
+    sourceStepId: "step_1",
   },
 };
 
@@ -186,7 +186,7 @@ describe("native recovery holder facts", () => {
       hostedOperationRecordSchema.parse({
         ...reserved(holderDescriptor),
         nativeRecoveryReceipt: holderReceipt,
-        result: { sessionId: child.sessionId, cursor: 0, events: [], status: "working" },
+        result: { cursor: 0, events: [], sessionId: child.sessionId, status: "working" },
         sessionId: child.sessionId,
         sessionRecordDigest: hostedSessionCreationDigest(child),
         state: "succeeded",

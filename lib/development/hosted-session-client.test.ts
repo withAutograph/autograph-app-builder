@@ -8,7 +8,7 @@ import { connectHostedSession, hostedSessionTools } from "./hosted-session-clien
 
 const owned: string[] = [];
 afterEach(async () => {
-  await Promise.all(owned.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(owned.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 const fixture = async (mode = "normal") => {
   const root = await mkdtemp(path.join(tmpdir(), "builder-native-protocol-"));
@@ -43,7 +43,7 @@ createInterface({input:process.stdin}).on('line',line=>{
 `,
   );
   await chmod(bin, 0o700);
-  return { cwd, codexBin: bin, resourceUrl: "https://builder.example/mcp", trace };
+  return { codexBin: bin, cwd, resourceUrl: "https://builder.example/mcp", trace };
 };
 const readTrace = async (trace: string) => {
   const raw = await readFile(trace, "utf-8");
@@ -138,7 +138,7 @@ it.each([
   "https://builder.example/other",
 ])("rejects a noncanonical resource without starting a child: %s", async (resourceUrl) => {
   await expect(
-    connectHostedSession({ codexBin: "/missing", resourceUrl, cwd: "/private/tmp" }),
+    connectHostedSession({ codexBin: "/missing", cwd: "/private/tmp", resourceUrl }),
   ).rejects.toThrow("credential-free HTTPS /mcp");
 });
 

@@ -125,7 +125,7 @@ describe("owner identity continuation", () => {
       return Promise.resolve(
         registrations === 1
           ? { status: "waiting" as const }
-          : { status: "consumed" as const, eventId: "canonical-event" },
+          : { eventId: "canonical-event", status: "consumed" as const },
       );
     };
     f.ports.acknowledge = function acknowledge(this: undefined) {
