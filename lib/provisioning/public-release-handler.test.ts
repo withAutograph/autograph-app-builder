@@ -405,8 +405,8 @@ it.each([
     ).rejects.toThrow("public_release_provider_rejected");
     const row = await f.store.read(authority, selected.operationRef);
     expect(row?.record.lastProviderFailure).toEqual({
-      phase: "publish-release-source",
       diagnostic,
+      phase: "publish-release-source",
     });
     expect(row?.record.effects).toEqual({
       "bind-production-runtime": "applied",

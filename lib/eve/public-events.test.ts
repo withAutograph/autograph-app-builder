@@ -1685,8 +1685,8 @@ describe("suspended hosted identity invitation", () => {
     expect(projected).toHaveLength(2);
     expect(projected[0]).toMatchObject({ type: "assistant_message" });
     expect(projected[1]).toMatchObject({
-      type: "auth_identity_invitation",
       callId: "prepare-call",
+      type: "auth_identity_invitation",
       url: link,
     });
     expect(JSON.stringify(projected)).toContain(link);
@@ -1747,9 +1747,9 @@ it("closes only the finished hosted identity tool invitation", () => {
     }),
   ]);
   expect(events).toContainEqual({
-    type: "auth_identity_invitation_resolved",
     callId: "prepare-call",
     index: 1,
+    type: "auth_identity_invitation_resolved",
   });
 });
 
@@ -1788,11 +1788,11 @@ describe("Production app identity invitation", () => {
     const events = projectInstalledEveEvents([event]);
     expect(events).toContainEqual(
       expect.objectContaining({
-        type: "auth_identity_invitation",
         callId: "prepare-call",
-        operationRef,
-        url,
         expiresAt,
+        operationRef,
+        type: "auth_identity_invitation",
+        url,
       }),
     );
     const message = events.find((projected) => projected.type === "assistant_message");
@@ -1886,7 +1886,7 @@ describe("Production app identity invitation", () => {
       result(projectInstalledEveEvents([prepare(), prepare(renewed, "renewed-prepare-call")])),
     );
     expect(state.invitations).toEqual([
-      { callId: "renewed-prepare-call", operationRef, url, expiresAt: renewed.creator.expiresAt },
+      { callId: "renewed-prepare-call", expiresAt: renewed.creator.expiresAt, operationRef, url },
     ]);
   });
 
