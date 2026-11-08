@@ -3922,10 +3922,9 @@ export function createHostedEveSessionService(input: {
     }
     // Preserve original resource approval authority before dispatch when the full private batch is available.
     const approvalRequest = resourceApprovalResponseProofSchema.shape.request.safeParse(request);
-    const approvalMetadata =
-      marker === undefined && approvalRequest.success && (state?.pending.length ?? 0) > 0
-        ? await readCheckpointMetadata(session)
-        : null;
+    const hasEligibleApproval = marker === undefined && approvalRequest.success;
+    const hasPendingApproval = hasEligibleApproval && (state?.pending.length ?? 0) > 0;
+    const approvalMetadata = hasPendingApproval ? await readCheckpointMetadata(session) : null;
     const resourceApprovalResponse =
       marker === undefined && approvalRequest.success
         ? captureResourceApprovalResponse(
@@ -4510,11 +4509,12 @@ export function createHostedEveSessionService(input: {
       requireHostedOperationScope(principal, "send");
       let session = await requireSession(request.sessionId);
       const initialBinding = toDurableHostedSessionRecord(session);
+      const hasCancellation =
+        session.status === "cancelled" ||
+        (initialBinding.cancellationRevision ?? 0) >
+          (initialBinding.resumedCancellationRevision ?? 0);
       const resumeCancellationRevision =
-        (session.status === "cancelled" ||
-          (initialBinding.cancellationRevision ?? 0) >
-            (initialBinding.resumedCancellationRevision ?? 0)) &&
-        input.store.recordCancellationIntent !== undefined
+        hasCancellation && input.store.recordCancellationIntent !== undefined
           ? (initialBinding.cancellationRevision ?? 0)
           : undefined;
       const settledResult = await mutate({
@@ -4779,9 +4779,10 @@ export function createHostedEveSessionService(input: {
         const executionTransfer = request.resumeMode !== undefined;
         const transferKind =
           request.resumeMode === "recover-idle" ? "idle-checkpoint" : "pending-approval";
+        const needsTransfer =
+          executionTransfer && retainedRecovery?.executionTransfer === undefined;
         if (
-          executionTransfer &&
-          retainedRecovery?.executionTransfer === undefined &&
+          needsTransfer &&
           (existing.status !==
             (transferKind === "idle-checkpoint" ? "waiting" : "input_required") ||
             existing.checkpointDigest === undefined)
@@ -5009,8 +5010,10 @@ export function createHostedEveSessionService(input: {
             }
           }
         }
+        const missingCheckpoint =
+          existing.checkpoint === undefined && existing.checkpointRef === undefined;
         if (
-          (existing.checkpoint === undefined && existing.checkpointRef === undefined) ||
+          missingCheckpoint ||
           existing.checkpointDigest === undefined ||
           (input.store.replaceSessionAdapter === undefined &&
             input.store.replaceSessionAdapterPaged === undefined)
