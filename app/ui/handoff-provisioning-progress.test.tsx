@@ -43,7 +43,7 @@ function projection(
 }
 
 class TestEventSource {
-  static instances: TestEventSource[] = [];
+  static readonly instances: TestEventSource[] = [];
   readonly listeners = new Map<string, Set<(event: MessageEvent<string>) => void>>();
   readonly url: string;
   closed = false;
@@ -113,7 +113,7 @@ afterEach(async () => {
   container?.remove();
   root = undefined;
   container = undefined;
-  TestEventSource.instances = [];
+  TestEventSource.instances.length = 0;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.clearAllMocks();

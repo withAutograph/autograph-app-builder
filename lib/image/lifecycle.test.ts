@@ -386,6 +386,8 @@ function stateArtifactText(root: string): string {
   return contents.join("\n");
 }
 
+const createSyntheticGithubToken = () => `github_pat_${randomUUID().replaceAll("-", "")}`;
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function installPreloadFixture(
   variant:
@@ -405,7 +407,7 @@ function installPreloadFixture(
   mkdirSync(providerRoot, { mode: 0o700 });
   mkdirSync(stateRoot, { mode: 0o700 });
   mkdirSync(arrustedRoot, { mode: 0o700 });
-  const sentinel = "github_pat_preload_behavioral_sentinel";
+  const sentinel = createSyntheticGithubToken();
   const fixture = installFakeGhBoundary(
     providerRoot,
     sentinel,
@@ -798,7 +800,7 @@ describe("image lifecycle", () => {
     const root = realpathSync(
       mkdtempSync(nodePath.join(tmpdir(), "app-builder-ghcr-bound-helper-")),
     );
-    const approved = "github_pat_exact_private_package_token";
+    const approved = createSyntheticGithubToken();
     const fixture = installFakeGhBoundary(root, approved);
     const stateDigest = seedFakeGhState(fixture);
     const provenanceDigest = "b".repeat(64);
@@ -863,7 +865,7 @@ describe("image lifecycle", () => {
 
   it("emits no credential when GitHub state changes during token read-back", () => {
     const root = realpathSync(mkdtempSync(nodePath.join(tmpdir(), "app-builder-ghcr-state-race-")));
-    const approved = "github_pat_exact_private_package_token";
+    const approved = createSyntheticGithubToken();
     const fixture = installFakeGhBoundary(root, approved, true);
     const stateDigest = seedFakeGhState(fixture);
     const provenanceDigest = "7".repeat(64);

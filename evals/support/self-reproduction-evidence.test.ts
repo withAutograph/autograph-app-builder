@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -68,12 +69,13 @@ describe("self-reproduction evidence completion", () => {
 describe("self-reproduction evidence persistence", () => {
   it("sanitizes credentials split across stream chunks before writing either artifact", () => {
     const { sink, logPath, transcriptPath, records } = capture();
+    const password = randomUUID();
     const raw = receipt({
       authorization: "Bearer private-bearer-value",
       continuationToken: "private-continuation-value",
       kind: "event",
       message: "API_KEY=private-key-value https://example.test/?token=private-query-value",
-      nested: { password: "private-password-value" },
+      nested: { password },
     });
     // Every credential, field name, and record prefix crosses a chunk boundary.
     for (const character of raw) {
@@ -88,7 +90,7 @@ describe("self-reproduction evidence persistence", () => {
         "private-continuation-value",
         "private-key-value",
         "private-query-value",
-        "private-password-value",
+        password,
       ]) {
         expect(persisted).not.toContain(secret);
       }

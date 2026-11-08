@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
 import { betterAuth } from "better-auth";
@@ -145,7 +146,7 @@ describe("Preview Better Auth user management", () => {
       body: {
         email: "person@example.com",
         name: "Person",
-        password: "test-password-123",
+        password: randomUUID(),
       },
     });
 
