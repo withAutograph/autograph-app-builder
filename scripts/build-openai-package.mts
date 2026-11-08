@@ -9,6 +9,10 @@ import {
   AUTOGRAPH_PACKAGE_VERSION,
 } from "../lib/plugin/agent-plugin-package.ts";
 
+interface CodexOAuthOptions {
+  oauth?: { callback_url: string; client_id: string };
+}
+
 const portable = JSON.parse(await readFile(path.resolve("plugin.json"), "utf-8"));
 const connectionIndex = process.argv.indexOf("--connection-id");
 const connectionId = connectionIndex === -1 ? undefined : process.argv[connectionIndex + 1];
@@ -109,16 +113,19 @@ if (hasEndpoint) {
     portableMcpPath,
     await formatWithOxfmt(portableMcpPath, JSON.stringify(portableMcp)),
   );
+  const codexMcpPath = path.resolve(".mcp.json");
+  const oauthOptions: CodexOAuthOptions = {};
+  if (hasSuppliedEndpoint) {
+    oauthOptions.oauth = { callback_url: codexRedirectUri, client_id: codexClientId };
+  }
   await writeFile(
-    path.resolve(".mcp.json"),
+    codexMcpPath,
     await formatWithOxfmt(
       ".mcp.json",
       JSON.stringify({
         mcpServers: {
           [AUTOGRAPH_MCP_SERVER_NAME]: {
-            ...(hasSuppliedEndpoint
-              ? { oauth: { callback_url: codexRedirectUri, client_id: codexClientId } }
-              : {}),
+            ...oauthOptions,
             oauth_resource: endpoint,
             type: "http",
             url: endpoint,

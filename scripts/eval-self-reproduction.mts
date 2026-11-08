@@ -283,27 +283,23 @@ const runConfiguredWorkflowAdapters = async (candidateRoot: string | undefined) 
       await import("../evals/support/self-reproduction-framework");
     const { createDefaultFrameworkAdapter } =
       await import("../evals/support/self-reproduction-framework-adapters");
+    const frameworkAdapters: Parameters<typeof runTrustedFrameworkEvidence>[0]["adapters"] = {};
+    if (referenceUrl !== undefined && referenceUrl !== "" && referenceFiles !== undefined) {
+      frameworkAdapters.reference = createDefaultFrameworkAdapter({
+        baseURL: referenceUrl,
+        files: referenceFiles,
+        side: "reference",
+      });
+    }
+    if (candidateUrl !== undefined && candidateUrl !== "" && candidateFiles !== undefined) {
+      frameworkAdapters.candidate = createDefaultFrameworkAdapter({
+        baseURL: candidateUrl,
+        files: candidateFiles,
+        side: "candidate",
+      });
+    }
     const framework = await runTrustedFrameworkEvidence({
-      adapters: {
-        ...(referenceUrl && referenceFiles
-          ? {
-              reference: createDefaultFrameworkAdapter({
-                baseURL: referenceUrl,
-                files: referenceFiles,
-                side: "reference",
-              }),
-            }
-          : {}),
-        ...(candidateUrl && candidateFiles
-          ? {
-              candidate: createDefaultFrameworkAdapter({
-                baseURL: candidateUrl,
-                files: candidateFiles,
-                side: "candidate",
-              }),
-            }
-          : {}),
-      },
+      adapters: frameworkAdapters,
       browser,
       outputRoot: output,
     });

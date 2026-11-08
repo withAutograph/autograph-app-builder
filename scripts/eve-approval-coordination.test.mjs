@@ -437,17 +437,21 @@ it.each([
       assert.equal(requests, 1);
       return;
     }
-    let completed = await invoke(approved.session, {
-      ...(withInput ? { message: "new product reply", context: ["new product context"] } : {}),
-      runtimeActionResults: [
-        {
-          kind: "tool-result",
-          callId: "mixed-deferred",
-          toolName: "deferred",
-          output: "deferred-result",
-        },
-      ],
-    });
+    const approvedSession = approved.session;
+    const continuationInput = {};
+    if (withInput) {
+      continuationInput.message = "new product reply";
+      continuationInput.context = ["new product context"];
+    }
+    continuationInput.runtimeActionResults = [
+      {
+        kind: "tool-result",
+        callId: "mixed-deferred",
+        toolName: "deferred",
+        output: "deferred-result",
+      },
+    ];
+    let completed = await invoke(approvedSession, continuationInput);
     assert.equal(executions, optionId === "approve" ? 1 : 0);
     assert.equal(requests, 2);
     if (withInput) {
@@ -594,20 +598,19 @@ it.each([400, 503])(
       },
     });
     const invoke = (session, input, events) =>
-      contextStorage.run(ctx, () =>
-        createToolLoopHarness({
+      contextStorage.run(ctx, () => {
+        const options = {
           tools,
           resolveModel: () => Promise.resolve(model),
-          ...(events === undefined
-            ? {}
-            : {
-                handleEvent: (event) => {
-                  events.push(event);
-                  return Promise.resolve();
-                },
-              }),
-        })(session, input),
-      );
+        };
+        if (events !== undefined) {
+          options.handleEvent = (event) => {
+            events.push(event);
+            return Promise.resolve();
+          };
+        }
+        return createToolLoopHarness(options)(session, input);
+      });
     const generated = await invoke(
       {
         agent: { system: "", tools: [], modelReference: { id: "model", provider: "test" } },
