@@ -656,7 +656,7 @@ describe("native recovery verification diagnostics", () => {
     );
     expect(
       await f.store.getStartOperation(principal, f.recoveryRequest.clientRequestId),
-    ).toMatchObject({ state: "succeeded", sessionId });
+    ).toMatchObject({ sessionId, state: "succeeded" });
     expect(f.transport.start).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(f.sink.mock.calls)).not.toContain(canary);
     expect(JSON.stringify(f.sink.mock.calls)).not.toContain("private-recovered-owner");

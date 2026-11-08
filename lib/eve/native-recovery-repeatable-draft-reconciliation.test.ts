@@ -184,12 +184,12 @@ const fixture = () => {
     {
       content: [
         call,
-        { type: "tool-approval-request", toolCallId: call.toolCallId, approvalId: "approval" },
+        { approvalId: "approval", toolCallId: call.toolCallId, type: "tool-approval-request" },
       ],
       role: "assistant",
     },
     {
-      content: [{ type: "tool-approval-response", approvalId: "approval", approved: true }],
+      content: [{ approvalId: "approval", approved: true, type: "tool-approval-response" }],
       role: "tool",
     },
     { content: "An intervening ordinary question", role: "assistant" },
@@ -287,8 +287,8 @@ it("requires exact native call arguments and one ordered approved decision by th
   expect(authorizeRepeatableDraftReconciliationCalls(reversed.input)).toEqual([]);
   const conflicted = fixture();
   conflicted.nativeEvents.push({
-    type: "approval.settled",
     data: { ...conflicted.settlement, outcome: "cancelled" },
+    type: "approval.settled",
   });
   expect(authorizeRepeatableDraftReconciliationCalls(conflicted.input)).toEqual([]);
 });
@@ -308,12 +308,12 @@ it("rejects malformed or ambiguous native approvals rather than ignoring conflic
   for (const extra of [
     { data: { ...f.settlement, outcome: "unexpected" }, type: "approval.settled" },
     {
-      type: "input.requested",
       data: { requests: [{ ...f.request, kind: "question", requestId: "other-request" }] },
+      type: "input.requested",
     },
     {
-      type: "input.requested",
       data: { requests: [{ ...f.request, action: { ...f.request.action, callId: "other-call" } }] },
+      type: "input.requested",
     },
   ]) {
     expect(
@@ -367,14 +367,14 @@ it("rejects a completed or duplicate call without rewriting history", () => {
             sessionState: {
               snapshot: {
                 session: {
-                  sessionId: "logical",
                   history: [
                     ...completed.history,
                     {
+                      content: [{ toolCallId: "reconcile-call", type: "tool-result" }],
                       role: "tool",
-                      content: [{ type: "tool-result", toolCallId: "reconcile-call" }],
                     },
                   ],
+                  sessionId: "logical",
                 },
               },
             },
@@ -384,7 +384,7 @@ it("rejects a completed or duplicate call without rewriting history", () => {
     }),
   ).toEqual([]);
   const duplicate = fixture();
-  duplicate.history.push({ role: "assistant", content: [{ ...duplicate.call }] });
+  duplicate.history.push({ content: [{ ...duplicate.call }], role: "assistant" });
   expect(authorizeRepeatableDraftReconciliationCalls(duplicate.input)).toEqual([]);
 });
 it("rejects ambiguous retained completions and a later changed current candidate", () => {
@@ -430,8 +430,8 @@ it("requires the retained sealed preparation and preserves literal read-only mod
           ...f.input.payload,
           nativeEvents: [
             {
-              type: "input.requested",
               data: { requests: [{ ...f.request, action: { ...f.request.action, input } }] },
+              type: "input.requested",
             },
             { data: f.settlement, type: "approval.settled" },
           ],
@@ -441,21 +441,21 @@ it("requires the retained sealed preparation and preserves literal read-only mod
               sessionState: {
                 snapshot: {
                   session: {
-                    sessionId: "logical",
                     history: [
                       {
-                        role: "assistant",
                         content: [
                           { ...f.call, input },
                           {
-                            type: "tool-approval-request",
-                            toolCallId: f.call.toolCallId,
                             approvalId: "approval",
+                            toolCallId: f.call.toolCallId,
+                            type: "tool-approval-request",
                           },
                         ],
+                        role: "assistant",
                       },
                       f.history[1],
                     ],
+                    sessionId: "logical",
                   },
                 },
               },
@@ -537,7 +537,7 @@ it("validates old histories and preserves latest selection across unordered cand
     ...older,
     sessionState: {
       snapshot: {
-        session: { sessionId: "logical", history: [{ role: "assistant", content: [{ type: 7 }] }] },
+        session: { history: [{ content: [{ type: 7 }], role: "assistant" }], sessionId: "logical" },
       },
     },
   };

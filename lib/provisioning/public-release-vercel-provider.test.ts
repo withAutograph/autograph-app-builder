@@ -277,12 +277,12 @@ it("observes only the provider-active Production binding and delivered release",
   const f = fixture();
   const result = await f.provider.observe(f.invocation, f.plan);
   expect(result).toEqual({
-    status: "ready",
     deploymentId: "active-deployment",
-    projectId: f.plan.project.projectId,
     environment: "production",
+    projectId: f.plan.project.projectId,
     publicOrigin: f.plan.publicOrigin,
     releaseId: f.plan.runtime.releaseId,
+    status: "ready",
   });
   expect(JSON.stringify(result)).not.toContain("synthetic-private");
   expect(
@@ -381,7 +381,7 @@ it.each([
   [
     JSON.stringify({ error: { code: "forbidden", message: "private-token-should-never-persist" } }),
     "iad1::request_123",
-    { statusCode: 403, code: "forbidden", requestRef: "iad1::request_123" },
+    { code: "forbidden", requestRef: "iad1::request_123", statusCode: 403 },
   ],
   [
     JSON.stringify({
@@ -393,9 +393,9 @@ it.each([
   [
     "not-json-private-token-should-never-persist",
     "iad1::request_123",
-    { statusCode: 403, requestRef: "iad1::request_123" },
+    { requestRef: "iad1::request_123", statusCode: 403 },
   ],
-  ["x".repeat(20_000), "iad1::request_123", { statusCode: 403, requestRef: "iad1::request_123" }],
+  ["x".repeat(20_000), "iad1::request_123", { requestRef: "iad1::request_123", statusCode: 403 }],
 ])(
   "projects only bounded allowlisted facts from a provider rejection",
   async (body, requestRef, diagnostic) => {
@@ -407,8 +407,8 @@ it.each([
       }),
     );
     await expect(f.provider.observe(f.invocation, f.plan)).rejects.toMatchObject({
-      name: "PublicReleaseProviderError",
       diagnostic,
+      name: "PublicReleaseProviderError",
     });
   },
 );
@@ -527,8 +527,8 @@ it("reads only bounded prior binding facts for new plan construction, without re
   });
   expect(snapshot).toEqual([
     {
-      key: "INVOICE_APP_DATABASE_URL",
       id: "new-env",
+      key: "INVOICE_APP_DATABASE_URL",
       operationRef: f.context.operationRef,
       sha256: f.plan.environment[0].sha256,
     },

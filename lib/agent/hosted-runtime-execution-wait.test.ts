@@ -38,10 +38,8 @@ const fixture = () => {
     environment: "preview" as const,
   };
   const plan = hostedOperatorPlanSchema.parse({
-    version: 1,
+    access: [],
     action: "prepare",
-    selection,
-    contextId: "context",
     appDatabase: {
       database: "reports",
       migratorRole: "reports_owner",
@@ -54,7 +52,7 @@ const fixture = () => {
       resourceId: "identity",
       runtimeRole: "identity_reader",
     },
-    access: [],
+    contextId: "context",
     cost: { class: "shared-recovery-group", description: "fixture", owner: "fixture" },
     effects: [
       { description: "Resources", id: "resources", kind: "resources" },
@@ -72,6 +70,8 @@ const fixture = () => {
     },
     release: { artifactRef: "artifact", id: "release", sha256: "b".repeat(64) },
     retention: { expiresAt: "2027-01-01T00:00:00Z", policy: "retain" },
+    selection,
+    version: 1,
   });
   const approved = {
     appId: selection.appId,
@@ -462,8 +462,8 @@ describe("automatic observation of one approved execution", () => {
         ...f.observed,
         status: "prepared",
         execution: {
+          outcome: { code: "reconciliation_required", status: "blocked" },
           state: "settled",
-          outcome: { status: "blocked", code: "reconciliation_required" },
         },
       }),
     ).toThrow();

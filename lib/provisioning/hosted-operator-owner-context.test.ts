@@ -761,7 +761,7 @@ describe("Realm service continuation live owner checks", () => {
     const denials = [
       [fixture({ realmContinuation }), serviceAuth({ adapterSessionId: "foreign-adapter" })],
       [fixture({ realmContinuation }), serviceAuth({ ownerSessionId: "foreign-public-session" })],
-      [fixture({ realmContinuation, isActiveMember: false }), valid],
+      [fixture({ isActiveMember: false, realmContinuation }), valid],
       [
         fixture({
           realmContinuation,
@@ -837,19 +837,19 @@ describe("approval history for recovered public grant authority", () => {
     };
     const resolver = createHostedOperatorOwnerContextResolver({
       audience: authority.audience,
-      issuer: authority.issuer,
-      sessions,
       handoffs: {
         read: async () => await Promise.resolve(kind === "handoff" ? handoff : undefined),
       },
       isActiveMember: async () => await Promise.resolve(true),
+      issuer: authority.issuer,
+      sessions,
     });
     const verifyReadAuthority = createHostedOperatorApprovalReadAuthority({
-      sessions,
-      resolveOwnerContext: resolver,
       forwardSessionAuth: (_principal, sourceId) => sessionAuthFor(sourceId),
+      resolveOwnerContext: resolver,
+      sessions,
     });
-    return { source, child, sessions, verifyReadAuthority };
+    return { child, sessions, source, verifyReadAuthority };
   };
   it.each(["direct", "handoff"] as const)(
     "reads the original approval pair from its %s recovered worker without confusing the physical public ID",
