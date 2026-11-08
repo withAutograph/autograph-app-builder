@@ -290,7 +290,7 @@ export async function assessParity(
       } else if (observation?.disposition === missingFunctionality) {
         status = "failed";
         reasonCode = missingFunctionality;
-      } else if (observation?.assertions.some((assertion) => !assertion.passed)) {
+      } else if (observation?.assertions.some((assertion) => !assertion.passed) ?? false) {
         status = "failed";
         reasonCode = "assertion-failed";
       } else if (observation?.disposition === infrastructureUnavailable) {

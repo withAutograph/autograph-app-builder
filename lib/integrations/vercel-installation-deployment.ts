@@ -235,7 +235,7 @@ export function createVercelWebhookDeploymentHandler(
       const event = webhookSchema.parse(JSON.parse(body));
       if (event.type === "integration-configuration.removed") {
         const id = event.payload.configuration?.id ?? event.payload.configurationId;
-        if (!id) {
+        if (id === undefined || id === null || id === "") {
           return new Response("Invalid event", { status: 400 });
         }
         await runtime.installations.deactivate(id, new Date());
