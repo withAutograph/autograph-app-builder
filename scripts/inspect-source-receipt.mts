@@ -1,8 +1,7 @@
 import { inspectSourceReceipt, sourceReceiptEvidence } from "../lib/repository/source-receipt";
-import type { SourceKind } from "../lib/repository/source-receipt";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function parseArguments(args: readonly string[]): { sourceKind: SourceKind; sourcePath: string } {
+function parseArguments(args: readonly string[]) {
   const values = new Map<string, string>();
   for (let index = 0; index < args.length; index += 2) {
     const flag = args[index];
@@ -28,7 +27,7 @@ function parseArguments(args: readonly string[]): { sourceKind: SourceKind; sour
   if (values.size !== 0) {
     throw new Error(`Unknown arguments: ${[...values.keys()].join(", ")}.`);
   }
-  return { sourceKind, sourcePath };
+  return { sourceKind, sourcePath } as const;
 }
 
 const { sourceKind, sourcePath } = parseArguments(process.argv.slice(2));
