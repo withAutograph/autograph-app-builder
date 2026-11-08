@@ -12,6 +12,8 @@ import {
 } from "./working-preview-diagnostics";
 import { createWorkingPreviewAccess } from "./working-preview-access";
 
+const CLEANUP_REQUIRED = "cleanup-required";
+
 export interface WorkingPreviewCommand {
   executable: string;
   args: string[];
@@ -210,7 +212,7 @@ const openApp = async (input: {
     const ready = response.ok && response.headers.get("content-type")?.includes("text/html");
     // oxlint-disable-next-line eslint/no-await-in-loop -- Release the current response before following its redirect.
     await response.body?.cancel();
-    if (ready) {
+    if (ready ?? false) {
       return true;
     }
     if (response.status < 300 || response.status >= 400 || !next) {
@@ -392,7 +394,7 @@ const reconcilePreviewAttempt = async (
   } catch (error) {
     await previewOwnershipOperation(
       provider,
-      { kind: "update", ...attemptIdentity(attempt), patch: { status: "cleanup-required" } },
+      { kind: "update", ...attemptIdentity(attempt), patch: { status: CLEANUP_REQUIRED } },
       AbortSignal.timeout(5000),
     );
     throw error;
@@ -505,7 +507,7 @@ const cleanupPreviewAttempt = async (input: {
         const pending = { ...attempt, status: "cleanup-required" as const };
         await previewOwnershipOperation(
           provider,
-          { kind: "update", ...attemptIdentity(attempt), patch: { status: "cleanup-required" } },
+          { kind: "update", ...attemptIdentity(attempt), patch: { status: CLEANUP_REQUIRED } },
           AbortSignal.timeout(5000),
         );
         onAttempt?.(pending);
@@ -699,7 +701,7 @@ export const startWorkingPreview = async (input: {
     return cleanupPreviewAttempt({
       attempt,
       command,
-      diagnosticsPath: input.signal?.aborted ? undefined : diagnosticsPath,
+      diagnosticsPath: (input.signal?.aborted ?? false) ? undefined : diagnosticsPath,
       error,
       expiresAt,
       launchDispatched,
