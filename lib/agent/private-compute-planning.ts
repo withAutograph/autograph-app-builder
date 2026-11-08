@@ -129,7 +129,7 @@ export const refreshPrivateComputePlanning = (
   }
   appBuilderWorkflowState.update((latest) => {
     assertExactWorkflowState(latest, current, "prepare a new private compute plan");
-    return {
+    const next: Extract<AppBuilderWorkflowState, { phase: "app_spec_accepted" }> = {
       version: APP_BUILDER_WORKFLOW_VERSION,
       phase: "app_spec_accepted",
       appSpec: current.appSpec,
@@ -137,11 +137,14 @@ export const refreshPrivateComputePlanning = (
       preparedByCallId: callId,
       workspace: current.workspace,
       sourceReceipt: current.sourceReceipt,
-      ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-      ...(current.checkoutDependencyAttempts === undefined
-        ? {}
-        : { checkoutDependencyAttempts: current.checkoutDependencyAttempts }),
     };
+    if (current.githubSource !== undefined) {
+      next.githubSource = current.githubSource;
+    }
+    if (current.checkoutDependencyAttempts !== undefined) {
+      next.checkoutDependencyAttempts = current.checkoutDependencyAttempts;
+    }
+    return next;
   });
 };
 export const preparePrivateComputePlanning = async (input: {

@@ -3,6 +3,7 @@ import { createSourceCandidateValidator } from "./source-candidate-validation";
 import { z } from "zod";
 
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "../auth/preview-oauth-deployment";
+import type { isCursorClientReady } from "../auth/cursor-client";
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
@@ -308,9 +309,7 @@ export interface BuilderHandoffPageDependencies {
     headers: Headers;
   }) => Promise<{ user: { id: string }; organization: { workspaceId: string } } | undefined>;
   createStore: (database: ReturnType<typeof openHostedPostgresDatabase>) => BuilderHandoffStore;
-  loadCursorClient: () => Promise<
-    Pick<typeof import("../auth/cursor-client"), "isCursorClientReady">
-  >;
+  loadCursorClient: () => Promise<{ isCursorClientReady: typeof isCursorClientReady }>;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
