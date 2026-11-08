@@ -1009,12 +1009,15 @@ for (const item of [
       ...item.options,
     });
     assert.equal(f.collected.reason, "source-not-terminal");
-    assert.deepEqual(f.collected.boundary, {
+    const expectedBoundary = {
       stage: item.stage,
       status: item.status,
-      ...(item.parentStatus === undefined ? {} : { parentStatus: item.parentStatus }),
-      allowParked: true,
-    });
+    };
+    if (item.parentStatus !== undefined) {
+      expectedBoundary.parentStatus = item.parentStatus;
+    }
+    expectedBoundary.allowParked = true;
+    assert.deepEqual(f.collected.boundary, expectedBoundary);
   });
 }
 
