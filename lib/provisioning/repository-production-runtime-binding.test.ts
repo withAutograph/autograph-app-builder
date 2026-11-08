@@ -39,12 +39,12 @@ const fixture = () => {
     },
   });
   const context: RepositoryProductionEffectContext = {
-    row: { operationRef: repositoryProductionOperationRef(scope), revision: 1, record },
-    effect: "bind-runtime",
     assertCurrent: async () => {},
     checkpoint: async (value) => {
       record.workerCheckpoints.push(value);
     },
+    effect: "bind-runtime",
+    row: { operationRef: repositoryProductionOperationRef(scope), record, revision: 1 },
   };
   let row: Record<string, string | string[]> | undefined;
   let loseResponse = false;
@@ -111,8 +111,8 @@ describe("Production runtime credential binding", () => {
     f.replaceRow({
       id: "foreign",
       key: "REQUESTS_DATABASE_URL",
-      type: "encrypted",
       target: ["production"],
+      type: "encrypted",
       value: "foreign",
     });
     await expect(f.service.apply(f.context, runtimeUrl)).rejects.toThrow("binding_conflict");

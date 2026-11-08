@@ -13,24 +13,24 @@ import type { AppAccessCommand } from "../app-access/contracts";
 
 const fixture = () => {
   const scope = {
+    appId: "requests",
     authority: {
-      issuer: "https://builder.test/api/auth",
       audience: "https://builder.test/mcp",
+      issuer: "https://builder.test/api/auth",
       ownerUserId: "owner",
       workspaceId: "workspace",
     },
-    appId: "requests",
-    repositoryId: "repo",
-    repositoryFullName: "example/repo",
-    projectId: "project",
-    organizationId: "org",
-    publicOrigin: "https://apps.test",
     environment: "production" as const,
+    organizationId: "org",
+    projectId: "project",
+    publicOrigin: "https://apps.test",
+    repositoryFullName: "example/repo",
+    repositoryId: "repo",
   };
   const record = initialRepositoryProductionRecord(scope, {
+    creatorRoles: ["approver"],
     sessionId: "session",
     sourceSha: "a".repeat(40),
-    creatorRoles: ["approver"],
     storage: { kind: "none" },
   });
   record.creatorActorId = "creator";
@@ -40,12 +40,12 @@ const fixture = () => {
     state: "pending",
   };
   const context: RepositoryProductionEffectContext = {
-    row: { operationRef: repositoryProductionOperationRef(scope), revision: 1, record },
-    effect: "creator-access",
     assertCurrent: async () => {},
     checkpoint: async (value) => {
       record.workerCheckpoints.push(value);
     },
+    effect: "creator-access",
+    row: { operationRef: repositoryProductionOperationRef(scope), record, revision: 1 },
   };
   return context;
 };
@@ -125,16 +125,16 @@ describe("approved creator role revisions", () => {
     await expect(update(context)).rejects.toThrow("lost after role revocation");
     expect(() => {
       assertNoConflictingCreatorRoleUpdate({
-        row: context.row,
         commandId: "new-remove",
         pendingCommandIds: ["11111111-1111-4111-a111-111111111111"],
+        row: context.row,
       });
     }).toThrow();
     expect(() => {
       assertNoConflictingCreatorRoleUpdate({
-        row: context.row,
         commandId: "11111111-1111-4111-a111-111111111111",
         pendingCommandIds: ["11111111-1111-4111-a111-111111111111"],
+        row: context.row,
       });
     }).not.toThrow();
     expect(await update(context)).toBe("applied");
@@ -145,9 +145,9 @@ describe("approved creator role revisions", () => {
     const context = fixture();
     expect(() => {
       assertNoConflictingCreatorRoleUpdate({
-        row: context.row,
         commandId: "saved-remove",
         pendingCommandIds: ["saved-remove"],
+        row: context.row,
       });
     }).not.toThrow();
   });
