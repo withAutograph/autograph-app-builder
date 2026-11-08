@@ -173,13 +173,9 @@ describe("PostgreSQL handoff renewal", () => {
         current.sessionId = "existing-session";
       }
       const test = store({ current: [current] });
-      const expectedRecord: { expiresAt: Date; handoffId: string; sessionId?: string } = {
-        expiresAt: current.expiresAt,
-        handoffId: row.handoffId,
-      };
-      if (bound) {
-        expectedRecord.sessionId = "existing-session";
-      }
+      const expectedRecord = bound
+        ? { expiresAt: current.expiresAt, handoffId: row.handoffId, sessionId: "existing-session" }
+        : { expiresAt: current.expiresAt, handoffId: row.handoffId };
       expect(await test.handoffs.renewExpired(renewal)).toMatchObject({
         disposition: "existing",
         record: expectedRecord,

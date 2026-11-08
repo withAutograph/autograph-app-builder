@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 import { z } from "zod";
 import {
   decryptVersionedVercelToken,
@@ -38,7 +39,7 @@ function databaseFixture(rows: unknown[]) {
     set: vi.fn(),
     update: vi.fn(),
     values: vi.fn(),
-    where: vi.fn(),
+    where: vi.fn<(condition: SQL) => unknown>(),
   };
   for (const key of [
     "select",
@@ -109,7 +110,11 @@ describe("durable Vercel connection return", () => {
         installationId: "icfg_selected",
       }),
     ).toBeUndefined();
-    const observed = new PgDialect().sqlToQuery(query.where.mock.calls[0]?.[0]);
+    const condition = query.where.mock.calls[0]?.[0];
+    if (condition === undefined) {
+      throw new Error("Expected an owner-scoped token query.");
+    }
+    const observed = new PgDialect().sqlToQuery(condition);
     expect(observed.params).toEqual([
       ...Object.values(authority).slice(0, 2),
       authority.workspaceId,
@@ -132,7 +137,11 @@ describe("durable Vercel connection return", () => {
     };
     const { database, query } = databaseFixture([row]);
     expect(await readVercelInstallationBindings({ authority, database })).toEqual([row]);
-    const observed = new PgDialect().sqlToQuery(query.where.mock.calls[0]?.[0]);
+    const condition = query.where.mock.calls[0]?.[0];
+    if (condition === undefined) {
+      throw new Error("Expected an owner-scoped binding query.");
+    }
+    const observed = new PgDialect().sqlToQuery(condition);
     expect(observed.params).toEqual([
       authority.audience,
       authority.issuer,

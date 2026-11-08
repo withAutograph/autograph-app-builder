@@ -74,7 +74,7 @@ vi.mock("./workflow-state", () => ({
 }));
 // This fixture models an ordinary new Build, not resumeApprovedBuild history.
 vi.mock("./existing-app-repair-planning", () => ({
-  priorResumedBuildDraftProposal: () => undefined,
+  priorResumedBuildDraftProposal: () => {},
 }));
 vi.mock("./draft-reconciliation-state", () => ({
   draftReconciliationCompletions: { get: () => [] },

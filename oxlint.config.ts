@@ -323,7 +323,6 @@ export default defineConfig({
         sharedLintFile26,
         "lib/eve/local-eve-launch.test.ts",
         sharedLintFile8,
-        "lib/handoff/postgres-store.test.ts",
         "lib/hosted/session-authority.ts",
         "lib/image/lifecycle.ts",
         sharedLintFile29,
@@ -381,8 +380,6 @@ export default defineConfig({
         "evals/self-reproduction/workflow-adapter.ts",
         "evals/support/self-reproduction-supplementary.ts",
         "lib/auth/real-oauth-test-harness.ts",
-        "lib/eve/same-origin-http.test.ts",
-        "lib/integrations/postgres-vercel-installation.test.ts",
         "lib/mcp/handoff-provider-test-harness.ts",
         "lib/release/promotion.ts",
         "lib/repository/reviewed-receipt-contract.test.ts",
@@ -522,7 +519,6 @@ export default defineConfig({
         "components/auth/settings/security/fresh-session-prompt.tsx",
         "components/auth/sign-out.tsx",
         "components/create-app/provider-choice-section.tsx",
-        sharedLintFile8,
         "lib/mcp/session-app/approval-request.tsx",
         "lib/mcp/session-app/view.tsx",
         productionSetupTestPath,
@@ -597,11 +593,7 @@ export default defineConfig({
     },
     {
       // Retain existing receiver and callback behavior pending review.
-      files: [
-        "lib/auth/preview-auth-ui.test.ts",
-        sharedLintFile18,
-        productionCreatorTestPath,
-      ],
+      files: ["lib/auth/preview-auth-ui.test.ts", sharedLintFile18, productionCreatorTestPath],
       rules: { "typescript/unbound-method": "off" },
     },
     {
@@ -664,7 +656,6 @@ export default defineConfig({
         builderControllerPath,
         "components/auth/passkey/add-passkey-dialog.tsx",
         sharedLintFile24,
-        "lib/agent/fresh-published-draft-preparation.test.ts",
         "lib/agent/hosted-github-publication-runtime.test.ts",
         "lib/agent/prepare-app-creation-projection.test.ts",
         "lib/agent/review-applied-product-source.test.ts",
