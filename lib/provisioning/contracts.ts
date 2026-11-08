@@ -9,20 +9,24 @@ export * from "./contracts-schema";
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function builderProvisionRequestDigest(input: BuilderProvisionRequest): string {
   const request = builderProvisionRequestSchema.parse(input);
-  return createHash("sha256")
-    .update(
-      JSON.stringify({
-        appName: request.appName,
-        ...(request.deploymentAccess === undefined
-          ? {}
-          : { deploymentAccess: request.deploymentAccess }),
-        providers: request.providers,
-        repository: request.repository,
-        requestId: request.requestId,
-        version: request.version,
-      }),
-    )
-    .digest("hex");
+  const hash = createHash("sha256");
+  const update = hash.update.bind(hash);
+  const { stringify } = JSON;
+  const prefix: Pick<BuilderProvisionRequest, "appName" | "deploymentAccess"> = {
+    appName: request.appName,
+  };
+  if (request.deploymentAccess !== undefined) {
+    prefix.deploymentAccess = request.deploymentAccess;
+  }
+  return update(
+    stringify({
+      ...prefix,
+      providers: request.providers,
+      repository: request.repository,
+      requestId: request.requestId,
+      version: request.version,
+    }),
+  ).digest("hex");
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -31,11 +35,15 @@ export function initialBuilderProvisionResponse(
   now = new Date(),
 ): BuilderProvisionResponse {
   const request = builderProvisionRequestSchema.parse(input);
-  return builderProvisionResponseSchema.parse({
+  const parse = builderProvisionResponseSchema.parse.bind(builderProvisionResponseSchema);
+  const prefix: Pick<BuilderProvisionResponse, "appId" | "deploymentAccess"> = {
     appId: deriveBuilderAppId(request.appName),
-    ...(request.deploymentAccess === undefined
-      ? {}
-      : { deploymentAccess: request.deploymentAccess }),
+  };
+  if (request.deploymentAccess !== undefined) {
+    prefix.deploymentAccess = request.deploymentAccess;
+  }
+  return parse({
+    ...prefix,
     github:
       request.providers.githubInstallationId === undefined
         ? { code: "not_selected", retryable: false, status: "skipped" }

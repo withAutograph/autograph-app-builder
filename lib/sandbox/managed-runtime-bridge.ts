@@ -193,14 +193,21 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
       throw unavailable();
     }
     await assertCurrent();
-    await input.verification.verifyRequest({
-      verification,
-      headers: incomingHeaders(request),
-      method: request.method ?? "GET",
-      target: request.url ?? "/",
-      ...(body === undefined ? {} : { body }),
-      actors,
-    });
+    const verificationRequest = () => {
+      const requestDetails: Pick<VerifiedRequest, "headers" | "method" | "target" | "body"> & {
+        verification: Configuration;
+      } = {
+        verification,
+        headers: incomingHeaders(request),
+        method: request.method ?? "GET",
+        target: request.url ?? "/",
+      };
+      if (body !== undefined) {
+        requestDetails.body = body;
+      }
+      return { ...requestDetails, actors };
+    };
+    await input.verification.verifyRequest(verificationRequest());
     await assertCurrent();
   };
   const server = createServer((request, response) => {

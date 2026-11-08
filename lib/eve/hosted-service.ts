@@ -4461,15 +4461,23 @@ export function createHostedEveSessionService(input: {
           }
           const requestDigest = digest({ kind: "send", request, sessionId: request.sessionId });
           let sendDelivery: SendDelivery | undefined;
-          const sendInput = {
+          const sendIdentity: Pick<Parameters<HostedEveTransport["send"]>[0], "adapterSessionId"> &
+            Partial<Parameters<HostedEveTransport["send"]>[0]> = {
             adapterSessionId: session.adapterSessionId,
-            ...(session.version === 2 && session.nativeRecoveryBinding !== undefined
-              ? { logicalSessionId: session.nativeRecoveryBinding.logicalSessionId }
-              : {}),
+          };
+          if (session.version === 2 && session.nativeRecoveryBinding !== undefined) {
+            sendIdentity.logicalSessionId = session.nativeRecoveryBinding.logicalSessionId;
+          }
+          const sendInput = {
+            ...sendIdentity,
             message: request.message,
             onAccepted: async (deliveryId: string) => {
+              const markerRevision: Pick<SendDelivery, "resumeCancellationRevision"> = {};
+              if (resumeCancellationRevision !== undefined) {
+                markerRevision.resumeCancellationRevision = resumeCancellationRevision;
+              }
               const marker: SendDelivery = {
-                ...(resumeCancellationRevision === undefined ? {} : { resumeCancellationRevision }),
+                ...markerRevision,
                 adapterGeneration: binding.adapterGeneration,
                 adapterSessionId: binding.adapterSessionId,
                 deliveryId,
@@ -4502,10 +4510,10 @@ export function createHostedEveSessionService(input: {
             },
             operationId,
             principal,
-            ...(session.version === 2 && session.sourceHandoffId
-              ? { sourceHandoffId: session.sourceHandoffId }
-              : {}),
           };
+          if (session.version === 2 && session.sourceHandoffId) {
+            sendInput.sourceHandoffId = session.sourceHandoffId;
+          }
           if (nativePreflight) {
             await input.transport.sendAccepted?.(sendInput);
             if (sendDelivery === undefined) {

@@ -190,6 +190,16 @@ const lostResponsePhrase = "lost response";
 const staleBranchWorktreeMessage =
   "Stale branch-worktree publication was rejected without creating a branch or worktree.";
 
+interface FixtureAcceptanceInput {
+  appId: string;
+  existingAppChanges?: ReturnType<typeof addVendorTaxVerificationStatus>;
+}
+
+interface FixtureFreshInspectionInput {
+  path?: string;
+  sourceKind: typeof freshTemplateSourceKind;
+}
+
 const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
   if (message.includes("component-backed renewal review ui")) {
@@ -1685,12 +1695,15 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           return "The inspected Vendor source did not expose a bounded application root for iteration.";
         }
       }
+      const acceptanceInput: FixtureAcceptanceInput = { appId };
+      if (existingAppChanges !== undefined) {
+        acceptanceInput.existingAppChanges = existingAppChanges;
+      }
       return {
         toolCalls: [
           {
             input: {
-              appId,
-              ...(existingAppChanges === undefined ? {} : { existingAppChanges }),
+              ...acceptanceInput,
               expectedArtifactDigest: artifact.digest,
               expectedArtifactRevision: artifact.revision,
             },
@@ -1719,22 +1732,20 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     }
     const inspectionResult = toolResults.find(({ name }) => name === "inspect_source");
     if (inspectionResult === undefined) {
+      if (sourceKind === freshTemplateSourceKind) {
+        const inspectionInput: FixtureFreshInspectionInput = { sourceKind };
+        if (hasTestCapability("simulated-target") && path !== undefined) {
+          inspectionInput.path = path;
+        }
+        return { toolCalls: [{ input: inspectionInput, name: "inspect_source" }] };
+      }
       return {
         toolCalls: [
           {
-            input:
-              sourceKind === freshTemplateSourceKind
-                ? {
-                    sourceKind,
-                    ...(hasTestCapability("simulated-target") && path !== undefined
-                      ? { path }
-                      : {}),
-                  }
-                : {
-                    path:
-                      path === undefined ? "" : developmentInspectionPath({ requestedPath: path }),
-                    sourceKind,
-                  },
+            input: {
+              path: path === undefined ? "" : developmentInspectionPath({ requestedPath: path }),
+              sourceKind,
+            },
             name: "inspect_source",
           },
         ],

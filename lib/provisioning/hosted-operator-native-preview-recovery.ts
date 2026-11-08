@@ -3,6 +3,7 @@ import { HostedOperatorError, hostedOperatorPlanSchema } from "./hosted-operator
 import type { HostedOperatorPlan, HostedOperatorRecordBase } from "./hosted-operator-contract";
 import type { ExternallyManagedTrustedSources } from "./hosted-operator-host-protection";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
+import type { ReadyDeliveryReplacementIntent } from "./hosted-operator-ready-delivery-replacement-intent";
 import {
   isReadyDeliveryReplacementSuccessor,
   resolveReadyDeliveryReplacementPredecessor,
@@ -123,15 +124,15 @@ export const createNativePreviewRecoveryPlan = (
     if (gatewayDeploymentId !== undefined && !gateway) {
       continue;
     }
-    const intent = {
-      version: 1 as const,
-      predecessor: {
-        operationRef: operator.operationRef,
-        planDigest: operator.planDigest,
-        appDeploymentId: app.deploymentId,
-        ...(gateway ? { gatewayDeploymentId: gateway.deploymentId } : {}),
-      },
+    const predecessor: ReadyDeliveryReplacementIntent["predecessor"] = {
+      operationRef: operator.operationRef,
+      planDigest: operator.planDigest,
+      appDeploymentId: app.deploymentId,
     };
+    if (gateway) {
+      predecessor.gatewayDeploymentId = gateway.deploymentId;
+    }
+    const intent = { version: 1 as const, predecessor };
     if (!resolveReadyDeliveryReplacementPredecessor(record, intent)) {
       continue;
     }

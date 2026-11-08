@@ -97,16 +97,15 @@ const readCanonicalContinuity = async <T>(read: () => Promise<T>, signal: AbortS
     if (error instanceof HostedOperatorError && error.recoveryStage !== undefined) {
       throw error;
     }
-    throw new HostedOperatorError(
-      error instanceof HostedOperatorError ? error.code : "operator_unavailable",
-      {
-        cause: error,
-        recoveryStage: "canonical_read",
-        ...(error instanceof HostedOperatorError && error.recoveryProgressAdvanced !== undefined
-          ? { recoveryProgressAdvanced: error.recoveryProgressAdvanced }
-          : {}),
-      },
-    );
+    const code = error instanceof HostedOperatorError ? error.code : "operator_unavailable";
+    const options: NonNullable<ConstructorParameters<typeof HostedOperatorError>[1]> = {
+      cause: error,
+      recoveryStage: "canonical_read",
+    };
+    if (error instanceof HostedOperatorError && error.recoveryProgressAdvanced !== undefined) {
+      options.recoveryProgressAdvanced = error.recoveryProgressAdvanced;
+    }
+    throw new HostedOperatorError(code, options);
   }
 };
 
