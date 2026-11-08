@@ -8,6 +8,7 @@ import {
 } from "./hosted-operator-contract";
 import type {
   HostedRuntimeJournalRecord,
+  HostedRuntimeJournalRow,
   HostedRuntimeJournalStore,
 } from "./hosted-runtime-journal";
 import {
@@ -167,7 +168,9 @@ const fixture = () => {
       "gateway-delivery",
     ].map((kind, index) => ({ kind, id: `notes-effect-${index}`, description: `Notes ${kind}` })),
   });
-  const record: HostedRuntimeJournalRecord = {
+  const record: HostedRuntimeJournalRecord & {
+    operator: NonNullable<HostedRuntimeJournalRecord["operator"]>;
+  } = {
     version: 1,
     kind: "app-runtime",
     approvedByCallId: "approval-call-notes",
@@ -215,7 +218,7 @@ const fixture = () => {
     version: 1,
     predecessor: {
       operationRef,
-      planDigest: record.operator!.planDigest,
+      planDigest: record.operator.planDigest,
       appDeploymentId: "ready-notes",
     },
   };
@@ -228,7 +231,7 @@ const fixture = () => {
 
 const recoveryFixture = () => {
   const base = fixture();
-  const original = base.record.operator!;
+  const original = base.record.operator;
   original.plan.retention.expiresAt = "2026-10-17T12:00:00Z";
   original.planDigest = operatorPlanDigest(original.plan);
   original.pendingEffectId = original.plan.effects[6].id;
@@ -322,37 +325,40 @@ describe("native externally managed policy recovery integration", () => {
     "keeps ordinary %s app planning on the full handler",
     async (planningCase) => {
       const f = fixture();
-      f.record.operator!.plan.appTrustedSources = {
+      f.record.operator.plan.appTrustedSources = {
         gatewayPreview: { projectId: "project-gateway", from: "preview", to: "preview" },
       };
-      f.record.operator!.plan.gatewayBindings!.trustedSources = {
+      f.record.operator.plan.gatewayBindings!.trustedSources = {
         appPreview: { projectId: "project-notes", from: "preview", to: "preview" },
       };
-      f.record.operator!.planDigest = operatorPlanDigest(f.record.operator!.plan);
-      f.record.operator!.deliveredDeploymentId = "ready-notes";
+      f.record.operator.planDigest = operatorPlanDigest(f.record.operator.plan);
+      f.record.operator.deliveredDeploymentId = "ready-notes";
       if (planningCase !== "approved-default") {
-        f.record.operator!.plan = withExternallyManagedHostProtection(
-          f.record.operator!.plan,
+        f.record.operator.plan = withExternallyManagedHostProtection(
+          f.record.operator.plan,
           externalPolicy,
         );
-        f.record.operator!.planDigest = operatorPlanDigest(f.record.operator!.plan);
+        f.record.operator.planDigest = operatorPlanDigest(f.record.operator.plan);
         f.record.approvedByCallId = "operator:unapproved-plan";
-        f.record.operator!.receipts = [];
-        delete f.record.operator!.approvalId;
-        delete f.record.operator!.pendingEffectId;
-        delete f.record.operator!.pendingEffectAttempt;
-        delete f.record.operator!.deliveredDeploymentId;
-        delete f.record.operator!.deliveryCandidates;
+        f.record.operator.receipts = [];
+        delete f.record.operator.approvalId;
+        delete f.record.operator.pendingEffectId;
+        delete f.record.operator.pendingEffectAttempt;
+        delete f.record.operator.deliveredDeploymentId;
+        delete f.record.operator.deliveryCandidates;
       }
       if (planningCase === "unapproved-expired-replacement") {
-        f.record.operator!.plan.appDeliveryReplacement = f.intent;
-        f.record.operator!.plan.retention.expiresAt = new Date(now - 1).toISOString();
-        f.record.operator!.planDigest = operatorPlanDigest(f.record.operator!.plan);
+        f.record.operator.plan.appDeliveryReplacement = f.intent;
+        f.record.operator.plan.retention.expiresAt = new Date(now - 1).toISOString();
+        f.record.operator.planDigest = operatorPlanDigest(f.record.operator.plan);
       }
-      const oldDigest = f.record.operator!.planDigest;
-      let row = { record: f.record, revision: 1 };
+      const oldDigest = f.record.operator.planDigest;
+      let row: HostedRuntimeJournalRow = {
+        record: f.record,
+        revision: 1,
+      };
       const context = {
-        authority: f.record.operator!.plan.deploymentBoundary!.authority,
+        authority: f.record.operator.plan.deploymentBoundary!.authority,
         target: f.record.request,
       };
       const store: HostedRuntimeJournalStore = {
@@ -374,7 +380,7 @@ describe("native externally managed policy recovery integration", () => {
           return structuredClone(row);
         },
       };
-      const ordinary = structuredClone(f.record.operator!.plan);
+      const ordinary = structuredClone(f.record.operator.plan);
       if (planningCase === "unapproved-expired-replacement") {
         delete ordinary.appDeliveryReplacement;
         ordinary.retention.expiresAt = new Date(now + 86_400_000).toISOString();
@@ -426,9 +432,9 @@ describe("native externally managed policy recovery integration", () => {
         executeEffect: async (input) => {
           executed.push(input.effect.kind);
           expect(input.plan.hostProtection).toBeUndefined();
-          expect(input.plan.appTrustedSources).toEqual(f.record.operator!.plan.appTrustedSources);
+          expect(input.plan.appTrustedSources).toEqual(f.record.operator.plan.appTrustedSources);
           expect(input.plan.gatewayBindings!.trustedSources).toEqual(
-            f.record.operator!.plan.gatewayBindings!.trustedSources,
+            f.record.operator.plan.gatewayBindings!.trustedSources,
           );
           if (input.effect.kind === "gateway-delivery") {
             await input.checkpointGatewayDelivery!(
@@ -456,9 +462,9 @@ describe("native externally managed policy recovery integration", () => {
         verify: async () => ({
           actors: 1,
           tenants: 1,
-          releaseId: f.record.operator!.plan.release.id,
-          artifactHash: f.record.operator!.plan.release.sha256,
-          manifestSha256: f.record.operator!.plan.release.sha256,
+          releaseId: f.record.operator.plan.release.id,
+          artifactHash: f.record.operator.plan.release.sha256,
+          manifestSha256: f.record.operator.plan.release.sha256,
           authenticatedBehavior: "unassessed",
         }),
         bindings: async () => ({}),
@@ -468,7 +474,7 @@ describe("native externally managed policy recovery integration", () => {
         new Request("https://operator.example.test/v1/runtime", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ...body, selection: f.record.operator!.plan.selection }),
+          body: JSON.stringify({ ...body, selection: f.record.operator.plan.selection }),
         });
       vi.spyOn(Date, "now").mockReturnValue(now);
       try {
@@ -1275,7 +1281,7 @@ describe("explicit READY delivery replacement", () => {
 
   it("resolves the resumed renewal shape with absent current selected IDs and pending marker", () => {
     const { record, intent } = fixture();
-    const original = record.operator!;
+    const original = record.operator;
     original.plan.retention.expiresAt = "2026-10-18T12:00:00.000Z";
     original.planDigest = operatorPlanDigest(original.plan);
     intent.predecessor.planDigest = original.planDigest;
@@ -1318,9 +1324,9 @@ describe("explicit READY delivery replacement", () => {
     "not-ready",
   ])("rejects a named app candidate that is %s", (change) => {
     const { record, intent, candidate } = fixture();
-    const app = record.operator!.deliveryCandidates![0];
+    const app = record.operator.deliveryCandidates![0];
     if (change === "absent") {
-      record.operator!.deliveryCandidates = [];
+      record.operator.deliveryCandidates = [];
     }
     if (change === "foreign-operation") {
       app.operationRef = "c1d096d4-d743-46d7-a4db-c20e67ca65a4";
@@ -1350,7 +1356,7 @@ describe("explicit READY delivery replacement", () => {
   ])("rejects invalid approval provenance: %s", (change) => {
     const { record, intent, candidate } = fixture();
     if (change === "missing-approval") {
-      delete record.operator!.approvalId;
+      delete record.operator.approvalId;
     }
     if (change === "unapproved-call") {
       record.approvedByCallId = "operator:unapproved-plan";
@@ -1359,7 +1365,7 @@ describe("explicit READY delivery replacement", () => {
       record.approvedByCallId = "";
     }
     if (change === "digest-mismatch") {
-      record.operator!.planDigest = "f".repeat(64);
+      record.operator.planDigest = "f".repeat(64);
     }
     if (change === "named-digest-mismatch") {
       intent.predecessor.planDigest = "e".repeat(64);
@@ -1433,7 +1439,7 @@ describe("explicit READY delivery replacement", () => {
     const { record, intent } = fixture();
     intent.predecessor.gatewayDeploymentId = "ready-gateway";
     expect(resolveReadyDeliveryReplacementPredecessor(record, intent)).toBeUndefined();
-    record.operator!.gatewayDeliveryCandidates = [
+    record.operator.gatewayDeliveryCandidates = [
       {
         deploymentId: "ready-gateway",
         operationRef,
@@ -1447,22 +1453,22 @@ describe("explicit READY delivery replacement", () => {
     expect(
       resolveReadyDeliveryReplacementPredecessor(record, intent)?.gatewayCandidate?.deploymentId,
     ).toBe("ready-gateway");
-    record.operator!.gatewayDeliveryCandidates[0].repoId = "foreign-repo";
+    record.operator.gatewayDeliveryCandidates[0].repoId = "foreign-repo";
     expect(resolveReadyDeliveryReplacementPredecessor(record, intent)).toBeUndefined();
   });
 
   it("does not adopt unrelated archived operators", () => {
     const { record, intent } = fixture();
-    const archived = structuredClone(record.operator!);
-    record.operator!.deliveryCandidates = [];
-    record.operator!.retainedGatewayDeliveries = [
+    const archived = structuredClone(record.operator);
+    record.operator.deliveryCandidates = [];
+    record.operator.retainedGatewayDeliveries = [
       { approvedByCallId: record.approvedByCallId, operator: archived },
     ];
-    record.operator!.retainedRenewalOperations = [
+    record.operator.retainedRenewalOperations = [
       { approvedByCallId: record.approvedByCallId, operator: archived },
     ];
-    record.operator!.plan.release.id = "different-approved-release";
-    record.operator!.planDigest = operatorPlanDigest(record.operator!.plan);
+    record.operator.plan.release.id = "different-approved-release";
+    record.operator.planDigest = operatorPlanDigest(record.operator.plan);
     expect(resolveReadyDeliveryReplacementPredecessor(record, intent)).toBeUndefined();
   });
 
@@ -1470,11 +1476,11 @@ describe("explicit READY delivery replacement", () => {
     "blocks current unknown %s creation",
     (kind) => {
       const { record, candidate } = fixture();
-      record.operator!.pendingEffectId = record.operator!.plan.effects.find(
+      record.operator.pendingEffectId = record.operator.plan.effects.find(
         (effect) => effect.kind === kind,
       )!.id;
-      record.operator!.receipts = record.operator!.receipts.filter(
-        (receipt) => receipt.effectId !== record.operator!.pendingEffectId,
+      record.operator.receipts = record.operator.receipts.filter(
+        (receipt) => receipt.effectId !== record.operator.pendingEffectId,
       );
       expect(isReadyDeliveryReplacementSuccessor(record, candidate, now)).toBe(false);
     },
@@ -1482,7 +1488,7 @@ describe("explicit READY delivery replacement", () => {
 
   it("distinguishes uncertain alias assignment from a confirmed applied Gateway", () => {
     const { record, candidate } = fixture();
-    record.operator!.gatewayDeliveryCandidates = [
+    record.operator.gatewayDeliveryCandidates = [
       {
         deploymentId: "ready-gateway",
         operationRef,
@@ -1495,8 +1501,8 @@ describe("explicit READY delivery replacement", () => {
       },
     ];
     expect(isReadyDeliveryReplacementSuccessor(record, candidate, now)).toBe(false);
-    record.operator!.deliveredGatewayDeploymentId = "ready-gateway";
-    record.operator!.receipts.push({
+    record.operator.deliveredGatewayDeploymentId = "ready-gateway";
+    record.operator.receipts.push({
       effectId: "notes-effect-6",
       observedAt: "2026-10-19T11:00:00.000Z",
       resourceVersion: "gateway-confirmed",
@@ -1506,7 +1512,7 @@ describe("explicit READY delivery replacement", () => {
 
   it("does not treat a historical operation's alias attempt as current uncertainty", () => {
     const { record, candidate } = fixture();
-    record.operator!.gatewayDeliveryCandidates = [
+    record.operator.gatewayDeliveryCandidates = [
       {
         deploymentId: "historical-gateway",
         operationRef: "c1d096d4-d743-46d7-a4db-c20e67ca65a4",
