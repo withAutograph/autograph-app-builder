@@ -30,6 +30,16 @@ const sharedLintFile2 = "lib/repository/supported-template.ts";
 const sharedLintFile3 = "scripts/self-reproduction-live.mts";
 const sharedLintFile4 = "scripts/test-capability-preload.mjs";
 
+const sharedLintFile5 = "app/ui/builder-connections.tsx";
+const sharedLintFile6 = "components/auth/error-toaster.tsx";
+const sharedLintFile7 = "evals/support/self-reproduction-candidate-workflows.ts";
+const sharedLintFile8 = "lib/eve/service.ts";
+const sharedLintFile9 = "lib/provisioning/github-provider.test.ts";
+const sharedLintFile10 = "lib/repository/fresh-bootstrap.ts";
+const sharedLintFile11 = "lib/repository/github-publication.ts";
+const sharedLintFile12 = "scripts/design-quality/browser.ts";
+const sharedLintFile13 = "scripts/eval-self-reproduction.mts";
+
 export default defineConfig({
   extends: [core, next, jsPlugins, nextJsPlugins, antiSlop],
   ignorePatterns: core.ignorePatterns,
@@ -39,11 +49,135 @@ export default defineConfig({
   },
   overrides: [
     {
+      // Existing findings awaiting a focused migration.
+      files: [
+        "evals/self-reproduction/workflow-adapter.test.ts",
+        "evals/support/self-reproduction-navigation-command.test.ts",
+        "evals/support/self-reproduction-reference-capture-fixture.test.ts",
+        "evals/support/self-reproduction-reference-runtime.test.ts",
+        "evals/support/self-reproduction-template-source.test.ts",
+        "lib/development/local-mode.test.ts",
+        "lib/eve/local-eve-launch.test.ts",
+        "lib/eve/local-vercel-oidc.test.ts",
+        "lib/image/lifecycle.test.ts",
+        "lib/release/promotion.test.ts",
+        "lib/repository/supported-template-development.test.ts",
+        "scripts/design-quality/archive-path.test.ts",
+        "scripts/design-quality/browser-fixture.test.ts",
+        "scripts/development.mts",
+        "scripts/eval-self-reproduction.test.ts",
+        "scripts/production-navigation-task.test.ts",
+        "scripts/self-reproduction-public-entrypoint.test.ts",
+        "scripts/test-production-navigation.mts",
+        "scripts/trusted-node-launcher.test.ts",
+      ],
+      rules: { "sonarjs/publicly-writable-directories": "off" },
+    },
+    {
+      // Existing findings awaiting a focused migration.
+      files: [
+        "app/ui/app-access.tsx",
+        "app/ui/handoff-controls.test.tsx",
+        "components/auth/settings/account/user-profile.tsx",
+        "lib/agent/deployment-repository-access-runtime.test.ts",
+        "lib/agent/prepared-provider-context.test.ts",
+        "lib/agent/product-behavior.test.ts",
+        "lib/auth/github-app-installation.test.ts",
+        "lib/auth/preview-oauth-deployment.ts",
+        "lib/auth/preview-oauth-runtime.test.ts",
+        "lib/development/mcp-readiness.test.ts",
+        "lib/eve/same-origin-http.test.ts",
+        "lib/integrations/provider-connection-return.ts",
+        "lib/integrations/vercel-installation.test.ts",
+        "lib/mcp/handoff-oauth.test.ts",
+        "lib/mcp/handoff-provider-test-harness.ts",
+        sharedLintFile9,
+        "lib/provisioning/starter-source.test.ts",
+        "lib/provisioning/vercel-provider.test.ts",
+        "lib/repository/arrusted-template-reader.test.ts",
+        "lib/repository/github-app-http-provider.test.ts",
+        "lib/repository/github-app-http-provider.ts",
+        "lib/sandbox/working-preview-runtime.test.ts",
+        "mdx-components.tsx",
+        sharedLintFile13,
+        "scripts/hosted-portable-proof.test.ts",
+        "scripts/self-reproduction-public-driver.test.ts",
+      ],
+      rules: { "typescript/no-base-to-string": "off" },
+    },
+    {
+      // Existing findings awaiting a focused migration.
+      files: [
+        ".config/mise/scripts/repository/image-lifecycle.ts",
+        "agent/tools/inspect_existing_app.ts",
+        sharedLintFile5,
+        "evals/support/self-reproduction-candidate-capabilities.ts",
+        sharedLintFile7,
+        "evals/support/self-reproduction-reference-navigation.ts",
+        "lib/agent/prepare-workspace-source.test.ts",
+        "lib/agent/prototype-artifacts.ts",
+        "lib/auth/preview-cimd-transport.test.ts",
+        "lib/development/dev-package.ts",
+        "lib/development/local-mode.ts",
+        "lib/development/process-supervisor.ts",
+        "lib/development/runtime-watch.ts",
+        "lib/eve/hosted-service.ts",
+        "lib/eve/local-eve-launch.test.ts",
+        sharedLintFile8,
+        "lib/handoff/postgres-store.test.ts",
+        "lib/hosted/session-authority.ts",
+        "lib/image/lifecycle.ts",
+        "lib/image/node-lifecycle.ts",
+        sharedLintFile10,
+        sharedLintFile11,
+        "lib/testing/eve-eval-lifecycle.ts",
+        sharedLintFile12,
+        sharedLintFile13,
+        "scripts/test-capability-protocol.mts",
+      ],
+      rules: { "anti-slop/no-known-value-widening": "off" },
+    },
+    {
+      // Existing findings awaiting a focused migration.
+      files: [
+        "app/**/route.ts",
+        "app/(product)/auth/sign-up/page.tsx",
+        "app/(product)/github/installations/callback/route.ts",
+        "app/(product)/local-connections/[provider]/complete/route.ts",
+        "app/(product)/local-connections/vercel/oauth-callback/route.ts",
+        "app/(product)/local-oauth/[provider]/approve/[approval]/route.ts",
+        "app/(product)/local-oauth/[provider]/approve/route.ts",
+        "app/(product)/preview/[sessionId]/[digest]/route.ts",
+        "app/(product)/settings/account/page.tsx",
+        "app/.well-known/oauth-protected-resource/route.ts",
+        "app/api/builder/draft/route.ts",
+        "app/api/builder/handoffs/[id]/renew/route.ts",
+        "app/api/builder/handoffs/[id]/route.ts",
+        "app/api/builder/handoffs/route.ts",
+        "app/api/builder/provision/stream/route.ts",
+        "app/api/github/webhooks/route.ts",
+        "app/healthz/route.ts",
+        sharedLintFile5,
+        "app/ui/builder-form-content.test.tsx",
+        "app/ui/builder-form-islands.tsx",
+        "app/ui/emulation-approval.tsx",
+        "app/ui/sign-up-request-boundary.test.tsx",
+        "app/ui/use-builder-draft-autosave.test.tsx",
+        sharedLintFile6,
+        "components/create-app/provider-choice-section.tsx",
+        "components/ui/badge.tsx",
+        "components/ui/item.tsx",
+        "e2e/production-navigation/cache-probe.route.ts",
+        "lib/agent/ui-preview-renderer.test.ts",
+      ],
+      rules: { "sonarjs/function-name": "off" },
+    },
+    {
       // Existing calls awaiting a focused contract review.
       files: [
         handoffControlsPath,
         "components/auth/additional-field.tsx",
-        "components/auth/error-toaster.tsx",
+        sharedLintFile6,
         "evals/cancel-dependency-preparation.eval.ts",
         "evals/self-reproduction/workflow-adapter.ts",
         "evals/support/self-reproduction-supplementary.ts",
@@ -57,7 +191,7 @@ export default defineConfig({
         "scripts/build-openai-package.mts",
         "scripts/build-portable-release.mts",
         "scripts/design-quality/archive.mts",
-        "scripts/design-quality/browser.ts",
+        sharedLintFile12,
         "scripts/design-quality/rescore.mts",
         "scripts/eve-eval-fetch-preload.mjs",
         "scripts/smoke-portable-plugin.mts",
@@ -81,7 +215,7 @@ export default defineConfig({
         "lib/repository/supported-template-development.test.ts",
         sharedLintFile2,
         "scripts/eval-design.mts",
-        "scripts/eval-self-reproduction.mts",
+        sharedLintFile13,
         sharedLintFile3,
         "scripts/self-reproduction-public.mts",
         "scripts/trusted-node-launcher.test.ts",
@@ -93,7 +227,7 @@ export default defineConfig({
       files: [
         "app/ui/use-builder-draft-autosave.ts",
         additionalAuthFieldPath,
-        "components/auth/error-toaster.tsx",
+        sharedLintFile6,
         "components/auth/oauth-provider/oauth-consent.tsx",
         "components/auth/passkey/delete-passkey-dialog.tsx",
         "components/auth/passkey/passkey.tsx",
@@ -102,7 +236,7 @@ export default defineConfig({
         "components/auth/user/user-view.tsx",
         "lib/integrations/store-in-view-model.ts",
         "lib/mcp/session-app/view.tsx",
-        "scripts/design-quality/browser.ts",
+        sharedLintFile12,
       ],
       rules: { "typescript/prefer-nullish-coalescing": "off" },
     },
@@ -120,7 +254,7 @@ export default defineConfig({
         "lib/plugin/agent-plugin-package.ts",
         "lib/provisioning/hosted-operator-ready-replacement-native.ts",
         "lib/release/promotion.ts",
-        "lib/repository/github-publication.ts",
+        sharedLintFile11,
         "lib/repository/node-branch-worktree-publication.ts",
         nodeFreshBootstrapPath,
         nodeLocalPublicationPath,
@@ -136,7 +270,7 @@ export default defineConfig({
       // Preserve existing sequential operation ordering.
       files: [
         "evals/self-reproduction/default-capture-adapter.ts",
-        "evals/support/self-reproduction-candidate-workflows.ts",
+        sharedLintFile7,
         referenceLifecyclePath,
         sharedLintFile1,
         "lib/agent/github-pr-delivery-step.ts",
@@ -177,7 +311,7 @@ export default defineConfig({
       // Preserve existing callback return contracts pending review.
       files: [
         ".storybook/create-app/layouts.tsx",
-        "app/ui/builder-connections.tsx",
+        sharedLintFile5,
         "app/ui/builder-destination.tsx",
         "app/ui/builder-form.tsx",
         "app/ui/builder-model-controls.tsx",
@@ -195,7 +329,7 @@ export default defineConfig({
         "components/auth/settings/security/fresh-session-prompt.tsx",
         "components/auth/sign-out.tsx",
         "components/create-app/provider-choice-section.tsx",
-        "lib/eve/service.ts",
+        sharedLintFile8,
         "lib/mcp/session-app/approval-request.tsx",
         "lib/mcp/session-app/view.tsx",
         productionSetupTestPath,
@@ -234,7 +368,7 @@ export default defineConfig({
       rules: { "react-doctor/nextjs-no-client-side-redirect": "off" },
     },
     {
-      files: ["app/ui/builder-connections.tsx", "app/ui/search-combobox.tsx"],
+      files: [sharedLintFile5, "app/ui/search-combobox.tsx"],
       rules: { "react-doctor/prefer-html-dialog": "off" },
     },
     {
@@ -257,10 +391,10 @@ export default defineConfig({
     {
       // Git object identity requires the existing SHA-1 format.
       files: [
-        "lib/provisioning/github-provider.test.ts",
+        sharedLintFile9,
         githubProviderPath,
         "lib/repository/dependency-cache.test.ts",
-        "lib/repository/fresh-bootstrap.ts",
+        sharedLintFile10,
         "lib/repository/github-publication.test.ts",
         nodeFreshBootstrapPath,
       ],
@@ -287,7 +421,7 @@ export default defineConfig({
       rules: { "typescript/no-unsafe-call": "off" },
     },
     {
-      files: ["evals/support/self-reproduction-candidate-workflows.ts"],
+      files: [sharedLintFile7],
       rules: { "github/no-blur": "off" },
     },
     {
@@ -340,7 +474,7 @@ export default defineConfig({
     },
     {
       // Preserve existing runtime contracts pending focused migration.
-      files: ["lib/eve/public-events.ts", "lib/eve/service.ts"],
+      files: ["lib/eve/public-events.ts", sharedLintFile8],
       rules: { "typescript/switch-exhaustiveness-check": "off" },
     },
     {
@@ -353,7 +487,7 @@ export default defineConfig({
       files: [
         "lib/auth/preview-user-management.ts",
         "lib/eve/hosted-service.test.ts",
-        "scripts/eval-self-reproduction.mts",
+        sharedLintFile13,
       ],
       rules: { "typescript/restrict-template-expressions": "off" },
     },
@@ -421,8 +555,8 @@ export default defineConfig({
         previewActivationCli,
         "lib/db/preview-activation-invited-user.ts",
         "lib/provisioning/repository-production-native.ts",
-        "lib/repository/fresh-bootstrap.ts",
-        "lib/repository/github-publication.ts",
+        sharedLintFile10,
+        sharedLintFile11,
       ],
       rules: { "typescript/no-unnecessary-boolean-literal-compare": "off" },
     },
@@ -486,7 +620,7 @@ export default defineConfig({
         "lib/eve/service.test.ts",
         "lib/handoff/postgres-store.test.ts",
         "lib/integrations/postgres-vercel-installation.test.ts",
-        "lib/provisioning/github-provider.test.ts",
+        sharedLintFile9,
         "lib/provisioning/github-webhook.test.ts",
         "lib/repository/direct-app-creation.test.ts",
         "lib/repository/postgres-github-publication-receipt-store.test.ts",
@@ -571,7 +705,6 @@ export default defineConfig({
     // Temporary migration baseline; remove these as findings are fixed.
     "typescript/promise-function-async": "off",
     "anti-slop/no-conditional-empty-object-spread": "off",
-    "anti-slop/no-known-value-widening": "off",
     "anti-slop/no-runtime-typeof": "off",
     "anti-slop/no-unknown-parameters": "off",
     "anti-slop/no-unknown-returns": "off",
@@ -580,13 +713,10 @@ export default defineConfig({
     "github/no-then": "off",
     "sonarjs/cognitive-complexity": "off",
     "sonarjs/expression-complexity": "off",
-    "sonarjs/function-name": "off",
     "sonarjs/max-union-size": "off",
     "sonarjs/no-undefined-assignment": "off",
-    "sonarjs/publicly-writable-directories": "off",
     "sonarjs/too-many-break-or-continue-in-loop": "off",
     "typescript/consistent-return": "off",
-    "typescript/no-base-to-string": "off",
     "typescript/no-unsafe-assignment": "off",
     "typescript/no-unsafe-member-access": "off",
     "typescript/no-unsafe-type-assertion": "off",
