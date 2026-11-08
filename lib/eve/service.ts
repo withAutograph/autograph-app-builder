@@ -374,6 +374,11 @@ function localEveRestartGeneration(
   return readLocalEveCycleBinding(path);
 }
 
+interface LocalInterruptionResultOptions {
+  status: "waiting" | undefined;
+  error?: EveSessionResult["error"];
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function resultForEvents(
   sessionId: string,
@@ -879,7 +884,7 @@ export function createLocalEveSessionService(
       };
     }
     const interruption = state.modelInterruptions.get(sessionId);
-    const result: { status: "waiting" | undefined; error?: EveSessionResult["error"] } = {
+    const result: LocalInterruptionResultOptions = {
       status:
         interruption !== undefined || state.restartInterrupted.has(sessionId)
           ? ("waiting" as const)

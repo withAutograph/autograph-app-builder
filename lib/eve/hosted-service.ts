@@ -4647,10 +4647,10 @@ export function createHostedEveSessionService(input: {
                 queued = evidence;
               },
             );
-            const dispatchResult: {
-              result: EveSessionResult;
-              queuedSend?: { delivery: SendDelivery; evidence: SendReadEvidence };
-            } = { result };
+            const dispatchResult: Pick<
+              Awaited<ReturnType<Parameters<typeof mutate>[0]["dispatch"]>>,
+              "result" | "queuedSend"
+            > = { result };
             if (queued !== undefined) {
               dispatchResult.queuedSend = { delivery: sendDelivery, evidence: queued };
             }
