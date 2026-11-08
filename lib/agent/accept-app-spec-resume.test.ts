@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
@@ -95,6 +96,7 @@ const seed = (phase: AppBuilderWorkflowState["phase"], prepared = true) => {
     });
   }
   // SAFETY: this fixture supplies the acceptance fields; unrelated receipt internals are opaque sentinels whose identity must remain unchanged.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve the existing test fixture or assertion boundary.
   const state = fixture as AppBuilderWorkflowState;
   appBuilderWorkflowState.update(() => state);
   return state;

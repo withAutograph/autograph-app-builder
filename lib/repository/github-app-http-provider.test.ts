@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 import { createHash, generateKeyPairSync } from "node:crypto";
 
 import { decodeJwt, decodeProtectedHeader } from "jose";
@@ -1038,7 +1039,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const { content } = unicodeDraftMaterial();
     let message = "unexpected success";
     try {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.
       await adapter.updateExistingDraft({} as ExistingDraftUpdateProposal, content);
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);

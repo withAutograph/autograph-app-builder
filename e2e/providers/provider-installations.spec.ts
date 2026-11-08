@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 import { setTimeout as delay } from "node:timers/promises";
 
 import postgres from "postgres";

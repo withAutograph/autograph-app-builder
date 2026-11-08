@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 /* oxlint-disable eslint/require-await -- Browser doubles preserve asynchronous Playwright operations. */
 import { compileFunction } from "node:vm";
 import { runtimeReceiptSchema } from "./self-reproduction-parity-evidence";

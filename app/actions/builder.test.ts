@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 import type { withSourceUploadAuthority } from "@/lib/handoff/source-upload-deployment";
 import { readAuthenticatedSourceUploadContext } from "@/lib/handoff/source-upload-deployment";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

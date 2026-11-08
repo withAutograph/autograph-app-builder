@@ -106,7 +106,7 @@ const state = {
     sourceReceiptDigest: "f".repeat(64),
     sourceSha: "a".repeat(40),
     sourceTree: "b".repeat(40),
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.
     target: {} as PreparedAppCreation["target"],
     version: 1,
     workspaceDigest: "c".repeat(64),

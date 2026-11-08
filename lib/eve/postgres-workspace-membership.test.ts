@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import { describe, expect, it, vi } from "vitest";
 

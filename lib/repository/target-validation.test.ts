@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 import { decideApprovedBuildContinuation } from "../agent/approved-build-continuation";
 import type { AppBuilderWorkflowState } from "../agent/workflow-state";
 import { sourceDeclaredToolchainActivationCommand } from "./source-toolchain";

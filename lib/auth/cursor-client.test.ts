@@ -75,7 +75,7 @@ function storage() {
     },
   };
   return {
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The database fixture implements only the OAuth client operations under test.; Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- The database fixture implements only the OAuth client operations under test.; Preserve the existing type assertion at this boundary.
     database: database as unknown as Parameters<typeof setupCursorClient>[0],
     insert: database.insert,
     rows,

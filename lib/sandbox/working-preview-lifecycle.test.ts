@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 import { createReleaseSandboxComputeHook } from "../../agent/hooks/release-sandbox-compute";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { HookContext } from "eve/hooks";
@@ -42,7 +43,7 @@ const context = {
   getSandbox: () => Promise.resolve({ id: "sandbox", stop: mocks.stop }),
   session: { auth: {}, id: "session" },
 } as unknown as HookContext;
-// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing unknown input contract.; Preserve the existing type assertion at this boundary.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing unknown input contract.; Preserve the existing type assertion at this boundary.
 const events = hook.events as Record<string, (event: unknown, ctx: HookContext) => Promise<void>>;
 
 describe.each([false, true])("preview completion lifecycle hosted=%s", (hosted) => {

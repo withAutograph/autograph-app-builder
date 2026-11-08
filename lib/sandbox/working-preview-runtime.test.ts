@@ -104,7 +104,7 @@ const setup = () => {
     cwd: "/workspace/repository",
     landingPath: "/example",
     port: 3000,
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The provider fixture supplies only the preview operations under test.; Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- The provider fixture supplies only the preview operations under test.; Preserve the existing type assertion at this boundary.
     provider: provider as unknown as Sandbox,
     sandboxId: "logical-1",
   };
