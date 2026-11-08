@@ -170,13 +170,13 @@ describe("private native target terminal approval", () => {
     expect(reader.read()).toBeNull();
     reader.observe(settled());
     expect(reader.read()).toEqual({
-      requestId: "human-request",
       callId: "prepare-call",
-      planDigest,
-      responderPrincipalId: authority.ownerUserId,
-      publicSessionId: plan.origin.publicSessionId,
-      outcome: "approved",
       observedAt: "2026-10-21T15:00:01.000Z",
+      outcome: "approved",
+      planDigest,
+      publicSessionId: plan.origin.publicSessionId,
+      requestId: "human-request",
+      responderPrincipalId: authority.ownerUserId,
     });
   });
 
@@ -281,24 +281,24 @@ describe("private native target terminal approval", () => {
       return Promise.resolve({ complete: true, nativeTailIndex: 2, nextNativeIndex: 3 });
     });
     const common = {
-      owner,
-      record,
-      historyOwner,
-      observation: { state: saved, save: vi.fn<() => Promise<void>>().mockResolvedValue() },
-      readHistory,
       assertOwner: () => Promise.resolve(),
+      historyOwner,
+      observation: { save: vi.fn<() => Promise<void>>().mockResolvedValue(), state: saved },
+      owner,
+      readHistory,
+      record,
     };
     expect(await readPrivateNativeTargetApproval(common)).toEqual({
-      status: "approved",
       proof: {
-        requestId: "request-one",
         callId: "call-one",
-        planDigest,
-        responderPrincipalId: authority.ownerUserId,
-        publicSessionId: plan.origin.publicSessionId,
-        outcome: "approved",
         observedAt: "2026-10-21T15:00:01.000Z",
+        outcome: "approved",
+        planDigest,
+        publicSessionId: plan.origin.publicSessionId,
+        requestId: "request-one",
+        responderPrincipalId: authority.ownerUserId,
       },
+      status: "approved",
     });
     expect(await readPrivateNativeTargetApproval({ ...common, callId: "call-two" })).toEqual({
       status: "pending",
@@ -346,10 +346,10 @@ describe("private native target terminal approval", () => {
         return Promise.resolve();
       });
       const base = {
+        assertOwner: () => Promise.resolve(),
+        historyOwner,
         owner,
         record,
-        historyOwner,
-        assertOwner: () => Promise.resolve(),
       };
       await expect(
         readPrivateNativeTargetApproval({

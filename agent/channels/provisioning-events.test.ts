@@ -63,9 +63,9 @@ const auth: SessionAuthContext = {
 };
 const request = () =>
   new Request("https://builder.example.test/eve/v1/internal/hosted-operator/realm-continuation", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify({ authority, dispatchId, version: 1 }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
   });
 const fixture = () => {
   const delivered = new Set<string>();
@@ -207,23 +207,23 @@ describe("private Realm continuation event handlers", () => {
   it.each([
     new Request("https://builder.example.test/internal/hosted-operator/realm-continuation"),
     new Request("https://builder.example.test/internal/hosted-operator/realm-continuation", {
-      method: "POST",
       body: "{}",
+      method: "POST",
     }),
     new Request("https://builder.example.test/internal/hosted-operator/realm-continuation", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       body: "not-json",
+      headers: { "content-type": "application/json" },
+      method: "POST",
     }),
     new Request("https://builder.example.test/internal/hosted-operator/realm-continuation", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify({ authority, dispatchId: "invalid", version: 1 }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
     }),
     new Request("https://builder.example.test/internal/hosted-operator/realm-continuation", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify({ authority: "x".repeat(16_385), dispatchId, version: 1 }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
     }),
   ])("rejects malformed input before authorization", async (invalid) => {
     const { dependencies, handlers } = fixture();
@@ -329,7 +329,7 @@ describe("private Realm continuation event handlers", () => {
       ...claim,
       reason: { kind: "expired-technical-wait" as const, expiresAt: "2026-10-15T00:00:00.000Z" },
     };
-    dependencies.authorize.mockResolvedValue({ claim: expiredClaim, auth });
+    dependencies.authorize.mockResolvedValue({ auth, claim: expiredClaim });
     const response = await handlers.dispatch(request(), attachSession);
     expect(response.status).toBe(200);
     const [[, event]] = dependencies.respond.mock.calls;

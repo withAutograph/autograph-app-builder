@@ -171,17 +171,6 @@ const fixture = () => {
   let writes = 0;
   let approvals = 0;
   const journal = createNormalActorJournal({
-    keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
-    now: () => Date.now(),
-    assertAuthorized: async (input) => {
-      if (
-        !owned ||
-        input.authority.ownerUserId !== authority.ownerUserId ||
-        input.target.sessionId !== target.sessionId
-      ) {
-        throw new Error("owner_revoked");
-      }
-    },
     assertAccountApproval: async (_context, preparation) => {
       approvals += 1;
       if (
@@ -193,13 +182,23 @@ const fixture = () => {
         throw new Error("approval_revoked");
       }
     },
+    assertAuthorized: async (input) => {
+      if (
+        !owned ||
+        input.authority.ownerUserId !== authority.ownerUserId ||
+        input.target.sessionId !== target.sessionId
+      ) {
+        throw new Error("owner_revoked");
+      }
+    },
     assertMutationAuthority: async (_context, current) => {
       if (current.record.leaseId !== row.record.leaseId || current.revision !== row.revision) {
         throw new Error("lease_changed");
       }
     },
+    keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
+    now: () => Date.now(),
     store: {
-      read: async () => structuredClone(row),
       compareAndSet: async (input): Promise<HostedRuntimeJournalRow | undefined> => {
         if (conflict) {
           conflict = false;
@@ -216,6 +215,7 @@ const fixture = () => {
         };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
     },
   });
   return {
@@ -289,22 +289,8 @@ const captureFixture = async () => {
   let pendingConsumed = false;
   const ports: NormalActorCapturePorts = {
     builderOrigin: "https://builder.example.test",
-    sender: {
-      issuer: "https://oidc.vercel.example",
-      audience: "audience",
-      ownerId: "team",
-      projectId: "prj_auth",
-      environment: "preview",
-      subject: "auth-subject",
-    },
-    verifySender: async () => ({
-      iss: "https://oidc.vercel.example",
-      aud: "audience",
-      owner_id: "team",
-      project_id: senderProject,
-      environment: "preview",
-      sub: "auth-subject",
-    }),
+    journal: value.journal,
+    now: () => Date.now(),
     pending: async () => ({
       context,
       actorKey: "owner",
@@ -345,7 +331,14 @@ const captureFixture = async () => {
         });
       },
     }),
-    journal: value.journal,
+    sender: {
+      audience: "audience",
+      environment: "preview",
+      issuer: "https://oidc.vercel.example",
+      ownerId: "team",
+      projectId: "prj_auth",
+      subject: "auth-subject",
+    },
     verifyCapturedActor: async (input) => {
       expect(input.normalCookie.value).toBe(normalCookie.value);
       return {
@@ -355,7 +348,14 @@ const captureFixture = async () => {
         expiresAt: "2030-01-01T00:00:00.000Z",
       };
     },
-    now: () => Date.now(),
+    verifySender: async () => ({
+      iss: "https://oidc.vercel.example",
+      aud: "audience",
+      owner_id: "team",
+      project_id: senderProject,
+      environment: "preview",
+      sub: "auth-subject",
+    }),
   };
   const handler = createNormalActorCaptureHandler(ports);
   const body = {

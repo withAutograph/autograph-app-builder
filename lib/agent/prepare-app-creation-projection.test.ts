@@ -59,13 +59,6 @@ vi.mock("./private-compute-planning", async (importOriginal) => ({
   preparePrivateComputePlanning: ports.profile,
 }));
 vi.mock("../repository/target-planning", () => ({
-  targetExecutionBinding: () => ({
-    fixture: true,
-    dependencyCacheDigest: "cache",
-    imageDigest: "image",
-  }),
-  fixtureTargetCommandExecutor: () => ({}),
-  sandboxTargetCommandExecutor: () => ({}),
   executeTargetIdentityAndPlanning: async (input: {
     onIdentity: (identity: { appId: string; workspacePath: string }) => void | Promise<void>;
   }) => {
@@ -73,6 +66,13 @@ vi.mock("../repository/target-planning", () => ({
     const result: unknown = await ports.execute(input);
     return result;
   },
+  fixtureTargetCommandExecutor: () => ({}),
+  sandboxTargetCommandExecutor: () => ({}),
+  targetExecutionBinding: () => ({
+    fixture: true,
+    dependencyCacheDigest: "cache",
+    imageDigest: "image",
+  }),
 }));
 const sha256 = (content: string) => createHash("sha256").update(content).digest("hex");
 const profile = () =>

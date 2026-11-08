@@ -340,10 +340,10 @@ it("does not publish completed application evidence after source changes or Stop
     evidence: sourceEvidence({}),
     journal: {
       assertCurrentOwner: async () => {},
+      put,
       read: async (): Promise<undefined> => {
         /* No completed record exists in this fixture. */
       },
-      put,
     },
   };
   const assess = vi.fn(async () => completedApplication());
@@ -404,9 +404,9 @@ it("releases a pending source byte read when Stop arrives", async () => {
 
 it("preserves validated baseline visibility and narrows missing optional metadata without a setup gate", () => {
   const input = {
-    observedPaths: ["app/page.ts", "shared/save.ts", "retained/later/manifest.json"],
     changedPaths: ["app/page.ts"],
     hasSelectedBaseline: true,
+    observedPaths: ["app/page.ts", "shared/save.ts", "retained/later/manifest.json"],
   };
   const fallback = applicationReviewVisibility(input);
   expect(fallback.paths).toEqual(["app/page.ts"]);
@@ -517,8 +517,8 @@ it("does not reuse an incompatible first-writer record or perform a fresh review
         evidence: sourceEvidence({}),
         journal: {
           assertCurrentOwner: async () => {},
-          read: async () => ({ kind: "application-completed" as const, assessment }),
           put,
+          read: async () => ({ kind: "application-completed" as const, assessment }),
         },
         currentDigest: async () => reviewInput.sourceDigest,
       },
@@ -567,8 +567,8 @@ it("does not publish an incompatible newly completed assessment", async () => {
       evidence: sourceEvidence({}),
       journal: {
         assertCurrentOwner: async () => {},
-        read: async (): Promise<undefined> => {},
         put,
+        read: async (): Promise<undefined> => {},
       },
       currentDigest: async () => reviewInput.sourceDigest,
     },
@@ -594,7 +594,7 @@ it("fails closed on occupied non-application records without attempting a review
         reviewInput,
         normalizedChanges: [],
         evidence: sourceEvidence({}),
-        journal: { assertCurrentOwner: async () => {}, read: async () => record, put },
+        journal: { assertCurrentOwner: async () => {}, put, read: async () => record },
         currentDigest: async () => reviewInput.sourceDigest,
       },
       assess,

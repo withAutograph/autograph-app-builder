@@ -381,7 +381,7 @@ const participantServiceFixture = () => {
   f.deps.verify = vi.fn(async () => {
     throw new Error("App verification must not run for participants");
   });
-  return { f, program, accountPlan };
+  return { accountPlan, f, program };
 };
 const participantAccountCompletion = (
   fixtureInput: ReturnType<typeof participantServiceFixture>,
@@ -418,7 +418,7 @@ const participantAccountCompletion = (
       tokenTag: "fixture-tag",
     },
   };
-  return { state, preparation };
+  return { preparation, state };
 };
 
 describe("participant preparation service branch", () => {
@@ -733,7 +733,7 @@ const captureSuccessorFixture = () => {
   }
   current.f.deps.plan = vi.fn(async () => successor);
   current.f.approve();
-  return { ...current, successor, nextProgram };
+  return { ...current, nextProgram, successor };
 };
 
 describe("capture-only participant program successor", () => {
