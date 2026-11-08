@@ -114,12 +114,17 @@ const operatorResponseDiagnostic = (
 } => {
   const blocked = operatorPublicResultSchema.safeParse(value);
   if (blocked.success && blocked.data.status === "blocked") {
-    return {
+    const diagnostic: Pick<HostedOperatorConsentMetadata, "operatorResponse" | "operatorCode"> & {
+      accessClass: NonNullable<HostedOperatorConsentMetadata["accessClass"]>;
+    } = {
       accessClass:
         blocked.data.code === "authorization_required" ? "application_auth_denied" : "other_failed",
       operatorResponse: "blocked",
-      ...(blocked.data.code === undefined ? {} : { operatorCode: blocked.data.code }),
     };
+    if (blocked.data.code !== undefined) {
+      diagnostic.operatorCode = blocked.data.code;
+    }
+    return diagnostic;
   }
   if (operatorSuccessSchemas[action].safeParse(value).success) {
     return { accessClass: "ok" };

@@ -29,13 +29,18 @@ const { values } = parseArgs({
   },
   strict: true,
 });
-if (values.help) {
+if (values.help === true) {
   console.log(
     "Observe an existing delivered preview. --state-file OWNER_STATE_JSON --output-dir EXTERNAL_PATH [--brief-file PATH] [--timeout-ms 30000]",
   );
   process.exit(0);
 }
-if (!values["state-file"] || !values["output-dir"]) {
+if (
+  values["state-file"] === undefined ||
+  values["state-file"] === "" ||
+  values["output-dir"] === undefined ||
+  values["output-dir"] === ""
+) {
   throw new Error("--state-file and --output-dir are required.");
 }
 const statePath = path.resolve(values["state-file"]);
@@ -45,16 +50,17 @@ if (output === path.dirname(statePath)) {
 }
 const repository = path.resolve(import.meta.dirname, "..");
 const relative = path.relative(repository, output);
-if (!relative || (!relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))) {
+if (relative === "" || (!relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))) {
   throw new Error("Observation output must remain outside the reference source tree.");
 }
 const timeoutMs = Number(values["timeout-ms"]);
 if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
   throw new Error("--timeout-ms must be a positive integer.");
 }
-const syntheticBrief = values["brief-file"]
-  ? await readFile(path.resolve(values["brief-file"]), "utf-8")
-  : undefined;
+const syntheticBrief =
+  values["brief-file"] !== undefined && values["brief-file"] !== ""
+    ? await readFile(path.resolve(values["brief-file"]), "utf-8")
+    : undefined;
 const finding = await loadWorkingPreview(statePath);
 
 if (finding.status === "ready") {

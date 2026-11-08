@@ -18,11 +18,18 @@ const { values } = parseArgs({
     "report-dir": { type: "string" },
   },
 });
-if (values.help) {
+if (values.help === true) {
   console.log("mise run eval:design-archive -- --report-dir PATH --name stock-exceptions");
   process.exit(0);
 }
-if (!values["report-dir"] || !values.name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(values.name)) {
+if (values["report-dir"] === undefined || values["report-dir"] === "") {
+  throw new Error("Supply --report-dir and a lowercase kebab-case --name");
+}
+if (
+  values.name === undefined ||
+  values.name === "" ||
+  !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(values.name)
+) {
   throw new Error("Supply --report-dir and a lowercase kebab-case --name");
 }
 const input = path.resolve(values["report-dir"]);

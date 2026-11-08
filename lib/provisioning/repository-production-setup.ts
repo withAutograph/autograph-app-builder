@@ -214,12 +214,17 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
           const identity = await ports.readCreatorIdentity(row);
           await assertCurrent();
           if (identity.state === "required") {
-            return {
+            const result: RepositoryProductionSetupResult = {
               operationRef: row.operationRef,
               state: "identity-required",
-              ...(identity.signInUrl === undefined ? {} : { signInUrl: identity.signInUrl }),
-              ...(identity.expiresAt === undefined ? {} : { expiresAt: identity.expiresAt }),
             };
+            if (identity.signInUrl !== undefined) {
+              result.signInUrl = identity.signInUrl;
+            }
+            if (identity.expiresAt !== undefined) {
+              result.expiresAt = identity.expiresAt;
+            }
+            return result;
           }
           if (
             row.record.creatorActorId !== undefined &&
@@ -305,12 +310,17 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
     if (row.record.effects["creator-access"].state !== "applied") {
       const identity = await ports.readCreatorIdentity(row);
       if (identity.state === "required") {
-        return {
+        const result: RepositoryProductionSetupResult = {
           operationRef: row.operationRef,
           state: "identity-required",
-          ...(identity.signInUrl === undefined ? {} : { signInUrl: identity.signInUrl }),
-          ...(identity.expiresAt === undefined ? {} : { expiresAt: identity.expiresAt }),
         };
+        if (identity.signInUrl !== undefined) {
+          result.signInUrl = identity.signInUrl;
+        }
+        if (identity.expiresAt !== undefined) {
+          result.expiresAt = identity.expiresAt;
+        }
+        return result;
       }
     }
     const complete = selectedEffects(row.record).every(
