@@ -520,7 +520,6 @@ export default defineConfig({
         "components/auth/settings/security/fresh-session-prompt.tsx",
         "components/auth/sign-out.tsx",
         "components/create-app/provider-choice-section.tsx",
-        sharedLintFile8,
         "lib/mcp/session-app/approval-request.tsx",
         "lib/mcp/session-app/view.tsx",
         productionSetupTestPath,
