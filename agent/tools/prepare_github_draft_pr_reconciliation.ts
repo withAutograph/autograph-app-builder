@@ -268,8 +268,8 @@ export default defineTool({
       ...draftReconciliationCompletions.get().map((completion) => completion.root),
     ];
     const workspaceMaintenance = await retireUnusedDraftWorktrees({
-      sandbox,
       retainedRoots,
+      sandbox,
       signal: ctx.abortSignal,
     });
     try {

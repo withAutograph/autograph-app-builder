@@ -62,15 +62,27 @@ interface ValidationCommandSummary {
   name: TargetValidationCommandReceipt["name"];
 }
 
+interface ValidationPhaseEvent {
+  callId: string;
+  event: "app_builder.validation_phase";
+  phase: string;
+  detail?: string | boolean;
+}
+
+const validationPhaseEvent = (
+  callId: string,
+  phase: string,
+  detail?: string | boolean,
+): ValidationPhaseEvent => {
+  const event: ValidationPhaseEvent = { callId, event: "app_builder.validation_phase", phase };
+  if (detail !== undefined) {
+    event.detail = detail;
+  }
+  return event;
+};
+
 const validationPhase = (callId: string, phase: string, detail?: string | boolean): void => {
-  console.info(
-    JSON.stringify({
-      callId,
-      event: "app_builder.validation_phase",
-      phase,
-      ...(detail === undefined ? {} : { detail }),
-    }),
-  );
+  console.info(JSON.stringify(validationPhaseEvent(callId, phase, detail)));
 };
 
 const describeValidationApp = async (
@@ -120,20 +132,20 @@ const prepareBackendValidationRuntime = async (
   signal?: AbortSignal,
 ) => {
   if (description?.backend.kind !== GENERATED_BACKEND || description.validation.browser === null) {
-    return { runtime: null, failure: null };
+    return { failure: null, runtime: null };
   }
   try {
-    return { runtime: await resolvePreparedRuntimeExecution(execution()), failure: null };
+    return { failure: null, runtime: await resolvePreparedRuntimeExecution(execution()) };
   } catch (error) {
     signal?.throwIfAborted();
     return {
-      runtime: null,
       failure: {
         problem:
           error instanceof Error ? error.message : "Authenticated runtime preparation failed.",
         reason: "authenticated-runtime-preparation",
         status: "blocked" as const,
       },
+      runtime: null,
     };
   }
 };

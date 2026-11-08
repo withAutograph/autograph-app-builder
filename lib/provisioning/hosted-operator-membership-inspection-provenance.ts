@@ -69,7 +69,7 @@ const selectedMembership = (plan: HostedOperatorPlan, organizationId: string) =>
   if (spec === undefined || effects.length !== 1 || effects[0] === undefined) {
     return null;
   }
-  return { spec, effect: effects[0] };
+  return { effect: effects[0], spec };
 };
 
 // A later approval may use a fresh signed owner capture. Its original capture
@@ -316,28 +316,26 @@ export const retainedMembershipInspectionProvenance = (
   for (const entry of retained) {
     const prior = entry.operator;
     const priorEffect = inspectionEffect(prior.plan, organizationId);
-    if (priorEffect === null || prior.approvalId === undefined) {
-      continue;
+    if (priorEffect !== null && prior.approvalId !== undefined) {
+      const identity = retainedMembershipIdentity(entry, organizationId);
+      const hasAuthority = [
+        entry.approvedByCallId.trim().length > 0,
+        entry.approvedByCallId !== "operator:unapproved-plan",
+        prior.approvalId.trim().length > 0,
+        prior.planDigest !== digest,
+        canonicalDigest(prior.plan) === prior.planDigest,
+        matchesMembershipAuthority(current, currentPlan, prior, organizationId),
+        !seen.has(identity),
+      ].every(Boolean);
+      if (hasAuthority) {
+        seen.add(identity);
+        candidates.push({
+          approvedByCallId: entry.approvedByCallId,
+          operator: prior,
+          effect: priorEffect,
+        });
+      }
     }
-    const identity = retainedMembershipIdentity(entry, organizationId);
-    const hasAuthority = [
-      entry.approvedByCallId.trim().length > 0,
-      entry.approvedByCallId !== "operator:unapproved-plan",
-      prior.approvalId.trim().length > 0,
-      prior.planDigest !== digest,
-      canonicalDigest(prior.plan) === prior.planDigest,
-      matchesMembershipAuthority(current, currentPlan, prior, organizationId),
-      !seen.has(identity),
-    ].every(Boolean);
-    if (!hasAuthority) {
-      continue;
-    }
-    seen.add(identity);
-    candidates.push({
-      approvedByCallId: entry.approvedByCallId,
-      operator: prior,
-      effect: priorEffect,
-    });
   }
   return candidates;
 };

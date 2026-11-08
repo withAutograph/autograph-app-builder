@@ -25,6 +25,7 @@ import {
 } from "@/lib/repository/sandbox-draft-reconciliation";
 
 const PUBLICATION_RECOVERY_KIND = "publication-recovery";
+const DRAFT_HEAD = "draft-head";
 
 type RepairInspectionInput =
   | { kind: "changes"; against: "base" | "head"; cursor?: number }
@@ -39,7 +40,7 @@ const inspectPublishedDraftRepair = async (
     return {
       status: "candidate" as const,
       kind: "published-draft-repair" as const,
-      baseline: "draft-head" as const,
+      baseline: DRAFT_HEAD,
       root: candidate.root,
       headSha: candidate.headSha,
       nextAction:
@@ -49,7 +50,7 @@ const inspectPublishedDraftRepair = async (
   if (input.kind === "changes") {
     return {
       status: "changes" as const,
-      against: "draft-head" as const,
+      against: DRAFT_HEAD,
       ...summarizeReconciliationChanges(review.changes, candidate.appId, input.cursor),
       reviewDigest: review.digest,
     };
@@ -64,7 +65,7 @@ const inspectPublishedDraftRepair = async (
   });
   return {
     status: "diff" as const,
-    against: "draft-head" as const,
+    against: DRAFT_HEAD,
     content: Buffer.from(page.chunkBase64, "base64").toString("utf-8"),
     cursor: page.cursor,
     path: input.path,
