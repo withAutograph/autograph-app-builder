@@ -22,13 +22,20 @@ export interface ReadyDeliveryReplacementPredecessor {
   gatewayCandidate?: OperatorDeploymentCandidate;
 }
 
-const hasApproval = (operator: HostedOperatorRecordBase, approvedByCallId: string) =>
-  approvedByCallId.length > 0 &&
-  approvedByCallId !== "operator:unapproved-plan" &&
-  operator.approvalId !== undefined &&
-  operator.approvalId.length > 0 &&
-  hostedOperatorPlanSchema.safeParse(operator.plan).success &&
-  operator.planDigest === operatorPlanDigest(operator.plan);
+const hasApproval = (operator: HostedOperatorRecordBase, approvedByCallId: string) => {
+  if (
+    approvedByCallId.length === 0 ||
+    approvedByCallId === "operator:unapproved-plan" ||
+    operator.approvalId === undefined ||
+    operator.approvalId.length === 0
+  ) {
+    return false;
+  }
+  return (
+    hostedOperatorPlanSchema.safeParse(operator.plan).success &&
+    operator.planDigest === operatorPlanDigest(operator.plan)
+  );
+};
 
 const resourceIdentity = (plan: HostedOperatorPlan) => ({
   appDatabase: plan.appDatabase,
@@ -130,9 +137,11 @@ export const resolveReadyDeliveryReplacementPredecessor = (
     record === undefined ||
     current === undefined ||
     !parsedIntent.success ||
-    !hasApproval(current, record.approvedByCallId) ||
-    !matchesRequest(record, current.plan)
+    !hasApproval(current, record.approvedByCallId)
   ) {
+    return undefined;
+  }
+  if (!matchesRequest(record, current.plan)) {
     return undefined;
   }
   const named = parsedIntent.data.predecessor;
