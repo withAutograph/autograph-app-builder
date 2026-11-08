@@ -112,7 +112,7 @@ export const createLocalNativeRecovery = (environment: Record<string, string | u
       | z.infer<typeof cancellationSchema>,
   ) => {
     assertLocal();
-    await mkdir(directory, { recursive: true, mode: 0o700 });
+    await mkdir(directory, { mode: 0o700, recursive: true });
     owned(directory, true);
     const temporary = `${file}.${process.pid}.${randomUUID()}`;
     try {

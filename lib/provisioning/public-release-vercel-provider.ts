@@ -184,7 +184,7 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
       const requestRef = vercelProvisionDiagnosticSchema.shape.requestRef.safeParse(
         response.headers.get("x-vercel-id"),
       );
-      let code: string | undefined;
+      let code: z.output<typeof vercelProvisionDiagnosticSchema.shape.code>;
       try {
         // Error bodies are untrusted diagnostic input; read only a bounded projection.
         const errorBody = await boundedJson(response, invocation.signal, 16_384);
@@ -199,11 +199,19 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
         // Non-JSON, oversized and malformed errors still preserve safe HTTP facts.
       }
       await check(invocation, plan, approval);
-      const diagnostic = vercelProvisionDiagnosticSchema.parse({
+      const parseDiagnostic = vercelProvisionDiagnosticSchema.parse.bind(
+        vercelProvisionDiagnosticSchema,
+      );
+      const diagnosticInput: z.input<typeof vercelProvisionDiagnosticSchema> = {
         statusCode: response.status,
-        ...(code === undefined ? {} : { code }),
-        ...(requestRef.success ? { requestRef: requestRef.data } : {}),
-      });
+      };
+      if (code !== undefined) {
+        diagnosticInput.code = code;
+      }
+      if (requestRef.success) {
+        diagnosticInput.requestRef = requestRef.data;
+      }
+      const diagnostic = parseDiagnostic(diagnosticInput);
       throw new PublicReleaseProviderError(diagnostic);
     }
     const result = await boundedJson(response, invocation.signal);

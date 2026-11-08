@@ -182,7 +182,7 @@ const restoredReadWindow = (
     return undefined;
   }
   const digest = createHash("sha256").update(text.slice(startOffset, endOffset)).digest("hex");
-  return digest === reference.contentDigest ? { startOffset, endOffset } : undefined;
+  return digest === reference.contentDigest ? { endOffset, startOffset } : undefined;
 };
 const mergeReadWindow = (
   windows: readonly SourceReadWindow[],
@@ -403,7 +403,7 @@ export const createApplicationReviewEvidence = (input: {
       input.abortSignal?.throwIfAborted();
       const starts = lineStarts.get(path) ?? sourceLineStarts(text);
       lineStarts.set(path, starts);
-      const position = cursor ?? { line: startLine, column: 1 };
+      const position = cursor ?? { column: 1, line: startLine };
       const startOffset = sourceCursorOffset(text, starts, position);
       const requestedEnd = cursor?.endLine ?? endLine;
       if (
@@ -458,8 +458,8 @@ export const createApplicationReviewEvidence = (input: {
       readWindows.set(
         path,
         mergeReadWindow(readWindows.get(path) ?? [], {
-          startOffset,
           endOffset: startOffset + result.content.length,
+          startOffset,
         }),
       );
       return result;

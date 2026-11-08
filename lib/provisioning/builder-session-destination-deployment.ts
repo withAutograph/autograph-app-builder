@@ -82,7 +82,7 @@ export const openBuilderSessionDestination = async (
   headers: Headers,
   environment: NodeJS.ProcessEnv = process.env,
 ) => {
-  const readOwner = () => ensurePreviewOAuthDeploymentSessionOrganization({ headers, environment });
+  const readOwner = () => ensurePreviewOAuthDeploymentSessionOrganization({ environment, headers });
   const owner = await readOwner();
   if (owner === null || owner === undefined) {
     throw new BuilderSessionDestinationSignInRequiredError();
@@ -192,8 +192,8 @@ export const openBuilderSessionDestination = async (
             throw new Error("This app's current project is unavailable.");
           }
           return await readStandardBuilderPublicOrigins({
-            destination: target.scope,
             assertCurrent,
+            destination: target.scope,
             readCredential: () =>
               readCredential({
                 installationId: target.scope.installationId,
