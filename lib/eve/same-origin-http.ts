@@ -340,6 +340,14 @@ async function postMutation(input: {
   }
 }
 
+const mergeWorkloadHeaders = (defaults: HeadersInit, overrides?: HeadersInit): Headers => {
+  const merged = new Headers(defaults);
+  for (const [name, value] of new Headers(overrides)) {
+    merged.set(name, value);
+  }
+  return merged;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function authenticatedFetch(input: {
   config: z.infer<typeof sameOriginConfigSchema>;
@@ -355,7 +363,7 @@ async function authenticatedFetch(input: {
   input.readTrace?.enter("fetch");
   return await input.fetchImplementation(endpoint(input.config, input.path), {
     ...input.init,
-    headers: { ...headers, ...input.init?.headers },
+    headers: mergeWorkloadHeaders(headers, input.init?.headers),
     redirect: "manual",
     signal:
       input.init?.signal ??

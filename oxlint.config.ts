@@ -561,7 +561,7 @@ export default defineConfig({
       rules: { "react-doctor/no-giant-component": "off" },
     },
     {
-      files: [handoffControlsPath, handoffProgressPath],
+      files: [handoffControlsPath],
       rules: { "react-doctor/effect-needs-cleanup": "off" },
     },
     {
@@ -659,11 +659,6 @@ export default defineConfig({
         productionCreatorTestPath,
       ],
       rules: { "typescript/unbound-method": "off" },
-    },
-    {
-      // Preserve existing runtime contracts pending focused migration.
-      files: [sharedLintFile28],
-      rules: { "typescript/no-misused-spread": "off" },
     },
     {
       // Preserve existing runtime contracts pending focused migration.

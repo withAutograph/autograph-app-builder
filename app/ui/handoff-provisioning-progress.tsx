@@ -82,54 +82,54 @@ export function HandoffProvisioningProgress({
     }
     let closed = false;
     let source: EventSource | undefined;
-    const connect = () => {
-      if (closed || latestRevision.current <= 0) {
+    const listeners = new AbortController();
+    const receive = (event: MessageEvent<string>) => {
+      if (closed) {
         return;
       }
+      try {
+        const next = readProjection(JSON.parse(event.data));
+        if (
+          !next ||
+          next.provisioning.requestId !== snapshot.provisioning.requestId ||
+          next.revision <= latestRevision.current
+        ) {
+          return;
+        }
+        latestRevision.current = next.revision;
+        setSnapshot(next);
+      } catch {
+        // Malformed stream data never replaces the last authenticated state.
+      }
+    };
+    const onOpen = () => {
+      if (!closed) {
+        setConnection("connected");
+      }
+    };
+    const onError = () => {
+      if (closed) {
+        return;
+      }
+      setConnection("reconnecting");
+      // Keep this EventSource alive: its native reconnect sends the most
+      // recent SSE event id as Last-Event-ID. Replacing it here would lose
+      // that cursor and turn a transient disconnect into a full replay.
+    };
+    if (latestRevision.current > 0) {
       source = new EventSource(
         `/api/builder/provision/stream?requestId=${encodeURIComponent(
           snapshot.provisioning.requestId,
         )}&afterRevision=${latestRevision.current}`,
       );
-      const receive = (event: MessageEvent<string>) => {
-        if (closed) {
-          return;
-        }
-        try {
-          const next = readProjection(JSON.parse(event.data));
-          if (
-            !next ||
-            next.provisioning.requestId !== snapshot.provisioning.requestId ||
-            next.revision <= latestRevision.current
-          ) {
-            return;
-          }
-          latestRevision.current = next.revision;
-          setSnapshot(next);
-        } catch {
-          // Malformed stream data never replaces the last authenticated state.
-        }
-      };
-      source.addEventListener("snapshot", receive);
-      source.addEventListener("end", receive);
-      source.addEventListener("open", () => {
-        if (!closed) {
-          setConnection("connected");
-        }
-      });
-      source.addEventListener("error", () => {
-        if (closed) {
-          return;
-        }
-        setConnection("reconnecting");
-        // Keep this EventSource alive: its native reconnect sends the most
-        // recent SSE event id as Last-Event-ID. Replacing it here would lose
-        // that cursor and turn a transient disconnect into a full replay.
-      });
-    };
-    connect();
+      source.addEventListener("snapshot", receive, { signal: listeners.signal });
+      source.addEventListener("end", receive, { signal: listeners.signal });
+      source.addEventListener("open", onOpen, { signal: listeners.signal });
+      source.addEventListener("error", onError, { signal: listeners.signal });
+    }
     return () => {
       closed = true;
+      listeners.abort();
       source?.close();
     };
   }, [snapshot.provisioning.requestId, snapshot.provisioning.status, streamAttempt]);
