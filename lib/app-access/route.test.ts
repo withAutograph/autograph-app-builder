@@ -71,10 +71,10 @@ describe("session-owned app access route", () => {
   it("uses server-owned scope and the original request identity for a valid command", async () => {
     const execute = vi.fn(async () => snapshot);
     const handler = createAppAccessRouteHandler({
-      origin,
-      resolveOwner: async () => routeOwner,
-      read: vi.fn(),
       execute,
+      origin,
+      read: vi.fn(),
+      resolveOwner: async () => routeOwner,
     });
     const response = await handler(request(), "session");
     expect(response.status).toBe(200);
@@ -88,10 +88,10 @@ describe("session-owned app access route", () => {
       .mockResolvedValueOnce(routeOwner)
       .mockRejectedValueOnce(new AppAccessError("app_access_denied"));
     const handler = createAppAccessRouteHandler({
-      origin,
-      resolveOwner,
-      read: async () => snapshot,
       execute: vi.fn(),
+      origin,
+      read: async () => snapshot,
+      resolveOwner,
     });
     const response = await handler(
       new Request(`${origin}/api/builder/sessions/session/access`),
@@ -103,10 +103,10 @@ describe("session-owned app access route", () => {
 
   it("rejects another app's response and never exposes provider diagnostics", async () => {
     const handler = createAppAccessRouteHandler({
-      origin,
-      resolveOwner: async () => routeOwner,
-      read: async () => ({ ...snapshot, appId: "other" }),
       execute: vi.fn(),
+      origin,
+      read: async () => ({ ...snapshot, appId: "other" }),
+      resolveOwner: async () => routeOwner,
     });
     const response = await handler(
       new Request(`${origin}/api/builder/sessions/session/access`),
@@ -114,12 +114,12 @@ describe("session-owned app access route", () => {
     );
     expect(response.status).toBe(503);
     const failed = createAppAccessRouteHandler({
+      execute: vi.fn(),
       origin,
-      resolveOwner: async () => routeOwner,
       read: async () => {
         throw new Error("postgres://secret@private");
       },
-      execute: vi.fn(),
+      resolveOwner: async () => routeOwner,
     });
     const failedResponse = await failed(
       new Request(`${origin}/api/builder/sessions/session/access`),
@@ -130,10 +130,10 @@ describe("session-owned app access route", () => {
 
   it("checks the canonical response before projecting a recovered public handle", async () => {
     const handler = createAppAccessRouteHandler({
-      origin,
-      resolveOwner: async () => ({ publicSessionId: "child", operatorOwner: owner }),
-      read: async () => ({ ...snapshot, sessionId: "child" }),
       execute: vi.fn(),
+      origin,
+      read: async () => ({ ...snapshot, sessionId: "child" }),
+      resolveOwner: async () => ({ publicSessionId: "child", operatorOwner: owner }),
     });
     const response = await handler(
       new Request(`${origin}/api/builder/sessions/child/access`),
@@ -160,10 +160,10 @@ describe("session-owned app access route", () => {
     const read = vi.fn(async () => snapshot);
     const execute = vi.fn();
     const handler = createAppAccessRouteHandler({
-      origin,
-      resolveOwner: async () => routeOwner,
-      read,
       execute,
+      origin,
+      read,
+      resolveOwner: async () => routeOwner,
     });
     const response = await handler(
       new Request(`${origin}/api/builder/sessions/session/access?cursor=next`),
@@ -194,8 +194,8 @@ describe("protected app access transport", () => {
       .mockResolvedValueOnce(new Response("not json", { status: 400 }));
     const client = createAppAccessOperatorClient({
       endpoint: "https://operator.example.test",
-      token: async () => "workload",
       fetch: send,
+      token: async () => "workload",
     });
     await expect(client.execute(owner, command)).rejects.toMatchObject({
       code: "request_id_conflict",
@@ -212,8 +212,8 @@ describe("protected app access transport", () => {
       .mockRejectedValue(new Error("connection closed after commit"));
     const client = createAppAccessOperatorClient({
       endpoint: "https://operator.example.test",
-      token: async () => "workload",
       fetch: send,
+      token: async () => "workload",
     });
     await expect(client.execute(owner, command)).rejects.toMatchObject({
       code: "app_access_unknown",
@@ -230,10 +230,10 @@ describe("protected app access transport", () => {
   it("rejects a response belonging to another session", async () => {
     const client = createAppAccessOperatorClient({
       endpoint: "https://operator.example.test",
-      token: async () => "workload",
       fetch: vi
         .fn<typeof fetch>()
         .mockResolvedValue(Response.json({ ...snapshot, sessionId: "other" })),
+      token: async () => "workload",
     });
     await expect(client.read(owner)).rejects.toMatchObject({ code: "app_access_unavailable" });
   });

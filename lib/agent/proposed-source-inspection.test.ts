@@ -99,18 +99,18 @@ describe("current frozen proposal inspection", () => {
       );
       expect(result.files).toEqual([
         {
-          path: "apps/example/app/[...view]/page.tsx",
-          operation: "upsert",
+          content: "proposed bytes",
           digest: sha256("proposed bytes"),
           mode: "644",
-          content: "proposed bytes",
           offsetBytes: 0,
+          operation: "upsert",
+          path: "apps/example/app/[...view]/page.tsx",
         },
         {
-          path: "apps/example/removed.ts",
-          operation: "delete",
           beforeDigest: sha256("before"),
           mode: "755",
+          operation: "delete",
+          path: "apps/example/removed.ts",
         },
       ]);
       expect(result.missingPaths).toEqual(["apps/example/not-in-plan.ts"]);
@@ -340,8 +340,8 @@ it("routes explicit proposal reads through the real tool without acquiring a San
     expect(
       tool.inputSchema.safeParse({
         appId: "example",
-        source: "current-proposal",
         expectedProposalDigest: state.proposal.digest,
+        source: "current-proposal",
       }).success,
     ).toBe(true);
     const executeContext = { ...context, callId: "inspection-call" } as ToolContext;
@@ -353,9 +353,9 @@ it("routes explicit proposal reads through the real tool without acquiring a San
     };
     const proposed = await tool.execute(proposedInput, executeContext);
     expect(proposed).toMatchObject({
-      status: "UNAPPLIED",
-      proposalDigest: state.proposal.digest,
       files: [{ content: "proposed bytes" }],
+      proposalDigest: state.proposal.digest,
+      status: "UNAPPLIED",
     });
     await expect(
       tool.execute({ ...proposedInput, pathIndex: 1 }, executeContext),

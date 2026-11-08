@@ -132,9 +132,9 @@ describe("native target Vercel project provider", () => {
         projectId: project.id,
       }),
     ).toEqual({
-      status: "candidate",
       projectId: project.id,
       reason: "name_or_profile_mismatch",
+      status: "candidate",
     });
     expect(f.request).toHaveBeenCalledTimes(1);
   });
@@ -223,8 +223,8 @@ describe("native target Vercel project provider", () => {
       const f = fixture();
       f.request.mockResolvedValueOnce(json({ error: { code: "synthetic" } }, status));
       expect(await createNativeTargetVercelProject(f.input)).toEqual({
-        status: "rejected",
         reason,
+        status: "rejected",
       });
       expect(f.request).toHaveBeenCalledTimes(1);
       expect(f.acceptProjectId).not.toHaveBeenCalled();
@@ -260,9 +260,9 @@ describe("native target Vercel project provider", () => {
     const f = fixture();
     f.acceptProjectId.mockRejectedValueOnce(new Error("journal unavailable"));
     expect(await createNativeTargetVercelProject(f.input)).toEqual({
-      status: "uncertain",
-      reason: "receipt_unavailable",
       projectId: project.id,
+      reason: "receipt_unavailable",
+      status: "uncertain",
     });
     expect(f.request).toHaveBeenCalledTimes(1);
   });
@@ -272,9 +272,9 @@ describe("native target Vercel project provider", () => {
     f.request.mockResolvedValueOnce(json({ id: project.id }, 201));
     f.request.mockResolvedValueOnce(json({ ...project, accountId: "other-team" }));
     expect(await createNativeTargetVercelProject(f.input)).toEqual({
-      status: "candidate",
       projectId: project.id,
       reason: "name_or_profile_mismatch",
+      status: "candidate",
     });
     expect(f.acceptProjectId).toHaveBeenCalledWith(project.id);
   });
@@ -284,9 +284,9 @@ describe("native target Vercel project provider", () => {
     f.request.mockResolvedValueOnce(json({ id: project.id }, 201));
     f.request.mockResolvedValueOnce(Response.json({ ...project, ssoProtection: null }));
     expect(await createNativeTargetVercelProject(f.input)).toEqual({
-      status: "candidate",
       projectId: project.id,
       reason: "name_or_profile_mismatch",
+      status: "candidate",
     });
     expect(f.request).toHaveBeenCalledTimes(2);
 
@@ -297,9 +297,9 @@ describe("native target Vercel project provider", () => {
     expect(
       await observeNativeTargetVercelProject({ ...oidc.input, projectId: project.id }),
     ).toEqual({
-      status: "candidate",
       projectId: project.id,
       reason: "name_or_profile_mismatch",
+      status: "candidate",
     });
     expect(oidc.request).toHaveBeenCalledTimes(1);
   });
@@ -308,9 +308,9 @@ describe("native target Vercel project provider", () => {
     const f = fixture();
     f.request.mockResolvedValueOnce(Response.json({ ...project, oidcTokenConfig: undefined }));
     expect(await observeNativeTargetVercelProject({ ...f.input, projectId: project.id })).toEqual({
-      status: "uncertain",
       projectId: project.id,
       reason: "invalid_response",
+      status: "uncertain",
     });
   });
 
@@ -318,9 +318,9 @@ describe("native target Vercel project provider", () => {
     const f = fixture();
     f.request.mockResolvedValueOnce(json({ error: { code: "not_found" } }, 404));
     expect(await observeNativeTargetVercelProject({ ...f.input, projectId: project.id })).toEqual({
-      status: "uncertain",
       projectId: project.id,
       reason: "unobserved_project",
+      status: "uncertain",
     });
     expect(f.request).toHaveBeenCalledTimes(1);
     expect(f.request.mock.calls[0]?.[0]).toEqual(

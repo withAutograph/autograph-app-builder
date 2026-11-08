@@ -181,7 +181,7 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     }));
   });
   afterEach(() => {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { force: true, recursive: true });
   });
 
   it.each([false, true])(
@@ -238,9 +238,9 @@ describe("owned fresh-template draft preparation after review recovery", () => {
             sameRepository
               ? { kind: "added", path: "microfrontends.json" }
               : {
+                  before: { digest: "starter", mode: "644" },
                   kind: "modified",
                   path: "microfrontends.json",
-                  before: { mode: "644", digest: "starter" },
                 },
           ],
         },
