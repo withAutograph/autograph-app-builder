@@ -6,6 +6,10 @@ import type { PreparedSandboxWorkspace } from "../repository/supported-template"
 import type { SourceReceipt } from "../repository/source-receipt";
 import { freshBootstrapSourceWorkspace } from "./fresh-bootstrap-source";
 
+const unexpectedSandboxOperation = () => {
+  throw new Error("Unexpected sandbox operation");
+};
+
 const mocks = vi.hoisted(() => ({
   inspectSourceBoundSandboxWorkspace: vi.fn(),
   readPreparedSandboxSourceManifest: vi.fn(),
@@ -73,9 +77,6 @@ function sandboxFixture() {
         })
       : null;
   });
-  const unexpectedSandboxOperation = () => {
-    throw new Error("Unexpected sandbox operation");
-  };
   const sandbox: SandboxSession = {
     readBinaryFile,
     readFile,

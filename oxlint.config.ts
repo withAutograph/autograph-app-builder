@@ -564,8 +564,6 @@ export default defineConfig({
     {
       // Existing findings awaiting behavior-preserving contract changes.
       files: [
-        "lib/agent/application-review-context-store.test.ts",
-        "lib/agent/fresh-bootstrap-source.test.ts",
         "lib/agent/prior-validated-private-artifact.test.ts",
         "lib/agent/product-behavior-validation.test.ts",
         "lib/eve/native-live-quiescence.test.ts",

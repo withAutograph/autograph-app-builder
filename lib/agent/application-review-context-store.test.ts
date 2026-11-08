@@ -14,6 +14,10 @@ import type {
 import { createLocalOperatorArtifactStorage } from "../provisioning/local-operator-artifact-store";
 import { parsePrototypeArtifactPath } from "./prototype-artifacts";
 
+const assertLocalOwnerForTest = async () => {
+  await Promise.resolve();
+};
+
 const context: OperatorArtifactContext = {
   authority: {
     issuer: "https://builder.example/api/auth",
@@ -299,12 +303,16 @@ describe("private prepared application-review context and outcomes", () => {
     roots.push(stateRoot);
     const authority = { kind: "local" as const, ownerUid: process.getuid?.() ?? -1, stateRoot };
     const owned: OperatorArtifactContext = { authority, target: context.target };
-    const assertCurrentOwner = async () => {
-      await Promise.resolve();
-    };
-    const { store } = await createLocalOperatorArtifactStorage({ assertCurrentOwner, authority });
+    const { store } = await createLocalOperatorArtifactStorage({
+      assertCurrentOwner: assertLocalOwnerForTest,
+      authority,
+    });
     const adapter = () =>
-      createApplicationReviewContextStore({ assertCurrentOwner, context: owned, store });
+      createApplicationReviewContextStore({
+        assertCurrentOwner: assertLocalOwnerForTest,
+        context: owned,
+        store,
+      });
     const ref = await adapter().publishContext(prepared());
     const restored = await adapter().readContext(ref);
     expect(restored.sandboxName).toBe(prepared().sandboxName);
