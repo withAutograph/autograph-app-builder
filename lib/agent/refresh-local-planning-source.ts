@@ -158,7 +158,7 @@ export const refreshLocalPlanningSource = async (
     };
     appBuilderWorkflowState.update((latest) => {
       assertExactWorkflowState(latest, current, "record the reconciled local planning input");
-      return {
+      const next: Extract<AppBuilderWorkflowState, { phase: "app_spec_accepted" }> = {
         version: APP_BUILDER_WORKFLOW_VERSION,
         phase: "app_spec_accepted",
         appSpec: current.appSpec,
@@ -166,10 +166,11 @@ export const refreshLocalPlanningSource = async (
         preparedByCallId: ctx.callId,
         sourceReceipt: observed.receipt,
         workspace: reconciled.workspace,
-        ...(current.checkoutDependencyAttempts === undefined
-          ? {}
-          : { checkoutDependencyAttempts: current.checkoutDependencyAttempts }),
       };
+      if (current.checkoutDependencyAttempts !== undefined) {
+        next.checkoutDependencyAttempts = current.checkoutDependencyAttempts;
+      }
+      return next;
     });
     sourceWorkflowState.update(() => ({
       version: APP_BUILDER_SOURCE_VERSION,

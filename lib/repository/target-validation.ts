@@ -588,7 +588,7 @@ const failureReceipt = (
   diagnostics?: readonly TargetValidationDiagnostic[],
   output?: TargetValidationOutputExcerpt,
 ): TargetValidationFailureReceipt => {
-  const unsigned = {
+  const unsigned: Omit<TargetValidationFailureReceipt, "digest"> = {
     version: 3 as const,
     ...attemptBinding(attempt),
     attemptDigest: attempt.digest,
@@ -597,10 +597,10 @@ const failureReceipt = (
     recoveryRequired: true as const,
     status: "failed" as const,
     validatedByCallId: attempt.startedByCallId,
-    ...(commandFailure === undefined ? {} : { commandFailure }),
-    ...(diagnostics === undefined || diagnostics.length === 0 ? {} : { diagnostics }),
-    ...(output === undefined ? {} : { output }),
   };
+  if (commandFailure !== undefined) unsigned.commandFailure = commandFailure;
+  if (diagnostics !== undefined && diagnostics.length !== 0) unsigned.diagnostics = diagnostics;
+  if (output !== undefined) unsigned.output = output;
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 };
 
@@ -748,21 +748,19 @@ export const executeProposalBoundValidation = (input: {
         ),
       };
     }
-    const commandReceipt = {
+    const commandReceipt: TargetValidationCommandReceipt = {
       ...planned,
       exitCode: result.exitCode,
       inputTreeDigest: input.apply.postTreeDigest,
       stderrDigest: durableOutput?.stderr.reference.digest ?? sha256(result.stderr),
       stdoutDigest: durableOutput?.stdout.reference.digest ?? sha256(result.stdout),
-      ...(durableOutput === undefined
-        ? {}
-        : {
-            logs: {
-              stderr: durableOutput.stderr.reference,
-              stdout: durableOutput.stdout.reference,
-            },
-          }),
     };
+    if (durableOutput !== undefined) {
+      commandReceipt.logs = {
+        stderr: durableOutput.stderr.reference,
+        stdout: durableOutput.stdout.reference,
+      };
+    }
     commands.push(commandReceipt);
     if (result.exitCode !== 0) {
       return {

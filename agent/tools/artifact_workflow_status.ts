@@ -49,17 +49,37 @@ const acceptedUIReference = (state: ReturnType<typeof appBuilderWorkflowState.ge
   };
 };
 
+interface AppSpecSummary {
+  artifactRevision: string;
+  digest: string;
+  path: string;
+  uiRevision?: string;
+}
+
+interface WorkflowStatusPreview {
+  artifacts: ReturnType<typeof prototypeArtifactReceipt>[];
+  uiPreview?: Pick<
+    Extract<ReturnType<typeof appBuilderWorkflowState.get>, { uiPreview: unknown }>["uiPreview"],
+    "appId" | "revision" | "sourceDigest"
+  >;
+}
+
 const appSpecSummary = (appSpec: {
   artifactRevision: string;
   artifactPath: string;
   digest: string;
   uiRevision?: string;
-}) => ({
-  artifactRevision: appSpec.artifactRevision,
-  digest: appSpec.digest,
-  path: appSpec.artifactPath,
-  ...(appSpec.uiRevision === undefined ? {} : { uiRevision: appSpec.uiRevision }),
-});
+}): AppSpecSummary => {
+  const summary: AppSpecSummary = {
+    artifactRevision: appSpec.artifactRevision,
+    digest: appSpec.digest,
+    path: appSpec.artifactPath,
+  };
+  if (appSpec.uiRevision !== undefined) {
+    summary.uiRevision = appSpec.uiRevision;
+  }
+  return summary;
+};
 
 const githubDraftPublicationSummary = (state: ReturnType<typeof appBuilderWorkflowState.get>) => {
   if (state.phase !== "reviewed" || state.githubDraftProposal === undefined) {
@@ -175,17 +195,18 @@ export default defineTool({
         },
       };
     }
-    return {
+    const preview: WorkflowStatusPreview = {
       artifacts: state.artifacts.map(prototypeArtifactReceipt),
-      ...("uiPreview" in state
-        ? {
-            uiPreview: {
-              appId: state.uiPreview.appId,
-              revision: state.uiPreview.revision,
-              sourceDigest: state.uiPreview.sourceDigest,
-            },
-          }
-        : {}),
+    };
+    if ("uiPreview" in state) {
+      preview.uiPreview = {
+        appId: state.uiPreview.appId,
+        revision: state.uiPreview.revision,
+        sourceDigest: state.uiPreview.sourceDigest,
+      };
+    }
+    return {
+      ...preview,
       ...acceptedUIReference(state),
       phase: state.phase,
       sessionId: ctx.session.id,

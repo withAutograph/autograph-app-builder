@@ -180,12 +180,15 @@ export default defineTool({
         "The sandbox workspace cannot be recovered without its original durable source receipt.",
       );
     }
-    const observed = await inspectSourceBoundSandboxWorkspace({
+    const inspectionInput: Parameters<typeof inspectSourceBoundSandboxWorkspace>[0] = {
       expectedWorkspace: durable.workspace,
       receipt: durable.sourceReceipt,
       sandbox,
-      ...(durable.githubSource === undefined ? {} : { githubSource: durable.githubSource }),
-    });
+    };
+    if (durable.githubSource !== undefined) {
+      inspectionInput.githubSource = durable.githubSource;
+    }
+    const observed = await inspectSourceBoundSandboxWorkspace(inspectionInput);
     if (
       !canAutoSelectDevelopmentSource() &&
       durable.githubSource === undefined &&

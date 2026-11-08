@@ -174,13 +174,12 @@ export const projectNormalAuthClientFailure = (
     const retryAfterMs = normalAuthClientFailureDiagnosticSchema.shape.retryAfterMs
       .unwrap()
       .safeParse(Object.getOwnPropertyDescriptor(error, "retryAfterMs")?.value);
-    return {
-      code: code.data,
-      ...(operation.success ? { operation: operation.data } : {}),
-      ...(httpStatus.success ? { httpStatus: httpStatus.data } : {}),
-      ...(authCode.success ? { authCode: authCode.data } : {}),
-      ...(retryAfterMs.success ? { retryAfterMs: retryAfterMs.data } : {}),
-    };
+    const diagnostic: NormalAuthClientFailureDiagnostic = { code: code.data };
+    if (operation.success) diagnostic.operation = operation.data;
+    if (httpStatus.success) diagnostic.httpStatus = httpStatus.data;
+    if (authCode.success) diagnostic.authCode = authCode.data;
+    if (retryAfterMs.success) diagnostic.retryAfterMs = retryAfterMs.data;
+    return diagnostic;
   } catch {
     return undefined;
   }
