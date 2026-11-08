@@ -265,14 +265,14 @@ describe("canonical SEND delivery acknowledgement", () => {
     const saved = await f.store.getSession(principal, f.request.sessionId);
     expect(saved?.status).toBe("waiting");
     expect(
-      await f.create().get({ sessionId: f.request.sessionId, cursor: 0, limit: 100 }),
+      await f.create().get({ cursor: 0, limit: 100, sessionId: f.request.sessionId }),
     ).toMatchObject({ status: "working" });
     expect(await f.create().send(f.request)).toMatchObject({ status: "working" });
     expect(f.accepted).toHaveBeenCalledOnce();
     expect(await f.operation()).toMatchObject({ state: "submission_unknown" });
     f.setEvents([...f.getEvents(), turnEvent("turn.started", "delivered", ["ack"])]);
     expect(
-      await f.create().get({ sessionId: f.request.sessionId, cursor: 0, limit: 100 }),
+      await f.create().get({ cursor: 0, limit: 100, sessionId: f.request.sessionId }),
     ).toMatchObject({ status: "working" });
     expect(await f.operation()).toMatchObject({ state: "succeeded" });
     expect(f.accepted).toHaveBeenCalledOnce();
@@ -282,7 +282,7 @@ describe("canonical SEND delivery acknowledgement", () => {
       waiting(["ack"]),
     ]);
     expect(
-      await f.create().get({ sessionId: f.request.sessionId, cursor: 0, limit: 100 }),
+      await f.create().get({ cursor: 0, limit: 100, sessionId: f.request.sessionId }),
     ).toMatchObject({ status: "waiting" });
   });
   it.each(["before-ack", "after-ack"] as const)(
@@ -328,7 +328,7 @@ describe("canonical SEND delivery acknowledgement", () => {
       stage: "needs_attention",
     });
     expect(
-      await f.create().get({ sessionId: f.request.sessionId, cursor: 0, limit: 100 }),
+      await f.create().get({ cursor: 0, limit: 100, sessionId: f.request.sessionId }),
     ).toMatchObject({ status: "cancelled" });
     expect(f.accepted).toHaveBeenCalledOnce();
     expect(await f.operation()).toMatchObject({ state: "submission_unknown" });
@@ -366,7 +366,7 @@ describe("canonical SEND delivery acknowledgement", () => {
       });
       const result = await f
         .create()
-        .get({ sessionId: f.request.sessionId, cursor: 0, limit: 100 });
+        .get({ cursor: 0, limit: 100, sessionId: f.request.sessionId });
       expect(result.status).toBe(status);
       if (status === "input_required") {
         expect(result.inputRequests).toEqual([question]);
@@ -434,7 +434,7 @@ describe("canonical SEND delivery acknowledgement", () => {
       waiting(["ack"]),
     ]);
     expect(
-      await f.create().get({ sessionId: f.request.sessionId, cursor: 0, limit: 100 }),
+      await f.create().get({ cursor: 0, limit: 100, sessionId: f.request.sessionId }),
     ).toMatchObject({ status: "working" });
     expect(await f.operation()).toMatchObject({ state: "succeeded" });
     expect(await f.store.getPrivateOperation(principal, operationId("second-send"))).toMatchObject({
@@ -470,7 +470,7 @@ describe("canonical SEND delivery acknowledgement", () => {
     });
     expect(page?.acknowledgements[0]?.cancellationRevisionAtDispatch).toBeNull();
     expect(
-      await f.create().get({ sessionId: f.request.sessionId, cursor: 0, limit: 100 }),
+      await f.create().get({ cursor: 0, limit: 100, sessionId: f.request.sessionId }),
     ).toMatchObject({ status: "waiting" });
     expect(f.accepted).toHaveBeenCalledOnce();
   });
@@ -521,7 +521,7 @@ describe("canonical SEND delivery acknowledgement", () => {
       return page;
     };
     expect(
-      await f.create().get({ sessionId: f.request.sessionId, cursor: 0, limit: 100 }),
+      await f.create().get({ cursor: 0, limit: 100, sessionId: f.request.sessionId }),
     ).toMatchObject({ status: "cancelled" });
     expect(f.accepted).toHaveBeenCalledOnce();
     expect(await f.operation()).toMatchObject({ state: "submission_unknown" });
@@ -716,16 +716,10 @@ describe("canonical SEND delivery acknowledgement", () => {
           phase: "send_delivery_boundary",
           sendDeliveryObservation: {
             ackObserved: true,
-            sameAdapterSession: true,
-            sameAdapterGeneration: true,
-            nativeDeliveryStatePresent: stamped,
-            nativeTurnCount: stamped ? 1 : 0,
-            deliveryTurnMatchCount: 0,
-            startedStampMatchCount: 0,
             boundaryStampMatchCount: 0,
-            startedOrBoundaryMatch: false,
             currentTurnPresent: true,
-            nativeReadObserved: true,
+            deliveryTurnMatchCount: 0,
+            nativeDeliveryStatePresent: stamped,
             nativeRead: {
               currentTurnPresent: true,
               nativeNextIndex: 1,
@@ -733,6 +727,12 @@ describe("canonical SEND delivery acknowledgement", () => {
               nativeTailIndex: 0,
               observationComplete: true,
             },
+            nativeReadObserved: true,
+            nativeTurnCount: stamped ? 1 : 0,
+            sameAdapterGeneration: true,
+            sameAdapterSession: true,
+            startedOrBoundaryMatch: false,
+            startedStampMatchCount: 0,
           },
         }),
       );

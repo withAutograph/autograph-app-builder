@@ -52,10 +52,10 @@ test("actual source-preparation service retains old validation workflow while Na
     const stateRoot = path.dirname(f.source);
     writeFileSync(path.join(stateRoot, "eve-cycle"), "a".repeat(64), { mode: 0o600 });
     const environment = {
-      EVE_AGENT_HOST: "http://127.0.0.1:2100",
-      APP_BUILDER_EXECUTION_MODE: "development",
       APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+      APP_BUILDER_EXECUTION_MODE: "development",
       APP_BUILDER_LOCAL_ADAPTER: "1",
+      EVE_AGENT_HOST: "http://127.0.0.1:2100",
       EVE_HOSTED_ADAPTER: "0",
     };
     const appSpec = { appId: "example", digest: "a".repeat(64), artifactRevision: "b".repeat(64) };
@@ -470,10 +470,10 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
     const stateRoot = path.dirname(f.source);
     writeFileSync(path.join(stateRoot, "eve-cycle"), "a".repeat(64), { mode: 0o600 });
     const environment = {
-      EVE_AGENT_HOST: "http://127.0.0.1:2100",
-      APP_BUILDER_EXECUTION_MODE: "development",
       APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+      APP_BUILDER_EXECUTION_MODE: "development",
       APP_BUILDER_LOCAL_ADAPTER: "1",
+      EVE_AGENT_HOST: "http://127.0.0.1:2100",
       EVE_HOSTED_ADAPTER: "0",
     };
     const expected = {
@@ -551,10 +551,10 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
   const cycle = path.join(stateRoot, "eve-cycle");
   writeFileSync(cycle, "a".repeat(64), { mode: 0o600 });
   const environment = {
-    EVE_AGENT_HOST: "http://127.0.0.1:2100",
-    APP_BUILDER_EXECUTION_MODE: "development",
     APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+    APP_BUILDER_EXECUTION_MODE: "development",
     APP_BUILDER_LOCAL_ADAPTER: "1",
+    EVE_AGENT_HOST: "http://127.0.0.1:2100",
     EVE_HOSTED_ADAPTER: "0",
   };
   const recovery = createLocalNativeRecovery({

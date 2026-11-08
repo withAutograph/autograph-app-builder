@@ -73,10 +73,8 @@ const fixture = async () => {
     sessionId: saved.sessionId,
   };
   const plan = hostedOperatorPlanSchema.parse({
-    action: "prepare",
     access: [],
-    contextId: "context",
-    version: 1,
+    action: "prepare",
     appDatabase: {
       database: "app_db",
       migratorRole: "app_owner",
@@ -89,12 +87,13 @@ const fixture = async () => {
       resourceId: "auth-resource",
       runtimeRole: "auth_runtime",
     },
+    contextId: "context",
     cost: { class: "shared-recovery-group", description: "fixture", owner: "owner" },
     effects: [
-      { id: "resources", kind: "resources", description: "Verify resources" },
-      { id: "install", kind: "install", description: "Install release" },
-      { id: "access", kind: "access", description: "Grant access" },
-      { id: "bindings", kind: "bindings", description: "Bind runtime" },
+      { description: "Verify resources", id: "resources", kind: "resources" },
+      { description: "Install release", id: "install", kind: "install" },
+      { description: "Grant access", id: "access", kind: "access" },
+      { description: "Bind runtime", id: "bindings", kind: "bindings" },
     ],
     installer: { reference: "installer", sha256: "a".repeat(64) },
     neon: {
@@ -112,6 +111,7 @@ const fixture = async () => {
     release: { artifactRef: "artifact", id: "release", sha256: "b".repeat(64) },
     retention: { expiresAt: "2027-01-01T00:00:00.000Z", policy: "retain" },
     selection,
+    version: 1,
   });
   const input = {
     appId: selection.appId,

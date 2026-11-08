@@ -222,17 +222,17 @@ describe("isolated draft reconciliation", () => {
       path.join(prepared.root, "apps/demo/tests/journey.spec.ts"),
       "resolved app edit\n",
     );
-    await inspectDraftReconciliation({ sandbox: f.sandbox, prepared });
+    await inspectDraftReconciliation({ prepared, sandbox: f.sandbox });
     const files = [
       {
-        path: "package.json",
         content: '{"private":true,"workspaces":["packages/*"],"catalog":{"probe":"1.0.0"}}\n',
+        path: "package.json",
       },
       {
-        path: "packages/probe/package.json",
         content: '{"name":"@fixture/probe","dependencies":{"probe":"catalog:"}}\n',
+        path: "packages/probe/package.json",
       },
-      { path: "bun.lock", content: "normalized catalog lock\n" },
+      { content: "normalized catalog lock\n", path: "bun.lock" },
     ];
     for (const file of files) {
       writeFileSync(path.join(prepared.root, file.path), file.content);
@@ -247,7 +247,7 @@ describe("isolated draft reconciliation", () => {
 
   it("reviews and reuses exact normalized catalog files while preserving app edits", async () => {
     const { f, prepared } = await catalogCandidate();
-    const inspected = await inspectDraftReconciliation({ sandbox: f.sandbox, prepared });
+    const inspected = await inspectDraftReconciliation({ prepared, sandbox: f.sandbox });
     expect(inspected.baseChanges.map((change) => change.path)).toEqual(
       expect.arrayContaining([
         "package.json",
@@ -267,8 +267,8 @@ describe("isolated draft reconciliation", () => {
       "resolved app edit\n",
     );
     const retainedInspection = await inspectDraftReconciliation({
-      sandbox: f.sandbox,
       prepared: retained,
+      sandbox: f.sandbox,
     });
     expect(retainedInspection.resolvedTree).toBe(inspected.resolvedTree);
   });
@@ -292,7 +292,7 @@ describe("isolated draft reconciliation", () => {
     const changed =
       '{"name":"demo","devDependencies":{"probe":"catalog:"},"scripts":{"test":"existing task --run"}}\n';
     writeFileSync(path.join(prepared.root, appManifest), changed);
-    const observed = await inspectDraftReconciliation({ sandbox: f.sandbox, prepared: candidate });
+    const observed = await inspectDraftReconciliation({ prepared: candidate, sandbox: f.sandbox });
     expect(
       observed.baseChanges.some(
         (change) => change.path === appManifest && change.after?.digest === digest(changed),
@@ -338,13 +338,13 @@ describe("isolated draft reconciliation", () => {
         git(prepared.root, "add", "docs/platform.md");
       }
     }
-    await expect(inspectDraftReconciliation({ sandbox: f.sandbox, prepared })).rejects.toThrow();
+    await expect(inspectDraftReconciliation({ prepared, sandbox: f.sandbox })).rejects.toThrow();
   });
 
   it("rejects receipts authorizing non-manifest paths", async () => {
     const { f, prepared } = await catalogCandidate();
     prepared.dependencyCatalog.files.push({ path: "docs/platform.md", digest: digest("main\n") });
-    await expect(inspectDraftReconciliation({ sandbox: f.sandbox, prepared })).rejects.toThrow(
+    await expect(inspectDraftReconciliation({ prepared, sandbox: f.sandbox })).rejects.toThrow(
       "receipt is invalid",
     );
   });
@@ -1334,7 +1334,7 @@ describe("isolated draft reconciliation", () => {
     rmSync(path.join(old.root, "apps/demo/obsolete.txt"));
     writeFileSync(path.join(old.root, "apps/demo/repair.ts"), "app-owned repair\n");
     chmodSync(path.join(old.root, "apps/demo/repair.ts"), 0o755);
-    await inspectDraftReconciliation({ sandbox: f.sandbox, prepared: old });
+    await inspectDraftReconciliation({ prepared: old, sandbox: f.sandbox });
     writeFileSync(path.join(old.root, "bun.lock"), "observed root metadata\n");
     writeFileSync(path.join(old.root, "docs/platform.md"), "private outside-scope edit\n");
     git(old.root, "add", "docs/platform.md");
@@ -1380,7 +1380,7 @@ describe("isolated draft reconciliation", () => {
     expect(readFileSync(index)).toEqual(beforeIndex);
     expect(next.conflicts).toEqual([]);
     await expect(
-      inspectDraftReconciliation({ sandbox: f.sandbox, prepared: next }),
+      inspectDraftReconciliation({ prepared: next, sandbox: f.sandbox }),
     ).resolves.toMatchObject({ unresolvedConflicts: [] });
   });
 
@@ -1432,7 +1432,7 @@ describe("isolated draft reconciliation", () => {
       prepared: old,
       sandbox: f.sandbox,
     });
-    await inspectDraftReconciliation({ sandbox: f.sandbox, prepared: old });
+    await inspectDraftReconciliation({ prepared: old, sandbox: f.sandbox });
     const oldIndexPath = git(old.root, "rev-parse", "--git-path", "index");
     const beforeIndex = readFileSync(oldIndexPath);
     const oldHead = git(old.root, "rev-parse", "HEAD");
@@ -1488,10 +1488,10 @@ describe("isolated draft reconciliation", () => {
     const input = candidateFixtureInput(f, oldBase);
     const old = await prepareDraftReconciliation(input);
     await writeDraftReconciliationResolution({
+      content: "resolved draft\n",
+      path: "apps/demo/tests/journey.spec.ts",
       prepared: old,
       sandbox: f.sandbox,
-      path: "apps/demo/tests/journey.spec.ts",
-      content: "resolved draft\n",
     });
     await inspectDraftReconciliation({ prepared: old, sandbox: f.sandbox });
     writeFileSync(path.join(old.root, file), before.replace("first", "private-first"));
@@ -1527,10 +1527,10 @@ describe("isolated draft reconciliation", () => {
     const input = candidateFixtureInput(f, oldBase);
     const old = await prepareDraftReconciliation(input);
     await writeDraftReconciliationResolution({
+      content: "resolved draft\n",
+      path: "apps/demo/tests/journey.spec.ts",
       prepared: old,
       sandbox: f.sandbox,
-      path: "apps/demo/tests/journey.spec.ts",
-      content: "resolved draft\n",
     });
     await inspectDraftReconciliation({ prepared: old, sandbox: f.sandbox });
     git(old.root, "mv", "apps/demo/rename.ts", "apps/demo/renamed.ts");
@@ -1576,10 +1576,10 @@ describe("isolated draft reconciliation", () => {
       const input = candidateFixtureInput(f, oldBase);
       const old = await prepareDraftReconciliation(input);
       await writeDraftReconciliationResolution({
+        content: "resolved draft\n",
+        path: "apps/demo/tests/journey.spec.ts",
         prepared: old,
         sandbox: f.sandbox,
-        path: "apps/demo/tests/journey.spec.ts",
-        content: "resolved draft\n",
       });
       await inspectDraftReconciliation({ prepared: old, sandbox: f.sandbox });
       if (kind === "delete") {

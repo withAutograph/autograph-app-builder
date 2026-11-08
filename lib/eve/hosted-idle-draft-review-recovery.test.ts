@@ -59,17 +59,17 @@ const restoredSchema = z.object({
 const fixture = async (
   options: {
     activeTurn?: boolean;
-    pendingApproval?: boolean;
-    status?: HostedEngineSnapshot["status"];
-    fresh?: boolean;
-    priorOwnerReview?: boolean;
     afterCutoffReview?: boolean;
     beforeCutoffReview?: boolean;
+    fresh?: boolean;
     malformedBeforeCutoff?: "null" | "unknown-phase";
+    missingCutoff?: boolean;
     omitPriorReview?: boolean;
     paginateAncestor?: boolean;
+    pendingApproval?: boolean;
     priorFault?: string;
-    missingCutoff?: boolean;
+    priorOwnerReview?: boolean;
+    status?: HostedEngineSnapshot["status"];
   } = {},
 ) => {
   const native = await nativeFixture({
@@ -135,25 +135,25 @@ const fixture = async (
       },
       ownerRunId: owner,
       provenance: {
+        checkpointVersion: 1,
         kind: "committed-turn-output",
-        sourceStepId: "step-prior-cutoff",
+        resumePhase: "await-input",
         sourceEventId: `evnt_${String(cutoffSlot).padStart(26, "0")}`,
         sourceSlot: cutoffSlot,
-        checkpointVersion: 1,
-        resumePhase: "await-input",
+        sourceStepId: "step-prior-cutoff",
       },
     },
   });
   const seed = hostedOperationRecordSchema.parse({
-    version: 1,
+    clientRequestId: "original-start",
+    createdAtEpochMs: 1000,
     kind: "start",
     operationId: "original-start",
-    clientRequestId: "original-start",
     principal,
-    state: "reserved",
     requestDigest: `sha256:${"a".repeat(64)}`,
-    createdAtEpochMs: 1000,
+    state: "reserved",
     updatedAtEpochMs: 1000,
+    version: 1,
   });
   const authoritySeed = hostedOperationRecordSchema.parse({
     ...seed,
@@ -390,8 +390,8 @@ const fixture = async (
   });
   const request = eveStartInputSchema.parse({
     clientRequestId: "recover-original-idle-checkpoint",
-    resumeSessionId: source.sessionId,
     resumeMode: "recover-idle",
+    resumeSessionId: source.sessionId,
   });
   return {
     native,
@@ -476,9 +476,9 @@ it("the public idle recovery path restores verified original review and latest c
   f.idle();
   await f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 100 });
   const continuation = eveSendInputSchema.parse({
-    sessionId: child.sessionId,
     clientRequestId: "continue-recovered-original-draft",
     message: "Continue the same draft",
+    sessionId: child.sessionId,
   });
   await publicCall(f.service, "autograph_send", continuation);
   await publicCall(f.service, "autograph_send", continuation);
@@ -510,9 +510,9 @@ it("the public recovery restores a fresh-template owned publication and selects 
   f.idle();
   await f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 100 });
   const continuation = eveSendInputSchema.parse({
-    sessionId: child.sessionId,
     clientRequestId: "continue-fresh-owned-draft",
     message: "Continue the same draft",
+    sessionId: child.sessionId,
   });
   await publicCall(f.service, "autograph_send", continuation);
   await publicCall(f.service, "autograph_send", continuation);
@@ -549,9 +549,9 @@ it("restores the owned fresh review across a previously committed idle recovery"
   f.idle();
   await f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 100 });
   const continuation = eveSendInputSchema.parse({
-    sessionId: child.sessionId,
     clientRequestId: "continue-prior-owned-draft",
     message: "Continue the same draft",
+    sessionId: child.sessionId,
   });
   await publicCall(f.service, "autograph_send", continuation);
   await publicCall(f.service, "autograph_send", continuation);
