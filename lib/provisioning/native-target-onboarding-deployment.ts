@@ -569,15 +569,19 @@ export const createNativeTargetOnboardingDeployment = (input: {
     if (transport.observePrivateHistory === undefined) {
       throw unavailable();
     }
+    const observationState: Pick<
+      NonNullable<Parameters<typeof readPrivateNativeTargetApproval>[0]["observation"]>,
+      "state"
+    > = {};
+    if (observation !== undefined) {
+      observationState.state = observation;
+    }
     const result = await readPrivateNativeTargetApproval({
       owner,
       record,
       historyOwner: owner.historyOwner,
       ...(callId === undefined ? {} : { callId }),
-      observation: {
-        ...(observation === undefined ? {} : { state: observation }),
-        save: checkpoint.save,
-      },
+      observation: { ...observationState, save: checkpoint.save },
       readHistory: async (startIndex, onEvent) =>
         (await transport.observePrivateHistory?.({
           principal: owner.historyOwner.principal,

@@ -15,6 +15,15 @@ import { runSequentiallyUntilAsync } from "../async-sequential.ts";
 const PROTECTED_DEPLOYMENT_TYPE = "prod_deployment_urls_and_all_previews";
 const PUBLIC_APP = "public-app";
 
+interface VercelProjectCreateBody {
+  framework: "services";
+  name: string;
+  rootDirectory: ".";
+  ssoProtection?: { deploymentType: typeof PROTECTED_DEPLOYMENT_TYPE };
+  oidcTokenConfig?: { enabled: true; issuerMode: "team" };
+  gitRepository?: { repo: string; type: "github" };
+}
+
 const projectSchema = z
   .object({
     framework: z.literal("services"),
@@ -260,27 +269,21 @@ export async function provisionVercelProject(input: {
           await input.persistAbsent(candidate);
         }
         if (before.status === 404) {
+          const body: VercelProjectCreateBody = {
+            framework: "services",
+            name: candidate,
+            rootDirectory: ".",
+          };
+          if (input.deploymentAccess === PUBLIC_APP) {
+            body.ssoProtection = { deploymentType: PROTECTED_DEPLOYMENT_TYPE };
+            body.oidcTokenConfig = { enabled: true, issuerMode: "team" };
+          }
+          if (linkedRepository) {
+            body.gitRepository = { repo: linkedRepository, type: "github" };
+          }
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const created = await vercel({
-            body: {
-              framework: "services",
-              name: candidate,
-              rootDirectory: ".",
-              ...(input.deploymentAccess === PUBLIC_APP
-                ? {
-                    ssoProtection: { deploymentType: PROTECTED_DEPLOYMENT_TYPE },
-                    oidcTokenConfig: { enabled: true, issuerMode: "team" },
-                  }
-                : {}),
-              ...(linkedRepository
-                ? {
-                    gitRepository: {
-                      repo: linkedRepository,
-                      type: "github",
-                    },
-                  }
-                : {}),
-            },
+            body,
             expected: [200, 201, 400, 403, 409, 429],
             method: "POST",
             path: "/v11/projects",

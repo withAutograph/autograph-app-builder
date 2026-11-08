@@ -1045,11 +1045,14 @@ export async function executeProposalBoundApply(input: {
       stdout: "",
     };
   }
-  const attemptBase = {
+  const attemptBinding: TargetApplyBinding & Pick<ApplyResultBase, "frameworkUpgrade"> = {
     ...input.binding,
-    ...(input.proposal.frameworkUpgrade === undefined
-      ? {}
-      : { frameworkUpgrade: input.proposal.frameworkUpgrade.versions }),
+  };
+  if (input.proposal.frameworkUpgrade !== undefined) {
+    attemptBinding.frameworkUpgrade = input.proposal.frameworkUpgrade.versions;
+  }
+  const attemptBase = {
+    ...attemptBinding,
     appliedByCallId: input.appliedByCallId,
     applyRoot: overlay.applyRoot,
     command: {
@@ -1095,18 +1098,31 @@ export async function executeProposalBoundApply(input: {
   if (command.exitCode !== 0 || targetReceipt === undefined) {
     const commandOutput = `${command.stderr}\n${command.stdout}`;
     const output = validationOutputExcerpt(command.stdout, command.stderr);
-    const unsigned = {
+    const failureFields: typeof base &
+      Pick<TargetApplyFailureReceipt, "commandFailureKind" | "failedCommand" | "output"> = {
       ...base,
       commandFailureKind: commandFailureKind(commandOutput),
-      ...(command.failedCommand === undefined ? {} : { failedCommand: command.failedCommand }),
-      ...(output.stderr === "" && output.stdout === "" ? {} : { output }),
+    };
+    if (command.failedCommand !== undefined) {
+      failureFields.failedCommand = command.failedCommand;
+    }
+    if (!(output.stderr === "" && output.stdout === "")) {
+      failureFields.output = output;
+    }
+    const unsigned: typeof failureFields &
+      Pick<TargetApplyFailureReceipt, "missingDependency"> & {
+        reason: "invalid-receipt" | "command-failed";
+        recoveryRequired: true;
+        status: "partial-failure";
+      } = {
+      ...failureFields,
       reason: command.exitCode === 0 ? ("invalid-receipt" as const) : ("command-failed" as const),
       recoveryRequired: true as const,
       status: "partial-failure" as const,
-      ...(missingDependency(commandOutput) === undefined
-        ? {}
-        : { missingDependency: missingDependency(commandOutput) }),
     };
+    if (missingDependency(commandOutput) !== undefined) {
+      unsigned.missingDependency = missingDependency(commandOutput);
+    }
     return {
       ok: false,
       receipt: { ...unsigned, digest: sha256(JSON.stringify(unsigned)) },

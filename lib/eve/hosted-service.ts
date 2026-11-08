@@ -3367,21 +3367,25 @@ export function createHostedEveSessionService(input: {
               ? {}
               : { workingPreview: spool.observation.workingPreview }),
           };
-          const summary = eveSessionResultSchema.parse({
-            cursor: 0,
-            events: [],
-            ...(metadata.inputRequests === undefined
-              ? {}
-              : { inputRequests: metadata.inputRequests }),
-            ...(metadata.prototypeRef === undefined ? {} : { prototypeRef: metadata.prototypeRef }),
-            ...(metadata.prototype === undefined ? {} : { prototype: metadata.prototype }),
-            sessionId,
-            status: metadata.status,
-            ...(metadata.uiPreview === undefined ? {} : { uiPreview: metadata.uiPreview }),
-            ...(metadata.workingPreview === undefined
-              ? {}
-              : { workingPreview: metadata.workingPreview }),
-          });
+          const summaryDetails: Pick<z.input<typeof eveSessionResultSchema>, "cursor" | "events"> &
+            Partial<z.input<typeof eveSessionResultSchema>> = { cursor: 0, events: [] };
+          if (metadata.inputRequests !== undefined) {
+            summaryDetails.inputRequests = metadata.inputRequests;
+          }
+          if (metadata.prototypeRef !== undefined) {
+            summaryDetails.prototypeRef = metadata.prototypeRef;
+          }
+          if (metadata.prototype !== undefined) {
+            summaryDetails.prototype = metadata.prototype;
+          }
+          const summaryStatus = { ...summaryDetails, sessionId, status: metadata.status };
+          if (metadata.uiPreview !== undefined) {
+            summaryStatus.uiPreview = metadata.uiPreview;
+          }
+          if (metadata.workingPreview !== undefined) {
+            summaryStatus.workingPreview = metadata.workingPreview;
+          }
+          const summary = eveSessionResultSchema.parse(summaryStatus);
           const resumability = ["completed", "failed", "cancelled"].includes(summary.status)
             ? "terminal"
             : "live";

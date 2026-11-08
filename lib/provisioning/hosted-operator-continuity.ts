@@ -203,14 +203,20 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
   };
   const approvalObservation = (
     record: ContinuityRecord,
-  ): PrivateOperatorApprovalObservationPort => ({
-    ...(record.approvalObservation === undefined ? {} : { state: record.approvalObservation }),
-    save: async (state) => {
-      await approvalStage("journal", () =>
-        update(record, (value) => ({ ...value, approvalObservation: state })),
-      );
-    },
-  });
+  ): PrivateOperatorApprovalObservationPort => {
+    const initial: Pick<PrivateOperatorApprovalObservationPort, "state"> = {};
+    if (record.approvalObservation !== undefined) {
+      initial.state = record.approvalObservation;
+    }
+    return {
+      ...initial,
+      save: async (state) => {
+        await approvalStage("journal", () =>
+          update(record, (value) => ({ ...value, approvalObservation: state })),
+        );
+      },
+    };
+  };
   const assertRecoverablePredecessor = (record: ContinuityRecord, successorId: string) => {
     if (
       ![
@@ -629,20 +635,21 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
             }
             await assertFence();
             const cancelled = signal?.aborted === true;
-            current = await update(current, (value) => ({
-              ...value,
-              state: "reconciliation-required",
-              ...(cancelled ? { cancelled: true, pendingStage: "revocation" as const } : {}),
-              ...(publicationFailed
-                ? {
-                    pendingStage: "revocation" as const,
-                    failure: {
-                      stage: "publication" as const,
-                      reason: "runtime-closed-before-publication-completed" as const,
-                    },
-                  }
-                : {}),
-            }));
+            current = await update(current, (value) => {
+              const next: ContinuityRecord = { ...value, state: "reconciliation-required" };
+              if (cancelled) {
+                next.cancelled = true;
+                next.pendingStage = "revocation";
+              }
+              if (publicationFailed) {
+                next.pendingStage = "revocation";
+                next.failure = {
+                  stage: "publication",
+                  reason: "runtime-closed-before-publication-completed",
+                };
+              }
+              return next;
+            });
             if ((cancelled || current.failure !== undefined) && closed) {
               try {
                 await deps.projection.revoke(
