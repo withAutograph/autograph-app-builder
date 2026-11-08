@@ -4,6 +4,7 @@ import { z } from "zod";
 import { verifiedHostedClaimsSchema } from "../eve/hosted-auth";
 import type { VerifiedHostedClaims } from "../eve/hosted-auth";
 
+const sessionScope = "autograph:session";
 const strongAlgorithmSchema = z.enum(["RS256", "PS256", "ES256", "EdDSA"]);
 
 export const hostedMcpAuthConfigSchema = z
@@ -207,7 +208,7 @@ export function protectedResourceMetadata(configInput: HostedMcpAuthConfig) {
     bearer_methods_supported: ["header"],
     resource: config.resourceUrl,
     scopes_supported: [
-      "autograph:session",
+      sessionScope,
       "autograph:start",
       "autograph:get",
       "autograph:send",
@@ -227,7 +228,7 @@ function challenge(config: HostedMcpAuthConfig, attributes: string[]) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function unauthorizedResponse(
   config: HostedMcpAuthConfig,
-  scopes = ["autograph:session"],
+  scopes = [sessionScope],
 ): Response {
   return Response.json(
     { error: "unauthorized" },
@@ -246,10 +247,7 @@ export function unauthorizedResponse(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function forbiddenResponse(
-  config: HostedMcpAuthConfig,
-  scopes = ["autograph:session"],
-): Response {
+export function forbiddenResponse(config: HostedMcpAuthConfig, scopes = [sessionScope]): Response {
   return Response.json(
     { error: "forbidden" },
     {
