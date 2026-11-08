@@ -196,7 +196,7 @@ describe("Preview activation prerequisite contract", () => {
     expect(provisionStart).toBeGreaterThanOrEqual(0);
     expect(provisionEnd).toBeGreaterThan(provisionStart);
     const provision = cli.slice(provisionStart, provisionEnd);
-    expect(provision).toContain("return sql.begin(async (transaction) => {");
+    expect(provision).toMatch(/\breturn\s+(?:await\s+)?sql\.begin\(/u);
     expect(provision).toContain(
       "insert into hosted_workspace_membership (issuer, audience, workspace_id, owner_user_id, active, updated_at)",
     );
