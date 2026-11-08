@@ -141,6 +141,12 @@ original Builder setup. It grants organization membership only at member
 level, plus the app's reviewed roles. Creator access and subsequent invitations
 use the same protected Auth and generated-data workers.
 
+Shared Auth invitation and organization-membership workers use `app_id: auth`
+with no app `tenant_targets`, and their authorized effect frames use a null
+tenant. The target app and organization remain bound in the hashed approved
+`authAppAccess.scope` or `authMembership` plan. App schema and access workers
+retain their selected organization in `tenant_targets`.
+
 Setup, access changes, and callbacks share one physical lock per repository and
 app. Worker effects carry a positive durable fencing generation and are
 checkpointed before dispatch. Interrupted writes are read back before retry;

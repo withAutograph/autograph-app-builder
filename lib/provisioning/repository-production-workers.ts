@@ -333,7 +333,8 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
           ? { id: sha256(planBytes), sha256: proof.identityProof.sha256 }
           : { id: intent.storage.releaseId, sha256: intent.storage.manifestSha256 },
       installer: { id: worker.id, sha256: worker.sha256 },
-      tenant_targets: operation === "storage" ? [] : [scope.organizationId],
+      tenant_targets:
+        operation === "storage" || operation === "membership" ? [] : [scope.organizationId],
     };
     const resourceCredentialBytes = Buffer.from(JSON.stringify(privateCredentials(row)));
     let workerContext: ProtectedInstallContextWire | ResourceBootstrapContextWire = common;
@@ -452,7 +453,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
   ) => {
     await assertCurrent(context);
     const { row } = context;
-    const { scope, lease } = row.record;
+    const { lease } = row.record;
     if (!lease) {
       throw new Error("repository_production_lease_unavailable");
     }
@@ -502,7 +503,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       },
       release: { id: sha256(planBytes), sha256: sha256(planBytes) },
       installer: { id: worker.id, sha256: worker.sha256 },
-      tenant_targets: [scope.organizationId],
+      tenant_targets: [],
     };
     const runWorker = deps.runWorker ?? runRepositoryProductionFileSpool;
     const { sandbox } = deps.profile;

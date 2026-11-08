@@ -14,6 +14,7 @@ import { GENERATED_RELEASE_MEMBERS } from "./hosted-operator-sandbox-launcher";
 import type {
   GeneratedAppReleaseFiles,
   ResourceBootstrapContextWire,
+  ProtectedInstallContextWire,
 } from "./hosted-operator-sandbox-launcher";
 
 const defined = <T>(value: T | undefined): T => {
@@ -92,7 +93,30 @@ const resourceWorkerContextDigest = (context: ResourceBootstrapContextWire) =>
     )
     .digest("hex");
 
-const fixture = async (staticApp = false) => {
+// Frozen external startup rule: Arrusted 5f7a1e54 node-spool.ts rejects
+// app_id auth with any tenant_targets before the CLI can publish lifecycle facts.
+const authWorkerContext = z.object({
+  app_id: z.literal("auth"),
+  tenant_targets: z.array(z.string()).length(0),
+});
+// Both Auth workers authorize their shared-realm effect with null tenant;
+// the app's organization remains in the separately hashed approved plan.
+const authWorkerAuthorityFrame = (
+  context: Pick<ProtectedInstallContextWire, "app_id" | "tenant_targets" | "operation">,
+  effectId: string,
+) => ({
+  operation_id: context.operation.operation_id,
+  approval_digest: context.operation.approval_digest,
+  fence_generation: context.operation.fence_generation,
+  effect_id: effectId,
+  app_id: context.app_id,
+  tenant_id: null,
+});
+
+const fixture = async (
+  staticApp = false,
+  readCreator?: RepositoryProductionWorkerDependencies["readCreator"],
+) => {
   const record = initialRepositoryProductionRecord(scope, {
     sessionId: "session",
     sourceSha: "a".repeat(40),
@@ -113,10 +137,22 @@ const fixture = async (staticApp = false) => {
   let accepted = false;
   const calls: Parameters<NonNullable<RepositoryProductionWorkerDependencies["runWorker"]>>[1][] =
     [];
+  const authFrames: ReturnType<typeof authWorkerAuthorityFrame>[] = [];
   const runWorker: NonNullable<RepositoryProductionWorkerDependencies["runWorker"]> = async (
     _config,
     input,
   ) => {
+    if (input.operation === "auth-management" || input.operation === "membership") {
+      authWorkerContext.parse(input.context);
+      if (!input.readOnly) {
+        authFrames.push(
+          authWorkerAuthorityFrame(
+            input.context,
+            input.operation === "auth-management" ? "auth-app-invitation" : "auth-membership",
+          ),
+        );
+      }
+    }
     calls.push(input);
     const plan =
       input.operation === "auth-management"
@@ -196,12 +232,14 @@ const fixture = async (staticApp = false) => {
     builderOrigin: "https://builder.test",
     authRealm: {},
     signal: new AbortController().signal,
-    readCreator: async () => ({
-      kind: "managed-invitation",
-      actorId: "verified-actor",
-      invitationId: "11111111-1111-4111-a111-111111111111",
-      scopeDigest: "scope",
-    }),
+    readCreator:
+      readCreator ??
+      (async () => ({
+        kind: "managed-invitation",
+        actorId: "verified-actor",
+        invitationId: "11111111-1111-4111-a111-111111111111",
+        scopeDigest: "scope",
+      })),
     // SAFETY: Enumerating the closed member list supplies every required release file exactly once.
     readGeneratedRelease: async () =>
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Test fixture builds every declared member.
@@ -241,6 +279,7 @@ const fixture = async (staticApp = false) => {
     record.privateState = await workers.reservePrivateState(context.row);
   }
   return {
+    authFrames,
     calls,
     context,
     revoke: () => {
@@ -332,6 +371,100 @@ describe("concrete protected Production worker composition", () => {
       expect(call.operation).toBe("schema");
       expect(planFrom(call.startupFiles["approved-access-plan.json"]).access).toEqual([]);
     }
+  });
+
+  it.each([true, false])(
+    "opens the shared Auth worker with the app organization bound only by its approved plan (readOnly: %s)",
+    async (readOnly) => {
+      const f = await fixture();
+      const request = {
+        version: 1,
+        realm: { authorizedOrganizationIds: [scope.organizationId] },
+        builderOrigin: "https://builder.test",
+        scope: { appId: scope.appId, organizationId: scope.organizationId },
+        request: {
+          action: readOnly ? "read" : "send",
+          invitationId: "11111111-1111-4111-a111-111111111111",
+        },
+      };
+      await expect(
+        f.workers.invokeAuthManagement(f.context, request, readOnly),
+      ).resolves.toMatchObject({ status: "applied" });
+      const call = defined(f.calls[0]);
+      const bytes = defined(call.startupFiles["operator-plan.json"]);
+      const plan = z.object({ authAppAccess: z.json() }).parse(JSON.parse(bytes.toString()));
+      expect(plan.authAppAccess).toEqual(request);
+      expect(call.context.operation.approval_digest).toBe(
+        createHash("sha256").update(bytes).digest("hex"),
+      );
+      expect(f.authFrames).toEqual(
+        readOnly
+          ? []
+          : [
+              expect.objectContaining({
+                app_id: "auth",
+                tenant_id: null,
+                effect_id: "auth-app-invitation",
+                approval_digest: call.context.operation.approval_digest,
+              }),
+            ],
+      );
+      expect(call.readOnly).toBe(readOnly);
+    },
+  );
+
+  it("opens the shared Auth worker for a verified realm membership without losing organization authority", async () => {
+    const proof = "synthetic realm identity proof";
+    const f = await fixture(false, async () => ({
+      actorId: "verified-actor",
+      proof,
+      bootstrapPlanDigest: "d".repeat(64),
+      identityNonceSha256: "e".repeat(64),
+      identityProof: {
+        reference: "owned-proof",
+        sha256: createHash("sha256").update(proof).digest("hex"),
+      },
+      identityCapture: { capturedAt: "2026-11-08T16:00:00Z", realmSessionId: "realm-session" },
+      identityVerification: {
+        audience: "https://operator.test",
+        issuer: "https://auth.test",
+        jwksUrl: "https://auth.test/jwks",
+        transportSource: {
+          audience: "operator",
+          environment: "production",
+          issuer: "https://oidc.test",
+          ownerId: "team",
+          projectId: "operator",
+        },
+      },
+    }));
+    await f.workers.apply(f.context);
+    const call = defined(f.calls.find((entry) => entry.operation === "membership"));
+    const bytes = defined(call.startupFiles["operator-plan.json"]);
+    const plan = z
+      .object({
+        authMembership: z.object({
+          organizationId: z.string(),
+          actorId: z.string(),
+          membershipRole: z.string(),
+        }),
+      })
+      .parse(JSON.parse(bytes.toString()));
+    expect(plan.authMembership).toMatchObject({
+      organizationId: scope.organizationId,
+      actorId: "verified-actor",
+      membershipRole: "member",
+    });
+    expect(call.context.operation.approval_digest).toBe(
+      createHash("sha256").update(bytes).digest("hex"),
+    );
+    expect(f.authFrames).toContainEqual(
+      expect.objectContaining({ app_id: "auth", tenant_id: null, effect_id: "auth-membership" }),
+    );
+    expect(call.context.resource.resource_id).toBe("auth");
+    const app = defined(f.calls.find((entry) => entry.operation === "access"));
+    expect(app.context.app_id).toBe(scope.appId);
+    expect(app.context.tenant_targets).toEqual([scope.organizationId]);
   });
 
   it("identifies unavailable encrypted credentials without exposing or replacing private state", async () => {
