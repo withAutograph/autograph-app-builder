@@ -113,12 +113,12 @@ const fixture = () => {
     observe: vi.fn(async () => structuredClone(actual)),
   };
   return {
-    setup,
-    caller,
-    request,
-    ports,
     actual,
+    caller,
+    ports,
     read: createReadCentralIntegrationHostReady(ports),
+    request,
+    setup,
   };
 };
 it("requires independently current setup and app-caller authority with separate global ownership", async () => {

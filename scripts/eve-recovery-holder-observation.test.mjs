@@ -100,6 +100,7 @@ const fixture = () => {
       return Promise.resolve(hook);
     },
     isHookNotFound: (error) => error?.message === HOOK_NOT_FOUND_MESSAGE,
+    now: () => 1,
     async readRunEntry(runId) {
       seen.reads.push(runId);
       assert.equal(runId, holderOwnerRunId);
@@ -109,7 +110,6 @@ const fixture = () => {
     record(summary) {
       summaries.push(summary);
     },
-    now: () => 1,
   };
   const input = {
     auth,
@@ -173,8 +173,8 @@ it("observes a real occupied logical inbox held by a distinct physical owner wit
       isDeepStrictEqual(binding, {
         auth: f.auth,
         descriptor: f.descriptor,
-        holderOwnerRunId: f.holderOwnerRunId,
         holderDescriptor: f.holderDescriptor,
+        holderOwnerRunId: f.holderOwnerRunId,
       }),
     ),
     true,

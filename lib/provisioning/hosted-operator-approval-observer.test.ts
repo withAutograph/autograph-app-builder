@@ -59,11 +59,11 @@ const setup = (authorized = true) => {
   const fetchImplementation = vi.fn<typeof fetch>(() => Promise.resolve(stream()));
   const observer = createHostedOperatorApprovalObserver({
     builderOrigin: "https://builder.example.test",
-    workloadIdentity: { token: ambientToken },
-    verifyReadAuthority,
     fetchImplementation,
+    verifyReadAuthority,
+    workloadIdentity: { token: ambientToken },
   });
-  return { observer, ambientToken, verifyReadAuthority, fetchImplementation };
+  return { ambientToken, fetchImplementation, observer, verifyReadAuthority };
 };
 
 describe("request-owned approval observation", () => {

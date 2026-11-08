@@ -24,7 +24,7 @@ const git = (root: string, args: readonly string[]) =>
   ).trim();
 afterEach(() => {
   for (const root of roots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { force: true, recursive: true });
   }
 });
 const fixture = (existing?: "main" | "provider-default" | "historical-main") => {
@@ -128,17 +128,17 @@ const fixture = (existing?: "main" | "provider-default" | "historical-main") => 
       reader: { acquire: async () => ({ token: "fixture-token-never-retained" }) },
     });
   return {
-    root,
-    origin,
+    acquire,
     checkout,
-    oldSha,
+    commands,
     mainSha,
     mainTree,
-    sandbox,
-    acquire,
-    writes,
-    commands,
     materializeGitSource,
+    oldSha,
+    origin,
+    root,
+    sandbox,
+    writes,
   };
 };
 it("selects current main even when the provider default branch differs", async () => {

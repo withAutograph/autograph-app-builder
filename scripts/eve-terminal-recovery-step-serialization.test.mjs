@@ -112,7 +112,7 @@ const fixture = () => {
     assert.equal(step.stepName, validateCheckpoint.stepId);
     return { args: step.args, closureVars: step.closureVars, thisVal: step.thisVal };
   };
-  return { ports, calls, queuedArguments };
+  return { calls, ports, queuedArguments };
 };
 
 it("reproduces the member-step receiver failure through the real compiled Workflow proxy", async () => {

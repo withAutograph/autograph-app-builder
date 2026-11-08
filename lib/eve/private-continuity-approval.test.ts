@@ -210,9 +210,9 @@ describe("native private managed continuity approval", () => {
     }
     reader.observe(
       requested({
-        toolName: failure === "wrong tool" ? "prepare-app-hosted-runtime" : undefined,
         callId: failure === "wrong call" ? "different-call" : undefined,
         toolInput: changed,
+        toolName: failure === "wrong tool" ? "prepare-app-hosted-runtime" : undefined,
       }),
     );
     reader.observe(
@@ -283,8 +283,8 @@ describe("compact saved continuity request", () => {
   it("rejects missing reference fields, extra partial plans, and malformed intent paths", () => {
     const incomplete = {
       action: request.action,
-      planRef: request.planRef,
       idempotencyKey: request.idempotencyKey,
+      planRef: request.planRef,
     };
     expect(continuityApprovalToolInputSchema.safeParse(incomplete).success).toBe(false);
     expect(

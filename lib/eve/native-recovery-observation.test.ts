@@ -44,10 +44,10 @@ const fixture = async (id: string) => {
   };
   const assertOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
   const service = createHostedEveSessionService({
+    assertNativeRecoveryOwner: assertOwner,
     principal,
     store,
     transport: adapter,
-    assertNativeRecoveryOwner: assertOwner,
   });
   const first = await service.start({ clientRequestId: `${id}-initial`, prompt: "Build" });
   const readSession = store.getSession.bind(store);
@@ -71,7 +71,7 @@ const fixture = async (id: string) => {
     throw new Error("Expected public start lookup.");
   }
   const lookup = () => getStart({ clientRequestId, cursor: 0, limit: 20 });
-  return { store, service, adapter, assertOwner, lookup, clientRequestId, observeRecovery };
+  return { adapter, assertOwner, clientRequestId, lookup, observeRecovery, service, store };
 };
 
 describe("normal public recovery observation", () => {

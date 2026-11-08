@@ -149,9 +149,9 @@ const fixture = (failure) => {
     },
   };
   return {
+    deps,
     fault,
     ports,
-    deps,
     recover: async () => await recoverTerminalSession({ auth, descriptor, ports }, deps),
   };
 };
