@@ -785,7 +785,7 @@ const invokeHostedOperation = async function invokeHostedOperation(
       return await service.cancel({ sessionId: "session_1", turnId: "turn_1" });
     }
     default: {
-      throw new Error(`Unsupported hosted operation: ${operation}`);
+      throw new Error(`Unsupported hosted operation: ${String(operation)}`);
     }
   }
 };

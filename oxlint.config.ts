@@ -630,15 +630,6 @@ export default defineConfig({
       rules: { "typescript/no-unsafe-return": "off" },
     },
     {
-      // Preserve exhaustive-switch errors for unexpected runtime values.
-      files: [
-        "lib/auth/preview-user-management.ts",
-        "lib/eve/hosted-service.test.ts",
-        sharedLintFile13,
-      ],
-      rules: { "typescript/restrict-template-expressions": "off" },
-    },
-    {
       // Existing findings awaiting behavior-preserving contract changes.
       files: [
         "lib/agent/application-review-context-store.test.ts",
