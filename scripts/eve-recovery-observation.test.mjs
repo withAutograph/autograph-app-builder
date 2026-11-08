@@ -5,6 +5,12 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, test } from "vitest";
 
+const originalPhysicalRun = "physical-original";
+const failedChildRun = "physical-failed-child";
+const privateDeferredTool = "private-deferred";
+const privateApprovalId = "private-approval";
+const privateResult = "private-result";
+
 const require = createRequire(import.meta.url);
 const eve = path.dirname(require.resolve("eve/package.json"));
 const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
@@ -41,7 +47,7 @@ const setup = () => {
     version: 1,
     operationId: `observe-${sequence}`,
     sourcePublicSessionId: "public-original",
-    sourceOwnerRunId: "physical-original",
+    sourceOwnerRunId: originalPhysicalRun,
     sourceAdapterGeneration: 1,
     logicalSessionId: "logical-original",
     originalAuthoritySessionId: "public-original",
@@ -49,7 +55,7 @@ const setup = () => {
   };
   const receipt = {
     ...descriptor,
-    ownerRunId: "physical-failed-child",
+    ownerRunId: failedChildRun,
     provenance: {
       kind: "completed-terminal-turn-input",
       sourceStepId: "original-step",
@@ -127,13 +133,13 @@ test("receipt observation selects failed physical child and cannot activate, rec
   const before = JSON.stringify(payload);
   assert.deepEqual(await observeTerminalSession(input, deps), {
     kind: "accepted",
-    sessionId: "physical-failed-child",
+    sessionId: failedChildRun,
   });
   assert.equal(state.effects, 0);
   assert.equal(state.collects, 2);
   assert.deepEqual(
     state.reports.map((report) => report.ownerRunId),
-    ["physical-original", "physical-failed-child"],
+    [originalPhysicalRun, failedChildRun],
   );
   assert.equal(JSON.stringify(payload), before);
 });
@@ -143,7 +149,7 @@ test("without receipt observes only canonical original physical owner", async ()
   state.receipt = undefined;
   payload.binding.ownerRunId = input.descriptor.sourceOwnerRunId;
   const observed = await observeTerminalSession(input, deps);
-  assert.equal(observed.sessionId, "physical-original");
+  assert.equal(observed.sessionId, originalPhysicalRun);
   assert.equal(state.reports[0].receiptPresent, false);
   assert.equal(state.effects, 0);
 });
@@ -268,19 +274,19 @@ test("actual native collector and serialization retain mixed orphan history and 
             toolName: "private-tool",
             input: { privateArgument: "hidden" },
           },
-          { type: "tool-call", toolCallId: deferredCall, toolName: "private-deferred", input: {} },
-          { type: "tool-approval-request", approvalId: "private-approval", toolCallId: nativeCall },
+          { type: "tool-call", toolCallId: deferredCall, toolName: privateDeferredTool, input: {} },
+          { type: "tool-approval-request", approvalId: privateApprovalId, toolCallId: nativeCall },
         ],
       },
       {
         role: "tool",
         content: [
-          { type: "tool-approval-response", approvalId: "private-approval", approved: true },
+          { type: "tool-approval-response", approvalId: privateApprovalId, approved: true },
           {
             type: "tool-result",
             toolCallId: deferredCall,
-            toolName: "private-deferred",
-            output: { type: "text", value: "private-result" },
+            toolName: privateDeferredTool,
+            output: { type: "text", value: privateResult },
           },
         ],
       },
@@ -335,8 +341,8 @@ test("actual native collector and serialization retain mixed orphan history and 
       result: {
         kind: "tool-result",
         callId: deferredCall,
-        toolName: "private-deferred",
-        output: "private-result",
+        toolName: privateDeferredTool,
+        output: privateResult,
       },
     },
   };
@@ -370,9 +376,9 @@ test("actual native collector and serialization retain mixed orphan history and 
   for (const privateValue of [
     nativeCall,
     deferredCall,
-    "private-result",
+    privateResult,
     "private-tool",
-    "private-approval",
+    privateApprovalId,
     "secret-prompt",
     owner,
     logical,

@@ -84,7 +84,7 @@ async function sameOriginHeaders(contentType?: string) {
   const forwarded = new Headers(incoming);
   const { origin } = new URL(requestUrl("/"));
   forwarded.set("origin", origin);
-  if (contentType) {
+  if (contentType !== undefined && contentType !== null && contentType !== "") {
     forwarded.set("content-type", contentType);
   }
   return forwarded;
@@ -197,12 +197,12 @@ function provisioningInput(
     deploymentAccess: "public-app",
     operation,
     providers: {
-      ...(input.form.githubInstallationId
-        ? { githubInstallationId: input.form.githubInstallationId }
-        : {}),
-      ...(input.form.vercelInstallationId
-        ? { vercelInstallationId: input.form.vercelInstallationId }
-        : {}),
+      ...(input.form.githubInstallationId === undefined
+        ? {}
+        : { githubInstallationId: input.form.githubInstallationId }),
+      ...(input.form.vercelInstallationId === undefined
+        ? {}
+        : { vercelInstallationId: input.form.vercelInstallationId }),
     },
     repository: {
       name: input.form.repository,
@@ -352,10 +352,10 @@ export async function continueBuilderHandoff(
     );
 
     if (input.provisioningEnabled) {
-      const operation = input.form.githubInstallationId ? "github" : "vercel";
+      const operation = input.form.githubInstallationId === undefined ? "vercel" : "github";
       if (
-        (operation === "github" && input.form.githubInstallationId) ||
-        (operation === "vercel" && input.form.vercelInstallationId)
+        (operation === "github" && input.form.githubInstallationId !== undefined) ||
+        (operation === "vercel" && input.form.vercelInstallationId !== undefined)
       ) {
         // Reserve once, before the handoff exists. The visible handoff route
         // subsequently owns lease-safe provider continuation.

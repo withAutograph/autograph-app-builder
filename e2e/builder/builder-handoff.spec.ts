@@ -80,7 +80,7 @@ async function prepareNamedHandoff(
   const url = page.url();
   const { pathname } = new URL(url);
   const id = pathname.split("/").at(-1);
-  if (!id) throw new Error("Handoff URL is missing an ID");
+  if (id === undefined || id === null || id === "") throw new Error("Handoff URL is missing an ID");
   return { id, pathname, statusPath: `/api/builder/handoffs/${id}`, url };
 }
 
@@ -379,10 +379,12 @@ test("Cursor install link remains hidden until its dedicated local client is reg
       await setupCursorClient(database, `${appOrigin}/mcp`);
       await expect(install).toBeVisible({ timeout: 15_000 });
       const installHref = await install.getAttribute("href");
-      if (!installHref) throw new Error("Cursor install link is missing an href");
+      if (installHref === undefined || installHref === null || installHref === "")
+        throw new Error("Cursor install link is missing an href");
       const installUrl = new URL(installHref);
       const installConfig = installUrl.searchParams.get("config");
-      if (!installConfig) throw new Error("Cursor install link is missing its configuration");
+      if (installConfig === undefined || installConfig === null || installConfig === "")
+        throw new Error("Cursor install link is missing its configuration");
       const config = JSON.parse(Buffer.from(installConfig, "base64").toString("utf-8"));
       expect(Object.keys(config).toSorted()).toEqual(["auth", "url"]);
       expect(config.url).toBe(`${appOrigin}/mcp`);
@@ -473,7 +475,8 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   );
   expect(state.opened.at(-1)).toMatch(/^codex:\/\/new\?prompt=/u);
   const codexLaunchUrl = state.opened.at(-1);
-  if (!codexLaunchUrl) throw new Error("Codex launch URL is missing");
+  if (codexLaunchUrl === undefined || codexLaunchUrl === null || codexLaunchUrl === "")
+    throw new Error("Codex launch URL is missing");
   expect(new URL(codexLaunchUrl).searchParams.get("prompt")).toBe(state.clipboard[0]);
 
   await expect(page.getByText("Launch requested for Codex", { exact: false })).toBeVisible();
@@ -510,10 +513,12 @@ test("Cursor handoff carries the exact copied prompt", async ({ context, page })
   const install = page.getByRole("link", { name: "Add Autograph to Cursor" });
   await expect(install).toBeVisible();
   const installHref = await install.getAttribute("href");
-  if (!installHref) throw new Error("Cursor install link is missing an href");
+  if (installHref === undefined || installHref === null || installHref === "")
+    throw new Error("Cursor install link is missing an href");
   const installUrl = new URL(installHref);
   const installConfig = installUrl.searchParams.get("config");
-  if (!installConfig) throw new Error("Cursor install link is missing its configuration");
+  if (installConfig === undefined || installConfig === null || installConfig === "")
+    throw new Error("Cursor install link is missing its configuration");
   expect(JSON.parse(Buffer.from(installConfig, "base64").toString("utf-8"))).toEqual({
     auth: { CLIENT_ID: "autograph-cursor-desktop" },
     url: `${appOrigin}/mcp`,
@@ -525,7 +530,8 @@ test("Cursor handoff carries the exact copied prompt", async ({ context, page })
   expect(state.clipboard[0]).not.toContain("codex plugin");
   expect(state.opened.at(-1)).toMatch(/^cursor:\/\/anysphere\.cursor-deeplink\/prompt\?text=/u);
   const cursorLaunchUrl = state.opened.at(-1);
-  if (!cursorLaunchUrl) throw new Error("Cursor launch URL is missing");
+  if (cursorLaunchUrl === undefined || cursorLaunchUrl === null || cursorLaunchUrl === "")
+    throw new Error("Cursor launch URL is missing");
   expect(new URL(cursorLaunchUrl).searchParams.get("text")).toBe(state.clipboard[0]);
   await expect(page.getByRole("button", { name: "Open in Cursor" })).toBeVisible();
 });
@@ -561,7 +567,8 @@ test("expired handoff renews in place without changing intent or provisioning re
 
   const handoffUrl = page.url();
   const handoffId = new URL(handoffUrl).pathname.split("/").at(-1);
-  if (!handoffId) throw new Error("Handoff URL is missing an ID");
+  if (handoffId === undefined || handoffId === null || handoffId === "")
+    throw new Error("Handoff URL is missing an ID");
   const statusPath = `/api/builder/handoffs/${handoffId}`;
   const preparedResponse = await getWithTransientRetry(page, statusPath);
   expect(preparedResponse.ok()).toBe(true);

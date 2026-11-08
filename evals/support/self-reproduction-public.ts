@@ -67,7 +67,7 @@ const redactObservationUrls = (entry: unknown): unknown => {
   if (Array.isArray(entry)) {
     return entry.map(redactObservationUrls);
   }
-  if (entry && typeof entry === "object") {
+  if (entry !== null && typeof entry === "object") {
     return Object.fromEntries(
       Object.entries(entry).map(([key, item]) => [key, redactObservationUrls(item)]),
     );
@@ -242,7 +242,7 @@ export const makePublicTransport = async (
       return undefined;
     }
     let envelope: { id?: number; result?: unknown; error?: unknown };
-    if (response.headers.get("content-type")?.includes("text/event-stream")) {
+    if (response.headers.get("content-type")?.includes("text/event-stream") ?? false) {
       const reader = response.body?.getReader();
       if (!reader) {
         throw new Error("Missing public MCP response body");
@@ -330,7 +330,10 @@ export const makePublicTransport = async (
         content?: { type: string; text?: string }[];
       };
       recordSafely({ at: new Date().toISOString(), direction: "response", name, result });
-      if (result.isError && !eveSessionResultSchema.safeParse(result.structuredContent).success) {
+      if (
+        (result.isError ?? false) &&
+        !eveSessionResultSchema.safeParse(result.structuredContent).success
+      ) {
         throw new Error("Public App Builder tool returned an error; see transcript");
       }
       return redactTransportToken(
@@ -396,7 +399,7 @@ const observeOriginalStart = async (
     observe(
       await transport.call("autograph_get", { clientRequestId: originalStart.clientRequestId }),
     );
-  if (state.startSubmitted) {
+  if (state.startSubmitted ?? false) {
     if (await recover()) {
       return true;
     }

@@ -187,9 +187,9 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
           </div>
         </div>
 
-        {policyUrl || termsUrl ? (
+        {policyUrl === undefined && termsUrl === undefined ? null : (
           <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
-            {policyUrl ? (
+            {policyUrl === undefined ? null : (
               <a
                 className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
                 href={policyUrl}
@@ -198,8 +198,8 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
               >
                 {localization.privacyPolicy}
               </a>
-            ) : null}
-            {termsUrl ? (
+            )}
+            {termsUrl === undefined ? null : (
               <a
                 className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
                 href={termsUrl}
@@ -208,9 +208,9 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
               >
                 {localization.termsOfService}
               </a>
-            ) : null}
+            )}
           </div>
-        ) : null}
+        )}
       </CardContent>
 
       <CardFooter className="grid grid-cols-2 gap-2">

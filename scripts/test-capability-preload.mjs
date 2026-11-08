@@ -153,14 +153,14 @@ function contextForProcess() {
 function requestAuthorization() {
   const context = contextForProcess();
   const port =
-    !isMainThread && workerData && typeof workerData === "object"
+    !isMainThread && workerData !== null && typeof workerData === "object"
       ? workerData[workerPortKey]
       : undefined;
   if (!isMainThread && port === undefined) {
     throw new Error("Structural test Worker authorization was absent.");
   }
   const delegatedPublicKey =
-    !isMainThread && workerData && typeof workerData === "object"
+    !isMainThread && workerData !== null && typeof workerData === "object"
       ? workerData[`${workerPortKey}PublicKey`]
       : undefined;
   const request = registry.begin(process, context, delegatedPublicKey);
@@ -293,7 +293,7 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
           ...workerEnvironment(options.env ?? process.env, eveProfile, eveEnvelope),
           APP_BUILDER_TEST_CAPABILITY_ID: undefined,
           APP_BUILDER_TEST_MODEL: undefined,
-          NODE_OPTIONS: isTimeoutFixture ? undefined : `--import=${preloadUrl}`,
+          NODE_OPTIONS: isTimeoutFixture === true ? undefined : `--import=${preloadUrl}`,
         },
         execArgv: [],
         transferList: [...(options.transferList ?? []), channel.port2],
@@ -323,7 +323,7 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
           cleanup();
           void this.terminate();
         },
-        isTimeoutFixture ? 250 : timeoutMs,
+        isTimeoutFixture === true ? 250 : timeoutMs,
       );
       timer.timeout.unref();
       channel.port1.unref();
