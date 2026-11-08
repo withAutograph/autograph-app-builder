@@ -4,15 +4,24 @@ import type { Sandbox } from "@vercel/sandbox";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { startWorkingPreview, stopWorkingPreviewCommand } from "./working-preview-runtime";
-import type { PreviewAttempt, previewOwnershipOperation } from "./working-preview-ownership";
+import type {
+  PreviewAttempt,
+  previewOwnershipOperation,
+  previewOwnershipRoot,
+  previewOwnershipSource,
+} from "./working-preview-ownership";
 
 const ownership = vi.hoisted(() => ({ current: null as Partial<PreviewAttempt> | null }));
 vi.mock("./working-preview-ownership", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
+  const actual = await importOriginal<{
+    previewOwnershipOperation: typeof previewOwnershipOperation;
+    previewOwnershipRoot: typeof previewOwnershipRoot;
+    previewOwnershipSource: typeof previewOwnershipSource;
+  }>();
   return {
     ...actual,
     previewOwnershipOperation: (
-      _provider: unknown,
+      _provider: Parameters<typeof previewOwnershipOperation>[0],
       operation: Parameters<typeof previewOwnershipOperation>[1],
     ) => {
       if (operation.kind === "read") {

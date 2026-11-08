@@ -3,6 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { expect, test } from "playwright/test";
 import type { Page } from "playwright/test";
 import postgres from "postgres";
+import { z } from "zod";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { eq } from "drizzle-orm";
 
@@ -22,6 +23,14 @@ import {
   waitForBuilderReady,
   waitForHandoffContent,
 } from "../support/harness";
+
+const statusBodySchema = z.looseObject({ status: z.unknown() });
+const handoffBodySchema = z.looseObject({
+  handoffId: z.unknown(),
+  intent: z.looseObject({ appName: z.unknown(), brief: z.unknown() }),
+  status: z.unknown(),
+});
+const errorBodySchema = z.looseObject({ error: z.unknown() });
 
 // OAuth callbacks and browser cookies must not enter failure artifacts.
 test.use({ screenshot: "off", trace: "off", video: "off" });
@@ -169,7 +178,7 @@ test("multiple handoffs reload independently without replacing saved app context
       const response = await getWithTransientRetry(activePage, handoff.statusPath);
       expect(response.ok()).toBe(true);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const status = await response.json();
+      const status = handoffBodySchema.parse(await response.json());
       expect(status.handoffId).toBe(handoff.id);
       expect(status.intent.appName).toBe(name);
       expect(status.intent.brief).toBe(brief);
@@ -218,7 +227,7 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
     const strangerPage = await stranger.newPage();
     const anonymousResponse = await getWithTransientRetry(strangerPage, handoff.statusPath);
     expect(anonymousResponse.status()).toBe(401);
-    const anonymousBody = await anonymousResponse.json();
+    const anonymousBody = errorBodySchema.parse(await anonymousResponse.json());
     expect(Object.keys(anonymousBody)).toEqual(["error"]);
     expect(anonymousBody.error).toBe("authentication_required");
     expect(anonymousResponse.headers()["cache-control"]).toContain("no-store");
@@ -240,7 +249,7 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
     expect(strangerId).not.toBe(ownerId);
     const unavailableResponse = await getWithTransientRetry(strangerPage, handoff.statusPath);
     expect(unavailableResponse.status()).toBe(404);
-    const unavailableBody = await unavailableResponse.json();
+    const unavailableBody = errorBodySchema.parse(await unavailableResponse.json());
     expect(Object.keys(unavailableBody)).toEqual(["error"]);
     expect(unavailableBody.error).toBe("handoff_unavailable");
     expect(unavailableResponse.headers()["cache-control"]).toContain("no-store");
@@ -255,7 +264,7 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
     await expect(strangerPage.getByRole("textbox", { name: "Handoff prompt" })).toHaveCount(0);
     const ownerResponse = await getWithTransientRetry(page, handoff.statusPath);
     expect(ownerResponse.ok()).toBe(true);
-    const ownerBody = await ownerResponse.json();
+    const ownerBody = statusBodySchema.parse(await ownerResponse.json());
     expect(ownerBody.status).toBe("prepared");
   } finally {
     try {
@@ -287,7 +296,7 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
   await expect(continued).toHaveCount(0);
   const before = await getWithTransientRetry(page, handoff.statusPath);
   expect(before.ok()).toBe(true);
-  const beforeBody = await before.json();
+  const beforeBody = statusBodySchema.parse(await before.json());
   expect(beforeBody.status).toBe("prepared");
 
   let polled = 0;
@@ -317,7 +326,7 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
     expect(polled).toBeGreaterThan(0);
     const after = await getWithTransientRetry(page, handoff.statusPath);
     expect(after.ok()).toBe(true);
-    const afterBody = await after.json();
+    const afterBody = statusBodySchema.parse(await after.json());
     expect(afterBody.status).toBe("continued");
     expect(mcpRequests).toBe(0);
     const finalBoundaryState = await browserBoundaryState(page);
@@ -374,7 +383,7 @@ test("Cursor install link remains hidden until its dedicated local client is reg
       ).toBeVisible();
       const before = await getWithTransientRetry(page, handoff.statusPath);
       expect(before.ok()).toBe(true);
-      const beforeBody = await before.json();
+      const beforeBody = statusBodySchema.parse(await before.json());
       expect(beforeBody.cursorInstallReady).toBe(false);
       await setupCursorClient(database, `${appOrigin}/mcp`);
       await expect(install).toBeVisible({ timeout: 15_000 });
@@ -572,7 +581,7 @@ test("expired handoff renews in place without changing intent or provisioning re
   const statusPath = `/api/builder/handoffs/${handoffId}`;
   const preparedResponse = await getWithTransientRetry(page, statusPath);
   expect(preparedResponse.ok()).toBe(true);
-  const prepared = await preparedResponse.json();
+  const prepared = handoffBodySchema.parse(await preparedResponse.json());
   expect(prepared.status).toBe("prepared");
 
   const provisioningRequests: string[] = [];
@@ -619,7 +628,7 @@ test("expired handoff renews in place without changing intent or provisioning re
 
     const statusResponse = await getWithTransientRetry(page, statusPath);
     expect(statusResponse.ok()).toBe(true);
-    const renewed = await statusResponse.json();
+    const renewed = handoffBodySchema.parse(await statusResponse.json());
     expect(renewed.handoffId).toBe(handoffId);
     expect(renewed.status).toBe("prepared");
     expect(renewed.intent).toEqual(prepared.intent);

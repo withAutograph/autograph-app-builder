@@ -22,7 +22,7 @@ const fixtureInput: unknown = JSON.parse(
 const fixture = tenantExportWireFixtureSchema.parse(fixtureInput);
 const copy = () => structuredClone(fixture);
 const first = <T>(items: readonly T[]): T => {
-  const value = items[0];
+  const [value] = items;
   if (value === undefined) {
     throw new Error("Controlled wire fixture member is missing");
   }

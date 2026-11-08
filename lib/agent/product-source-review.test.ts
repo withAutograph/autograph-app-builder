@@ -290,12 +290,6 @@ const applicationJournalFixture = () => {
   );
   const journal: OwnerAuthorizedSourceReviewJournal = {
     assertCurrentOwner,
-    async read(key) {
-      await assertCurrentOwner();
-      const record = records.get(key);
-      await assertCurrentOwner();
-      return record;
-    },
     async put(key, record) {
       await assertCurrentOwner();
       if (!records.has(key)) {
@@ -307,6 +301,12 @@ const applicationJournalFixture = () => {
       }
       await assertCurrentOwner();
       return stored;
+    },
+    async read(key) {
+      await assertCurrentOwner();
+      const record = records.get(key);
+      await assertCurrentOwner();
+      return record;
     },
   };
   return {

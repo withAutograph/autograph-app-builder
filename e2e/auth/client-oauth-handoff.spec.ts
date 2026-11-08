@@ -40,6 +40,19 @@ test.afterEach(async () => {
 
 const issuer = `${appOrigin}/api/auth`;
 const resource = `${appOrigin}/mcp`;
+const sessionSchema = z
+  .looseObject({
+    session: z.looseObject({ activeOrganizationId: z.unknown() }).nullish(),
+    user: z.looseObject({ email: z.unknown(), id: z.unknown() }).nullish(),
+  })
+  .nullable();
+const readSession = async (page: Page) => {
+  const parsed = sessionSchema.safeParse(await currentSession(page));
+  return parsed.success ? parsed.data : null;
+};
+interface SessionCapture {
+  current: Awaited<ReturnType<typeof readSession>>;
+}
 interface Tokens {
   access_token: string;
   refresh_token: string;
@@ -112,24 +125,26 @@ test("web login and both emulated connections survive Cursor consent, token refr
   // Navigation can finish before a transient session read succeeds. Observe
   // a fresh authenticated response instead of treating one unavailable read
   // as a lost login. Only a boolean reaches failure artifacts.
-  let browserSession: Awaited<ReturnType<typeof currentSession>> = null;
+  const observedSession: SessionCapture = { current: null };
   await expect
     .poll(
       async () => {
-        browserSession = await currentSession(page);
+        observedSession.current = await readSession(page);
         return (
-          browserSession?.user?.email === "dev@autograph.local" &&
-          typeof browserSession?.user?.id === "string" &&
-          typeof browserSession?.session?.activeOrganizationId === "string"
+          observedSession.current?.user?.email === "dev@autograph.local" &&
+          typeof observedSession.current?.user?.id === "string" &&
+          typeof observedSession.current?.session?.activeOrganizationId === "string"
         );
       },
       { timeout: 30_000 },
     )
     .toBe(true);
-  const ownerUserId = browserSession?.user?.id;
-  const organizationId = browserSession?.session?.activeOrganizationId;
-  expect(typeof ownerUserId).toBe("string");
-  expect(typeof organizationId).toBe("string");
+  const ownerIdValue = observedSession.current?.user?.id;
+  const organizationIdValue = observedSession.current?.session?.activeOrganizationId;
+  expect(typeof ownerIdValue).toBe("string");
+  expect(typeof organizationIdValue).toBe("string");
+  const ownerUserId = z.string().parse(ownerIdValue);
+  const organizationId = z.string().parse(organizationIdValue);
   await installProvider(page, "GitHub");
   await installProvider(page, "Vercel");
   // Compare the established owner/workspace after both callbacks. Polling uses
@@ -138,7 +153,7 @@ test("web login and both emulated connections survive Cursor consent, token refr
   await expect
     .poll(
       async () => {
-        const session = await currentSession(page);
+        const session = await readSession(page);
         return (
           session?.user?.id === ownerUserId &&
           session?.session?.activeOrganizationId === organizationId
@@ -313,8 +328,11 @@ test("web login and both emulated connections survive Cursor consent, token refr
   expect(after.githubInstallations).toBe(before.githubInstallations);
   expect(after.vercelInstallations).toBe(before.vercelInstallations);
   expect(after.sessions).toBe(before.sessions);
-  const finalSession = await currentSession(page);
-  expect(finalSession?.user?.id === ownerUserId).toBe(true);
+  const finalSession = z
+    .looseObject({ user: z.looseObject({ id: z.unknown() }).nullish() })
+    .nullable()
+    .safeParse(await currentSession(page));
+  expect(finalSession.success && finalSession.data?.user?.id === ownerUserId).toBe(true);
   const handoff = await page.request.get(`/api/builder/handoffs/${handoffId}`);
   expect(handoff.ok()).toBe(true);
   const handoffBody = z.looseObject({ status: z.unknown() }).parse(await handoff.json());
