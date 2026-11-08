@@ -64,7 +64,7 @@ const runSourceSandboxCommand = async (
 };
 
 const shellQuote = function shellQuote(value: string) {
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
+  return `'${value.replaceAll("'", "'\"'\"'")}'`;
 };
 
 const parseRemote = function parseRemote(input: string) {

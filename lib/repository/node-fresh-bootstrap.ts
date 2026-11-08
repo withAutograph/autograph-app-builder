@@ -890,9 +890,9 @@ const acquireLease = async (
   });
   holder.once("exit", (code, signal) => {
     if (terminal === undefined && (!releasing || code !== 0 || signal !== null)) {
-      terminal = new Error(
-        `The fresh-bootstrap lease was lost (code ${String(code)}, signal ${String(signal)})${helperError.trim() === "" ? "." : `: ${helperError.trim()}`}`,
-      );
+      const message = `The fresh-bootstrap lease was lost (code ${String(code)}, signal ${String(signal)})`;
+      const detail = helperError.trim() === "" ? "." : `: ${helperError.trim()}`;
+      terminal = new Error(`${message}${detail}`);
     }
     resolveExit(undefined as undefined);
   });
@@ -1022,9 +1022,8 @@ const quiesceAbandonedLease = async (
   const monitorExit = async () => {
     await exited;
     clearTimeout(timeout);
-    reject(
-      new Error(`Lease quiescence failed${stderr.trim() === "" ? "." : `: ${stderr.trim()}`}`),
-    );
+    const detail = stderr.trim() === "" ? "." : `: ${stderr.trim()}`;
+    reject(new Error(`Lease quiescence failed${detail}`));
   };
   monitorExit();
   await ready;
@@ -2285,9 +2284,8 @@ const atomicPublish = async (
       },
     );
     if (result.status !== 0) {
-      throw new Error(
-        `Atomic no-replace publication failed${result.stderr.trim() === "" ? "." : `: ${result.stderr.trim()}`}`,
-      );
+      const detail = result.stderr.trim() === "" ? "." : `: ${result.stderr.trim()}`;
+      throw new Error(`Atomic no-replace publication failed${detail}`);
     }
     const destination = await lstat(proposal.destinationPath);
     if (
