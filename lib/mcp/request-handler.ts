@@ -638,13 +638,18 @@ async function hostedServiceForRequest(
     return notFoundResponse();
   }
 
-  const service = createHostedEveSessionService({
+  const serviceBinding: Pick<
+    Parameters<typeof createHostedEveSessionService>[0],
+    "principal" | "store" | "transport" | "beforeRead"
+  > = {
     principal,
     store: runtime.store,
     transport: runtime.transport,
-    ...(runtime.beforeRead === undefined ? {} : { beforeRead: runtime.beforeRead }),
-    now: runtime.now,
-  });
+  };
+  if (runtime.beforeRead !== undefined) {
+    serviceBinding.beforeRead = runtime.beforeRead;
+  }
+  const service = createHostedEveSessionService({ ...serviceBinding, now: runtime.now });
   return runtime.handoffs === undefined
     ? service
     : withHostedBuilderHandoffs({

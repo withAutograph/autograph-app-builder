@@ -195,20 +195,26 @@ function digest(value: string): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
+interface HostedAdminRetentionDigest {
+  deleteBeforeDigest?: ReturnType<typeof digest>;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function planHostedAdminRequest(input: unknown) {
   const request = hostedAdminPlanRequestSchema.parse(input);
-  return {
+  const plan = {
     action: request.action,
     authorityDigest: digest(JSON.stringify(request.authority)),
     requestDigest: digest(canonicalRequest(request)),
     requestedAt: request.requestedAt,
     requiredConfirmationDigest: digest(`confirm\n${canonicalRequest(request)}`),
     version: 1 as const,
-    ...(request.action === retentionApplyAction
-      ? { deleteBeforeDigest: digest(request.deleteBefore) }
-      : {}),
   };
+  const retention: HostedAdminRetentionDigest = {};
+  if (request.action === retentionApplyAction) {
+    retention.deleteBeforeDigest = digest(request.deleteBefore);
+  }
+  return { ...plan, ...retention };
 }
 
 const emptyEffects = {

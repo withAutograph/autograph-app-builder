@@ -48,6 +48,18 @@ export const historicalAppPublication = (
   current?.publishedSource.repositoryId === destination.publishedSource.repositoryId &&
   current.publishedSource.branch === destination.publishedSource.branch;
 
+const publicationDestinationForStorage = (
+  mode: AppPublicationSelectionMode,
+  destination: AppPublicationDestination,
+  current: AppPublicationDestination | undefined,
+): AppPublicationDestination & { historicalOnly?: true } => {
+  const stored: AppPublicationDestination & { historicalOnly?: true } = { ...destination };
+  if (historicalAppPublication(mode, destination, current)) {
+    stored.historicalOnly = true;
+  }
+  return stored;
+};
+
 export type PublishedAppSourceLookup = Pick<
   PublishedAppSource,
   "repositoryId" | "branch" | "gitSha" | "gitTree"
@@ -346,12 +358,9 @@ export const createPostgresOperatorArtifactSelections = (input: {
             : appPublicationDestinationSchema.parse(JSON.parse(prior.content));
         // A new currently selected proposal has its own sealed branch. Recovery
         // can retain its initial receipt, but cannot undo a same-branch reconciliation.
-        const content = JSON.stringify({
-          ...destination,
-          ...(historicalAppPublication(selectionMode, destination, current)
-            ? { historicalOnly: true }
-            : {}),
-        });
+        const content = JSON.stringify(
+          publicationDestinationForStorage(selectionMode, destination, current),
+        );
         await database
           .insert(prototypeArtifactChunks)
           .values({

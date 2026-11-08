@@ -5118,10 +5118,30 @@ export function createHostedEveSessionService(input: {
           );
           const result = projectSnapshot(sessionId, response.snapshot);
           const timestamp = now();
-          const sessionBase: HostedPagedSessionBase = {
+          const sessionIdentity: Pick<
+            HostedPagedSessionBase,
+            "adapterGeneration" | "adapterSessionId"
+          > &
+            Partial<HostedPagedSessionBase> = {
             adapterGeneration: 1,
             adapterSessionId: response.adapterSessionId,
-            ...(result.uiPreview?.appId === undefined ? {} : { appId: result.uiPreview.appId }),
+          };
+          if (result.uiPreview?.appId !== undefined) {
+            sessionIdentity.appId = result.uiPreview.appId;
+          }
+          const sessionDetails: Pick<
+            HostedPagedSessionBase,
+            | "adapterGeneration"
+            | "adapterSessionId"
+            | "createdAtEpochMs"
+            | "lastProgressAtEpochMs"
+            | "originAdapterSessionId"
+            | "principal"
+            | "resumability"
+            | "sessionId"
+          > &
+            Partial<HostedPagedSessionBase> = {
+            ...sessionIdentity,
             createdAtEpochMs: timestamp,
             lastProgressAtEpochMs: timestamp,
             originAdapterSessionId: response.adapterSessionId,
@@ -5130,7 +5150,12 @@ export function createHostedEveSessionService(input: {
               ? "terminal"
               : "live",
             sessionId,
-            ...(request.sourceHandoffId ? { sourceHandoffId: request.sourceHandoffId } : {}),
+          };
+          if (request.sourceHandoffId) {
+            sessionDetails.sourceHandoffId = request.sourceHandoffId;
+          }
+          const sessionBase: HostedPagedSessionBase = {
+            ...sessionDetails,
             stage: stageForResult(result),
             status: result.status,
             title: titleFromPrompt(prompt),
