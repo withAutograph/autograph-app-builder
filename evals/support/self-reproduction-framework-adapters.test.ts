@@ -20,7 +20,7 @@ const source = [
 describe("default framework adapter", () => {
   it("does not infer missing functionality from an incomplete source inventory", async () => {
     const adapter = createDefaultFrameworkAdapter({
-      baseURL: "http://candidate",
+      baseURL: "https://candidate",
       files: [],
       side: "candidate",
     });
@@ -32,7 +32,7 @@ describe("default framework adapter", () => {
 
   it("keeps instant navigation unassessed without distinct semantic selectors", async () => {
     const adapter = createDefaultFrameworkAdapter({
-      baseURL: "http://candidate",
+      baseURL: "https://candidate",
       files: source,
       side: "candidate",
     });
@@ -50,7 +50,7 @@ describe("default framework adapter", () => {
     "suspense",
   ] as const)("does not award %s assertions from structural hints", async (requirement) => {
     const adapter = createDefaultFrameworkAdapter({
-      baseURL: "http://reference",
+      baseURL: "https://reference",
       files: source,
       side: "reference",
     });
@@ -77,7 +77,7 @@ describe("default framework adapter", () => {
       .fn()
       .mockResolvedValue({ artifacts: [], assertions: [], reason: "Exercised request" });
     const adapter = createDefaultFrameworkAdapter({
-      baseURL: "http://candidate",
+      baseURL: "https://candidate",
       browserFixture,
       files: source,
       side: "candidate",

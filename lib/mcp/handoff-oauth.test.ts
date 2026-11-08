@@ -382,7 +382,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
       expect(start).toHaveBeenCalledTimes(1);
       const strangerCredentials = {
         email: "other-owner@example.test",
-        password: "other-owner-test-password",
+        password: randomUUID(),
       };
       await auth.auth.api.signUpEmail({
         body: { ...strangerCredentials, name: "Other owner" },

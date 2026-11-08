@@ -70,6 +70,11 @@ export default defineConfig({
   },
   overrides: [
     {
+      // Exercise rejection of insecure non-loopback endpoints.
+      files: ["lib/mcp/hosted-route.test.ts", "scripts/eve-worker-environment.test.ts"],
+      rules: { "sonarjs/no-clear-text-protocols": "off" },
+    },
+    {
       // Preserve existing control flow pending focused review.
       files: [
         ".config/mise/scripts/repository/build-hosted-arrusted-artifact.mts",
@@ -883,14 +888,10 @@ export default defineConfig({
       // Temporary migration baseline for existing test findings.
       files: ["**/*.{test,spec}.{js,jsx,ts,tsx,mjs,mts,cjs,cts}"],
       rules: {
-        "sonarjs/public-static-readonly": "off",
         "anti-slop/no-module-mocking": "off",
         "github/no-inner-html": "off",
-        "react-doctor/no-secrets-in-client-code": "off",
         "sonarjs/code-eval": "off",
-        "sonarjs/no-clear-text-protocols": "off",
         "sonarjs/no-hardcoded-ip": "off",
-        "sonarjs/no-hardcoded-passwords": "off",
         "typescript/no-implied-eval": "off",
         "typescript/prefer-promise-reject-errors": "off",
       },

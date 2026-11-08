@@ -27,7 +27,7 @@ function parseArguments(args: readonly string[]) {
   if (values.size !== 0) {
     throw new Error(`Unknown arguments: ${[...values.keys()].join(", ")}.`);
   }
-  return { sourceKind, sourcePath };
+  return { sourceKind, sourcePath } as const;
 }
 
 const { sourceKind, sourcePath } = parseArguments(process.argv.slice(2));

@@ -219,6 +219,61 @@ export const priorResumedBuildDraftProposal = (
   const base = entry?.approvedBase;
   return base?.phase === "reviewed" ? base.githubDraftProposal?.proposal : undefined;
 };
+
+/** Lookup context for a new revision; only the provider can prove the prior PR merged. */
+export const priorOwnedAppDraftPublication = (
+  state: Extract<AppBuilderWorkflowState, { phase: "validated" | "reviewed" }>,
+  sessionId: string,
+) => {
+  if (
+    state.sourceReceipt.sourceKind !== "fresh-template" ||
+    !("operation" in state.proposal.target) ||
+    state.proposal.target.operation !== "iterate-existing-app"
+  ) {
+    return;
+  }
+  const entry = existingAppRepairHistory
+    .get()
+    .findLast(({ sessionId: owner, approvedBase: base }) =>
+      [
+        owner === sessionId,
+        base.phase === "reviewed" && base.githubDraftProposal !== undefined,
+        base.appSpec.appId === state.appSpec.appId,
+        base.appSpec.digest === state.appSpec.digest,
+        base.sourceReceipt.digest === state.sourceReceipt.digest,
+        base.githubSource?.digest === state.githubSource?.digest,
+        base.workspace.workspaceId === state.workspace.workspaceId,
+        base.workspace.workspacePath === state.workspace.workspacePath,
+        base.workspace.workspaceDigest === state.workspace.workspaceDigest,
+        base.workspace.sourceSha === state.workspace.sourceSha,
+        base.workspace.sourceTree === state.workspace.sourceTree,
+        base.applyReceipt.applyRoot === state.applyReceipt.applyRoot,
+      ].every(Boolean),
+    );
+  const base = entry?.approvedBase;
+  if (base?.phase !== "reviewed" || base.githubDraftProposal === undefined) {
+    return;
+  }
+  const { proposal } = base.githubDraftProposal;
+  const destination = base.githubDestinationReview;
+  if (
+    destination === undefined ||
+    base.githubDraftProposal.sourceReceiptDigest !== base.sourceReceipt.digest ||
+    base.githubDraftProposal.destinationReviewDigest !== destination.digest ||
+    proposal.reviewDigest !== base.reviewReceipt.digest ||
+    proposal.changeSetDigest !== base.reviewReceipt.changeSetDigest ||
+    base.reviewReceipt.appSpecDigest !== base.appSpec.digest ||
+    (state.publishedGitHubDraftProposalDigest !== undefined &&
+      state.publishedGitHubDraftProposalDigest !== proposal.digest)
+  ) {
+    return;
+  }
+  return {
+    proposal,
+    installationId: destination.installation.installationId,
+    reviewed: base,
+  };
+};
 const validateRepairChanges = (changes: readonly ExistingAppChange[], current: Proposed) => {
   const paths = new Set<string>();
   for (const change of changes) {
