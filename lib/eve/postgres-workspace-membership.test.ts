@@ -101,7 +101,7 @@ describe("PostgreSQL workspace membership", () => {
       select() {
         throw new Error("database unavailable");
       },
-    } as unknown as Database;
+    };
     await expect(
       createPostgresWorkspaceMembership(database).isMember({
         principal,

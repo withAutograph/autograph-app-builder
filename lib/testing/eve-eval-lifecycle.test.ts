@@ -1,6 +1,5 @@
 /* eslint-disable unicorn/prefer-event-target -- Node ChildProcess lifecycle tests require EventEmitter semantics. */
 import { spawn } from "node:child_process";
-import type { ChildProcess } from "node:child_process";
 import { EventEmitter, once } from "node:events";
 import {
   existsSync,
@@ -22,6 +21,11 @@ import {
   reconcileDeadEveEvalPrewarmLocks,
   waitForEveEvalChild,
 } from "./eve-eval-lifecycle";
+
+class FixtureChild extends EventEmitter {
+  declare pid: number;
+  declare kill: (signal?: NodeJS.Signals | number) => boolean;
+}
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function lockFixture() {
@@ -180,7 +184,7 @@ describe("Eve eval resource lifecycle", () => {
       return;
     }
     const signals = new EventEmitter();
-    const child = new EventEmitter() as ChildProcess;
+    const child = new FixtureChild();
     Object.defineProperties(child, {
       exitCode: { value: null, writable: true },
       pid: { value: 54_589 },
@@ -221,7 +225,7 @@ describe("Eve eval resource lifecycle", () => {
     if (process.platform === "win32") {
       return;
     }
-    const child = new EventEmitter() as ChildProcess;
+    const child = new FixtureChild();
     Object.defineProperties(child, {
       exitCode: { value: null, writable: true },
       pid: { value: 54_590 },
