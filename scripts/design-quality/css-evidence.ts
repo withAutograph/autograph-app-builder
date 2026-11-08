@@ -31,29 +31,25 @@ function canonicalSelector(value: string) {
       if (char === quote && value[index - 1] !== "\\") {
         quote = undefined;
       }
-      continue;
-    }
-    if (char === '"' || char === "'") {
+    } else if (char === '"' || char === "'") {
       if (pendingSpace && output) {
         output += " ";
       }
       pendingSpace = false;
       quote = char;
       output += char;
-      continue;
-    }
-    if (/\s/u.test(char)) {
+    } else if (/\s/u.test(char)) {
       pendingSpace = Boolean(output);
-      continue;
-    }
-    if (pendingSpace) {
-      const previous = output.at(-1);
-      if (previous !== undefined && !/[>+~([,:=]/u.test(previous) && !/[>+~),:=]/u.test(char)) {
-        output += " ";
+    } else {
+      if (pendingSpace) {
+        const previous = output.at(-1);
+        if (previous !== undefined && !/[>+~([,:=]/u.test(previous) && !/[>+~),:=]/u.test(char)) {
+          output += " ";
+        }
       }
+      pendingSpace = false;
+      output += char;
     }
-    pendingSpace = false;
-    output += char;
   }
   return output.trim();
 }
