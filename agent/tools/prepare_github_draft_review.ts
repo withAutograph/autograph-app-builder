@@ -22,7 +22,6 @@ import {
   priorOwnedAppDraftPublication,
 } from "@/lib/agent/existing-app-repair-planning";
 import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
-import { resolveGitHubPrDeliverySubject } from "@/lib/agent/github-pr-delivery-subject";
 
 export const initialDraftCandidatePaths = async (
   input: Parameters<typeof observeNormalizedChangeSet>[0] & {
@@ -100,11 +99,16 @@ export default defineTool({
     if (state.phase !== "validated" && state.phase !== "reviewed") {
       throw new Error("Validate the app before preparing a destination review.");
     }
-    const retainedPublication = priorOwnedAppDraftPublication(state, ctx.session.id);
+    const retainedPublication = priorOwnedAppDraftPublication(
+      state,
+      ctx.session.id,
+      draftReconciliationState.get(),
+    );
+    const updatingExistingDraft =
+      state.phase === "reviewed" && state.existingDraftUpdate !== undefined;
     if (
-      (state.publishedGitHubDraftProposalDigest !== undefined &&
-        retainedPublication === undefined) ||
-      (state.phase === "reviewed" && state.existingDraftUpdate !== undefined)
+      (state.publishedGitHubDraftProposalDigest !== undefined || updatingExistingDraft) &&
+      retainedPublication === undefined
     ) {
       throw new Error(
         "Use the existing draft update or reconciliation workflow for an existing PR.",
@@ -158,12 +162,13 @@ export default defineTool({
         : undefined;
     ctx.abortSignal?.throwIfAborted();
     assertExactWorkflowState(appBuilderWorkflowState.get(), state, "publication lookup");
+    if (updatingExistingDraft && prior === undefined) {
+      throw new Error(
+        "Use the existing draft update or reconciliation workflow for an existing PR.",
+      );
+    }
     let selectedPaths =
       prior === undefined ? await initialDraftCandidatePaths(pathInput) : undefined;
-    const delivery =
-      prior === undefined
-        ? undefined
-        : resolveGitHubPrDeliverySubject(prior.reviewed, draftReconciliationState.get());
     const destination = await runtime.inspectDraftDestination({
       existingProposal:
         (state.phase === "reviewed" ? state.githubDraftProposal?.proposal : undefined) ??
@@ -176,10 +181,9 @@ export default defineTool({
               appId: state.appSpec.appId,
               proposal: prior.proposal,
               installationId: prior.installationId,
-              ...(delivery?.proposalDigest === prior.proposal.digest &&
-              delivery.reconciliation !== undefined
-                ? { reconciliation: delivery.reconciliation }
-                : {}),
+              ...(prior.reconciliation === undefined
+                ? {}
+                : { reconciliation: prior.reconciliation }),
             },
             prepareCandidatePaths: async (ownedMergedPublication: boolean) => {
               ctx.abortSignal?.throwIfAborted();

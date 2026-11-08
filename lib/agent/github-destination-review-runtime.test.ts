@@ -36,6 +36,7 @@ import { SUPPORTED_TEMPLATE_ADAPTER } from "../repository/supported-template";
 import prepareDraftReview from "../../agent/tools/prepare_github_draft_review";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import type { GitHubPublicationRuntime } from "./github-publication-runtime";
+import type { ExistingDraftReconciliationProposal } from "../repository/github-draft-reconciliation";
 import type { priorOwnedAppDraftPublication } from "./existing-app-repair-planning";
 import type * as WorkflowStateModule from "./workflow-state";
 import type * as RepairPlanningModule from "./existing-app-repair-planning";
@@ -217,12 +218,16 @@ const fixture = () => {
     .mockResolvedValue(true);
   const readProposal = vi.fn();
   const inspectPr = vi.fn();
+  const inspectExistingDraft = vi.fn<GitHubPublicationAdapter["inspectExistingDraft"]>();
+  const inspectAppliedDraftReconciliation =
+    vi.fn<NonNullable<GitHubPublicationAdapter["inspectAppliedDraftReconciliation"]>>();
   const adapter: GitHubPublicationAdapter = {
     createPrivateFreshHistoryRepository: unexpected,
     inspectDestination: unexpected,
     inspectDestinationFiles,
     inspectDraftPublication,
-    inspectExistingDraft: unexpected,
+    inspectExistingDraft,
+    inspectAppliedDraftReconciliation,
     inspectFreshRepositoryOutcome: unexpected,
     inspectInstallation,
     inspectRepository,
@@ -249,6 +254,8 @@ const fixture = () => {
     readReceipt,
     readProposal,
     inspectPr,
+    inspectExistingDraft,
+    inspectAppliedDraftReconciliation,
     runtime,
     save,
     unexpected,
@@ -383,6 +390,121 @@ const ownedRevisionTool = async (published = true, marker = true) => {
 
 describe("same-session post-merge destination review", () => {
   it.each([true, false])(
+    "starts a new PR after the approved published reconciliation merged (marker %s)",
+    async (marker) => {
+      const f = await ownedRevisionTool(true, marker);
+      const reconciliation: ExistingDraftReconciliationProposal = {
+        version: 1,
+        intendedOutcome: "reconcile-existing-draft-pull-request",
+        repositoryId: f.receipt.repositoryId,
+        owner: f.proposal.owner,
+        name: f.proposal.name,
+        pullRequestNumber: f.receipt.pullRequestNumber,
+        pullRequestId: f.receipt.pullRequestId,
+        branchName: f.proposal.branchName,
+        baseBranch: f.proposal.baseBranch,
+        expectedHeadSha: f.receipt.branchSha,
+        expectedHeadTree: f.receipt.branchTree,
+        expectedBaseSha: f.proposal.baseSha,
+        expectedBaseTree: f.proposal.baseTree,
+        resolvedTree: "e".repeat(40),
+        originMarker: f.receipt.idempotencyKey,
+        priorPublicationDigest: f.receipt.digest,
+        installationIdentityDigest: f.proposal.installationIdentityDigest,
+        reviewDigest: "e".repeat(64),
+        baseChangesDigest: f.proposal.changeSetDigest,
+        headChangesDigest: f.proposal.changeSetDigest,
+        idempotencyKey: "a".repeat(64),
+        digest: "b".repeat(64),
+        approvedPaths: f.proposal.approvedPaths,
+      };
+      const reconciledHead = "f".repeat(40);
+      const { prior } = toolPorts;
+      if (prior === undefined) {
+        throw new Error("Missing prior publication fixture");
+      }
+      toolPorts.prior = { ...prior, reconciliation };
+      Object.assign(f.state, { existingDraftUpdate: { proposal: { digest: "old-update" } } });
+      f.inspectExistingDraft.mockResolvedValue({
+        ...reconciliation,
+        number: f.receipt.pullRequestNumber,
+        headBranch: f.receipt.branchName,
+        headSha: reconciledHead,
+        headTree: reconciliation.resolvedTree,
+        headRepositoryId: f.receipt.repositoryId,
+        baseRepositoryId: f.receipt.repositoryId,
+        verifiedBuilderOrigin: {
+          appId: "builder",
+          authorId: "builder",
+          marker: f.receipt.idempotencyKey,
+        },
+        draft: false,
+        state: "closed",
+      });
+      f.inspectAppliedDraftReconciliation.mockResolvedValue(true);
+      f.inspectPr.mockResolvedValue({
+        state: "merged",
+        draft: false,
+        checks: "passed",
+        headSha: reconciledHead,
+        baseBranch: f.receipt.baseBranch,
+        mergeCommitSha: "9".repeat(40),
+      });
+      await prepareDraftReview.execute({}, f.context);
+      expect(f.inspectAppliedDraftReconciliation).toHaveBeenCalled();
+      expect(f.inspectPr).toHaveBeenCalledWith(
+        expect.objectContaining({ headSha: reconciledHead }),
+      );
+      expect(f.readTextFile).not.toHaveBeenCalled();
+      expect(toolPorts.state).toMatchObject({
+        phase: "validated",
+        sourceReceipt: f.state.sourceReceipt,
+        workspace: f.state.workspace,
+        applyReceipt: f.state.applyReceipt,
+      });
+      expect(toolPorts.state).not.toHaveProperty("existingDraftUpdate");
+      expect(toolPorts.state).not.toHaveProperty("githubDraftProposal");
+      expect(toolPorts.state).not.toHaveProperty("reviewReceipt");
+      expect(f.unexpected).not.toHaveBeenCalled();
+      // Repeating preparation never restores an old acceptance or update approval.
+      await prepareDraftReview.execute({}, f.context);
+      expect(f.inspectDestinationFiles).toHaveBeenCalledTimes(2);
+      expect(toolPorts.state).not.toHaveProperty("reviewReceipt");
+    },
+  );
+
+  it("does not treat a private or unverified reconciliation as the merged revision", async () => {
+    const f = await ownedRevisionTool();
+    const { prior } = toolPorts;
+    if (prior === undefined) {
+      throw new Error("Missing prior publication fixture");
+    }
+    // This is deliberately not a provider-proved published reconciliation.
+    toolPorts.prior = {
+      ...prior,
+      reconciliation: {
+        installationIdentityDigest: f.proposal.installationIdentityDigest,
+        priorPublicationDigest: "8".repeat(64),
+      } as ExistingDraftReconciliationProposal,
+    };
+    Object.assign(f.state, { existingDraftUpdate: { proposal: { digest: "private-update" } } });
+    f.inspectPr.mockResolvedValue({
+      state: "merged",
+      draft: false,
+      checks: "passed",
+      headSha: "f".repeat(40),
+      baseBranch: f.receipt.baseBranch,
+      mergeCommitSha: "9".repeat(40),
+    });
+    await expect(prepareDraftReview.execute({}, f.context)).rejects.toThrow(
+      "verified reviewed revision",
+    );
+    expect(toolPorts.state).toBe(f.state);
+    expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+    expect(f.unexpected).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])(
     "prepares a narrow revision with a missing original manifest (marker %s)",
     async (marker) => {
       const f = await ownedRevisionTool(true, marker);
@@ -414,6 +536,18 @@ describe("same-session post-merge destination review", () => {
       ).rejects.toThrow();
     },
   );
+
+  it("retains an active draft update when the original tenant journal is absent", async () => {
+    const f = await ownedRevisionTool(false, false);
+    Object.assign(f.state, { existingDraftUpdate: { proposal: { digest: "retained-update" } } });
+    await expect(prepareDraftReview.execute({}, f.context)).rejects.toThrow(
+      "existing draft update",
+    );
+    expect(toolPorts.state).toBe(f.state);
+    expect(f.readTextFile).not.toHaveBeenCalled();
+    expect(f.inspectPr).not.toHaveBeenCalled();
+    expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+  });
 
   it("keeps a sealed-only first publication on the full-app completeness route", async () => {
     const f = await ownedRevisionTool(false, false);
@@ -452,6 +586,7 @@ describe("same-session post-merge destination review", () => {
     "pending",
   ])("does not authorize revision paths from %s publication", async (kind) => {
     const f = await ownedRevisionTool();
+    Object.assign(f.state, { existingDraftUpdate: { proposal: { digest: "retained-update" } } });
     if (kind === "open" || kind === "closed") {
       f.inspectPr.mockResolvedValue({
         state: kind,
