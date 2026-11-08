@@ -198,6 +198,13 @@ async function workloadHeaders(identity: HostedWorkloadIdentity) {
   };
 }
 
+interface MutationReadbackFields {
+  ok: boolean | undefined;
+  sessionId?: string;
+  status?: string;
+  deliveryId?: string;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readJson(response: Response): Promise<unknown> {
   const contentType = response.headers.get(CONTENT_TYPE_HEADER)?.split(";", 1)[0];
@@ -218,12 +225,18 @@ async function readJson(response: Response): Promise<unknown> {
     ],
     { allowedRootKeys: ["ok", "sessionId", "status", "deliveryId"] },
   );
-  return {
-    ok: parsed.matches[0],
-    ...(parsed.values[1] === undefined ? {} : { sessionId: parsed.values[1] }),
-    ...(parsed.values[2] === undefined ? {} : { status: parsed.values[2] }),
-    ...(parsed.values[3] === undefined ? {} : { deliveryId: parsed.values[3] }),
-  };
+  const result: MutationReadbackFields = { ok: parsed.matches[0] };
+  const [, sessionId, status, deliveryId] = parsed.values;
+  if (sessionId !== undefined) {
+    result.sessionId = sessionId;
+  }
+  if (status !== undefined) {
+    result.status = status;
+  }
+  if (deliveryId !== undefined) {
+    result.deliveryId = deliveryId;
+  }
+  return result;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -379,12 +392,15 @@ export async function* streamSameOriginEveEvents(input: {
     (input.readDeadline === true ? AbortSignal.timeout(SESSION_READ_TIMEOUT_MS) : undefined);
   let response: Response;
   try {
-    response = await authenticatedFetch({
+    const fetchInput: Parameters<typeof authenticatedFetch>[0] = {
       ...input,
       path,
       timeout: "unbounded",
-      ...(signal === undefined ? {} : { init: { signal } }),
-    });
+    };
+    if (signal !== undefined) {
+      fetchInput.init = { signal };
+    }
+    response = await authenticatedFetch(fetchInput);
   } catch (error) {
     if (signal?.aborted === true) {
       throw new HostedSessionReadTimeoutError();
@@ -1076,42 +1092,89 @@ export async function observeSameOriginEveStream(
       status = "input_required";
     }
     readTrace.completed();
-    return {
+    const observationPrefix: Pick<
+      Awaited<ReturnType<typeof observeSameOriginEveStream>>,
+      | "artifactProjectionRequiresLegacyReadback"
+      | "installedEventCount"
+      | "observationComplete"
+      | "nativeTailIndex"
+    > = {
       artifactProjectionRequiresLegacyReadback: artifactReadback.requiresLegacy(),
       installedEventCount,
       observationComplete,
-      ...(nativeTailIndex === undefined ? {} : { nativeTailIndex }),
-      nativeObservationState: nativeObservationStateSchema.parse({
-        adapterSessionId: input.sessionId,
-        artifactReadback: artifactReadback.checkpoint(),
-        boundary,
-        invalidInput,
-        ...(retainedNativeDeliveryState(nativeDeliveryState) === undefined
-          ? {}
-          : { nativeDeliveryState }),
-        nextNativeIndex: installedEventCount,
-        pendingRequests: [...pending.values()],
-        privateInputState,
-        prototypeProjector: prototype.checkpoint(),
-        prototypeReference: prototypeReference.checkpoint(),
-        publicEventCount,
-        version: 1,
-        ...(currentTurnId === undefined ? {} : { currentTurnId }),
-        ...(uiPreview === undefined ? {} : { uiPreview }),
-        ...(workingPreview === undefined ? {} : { workingPreview }),
-      }),
+    };
+    if (nativeTailIndex !== undefined) {
+      observationPrefix.nativeTailIndex = nativeTailIndex;
+    }
+    const checkpointPrefix: Pick<
+      z.input<typeof nativeObservationStateSchema>,
+      "adapterSessionId" | "artifactReadback" | "boundary" | "invalidInput" | "nativeDeliveryState"
+    > = {
+      adapterSessionId: input.sessionId,
+      artifactReadback: artifactReadback.checkpoint(),
+      boundary,
+      invalidInput,
+    };
+    if (retainedNativeDeliveryState(nativeDeliveryState) !== undefined) {
+      checkpointPrefix.nativeDeliveryState = nativeDeliveryState;
+    }
+    const checkpoint: z.input<typeof nativeObservationStateSchema> = {
+      ...checkpointPrefix,
       nextNativeIndex: installedEventCount,
       pendingRequests: [...pending.values()],
-      ...(prototype.current() === undefined ? {} : { prototype: prototype.current() }),
-      ...(prototypeReference.snapshot() === undefined
-        ? {}
-        : { prototypeRef: prototypeReference.snapshot() }),
+      privateInputState,
+      prototypeProjector: prototype.checkpoint(),
+      prototypeReference: prototypeReference.checkpoint(),
+      publicEventCount,
+      version: 1,
+    };
+    if (currentTurnId !== undefined) {
+      checkpoint.currentTurnId = currentTurnId;
+    }
+    if (uiPreview !== undefined) {
+      checkpoint.uiPreview = uiPreview;
+    }
+    if (workingPreview !== undefined) {
+      checkpoint.workingPreview = workingPreview;
+    }
+    const observation: Pick<
+      Awaited<ReturnType<typeof observeSameOriginEveStream>>,
+      | "artifactProjectionRequiresLegacyReadback"
+      | "installedEventCount"
+      | "observationComplete"
+      | "nativeTailIndex"
+      | "nativeObservationState"
+      | "nextNativeIndex"
+      | "pendingRequests"
+      | "prototype"
+      | "prototypeRef"
+    > = {
+      ...observationPrefix,
+      nativeObservationState: nativeObservationStateSchema.parse(checkpoint),
+      nextNativeIndex: installedEventCount,
+      pendingRequests: [...pending.values()],
+    };
+    if (prototype.current() !== undefined) {
+      observation.prototype = prototype.current();
+    }
+    if (prototypeReference.snapshot() !== undefined) {
+      observation.prototypeRef = prototypeReference.snapshot();
+    }
+    const result: Awaited<ReturnType<typeof observeSameOriginEveStream>> = {
+      ...observation,
       publicEventCount,
       status,
-      ...(currentTurnId === undefined ? {} : { activeTurnId: currentTurnId }),
-      ...(uiPreview === undefined ? {} : { uiPreview }),
-      ...(workingPreview === undefined ? {} : { workingPreview }),
     };
+    if (currentTurnId !== undefined) {
+      result.activeTurnId = currentTurnId;
+    }
+    if (uiPreview !== undefined) {
+      result.uiPreview = uiPreview;
+    }
+    if (workingPreview !== undefined) {
+      result.workingPreview = workingPreview;
+    }
+    return result;
   } catch (error) {
     readTrace.failed();
     throw error;
@@ -1827,11 +1890,15 @@ export function createSameOriginEveTransport(input: {
       if (accepted.sessionId !== (request.logicalSessionId ?? request.adapterSessionId)) {
         throw new SubmissionOutcomeUnknownError();
       }
-      return readRespondSettlement({
+      const settlement: typeof common &
+        Pick<Parameters<typeof readRespondSettlement>[0], "internalSessionLimitResponse"> = {
         ...common,
-        ...(request.internalSessionLimitResponse === undefined
-          ? {}
-          : { internalSessionLimitResponse: request.internalSessionLimitResponse }),
+      };
+      if (request.internalSessionLimitResponse !== undefined) {
+        settlement.internalSessionLimitResponse = request.internalSessionLimitResponse;
+      }
+      return readRespondSettlement({
+        ...settlement,
         requestIds: request.responses.map(({ requestId }) => requestId),
         sessionId: request.adapterSessionId,
       });
@@ -1882,11 +1949,15 @@ export function createSameOriginEveTransport(input: {
       if (accepted.sessionId !== (request.logicalSessionId ?? request.adapterSessionId)) {
         throw new SubmissionOutcomeUnknownError();
       }
+      const settlement: Pick<
+        Parameters<typeof readRespondSettlementIncremental>[0],
+        "nativeObservationState" | "internalSessionLimitResponse"
+      > = { nativeObservationState };
+      if (request.internalSessionLimitResponse !== undefined) {
+        settlement.internalSessionLimitResponse = request.internalSessionLimitResponse;
+      }
       await readRespondSettlementIncremental({
-        nativeObservationState,
-        ...(request.internalSessionLimitResponse === undefined
-          ? {}
-          : { internalSessionLimitResponse: request.internalSessionLimitResponse }),
+        ...settlement,
         ...common,
         requestIds: request.responses.map(({ requestId }) => requestId),
         sessionId: request.adapterSessionId,
@@ -2055,9 +2126,15 @@ export function createSameOriginEveTransport(input: {
           throw new SubmissionOutcomeUnknownError();
         }
       }
+      const started: Pick<
+        Awaited<ReturnType<HostedEveTransport["start"]>>,
+        "adapterSessionId" | "recoveryBinding"
+      > = { adapterSessionId: accepted.sessionId };
+      if (recoveryBinding !== undefined) {
+        started.recoveryBinding = recoveryBinding;
+      }
       return {
-        adapterSessionId: accepted.sessionId,
-        ...(recoveryBinding === undefined ? {} : { recoveryBinding }),
+        ...started,
         // Ownership is established; the model may still be running. Persist
         // the provisional public session and observe the turn on autograph_get.
         snapshot: { events: [], status: "working" },
