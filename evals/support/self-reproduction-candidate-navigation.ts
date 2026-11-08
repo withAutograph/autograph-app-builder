@@ -35,7 +35,7 @@ export const exerciseCandidateNavigation = async (
   baseURL: string,
   capture: (state: string) => Promise<void>,
 ): Promise<Observation> => {
-  const INFRASTRUCTURE_UNAVAILABLE = "infrastructure-unavailable";
+  const NAVIGATION_INFRASTRUCTURE_UNAVAILABLE = "infrastructure-unavailable";
   const MISSING_FUNCTIONALITY = "missing-functionality";
   const observation: Observation = {
     artifacts: [],
@@ -53,7 +53,7 @@ export const exerciseCandidateNavigation = async (
   } catch {
     return {
       ...observation,
-      disposition: INFRASTRUCTURE_UNAVAILABLE,
+      disposition: NAVIGATION_INFRASTRUCTURE_UNAVAILABLE,
       reason: "Candidate runtime could not be opened.",
     };
   }
@@ -149,7 +149,7 @@ export const exerciseCandidateNavigation = async (
       disposition:
         observation.disposition === MISSING_FUNCTIONALITY
           ? MISSING_FUNCTIONALITY
-          : INFRASTRUCTURE_UNAVAILABLE,
+          : NAVIGATION_INFRASTRUCTURE_UNAVAILABLE,
       reason:
         observation.disposition === MISSING_FUNCTIONALITY
           ? observation.reason
