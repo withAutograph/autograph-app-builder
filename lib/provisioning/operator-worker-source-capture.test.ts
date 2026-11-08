@@ -5,7 +5,7 @@ import { bytes, capture, worker } from "./operator-worker-source-capture.test-fi
 describe("actual operator worker source capture", () => {
   it("matches the frozen two-repository receipt and selected binary path/hash", async () => {
     const readFile = vi.fn().mockResolvedValue(bytes);
-    await verifyOperatorWorkerSourceCapture({ worker, readFile });
+    await verifyOperatorWorkerSourceCapture({ readFile, worker });
     expect(readFile).toHaveBeenCalledExactlyOnceWith(capture.catalogPath);
   });
   it.each(["receipt", "source", "worker", "path"])(

@@ -636,12 +636,12 @@ it("retains historical branch-specific managed scope even if that branch is now 
 
 it("rejects foreign generic managed rows and never borrows a generic installer credential", async () => {
   const f = managedScopeFixture();
-  f.rows.push({ ...ownedApp, gitBranch: null, comment: "App Builder runtime foreign" });
+  f.rows.push({ ...ownedApp, comment: "App Builder runtime foreign", gitBranch: null });
   const provider = createHostedRuntimeVercelProvider({
     credential,
+    environmentGitBranch: null,
     fetch: f.request,
     target,
-    environmentGitBranch: null,
   });
   await expect(
     provider.bindEnvironment({ [ownedApp.key]: ownedApp.value }, { runtimeId }),

@@ -242,8 +242,8 @@ const providerFixture = (productionBranch?: string) => {
   });
   return {
     environments,
-    request,
     project,
+    request,
     setLosePostResponse: (value: boolean) => {
       losePostResponse = value;
     },
@@ -711,8 +711,8 @@ it("persists generic managed scope before an unknown POST and recovers it after 
   f.project.productionBranch = "another-production-branch";
   f.setLosePostResponse(false);
   expect(await prepareHostedRuntime(input)).toMatchObject({
-    status: "prepared",
     branch: target.branch,
+    status: "prepared",
   });
   const saved = await store.read({ authority, target });
   expect(saved?.record.environmentGitBranch).toBeNull();

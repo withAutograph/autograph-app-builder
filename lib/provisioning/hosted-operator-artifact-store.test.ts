@@ -73,11 +73,11 @@ const fixture = () => {
   });
   return {
     db,
-    rows,
-    store,
     revoke: () => {
       revoked = true;
     },
+    rows,
+    store,
   };
 };
 

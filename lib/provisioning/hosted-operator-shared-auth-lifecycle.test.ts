@@ -415,7 +415,7 @@ const composed = (active = true) => {
           return unavailable();
         },
       },
-      store: { read: unavailable, compareAndSet: unavailable },
+      store: { compareAndSet: unavailable, read: unavailable },
     },
     readNormalActorRuntimeBindings: unavailable,
     readNormalActorPreparation: unavailable,
