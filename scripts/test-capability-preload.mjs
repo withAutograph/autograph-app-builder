@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-member-access -- Preserve the existing untyped input and rendering boundary. */
 import { createPrivateKey, createPublicKey, randomBytes, sign } from "node:crypto";
 import { fstatSync, readSync, realpathSync, statSync, writeSync } from "node:fs";
 import { createRequire, syncBuiltinESMExports } from "node:module";

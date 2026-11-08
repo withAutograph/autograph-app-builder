@@ -40,6 +40,7 @@ let nestedAppRoot = null;
 let nestedEveDev = null;
 let nestedWorkflowBodyTimeout = null;
 let nestedWorkflowHeadersTimeout = null;
+// oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
 if (workerData?.spawnNested === true) {
   const { Worker } = await import("node:worker_threads");
   const nested = new Worker(new URL(import.meta.url));

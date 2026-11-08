@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-member-access -- Preserve the existing untyped input and rendering boundary. */
 import type { ReactNode } from "react";
 
 import styles from "../../app/ui/app-builder.module.css";

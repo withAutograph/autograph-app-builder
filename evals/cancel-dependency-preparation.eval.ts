@@ -26,7 +26,7 @@ export default defineEval({
         try {
           const state = JSON.parse(reply.slice(reply.indexOf("{")));
           return (
-            // oxlint-disable-next-line typescript/no-unsafe-argument -- Inspect the existing workflow fixture digest.
+            // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-argument -- Inspect the existing workflow fixture digest.
             state.phase === "planned" && /^[a-f0-9]{64}$/u.test(state.dependencies?.digest ?? "")
           );
         } catch {

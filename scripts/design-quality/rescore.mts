@@ -8,9 +8,10 @@ import { renderReport } from "./report";
 const directory = path.resolve(process.argv[2] ?? "");
 const brief = await readFile(process.argv[3], "utf-8");
 const report = JSON.parse(await readFile(path.join(directory, "report.json"), "utf-8"));
+// oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
 report.judge = await judgeDesign({
   brief,
-  // oxlint-disable-next-line typescript/no-unsafe-call -- Rescore accepts the saved report as written by the capture process.
+  // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-call -- Rescore accepts the saved report as written by the capture process.
   evidence: report.captures.map(
     (c: { name: string; state: string; measurements: unknown; interaction: unknown }) => ({
       interaction: c.interaction,
@@ -19,7 +20,7 @@ report.judge = await judgeDesign({
       state: c.state,
     }),
   ),
-  // oxlint-disable-next-line typescript/no-unsafe-call -- Preserve the saved report handling and its existing failure behavior.
+  // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-call -- Preserve the saved report handling and its existing failure behavior.
   images: report.captures.map((c: { name: string; width: number; height: number }) => ({
     ...c,
     path: path.join(directory, `${c.name}.png`),
@@ -32,4 +33,5 @@ await writeFile(path.join(directory, "report.json"), JSON.stringify(report, null
 await writeFile(path.join(directory, "index.html"), renderReport(report), {
   mode: 0o600,
 });
+// oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
 console.log(JSON.stringify(report.judge));

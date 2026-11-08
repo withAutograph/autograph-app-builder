@@ -25,6 +25,7 @@ const run = async (
         response.writeHead(307, { location: "https://outside.test/leak" });
       } else {
         if (mode === "stored") {
+          // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
           stored = JSON.parse(body).value;
         }
         response.writeHead(200, { "content-type": "application/json" });

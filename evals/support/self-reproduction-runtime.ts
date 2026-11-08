@@ -373,7 +373,9 @@ export const evaluateCandidateRuntime = async (input: {
         path: `apps/${input.candidateAppId}/.next/routes-manifest.json`,
       });
       const routes = JSON.parse(manifest ?? "{}");
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       if (typeof routes.basePath === "string") {
+        // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
         runtimeBasePath = routes.basePath;
       }
     } catch {
@@ -429,6 +431,7 @@ export const evaluateCandidateRuntime = async (input: {
     const root = Array.isArray(probes)
       ? probes.find((item: { id?: unknown }) => item.id === "root")
       : undefined;
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     if (root?.passed === true) {
       const browserSetup = await command(
         handle,
@@ -450,11 +453,11 @@ export const evaluateCandidateRuntime = async (input: {
       if (browser.exitCode === 0) {
         const browserProbes = JSON.parse(browser.stdout.trim());
         if (Array.isArray(browserProbes)) {
-          // oxlint-disable-next-line typescript/no-unsafe-call -- Keep the runtime-provided probe collection and its existing behavior.
+          // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-call -- Keep the runtime-provided probe collection and its existing behavior.
           probes.push(...browserProbes);
         }
       } else {
-        // oxlint-disable-next-line typescript/no-unsafe-call -- Keep the runtime-provided probe collection and its existing behavior.
+        // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-call -- Keep the runtime-provided probe collection and its existing behavior.
         probes.push({
           detail: `Evaluator browser was unavailable: ${browser.stderr || browser.stdout}`,
           disposition: infrastructureUnavailable,
@@ -471,10 +474,12 @@ export const evaluateCandidateRuntime = async (input: {
       probes: Array.isArray(probes) ? probes : [],
       producer: "evaluator",
       reason:
+        // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
         root?.passed === true
           ? "Candidate runtime became ready."
           : "Candidate runtime was not reachable.",
       sandboxId: handle.id,
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       status: root?.passed === true ? "available" : "failed",
     };
   } catch (error) {

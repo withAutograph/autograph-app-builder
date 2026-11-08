@@ -33,11 +33,12 @@ export function ErrorToaster() {
       }
 
       const err = error as BetterFetchError;
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       if (err?.error?.code === "EMAIL_NOT_VERIFIED") {
         return;
       }
       if (err?.error) {
-        // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing auth error passed to the toast.
+        // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-argument -- Preserve the existing auth error passed to the toast.
         toast.error(err.error.message);
       }
     };
@@ -65,12 +66,13 @@ export function ErrorToaster() {
 
       const err = error as BetterFetchError;
       if (
+        // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
         err.error?.code === "EMAIL_NOT_VERIFIED" &&
         !matchMutation({ mutationKey: oneTapMutationKeys.prompt }, mutation)
       ) {
         return;
       }
-      // oxlint-disable-next-line typescript/prefer-nullish-coalescing, typescript/no-unsafe-argument -- Preserve auth error messaging and its empty-message fallback.
+      // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/prefer-nullish-coalescing, typescript/no-unsafe-argument -- Preserve auth error messaging and its empty-message fallback.
       toast.error(err.error?.message || err.message);
     };
 

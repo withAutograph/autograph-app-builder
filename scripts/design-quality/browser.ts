@@ -581,13 +581,17 @@ export async function measureStyles(
         const parsed = text ? JSON.parse(text) : undefined;
         const hasValidSources =
           parsed &&
+          // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
           parsed.version === 3 &&
+          // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
           Array.isArray(parsed.sources) &&
-          // oxlint-disable-next-line typescript/no-unsafe-argument -- Pass source-map data to the existing string validation.
+          // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-argument -- Pass source-map data to the existing string validation.
           allStrings(parsed.sources);
         if (
           hasValidSources &&
+          // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
           (parsed.sourceRoot === undefined || typeof parsed.sourceRoot === "string") &&
+          // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
           typeof parsed.mappings === "string"
         ) {
           map = parsed;

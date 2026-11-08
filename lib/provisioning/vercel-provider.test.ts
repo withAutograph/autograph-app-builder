@@ -530,6 +530,7 @@ describe("Vercel project provisioning", () => {
       if (init?.method === "POST") {
         // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
         const body = JSON.parse(String(init.body));
+        // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
         expect(body.name).toBe("apps-vendor-portal-a1b2c3");
         expect(body).not.toHaveProperty("gitRepository");
         created = true;

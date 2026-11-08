@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-member-access -- Preserve the existing untyped input and rendering boundary. */
 import { authQueryKeys } from "@better-auth-ui/core";
 import type { SessionData } from "@better-auth-ui/core";
 import type { Preview } from "@storybook/nextjs-vite";

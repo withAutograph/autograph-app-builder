@@ -676,6 +676,7 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
   for (const match of rawOutput.matchAll(/(?:^|\n)(?=\{)/gu)) {
     try {
       const parsed = JSON.parse(rawOutput.slice(match.index + match[0].length));
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       if (Array.isArray(parsed.results)) {
         native = parsed;
         break;

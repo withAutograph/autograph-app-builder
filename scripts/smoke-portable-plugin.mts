@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-member-access -- Preserve the existing untyped input and rendering boundary. */
 import { lstat, readFile } from "node:fs/promises";
 import path from "node:path";
 import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";

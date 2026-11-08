@@ -44,9 +44,12 @@ describe("route-local auth configuration", () => {
       }
       passkeysFlag.mockResolvedValue(false);
       const { children: configuration } = RouteProviders({ children: null, fallback: null }).props;
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       expect(configuration.type).toBe(AuthConfiguration);
       const resolved = await AuthConfiguration({ children: null });
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       expect(resolved.props.githubAuthEnabled).toBe(scenario.enabled);
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       expect(resolved.props.vercelAuthEnabled).toBe(scenario.enabled);
     },
   );
@@ -60,11 +63,16 @@ describe("route-local auth configuration", () => {
       const boundary = RouteProviders({ children, fallback });
 
       expect(boundary.type).toBe(Suspense);
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       expect(boundary.props.fallback).toBe(fallback);
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       const configuration = boundary.props.children;
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       expect(configuration.type).toBe(AuthConfiguration);
       const resolved = await AuthConfiguration({ children });
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       expect(resolved.props.passkeysEnabled).toBe(enabled);
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       expect(resolved.props.children).toBe(children);
     },
   );

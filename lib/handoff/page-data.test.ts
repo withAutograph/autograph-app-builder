@@ -217,6 +217,7 @@ describe("owner-only handoff browser data", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     const data = await response.json();
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     expect(data.status).toBe("continued");
     expect(JSON.stringify(data)).not.toMatch(/sessionId|private-engine-id|redeemedAt/u);
   });

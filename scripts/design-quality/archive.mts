@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-member-access -- Preserve the existing untyped input and rendering boundary. */
 import { copyFile, mkdir, readFile, readdir, writeFile as writeRawFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";

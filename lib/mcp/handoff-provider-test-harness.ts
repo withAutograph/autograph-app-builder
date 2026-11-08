@@ -124,13 +124,14 @@ export function preparedProviderFixture(input: {
         expect(init?.method).toBe("POST");
         // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
         const body = JSON.parse(String(init?.body));
-        // oxlint-disable-next-line typescript/no-unsafe-argument -- Inspect the provider test parsed permission payload.
+        // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-argument -- Inspect the provider test parsed permission payload.
         expect(Object.values(body.permissions).every((permission) => permission === "read")).toBe(
           true,
         );
         return Response.json(
           {
             expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+            // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
             permissions: body.permissions,
             token: githubToken(),
           },

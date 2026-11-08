@@ -89,6 +89,7 @@ export function SignIn({
     onError: (error, { email }) => {
       setPassword("");
 
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       if (error.error?.code === "EMAIL_NOT_VERIFIED") {
         sessionStorage.setItem("better-auth-ui.verify-email", email);
         navigate({

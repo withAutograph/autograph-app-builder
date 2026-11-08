@@ -254,6 +254,7 @@ const referenceAdapter = (
         const statusPath = `/api/builder/handoffs/${handoffId}`;
         const ownerResponse = await restored.request.get(statusPath);
         const ownerBody = await ownerResponse.json();
+        // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
         const ownerCanRead = ownerResponse.ok() && ownerBody.status === "prepared";
         const signedOutResponse = await page.request.get(statusPath);
         const stranger = await freshPage();
@@ -279,6 +280,7 @@ const referenceAdapter = (
           otherUserDenied =
             isDistinctUser &&
             response.status() === 404 &&
+            // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
             body.error === "handoff_unavailable" &&
             // oxlint-disable-next-line typescript/no-unsafe-argument -- Inspect the existing handoff response body.
             Object.keys(body).length === 1;
