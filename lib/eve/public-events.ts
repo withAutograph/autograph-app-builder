@@ -1808,15 +1808,21 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
         : null;
     }
     case "progress": {
-      return event.label && event.state && progressStates.has(event.state)
-        ? {
-            index: event.index,
-            label: event.label,
-            state: event.state as "started" | "completed" | "failed",
-            ...(event.turnId === undefined ? {} : { turnId: event.turnId }),
-            type: "progress",
-          }
-        : null;
+      if (!(event.label && event.state && progressStates.has(event.state))) {
+        return null;
+      }
+      const progress: Pick<
+        Extract<PublicEveEvent, { type: "progress" }>,
+        "index" | "label" | "state" | "turnId"
+      > = {
+        index: event.index,
+        label: event.label,
+        state: event.state as "started" | "completed" | "failed",
+      };
+      if (event.turnId !== undefined) {
+        progress.turnId = event.turnId;
+      }
+      return { ...progress, type: "progress" };
     }
     case inputRequestedEvent: {
       return event.request && event.frameworkSessionLimit !== true

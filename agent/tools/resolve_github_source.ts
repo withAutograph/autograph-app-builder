@@ -31,6 +31,11 @@ import { appBaselineState, assertInitialAppBaseline } from "@/lib/agent/app-base
 import type { SelectedAppBaseline } from "@/lib/agent/app-baseline-state";
 import { savedAppBaselineBranchCorrection } from "@/lib/agent/saved-app-baseline-selection";
 
+interface ResolvedBaselineOptions {
+  appBaseline?: AppBaselineReceipt;
+  selectionCorrection?: NonNullable<ReturnType<typeof savedAppBaselineBranchCorrection>>;
+}
+
 const selectInitialBaseline = async (input: {
   callId: string;
   repository: { name: string; owner: string; repositoryId: string };
@@ -297,7 +302,7 @@ export default defineTool({
         githubSource: selectedGitHubSource,
         sandbox: await getSourceBoundSandbox(ctx),
       });
-      return {
+      const resolved = {
         githubSource: selectedGitHubSource,
         repository: access.access.repository,
         repositoryAccessReceiptDigest: access.receipt.digest,
@@ -306,31 +311,51 @@ export default defineTool({
           branch: selectedGitHubSource.resolvedRef.slice("refs/heads/".length),
           pullRequestNumber,
         },
-        ...(selectionCorrection === null ? {} : { selectionCorrection }),
-        ...(selectedBaseline?.receipt === undefined
-          ? {}
-          : { appBaseline: selectedBaseline.receipt }),
+      };
+      const optional: ResolvedBaselineOptions = {};
+      if (selectionCorrection !== null) {
+        optional.selectionCorrection = selectionCorrection;
+      }
+      if (selectedBaseline?.receipt !== undefined) {
+        optional.appBaseline = selectedBaseline.receipt;
+      }
+      return {
+        ...resolved,
+        ...optional,
         sourceReceipt: initialWorkflow.sourceReceipt,
         workspace,
       };
     }
 
-    const prepared = await runtime.prepareExistingSource({
+    const prepareExistingSource = runtime.prepareExistingSource.bind(runtime);
+    type PrepareInput = Parameters<typeof runtime.prepareExistingSource>[0];
+    const preparePrefix: Pick<
+      PrepareInput,
+      | "access"
+      | "callId"
+      | "currentAccessReceipt"
+      | "appBaseline"
+      | "revision"
+      | "currentGitHubSource"
+    > = {
       access: access.access,
       callId: ctx.callId,
       currentAccessReceipt: access.receipt,
-      ...(selectedBaseline === undefined ? {} : { appBaseline: selectedBaseline.selection }),
-      ...(revision === null
-        ? {}
-        : {
-            revision,
-          }),
-      // Source credentials are resolved first. The backend consumes the
-      // server-owned context while `getSandbox()` creates the provider
-      // session, so Vercel performs the Git clone itself.
-      ...(initialSource.phase === "empty" || initialSource.githubSource === undefined
-        ? {}
-        : { currentGitHubSource: initialSource.githubSource }),
+    };
+    if (selectedBaseline !== undefined) {
+      preparePrefix.appBaseline = selectedBaseline.selection;
+    }
+    if (revision !== null) {
+      preparePrefix.revision = revision;
+    }
+    // Source credentials are resolved first. The backend consumes the
+    // server-owned context while `getSandbox()` creates the provider
+    // session, so Vercel performs the Git clone itself.
+    if (initialSource.phase !== "empty" && initialSource.githubSource !== undefined) {
+      preparePrefix.currentGitHubSource = initialSource.githubSource;
+    }
+    const prepared = await prepareExistingSource({
+      ...preparePrefix,
       repository: input.repository,
       sandbox: () => ctx.getSandbox(),
       selectedInstallationId: input.selectedInstallationId,
@@ -396,12 +421,19 @@ export default defineTool({
         workspace: prepared.workspace,
       };
     });
-    return {
+    const resolved = {
       githubSource: preparedGitHubSource,
       repository: access.access.repository,
       repositoryAccessReceiptDigest: prepared.accessReceipt.digest,
       scope: access.access.scope,
-      ...(prepared.appBaseline === undefined ? {} : { appBaseline: prepared.appBaseline }),
+    };
+    const optional: Pick<ResolvedBaselineOptions, "appBaseline"> = {};
+    if (prepared.appBaseline !== undefined) {
+      optional.appBaseline = prepared.appBaseline;
+    }
+    return {
+      ...resolved,
+      ...optional,
       selectedSource: {
         branch: prepared.githubSource.resolvedRef.slice("refs/heads/".length),
         pullRequestNumber,

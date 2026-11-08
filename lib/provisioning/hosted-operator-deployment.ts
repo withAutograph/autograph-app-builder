@@ -3496,9 +3496,15 @@ export const createHostedOperatorControlPlane = async (input: {
           throw new HostedOperatorError("resource_mismatch");
         }
         const ownerContext = operatorOwnerContextSchema.parse(context.ownerContext);
+        const approvalContext: Pick<
+          Parameters<typeof readPrivateOperatorApproval>[0],
+          "owner" | "observation"
+        > = { owner: ownerContext };
+        if (observation !== undefined) {
+          approvalContext.observation = observation;
+        }
         return await readPrivateOperatorApproval({
-          owner: ownerContext,
-          ...(observation === undefined ? {} : { observation }),
+          ...approvalContext,
           capture: (state) => {
             const captureInput: Parameters<typeof createPrivateTenantExportApprovalCapture>[0] = {
               plan: recorded.journal.plan,
@@ -3938,9 +3944,15 @@ export const createHostedOperatorControlPlane = async (input: {
           throw new HostedOperatorError("resource_mismatch");
         }
         const canonical = operatorOwnerContextSchema.parse(context.ownerContext);
+        const approvalContext: Pick<
+          Parameters<typeof readPrivateOperatorApproval>[0],
+          "owner" | "observation"
+        > = { owner: canonical };
+        if (observation !== undefined) {
+          approvalContext.observation = observation;
+        }
         return await readPrivateOperatorApproval({
-          owner: canonical,
-          ...(observation === undefined ? {} : { observation }),
+          ...approvalContext,
           capture: (state) => {
             const captureInput: Parameters<typeof createPrivateContinuityApprovalCapture>[0] = {
               plan: saved.plan,
@@ -3995,14 +4007,16 @@ export const createHostedOperatorControlPlane = async (input: {
         };
         await assertCurrent();
         const readInstallationScopes = controlPlane.readAppInstallationMetadataScopes;
+        const readbackAuthority: Pick<
+          Parameters<typeof createHostedOperatorTenantBindingReadback>[0],
+          "assertAuthorized" | "readInstallationScopes"
+        > = { assertAuthorized: owner.assertAuthorized };
+        if (readInstallationScopes !== undefined) {
+          readbackAuthority.readInstallationScopes = (contextInput) =>
+            readInstallationScopes(contextInput, contextInput.plan);
+        }
         const reader = createHostedOperatorTenantBindingReadback({
-          assertAuthorized: owner.assertAuthorized,
-          ...(readInstallationScopes === undefined
-            ? {}
-            : {
-                readInstallationScopes: (contextInput) =>
-                  readInstallationScopes(contextInput, contextInput.plan),
-              }),
+          ...readbackAuthority,
           readRuntimeUrl: async (contextInput) => {
             await assertCurrent();
             const { current, operator } = await preparedForContinuity(context);

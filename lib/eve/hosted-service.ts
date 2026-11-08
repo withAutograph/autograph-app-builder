@@ -723,22 +723,35 @@ const checkpointMetadataForSnapshot = (
     (event): event is InternalEveEvent => event !== null && typeof event === "object",
   );
   const inputRequests = outstandingInternalEveRequests(internalEvents);
-  return {
-    capturedAtEpochMs,
-    ...(snapshot.nativeDeliveryState === undefined
-      ? {}
-      : { nativeDeliveryState: snapshot.nativeDeliveryState }),
-    ...(snapshot.privateInputState === undefined
-      ? {}
-      : { privateInputState: snapshot.privateInputState }),
-    ...(inputRequests.length === 0 ? {} : { inputRequests }),
-    ...(snapshot.prototype === undefined ? {} : { prototype: snapshot.prototype }),
-    status: snapshot.status,
-    ...(truncatedBeforeIndex === undefined ? {} : { truncatedBeforeIndex }),
-    ...(snapshot.uiPreview === undefined ? {} : { uiPreview: snapshot.uiPreview }),
+  const checkpointDetails: Pick<HostedPagedCheckpointMetadata, "capturedAtEpochMs"> &
+    Partial<HostedPagedCheckpointMetadata> = { capturedAtEpochMs };
+  if (snapshot.nativeDeliveryState !== undefined) {
+    checkpointDetails.nativeDeliveryState = snapshot.nativeDeliveryState;
+  }
+  if (snapshot.privateInputState !== undefined) {
+    checkpointDetails.privateInputState = snapshot.privateInputState;
+  }
+  if (inputRequests.length !== 0) {
+    checkpointDetails.inputRequests = inputRequests;
+  }
+  if (snapshot.prototype !== undefined) {
+    checkpointDetails.prototype = snapshot.prototype;
+  }
+  const checkpointStatus = { ...checkpointDetails, status: snapshot.status };
+  if (truncatedBeforeIndex !== undefined) {
+    checkpointStatus.truncatedBeforeIndex = truncatedBeforeIndex;
+  }
+  if (snapshot.uiPreview !== undefined) {
+    checkpointStatus.uiPreview = snapshot.uiPreview;
+  }
+  const metadata: HostedPagedCheckpointMetadata = {
+    ...checkpointStatus,
     version: 1,
-    ...(snapshot.workingPreview === undefined ? {} : { workingPreview: snapshot.workingPreview }),
   };
+  if (snapshot.workingPreview !== undefined) {
+    metadata.workingPreview = snapshot.workingPreview;
+  }
+  return metadata;
 };
 
 // eslint-disable-next-line eslint/func-style -- Project snapshot events lazily for progress recovery.

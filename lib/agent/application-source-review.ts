@@ -473,10 +473,11 @@ const reviewTools = (
                     (kind !== "changes" || changedPaths.has(path)),
                 );
           const page = items.slice(cursor, cursor + 200);
-          return Promise.resolve({
-            items: page,
-            ...(cursor + page.length < items.length ? { nextCursor: cursor + page.length } : {}),
-          });
+          const pageResult: Extract<ReusableEvidenceResult, { items: unknown }> = { items: page };
+          if (cursor + page.length < items.length) {
+            pageResult.nextCursor = cursor + page.length;
+          }
+          return Promise.resolve(pageResult);
         });
         if (!(result instanceof ApplicationReviewSelectionError)) {
           rememberEvidenceRead(

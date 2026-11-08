@@ -558,24 +558,31 @@ export const createHostedOperatorGatewayBindings = (deps: {
         providerFailure = failure;
       },
       finish(result: OperatorGatewayBindingsDiagnostic["result"]) {
-        report?.({
+        if (report === undefined) {
+          return;
+        }
+        let gatewayBindings: OperatorGatewayBindingsDiagnostic = { mode, stage, result };
+        if (method !== undefined) {
+          gatewayBindings.method = method;
+        }
+        if ((result === "failed" || result === "unknown") && requestTarget !== undefined) {
+          gatewayBindings.requestTarget = requestTarget;
+        }
+        if (result === "failed" || result === "unknown") {
+          gatewayBindings = { ...gatewayBindings, ...protection };
+        }
+        if (statusCategory !== undefined) {
+          gatewayBindings.statusCategory = statusCategory;
+        }
+        if (httpStatus !== undefined) {
+          gatewayBindings.httpStatus = httpStatus;
+        }
+        report({
           boundary: "operator",
           phase: "inline",
           stage: "operator_request",
           outcome: result === "failed" || result === "unknown" ? "setup_unavailable" : "verified",
-          gatewayBindings: {
-            mode,
-            stage,
-            result,
-            ...(method === undefined ? {} : { method }),
-            ...((result === "failed" || result === "unknown") && requestTarget !== undefined
-              ? { requestTarget }
-              : {}),
-            ...(result === "failed" || result === "unknown" ? protection : {}),
-            ...(statusCategory === undefined ? {} : { statusCategory }),
-            ...(httpStatus === undefined ? {} : { httpStatus }),
-            ...providerFailure,
-          },
+          gatewayBindings: { ...gatewayBindings, ...providerFailure },
         });
       },
     };

@@ -304,14 +304,15 @@ const readVercelProjectAccess = async (input: {
       }));
       return unavailable();
     }
+    const project: NonNullable<Extract<PreparedVercelAccess, { status: "ready" }>["project"]> = {
+      id: input.projectId,
+      name: observed.values[1] ?? input.projectName ?? input.projectId,
+    };
+    if (observed.values.at(-1) !== undefined) {
+      project.productionBranch = observed.values.at(-1);
+    }
     return {
-      project: {
-        id: input.projectId,
-        name: observed.values[1] ?? input.projectName ?? input.projectId,
-        ...(observed.values.at(-1) === undefined
-          ? {}
-          : { productionBranch: observed.values.at(-1) }),
-      },
+      project,
       scope: {
         id: binding.scopeId,
         installationId: input.installationId,
@@ -387,7 +388,10 @@ export async function readPreparedVercelAccess(input: {
     if (project.installationId !== installationId) {
       return { action: REVIEW_SELECTION, status: RESOURCE_UNAVAILABLE };
     }
-    return await readVercelProjectAccess({
+    const projectAccessInput: Omit<
+      Parameters<typeof readVercelProjectAccess>[0],
+      "readCredential"
+    > = {
       authority: input.authority,
       expectedScope: project.scope,
       requireServicesRoot: input.requireServicesRoot,
@@ -397,8 +401,15 @@ export async function readPreparedVercelAccess(input: {
       installationId,
       projectId: project.projectId,
       projectName: project.name,
-      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-      ...(input.apiOrigin === undefined ? {} : { apiOrigin: input.apiOrigin }),
+    };
+    if (input.fetch !== undefined) {
+      projectAccessInput.fetch = input.fetch;
+    }
+    if (input.apiOrigin !== undefined) {
+      projectAccessInput.apiOrigin = input.apiOrigin;
+    }
+    return await readVercelProjectAccess({
+      ...projectAccessInput,
       readCredential: input.readCredential,
     });
   }
