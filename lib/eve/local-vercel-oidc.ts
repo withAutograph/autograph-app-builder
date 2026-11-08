@@ -28,6 +28,7 @@ const closedObject = (value: unknown, name: string): Record<string, unknown> => 
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${name} was not an object.`);
   }
+  // SAFETY: The checks above exclude null, arrays, and non-object values; property values remain unknown.
   return value as Record<string, unknown>;
 };
 
@@ -118,7 +119,7 @@ export const resolveInstalledEveCli = (repositoryRootInput: string): string => {
   const repositoryPackagePath = nodePath.join(repositoryRoot, "package.json");
   assertOwnerNonWritable(repositoryPackagePath);
   const rootMetadata = closedObject(
-    JSON.parse(readFileSync(repositoryPackagePath, "utf-8")) as unknown,
+    JSON.parse(readFileSync(repositoryPackagePath, "utf-8")),
     "Repository package",
   );
   const declared = [
@@ -147,7 +148,7 @@ export const resolveInstalledEveCli = (repositoryRootInput: string): string => {
   assertOwnerBoundResolvedDirectory(packageRoot);
   assertOwnerNonWritable(metadataPath);
   const metadata = closedObject(
-    JSON.parse(readFileSync(metadataPath, "utf-8")) as unknown,
+    JSON.parse(readFileSync(metadataPath, "utf-8")),
     "Installed Eve package",
   );
   const bin =
@@ -190,11 +191,12 @@ const requiredInteger = (value: Record<string, unknown>, key: string): number =>
   if (!Number.isSafeInteger(candidate)) {
     throw new TypeError(`Required ${key} was unavailable.`);
   }
+  // SAFETY: Number.isSafeInteger returns true only for values that are numbers.
   return candidate as number;
 };
 
 export const parseLinkedVercelProject = (source: string): LinkedVercelProject => {
-  const value = closedObject(JSON.parse(source) as unknown, "Vercel project");
+  const value = closedObject(JSON.parse(source), "Vercel project");
   return {
     orgId: requiredString(value, "orgId"),
     projectId: requiredString(value, "projectId"),
@@ -231,7 +233,7 @@ export const parseLocalVercelOidcToken = (source: string): string => {
     throw new Error("Expected exactly one VERCEL_OIDC_TOKEN entry.");
   }
   const encoded = match.slice("VERCEL_OIDC_TOKEN=".length);
-  const token = encoded.startsWith('"') ? (JSON.parse(encoded) as unknown) : encoded;
+  const token: unknown = encoded.startsWith('"') ? JSON.parse(encoded) : encoded;
   if (
     typeof token !== "string" ||
     token.length > 8192 ||

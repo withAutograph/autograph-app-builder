@@ -1155,10 +1155,7 @@ const inspectLiveTemplateDependencyIdentity = async function inspectLiveTemplate
   }
   let entries: z.infer<typeof preparedDependencyInputSchema>[];
   try {
-    entries = z
-      .array(preparedDependencyInputSchema)
-      .min(1)
-      .parse(JSON.parse(manifestSource) as unknown);
+    entries = z.array(preparedDependencyInputSchema).min(1).parse(JSON.parse(manifestSource));
   } catch {
     throw new Error("The prepared source manifest is invalid.");
   }
@@ -1281,7 +1278,7 @@ const inspectLiveTemplateClosure = async function inspectLiveTemplateClosure(inp
     throw new Error("The live template dependency cache closure is missing.");
   }
   try {
-    return liveTemplateClosureObservationSchema.parse(JSON.parse(result.stdout) as unknown);
+    return liveTemplateClosureObservationSchema.parse(JSON.parse(result.stdout));
   } catch {
     throw new Error("The live template dependency cache closure is invalid.");
   }
@@ -1315,7 +1312,7 @@ export const bootstrapLiveTemplateDependencies =
     if (prior !== null) {
       let manifest: z.infer<typeof liveTemplateDependencyCacheManifestSchema>;
       try {
-        manifest = liveTemplateDependencyCacheManifestSchema.parse(JSON.parse(prior) as unknown);
+        manifest = liveTemplateDependencyCacheManifestSchema.parse(JSON.parse(prior));
       } catch {
         throw new Error("The live template dependency cache manifest is invalid.");
       }
@@ -1344,9 +1341,7 @@ export const bootstrapLiveTemplateDependencies =
     }
     let observation: z.infer<typeof liveTemplateClosureObservationSchema>;
     try {
-      observation = liveTemplateClosureObservationSchema.parse(
-        JSON.parse(result.stdout) as unknown,
-      );
+      observation = liveTemplateClosureObservationSchema.parse(JSON.parse(result.stdout));
     } catch {
       throw new Error("The canonical template dependency bootstrap receipt is invalid.");
     }
@@ -1410,9 +1405,7 @@ export const inspectDependencyCache = async function inspectDependencyCache(
     }
     let manifest: z.infer<typeof liveTemplateDependencyCacheManifestSchema>;
     try {
-      manifest = liveTemplateDependencyCacheManifestSchema.parse(
-        JSON.parse(liveManifest) as unknown,
-      );
+      manifest = liveTemplateDependencyCacheManifestSchema.parse(JSON.parse(liveManifest));
     } catch {
       throw new Error("The live template dependency cache manifest is invalid.");
     }
@@ -1443,7 +1436,7 @@ export const inspectDependencyCache = async function inspectDependencyCache(
   const manifestPayload = commandPayload(manifestResult.stdout);
   let parsed: unknown;
   try {
-    parsed = JSON.parse(manifestPayload) as unknown;
+    parsed = JSON.parse(manifestPayload);
   } catch {
     throw new Error("The fixed offline dependency cache manifest is invalid.");
   }

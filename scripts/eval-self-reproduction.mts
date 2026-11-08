@@ -754,6 +754,7 @@ const runtimeObservations = (existingRequirementIds: ReadonlySet<string>): Obser
     return [];
   }
   if (candidateRuntime.status !== "available") {
+    // SAFETY: The helper builds observations from known requirement IDs, with method "none", empty assertions, and a failure disposition.
     return candidateRuntimeFailureObservations({
       existingRequirementIds,
       receipt: candidateRuntime,

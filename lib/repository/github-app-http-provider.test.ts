@@ -78,6 +78,7 @@ function unicodeDraftMaterial(
         kind: includePreimages ? ("modified" as const) : ("added" as const),
         path,
       };
+      // SAFETY: The reconstructed entries retain path, kind, optional before, and both after fields from change.
       return preserveOverlayOrder
         ? change
         : (Object.fromEntries([
@@ -164,6 +165,7 @@ function unicodeDraftMaterial(
     review,
     title: "Add demo",
   });
+  // SAFETY: Each change is built above with before exactly when modified; this adds bytes to its reviewed after value.
   const content: GitHubDraftPullRequestContent = {
     approvedPaths: review.approvedPaths,
     changeSetDigest: review.changeSetDigest,
@@ -239,9 +241,9 @@ function providerFetch(input?: {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const implementation: typeof fetch = async (request, init = {}) => {
     const url = String(request);
-    let body;
+    let body: unknown;
     if (typeof init.body === "string") {
-      body = JSON.parse(init.body) as unknown;
+      body = JSON.parse(init.body);
     }
     calls.push({ body, init, url });
     if (input?.fail ?? false) {
@@ -320,7 +322,7 @@ function historicalProviderFetch(input?: {
   const implementation: typeof fetch = async (request, init = {}) => {
     const url = String(request);
     const method = init.method ?? "GET";
-    const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+    const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
     calls.push({ body, method, url });
     if (url.endsWith("/app/installations/456/access_tokens")) {
       return json(
@@ -386,7 +388,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     // oxlint-disable-next-line eslint/require-await -- mocked HTTP transport
     const provider = createProvider(async (request, init = {}) => {
       const url = String(request);
-      const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+      const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, method: init.method ?? "GET", url });
       if (url.endsWith("/access_tokens")) {
         return json(
@@ -1364,7 +1366,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const implementation: typeof fetch = async (request, init = {}) => {
       const url = String(request);
       const method = init.method ?? "GET";
-      const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+      const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, method, url });
       if (url.endsWith("/app/installations/456/access_tokens")) {
         const tokenRequest = z
@@ -1713,7 +1715,7 @@ describe("existing draft update provider", () => {
     const implementation: typeof fetch = async (request, init = {}) => {
       const url = String(request);
       const method = init.method ?? "GET";
-      const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+      const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, url });
       if (url.endsWith("/app")) {
         return json({ id: 123, slug: "autograph-app-builder" });
@@ -1892,7 +1894,7 @@ describe("existing draft reconciliation provider", () => {
     const implementation: typeof fetch = async (request, init = {}) => {
       const url = String(request);
       const method = init.method ?? "GET";
-      const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+      const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, url });
       if (url.endsWith("/app")) return json({ id: 123, slug: "autograph-app-builder" });
       if (url.endsWith("/app/installations/456/access_tokens"))

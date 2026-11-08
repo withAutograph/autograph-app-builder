@@ -138,13 +138,15 @@ function changeSetStatusOutput(
   if (event?.type !== "action.result" || !event.data?.result) {
     return undefined;
   }
-  if (["change-set-status", "change_set_status"].includes(event.data.result.toolName as string)) {
+  const { toolName: resultToolName } = event.data.result;
+  if (resultToolName === "change-set-status" || resultToolName === "change_set_status") {
     const { output } = event.data.result;
     return typeof output === "object" && output !== null && !Array.isArray(output)
       ? (output as Record<string, unknown>)
       : undefined;
   }
-  return ["change-set-status", "change_set_status"].includes(event.data.toolName as string)
+  const { toolName } = event.data;
+  return toolName === "change-set-status" || toolName === "change_set_status"
     ? event.data.result
     : undefined;
 }
