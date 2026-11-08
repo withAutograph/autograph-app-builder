@@ -113,12 +113,23 @@ export default defineTool({
             if (preservesAcceptedWorkflow(current)) {
               return { ...current, artifacts };
             }
-            return {
+            type PreparedState = Extract<
+              ReturnType<typeof appBuilderWorkflowState.get>,
+              { phase: "prepared" }
+            >;
+            const prepared = {
               artifacts,
               phase: "prepared",
               preparedByCallId: current.preparedByCallId,
               sourceReceipt: current.sourceReceipt,
-              ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+            } as const;
+            const source: Pick<PreparedState, "githubSource"> = {};
+            if (current.githubSource !== undefined) {
+              source.githubSource = current.githubSource;
+            }
+            return {
+              ...prepared,
+              ...source,
               version: APP_BUILDER_WORKFLOW_VERSION,
               workspace: current.workspace,
             };
@@ -192,12 +203,23 @@ export default defineTool({
           if (preservesAcceptedWorkflow(current)) {
             return { ...current, artifacts: recorded.artifacts };
           }
-          return {
+          type PreparedState = Extract<
+            ReturnType<typeof appBuilderWorkflowState.get>,
+            { phase: "prepared" }
+          >;
+          const prepared = {
             artifacts: recorded.artifacts,
             phase: "prepared",
             preparedByCallId: current.preparedByCallId,
             sourceReceipt: current.sourceReceipt,
-            ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+          } as const;
+          const source: Pick<PreparedState, "githubSource"> = {};
+          if (current.githubSource !== undefined) {
+            source.githubSource = current.githubSource;
+          }
+          return {
+            ...prepared,
+            ...source,
             version: APP_BUILDER_WORKFLOW_VERSION,
             workspace: current.workspace,
           };

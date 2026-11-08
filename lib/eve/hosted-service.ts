@@ -4790,16 +4790,23 @@ export function createHostedEveSessionService(input: {
                 }
                 await (input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner)(current);
               }
-              const response = await input.transport.start({
+              const transport = input.transport;
+              const start = transport.start;
+              const startInput: Parameters<HostedEveTransport["start"]>[0] = {
                 operationId,
                 principal,
                 prompt:
                   recovery === undefined
                     ? await recoveryPrompt({ principal, record: existing, store: input.store })
                     : "",
-                ...(recovery === undefined ? {} : { recovery }),
-                ...(existing.sourceHandoffId ? { sourceHandoffId: existing.sourceHandoffId } : {}),
-              });
+              };
+              if (recovery !== undefined) {
+                startInput.recovery = recovery;
+              }
+              if (existing.sourceHandoffId) {
+                startInput.sourceHandoffId = existing.sourceHandoffId;
+              }
+              const response = await start.call(transport, startInput);
               let recoveryBinding: NativeRecoveryBinding | undefined;
               if (recovery !== undefined) {
                 recoveryBinding = nativeRecoveryBindingSchema.parse(response.recoveryBinding);

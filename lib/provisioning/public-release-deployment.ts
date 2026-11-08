@@ -387,26 +387,31 @@ export const createPublicReleaseDeployment = (input: {
         // oxlint-disable-next-line unicorn/no-useless-undefined -- No retained binding is distinct from unavailable authority.
         return undefined;
       }
-      const removal =
-        original.purpose === "application"
-          ? await readPublicReleaseIntegrationRemoval({
-              ports: input.integrationRemoval,
-              invocation: current,
-              sourceCapability: retained.sourceCapability,
-              ...(expected?.integrationRemoval === undefined
-                ? {}
-                : {
-                    expected: {
-                      removal: expected.integrationRemoval,
-                      operationRef: publicReleaseOperationRef(expected),
-                    },
-                  }),
-              assertCurrent: async () => {
-                await base(current);
-                await heldFence?.();
-              },
-            })
-          : undefined;
+      let removal: Awaited<ReturnType<typeof readPublicReleaseIntegrationRemoval>> | undefined;
+      if (original.purpose === "application") {
+        const readRemoval = readPublicReleaseIntegrationRemoval;
+        const removalInput: Omit<
+          Parameters<typeof readPublicReleaseIntegrationRemoval>[0],
+          "assertCurrent"
+        > = {
+          ports: input.integrationRemoval,
+          invocation: current,
+          sourceCapability: retained.sourceCapability,
+        };
+        if (expected?.integrationRemoval !== undefined) {
+          removalInput.expected = {
+            removal: expected.integrationRemoval,
+            operationRef: publicReleaseOperationRef(expected),
+          };
+        }
+        removal = await readRemoval({
+          ...removalInput,
+          assertCurrent: async () => {
+            await base(current);
+            await heldFence?.();
+          },
+        });
+      }
       return { bindings: retained.bindings, removal };
     };
 

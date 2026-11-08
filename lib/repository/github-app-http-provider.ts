@@ -36,6 +36,10 @@ import type {
 import { historicalAppSourceSelectorSchema } from "./historical-app-source";
 import type { HistoricalAppSourceObservation } from "./historical-app-source";
 
+interface GitTreeBase {
+  base_tree?: string;
+}
+
 const invalidProviderConfigurationMessage = "GitHub App provider configuration is invalid.";
 const invalidResponseMessage = "invalid-response";
 const invalidMaterialMessage = "invalid-material";
@@ -636,10 +640,15 @@ export const createGitHubAppHttpProvider = (input: {
         type: "blob",
       });
     }
+    const { accessToken: authorization } = treeInput;
+    const treeBase: GitTreeBase = {};
+    if (treeInput.baseTree !== undefined) {
+      treeBase.base_tree = treeInput.baseTree;
+    }
     const response = await github({
-      authorization: treeInput.accessToken,
+      authorization,
       body: {
-        ...(treeInput.baseTree === undefined ? {} : { base_tree: treeInput.baseTree }),
+        ...treeBase,
         tree: [
           ...entries,
           ...(treeInput.deletions ?? []).map((path) => ({

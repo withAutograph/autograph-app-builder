@@ -1901,11 +1901,29 @@ export const composeHostedOperatorDependencies = (
       }
       return selectedWorker;
     });
-    const freshBase = await observe("plan_construction", () =>
-      hostedOperatorPlanSchema.parse({
+    const freshBase = await observe("plan_construction", () => {
+      const planSchema = hostedOperatorPlanSchema;
+      const parsePlan = planSchema.parse.bind(planSchema);
+      const planStart: Pick<HostedOperatorPlan, "access" | "action" | "releaseIntent"> = {
         access: [],
         action: "prepare",
-        ...(context.releaseIntent === undefined ? {} : { releaseIntent: context.releaseIntent }),
+      };
+      if (context.releaseIntent !== undefined) {
+        planStart.releaseIntent = context.releaseIntent;
+      }
+      const planResources: Pick<
+        HostedOperatorPlan,
+        | "access"
+        | "action"
+        | "releaseIntent"
+        | "appDatabase"
+        | "authAdoption"
+        | "authDatabase"
+        | "authSchema"
+        | "bootstrap"
+        | "runtimePreparation"
+      > = {
+        ...planStart,
         appDatabase: application.appDatabase,
         authAdoption: activeAuth?.adoption ?? adopted?.adoption,
         authDatabase: configuration.authDatabase,
@@ -1915,10 +1933,12 @@ export const composeHostedOperatorDependencies = (
           maintenanceDatabase: native.maintenanceDatabase,
           role: native.maintenanceRole,
         },
-        ...(configuration.composition === singleProjectServicesComposition
-          ? { runtimePreparation: "single-project-resources-v1" }
-          : {}),
-
+      };
+      if (configuration.composition === singleProjectServicesComposition) {
+        planResources.runtimePreparation = "single-project-resources-v1";
+      }
+      return parsePlan({
+        ...planResources,
         contextId: selected.contextId ?? selected.currentSpec.appSpecDigest,
         cost: {
           class: "shared-recovery-group",
@@ -2022,8 +2042,8 @@ export const composeHostedOperatorDependencies = (
           current?.record.accountPreparation?.program ??
           current?.record.operator?.plan.normalActorProgram,
         version: 1,
-      }),
-    );
+      });
+    });
     const existingResources =
       freshBase.runtimePreparation === undefined
         ? undefined

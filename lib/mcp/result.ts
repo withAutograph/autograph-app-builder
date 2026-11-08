@@ -107,6 +107,11 @@ const genericUnexpectedMessage = (safeCause: string): string => {
   return message;
 };
 
+type SessionToolResponse<Result extends EveSessionListResult | EveSessionResult> = {
+  content: { text: string; type: "text" }[];
+  structuredContent: Result;
+} & { _meta?: { ui: { resourceUri: string } } };
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function toolResult<const Result extends EveSessionListResult | EveSessionResult>(
   result: Result,
@@ -124,11 +129,14 @@ export function toolResult<const Result extends EveSessionListResult | EveSessio
       ? `${text}\n\nManage app access and people: ${result.appAccessUrl}`
       : text;
 
-  return {
-    content: [{ text: accessText, type: "text" as const }],
+  const output: SessionToolResponse<Result> = {
+    content: [{ text: accessText, type: "text" }],
     structuredContent: result,
-    ...(needsInteractiveSessionUi ? { _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } } } : {}),
   };
+  if (needsInteractiveSessionUi) {
+    output._meta = { ui: { resourceUri: SESSION_RESOURCE_URI } };
+  }
+  return output;
 }
 
 type ErrorToolResponse = Omit<ReturnType<typeof toolResult<EveSessionResult>>, "_meta"> & {

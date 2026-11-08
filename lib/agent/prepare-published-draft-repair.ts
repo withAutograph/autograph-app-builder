@@ -663,18 +663,42 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
     operation: "preparing this owned draft's native base merge",
     transition: () => candidate,
   });
-  return {
+  interface ReconciliationResultFields {
+    status: string;
+    kind: "reconciliation";
+    baseSha: typeof candidate.baseSha;
+    headSha: typeof candidate.headSha;
+    root: typeof candidate.root;
+    conflicts: typeof candidate.conflicts;
+    recoveryMode?: typeof recoveryMode;
+    originalReviewReplayed?: boolean;
+    preservedWorkspaces?: typeof preservedWorkspaces;
+    preservedCandidateRoot?: typeof preservedCandidateRoot;
+    replayedAppChanges?: typeof replayedAppChanges;
+    gitTransportRecovery?: string;
+  }
+  const result: ReconciliationResultFields = {
     status: candidate.conflicts.length === 0 ? "ready_for_validation" : "needs_resolution",
     kind: "reconciliation" as const,
     baseSha: candidate.baseSha,
     headSha: candidate.headSha,
     root: candidate.root,
     conflicts: candidate.conflicts,
-    ...(reopenCurrent ? { recoveryMode, originalReviewReplayed: false, preservedWorkspaces } : {}),
-    ...(preservedCandidateRoot === undefined ? {} : { preservedCandidateRoot, replayedAppChanges }),
-    ...(retriedGitFetch
-      ? { gitTransportRecovery: "Verified installation Git fetch recovered." }
-      : {}),
+  };
+  if (reopenCurrent) {
+    result.recoveryMode = recoveryMode;
+    result.originalReviewReplayed = false;
+    result.preservedWorkspaces = preservedWorkspaces;
+  }
+  if (preservedCandidateRoot !== undefined) {
+    result.preservedCandidateRoot = preservedCandidateRoot;
+    result.replayedAppChanges = replayedAppChanges;
+  }
+  if (retriedGitFetch) {
+    result.gitTransportRecovery = "Verified installation Git fetch recovered.";
+  }
+  return {
+    ...result,
     nextAction: reopenCurrent
       ? "The original app review was not replayed. Compare its preserved app changes through change_set_status and any retained draft candidates with this current owned draft, then apply only intended app edits. Resolve app conflicts, validate and review the candidate, then seal_github_draft_pr_reconciliation and request its exact update approval. The original source and private workspaces remain retained; their availability is established when read."
       : "Resolve any app conflicts, validate and review this native base/head merge, then seal_github_draft_pr_reconciliation and request its exact update approval. The original starter, same draft branch, and approved root registration remain intact.",
