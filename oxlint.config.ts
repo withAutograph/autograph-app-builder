@@ -58,8 +58,6 @@ export default defineConfig({
       rules: {
         "sonarjs/public-static-readonly": "off",
         "anti-slop/no-module-mocking": "off",
-        "eslint/no-nested-ternary": "off",
-        "eslint/no-plusplus": "off",
         "github/no-inner-html": "off",
         "react-doctor/no-secrets-in-client-code": "off",
         "sonarjs/code-eval": "off",
@@ -69,7 +67,6 @@ export default defineConfig({
         "sonarjs/no-hardcoded-passwords": "off",
         "typescript/no-implied-eval": "off",
         "typescript/prefer-promise-reject-errors": "off",
-        "unicorn/no-await-expression-member": "off",
       },
     },
   ],

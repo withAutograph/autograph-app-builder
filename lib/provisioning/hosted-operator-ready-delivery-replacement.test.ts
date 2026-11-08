@@ -403,7 +403,7 @@ describe("native externally managed policy recovery integration", () => {
         reserve: async () => structuredClone(row),
         reserveFenceGeneration: async () => {
           requireFixtureValue(row.record.operator, "journal operator").fenceGeneration = 1;
-          row.revision++;
+          row.revision += 1;
           return structuredClone(row);
         },
       };
@@ -515,13 +515,10 @@ describe("native externally managed policy recovery integration", () => {
         });
       vi.spyOn(Date, "now").mockReturnValue(now);
       try {
-        expect(
-          (
-            await readOperatorResponse(
-              await handler(request({ action: "plan", operation: "prepare" })),
-            )
-          ).planDigest,
-        ).toBe(operatorPlanDigest(ordinary));
+        const planned = await readOperatorResponse(
+          await handler(request({ action: "plan", operation: "prepare" })),
+        );
+        expect(planned.planDigest).toBe(operatorPlanDigest(ordinary));
         if (planningCase !== "approved-default") {
           expect(
             requireFixtureValue(row.record.operator, "journal operator").plan.hostProtection,
@@ -754,7 +751,7 @@ describe("native externally managed policy recovery integration", () => {
               return;
             }
             requireFixtureValue(row.record.operator, "journal operator").fenceGeneration = 2;
-            row.revision++;
+            row.revision += 1;
             return structuredClone(row);
           },
         ),
@@ -1151,9 +1148,8 @@ describe("native externally managed policy recovery integration", () => {
           operationRef: proposed.operationRef,
           planDigest: proposed.planDigest,
         };
-        expect((await readOperatorResponse(await handler(request(execute)))).status).toBe(
-          "blocked",
-        );
+        const blocked = await readOperatorResponse(await handler(request(execute)));
+        expect(blocked.status).toBe("blocked");
         expect(calls.filter((call) => call.method === "POST")).toHaveLength(0);
         approved = true;
         const result = await readOperatorResponse(await handler(request(execute)));
