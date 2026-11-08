@@ -52,8 +52,7 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function property(value: unknown, key: string) {
   if (!record(value) || !(key in value)) {
     throw new TypeError(INVALID_RESPONSE);
@@ -61,8 +60,7 @@ function property(value: unknown, key: string) {
   return value[key];
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function stringProperty(value: unknown, key: string) {
   const result = property(value, key);
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -72,8 +70,7 @@ function stringProperty(value: unknown, key: string) {
   return result;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function decimalProperty(value: unknown, key: string) {
   const result = property(value, key);
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -91,8 +88,7 @@ function suffix() {
   return [...randomBytes(6)].map((value) => alphabet[value % alphabet.length]).join("");
 }
 
-// eslint-disable-next-line eslint/func-style -- Shared by the GitHub request boundary.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Shared by the GitHub request boundary. Preserve the existing unknown input contract.
 function retryAfterMilliseconds(headers: unknown, now: number): number | undefined {
   if (!record(headers)) {
     return undefined;

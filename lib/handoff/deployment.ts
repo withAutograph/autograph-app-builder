@@ -223,8 +223,7 @@ export function createBuilderHandoffRouteHandler(input: {
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function handoffErrorResponse(error: unknown) {
   if (error instanceof BuilderHandoffUnavailableError) {
     return Response.json({ error: "handoff_unavailable" }, { headers: noStore, status: 404 });

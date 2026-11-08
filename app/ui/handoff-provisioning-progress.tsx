@@ -15,8 +15,7 @@ import type { HandoffProvisioningContinuationState } from "@/app/actions/builder
 import { builderProvisionProjectionSchema } from "@/lib/provisioning/contracts-schema";
 import type { BuilderProvisionProjection } from "@/lib/provisioning/contracts-schema";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function readProjection(value: unknown): BuilderProvisionProjection | undefined {
   const parsed = builderProvisionProjectionSchema.safeParse(value);
   return parsed.success && Number.isSafeInteger(parsed.data.revision) ? parsed.data : undefined;

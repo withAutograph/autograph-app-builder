@@ -31,8 +31,7 @@ export type PreparedGitHubSelection = Pick<
 >;
 
 /** Call only after the durable handoff reader has verified the session. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 export function preparedHandoffReturnPath(sessionAuth: unknown) {
   const parsed = z
     .object({
@@ -624,8 +623,7 @@ export function createPreparedAppContextReader(input: {
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 export async function readPreparedAppContext(sessionAuth: unknown) {
   return await createPreparedAppContextReader({
     async github(auth, value) {

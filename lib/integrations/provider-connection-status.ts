@@ -21,8 +21,7 @@ export interface ProviderConnectionNotice {
   reason?: ProviderConnectionFailureReason;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 export function parseProviderConnectionFailureReason(input: unknown) {
   const parsed = providerConnectionFailureReasonSchema.safeParse(input);
   return parsed.success ? parsed.data : undefined;

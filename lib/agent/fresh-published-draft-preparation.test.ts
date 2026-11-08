@@ -315,6 +315,7 @@ describe("owned fresh-template draft preparation after review recovery", () => {
       proposalDigest: proposal.digest,
       idempotencyKey: proposal.idempotencyKey,
       branchName: proposal.branchName,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve absent optional publication metadata as undefined under the existing contract.
       reviewDigest: undefined,
       changeSetDigest: proposal.changeSetDigest,
       changedContentDigest: proposal.changedContentDigest,

@@ -32,8 +32,7 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function privateTemplateRepository(value: unknown) {
   if (!record(value)) {
     return false;
@@ -49,8 +48,7 @@ function privateTemplateRepository(value: unknown) {
   );
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function readOnlyReaderPermissions(value: unknown) {
   if (!record(value)) {
     return false;
@@ -61,8 +59,7 @@ function readOnlyReaderPermissions(value: unknown) {
   return Object.values(value).every((permission) => permission === "read");
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function exactTemplateRepositoryIds(value: unknown) {
   return Array.isArray(value) && value.length === 1 && value[0] === ARRUSTED_TEMPLATE_REPOSITORY_ID;
 }

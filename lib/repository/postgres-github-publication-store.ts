@@ -66,8 +66,7 @@ const releaseGateSchema = z.strictObject({
 const hasExactStoredKeys = (value: GitHubPublicationProposal, keys: readonly string[]): boolean =>
   JSON.stringify(Object.keys(value).toSorted()) === JSON.stringify([...keys].toSorted());
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function parseProposal(input: unknown): GitHubPublicationProposal {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
@@ -144,8 +143,7 @@ function parseProposal(input: unknown): GitHubPublicationProposal {
   return proposal;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 export function parseGitHubPublicationProposalRow(input: unknown): GitHubPublicationProposal {
   const row = proposalRowSchema.parse(input);
   const proposal = parseProposal(row.proposal);

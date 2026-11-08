@@ -57,8 +57,7 @@ function principal(ownerUserId: string, workspaceId = "workspace_1") {
   } satisfies HostedPrincipal;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
+// oxlint-disable-next-line eslint/func-style, typescript/promise-function-async -- Preserve function declaration hoisting and initialization timing. Preserve the returned promise and synchronous throw behavior.
 function acquire(owner: string, session: string, workspace = "workspace_1") {
   return store.acquire({
     adapterSessionId: session,

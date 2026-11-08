@@ -512,8 +512,7 @@ const canonicalReviewedChanges = (changes: ReviewedChangeSetReceipt["changes"]) 
     };
   });
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function exactKeys(value: unknown, keys: readonly string[]): boolean {
   return (
     record(value) && Object.keys(value).toSorted().join("\0") === [...keys].toSorted().join("\0")
@@ -743,8 +742,7 @@ function contentManifest(
   });
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function exactContentFileState(value: unknown, includeBytes: boolean): boolean {
   const keys = includeBytes
     ? (["mode", "digest", "bytes"] as const)
@@ -758,8 +756,7 @@ function exactContentFileState(value: unknown, includeBytes: boolean): boolean {
   return isDigest(value.digest) && (!includeBytes || value.bytes instanceof Uint8Array);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function exactContentChange(change: unknown): boolean {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (!record(change) || typeof change.path !== "string" || !safeSourcePath(change.path)) {

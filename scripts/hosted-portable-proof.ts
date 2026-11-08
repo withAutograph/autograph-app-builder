@@ -128,8 +128,7 @@ export type HostedProofScenario = z.infer<typeof hostedProofScenarioSchema>;
 export const digest = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function canonicalPublicResult(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalPublicResult).join(",")}]`;

@@ -37,8 +37,7 @@ export function isTwoFactorRedirect(data: unknown): data is TwoFactorRedirect {
 }
 
 /** Narrow arbitrary method names to the challenge views this UI supports. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 export function parseTwoFactorMethods(methods?: unknown): TwoFactorMethod[] {
   if (!Array.isArray(methods)) {
     return [];
@@ -48,8 +47,7 @@ export function parseTwoFactorMethods(methods?: unknown): TwoFactorMethod[] {
 }
 
 /** Persist the enabled method names without blocking sign-in on storage errors. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 export function storeTwoFactorMethods(methods?: unknown) {
   if (typeof sessionStorage === "undefined") {
     return;

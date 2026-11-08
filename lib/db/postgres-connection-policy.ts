@@ -76,14 +76,12 @@ const databaseUrlSchema = (endpointKind: "pooled" | "direct") =>
 const hostedDatabaseUrlSchema = databaseUrlSchema("pooled");
 const migrationDatabaseUrlSchema = databaseUrlSchema("direct");
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 export function parseHostedDatabaseUrl(value: unknown): string {
   return hostedDatabaseUrlSchema.parse(value);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 export function parseMigrationDatabaseUrl(value: unknown): string {
   return migrationDatabaseUrlSchema.parse(value);
 }

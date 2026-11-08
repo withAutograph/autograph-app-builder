@@ -76,8 +76,7 @@ export type ApprovalTarget = Pick<
   "repositoryId" | "repository" | "baseRef" | "baseSha"
 >;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 export function parseApprovalReceipt(value: unknown): ApprovalReceipt {
   return approvalReceiptSchema.parse(value);
 }
@@ -218,8 +217,7 @@ export function assertApprovalReceipt(input: {
 const isDraftPullRequestTool = (toolName?: string) =>
   toolName === "publish_github_draft_pr" || toolName === "publish-github-draft-pr";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function publicReceiptDescription(receipt: unknown, toolName?: string): string | undefined {
   const parsed = approvalReceiptSchema.safeParse(receipt);
   let expectedPhase: ApprovalReceipt["phase"] | undefined;
@@ -673,8 +671,7 @@ const nativeTargetApprovalDescription = (input: unknown): string | undefined => 
 const isApprovalInputRecord = (input: unknown): input is Record<string, unknown> =>
   typeof input === "object" && input !== null && !Array.isArray(input);
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function otherPublicApprovalDescription(input: unknown, toolName?: string): string | undefined {
   if (!isApprovalInputRecord(input)) {
     return undefined;

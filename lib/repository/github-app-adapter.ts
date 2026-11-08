@@ -314,8 +314,7 @@ const inspectSelectedRepositoryRevisionAction = "inspect the selected repository
 
 const providerStatus = z.looseObject({ status: z.number().int().min(400).max(599) });
 
-// eslint-disable-next-line eslint/func-style -- Keep provider errors free of URLs, headers, and tokens.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Keep provider errors free of URLs, headers, and tokens. Preserve the existing unknown input contract.
 function safeProviderStatus(error: unknown): number | undefined {
   const direct = providerStatus.safeParse(error);
   if (direct.success) {
@@ -366,8 +365,7 @@ async function sanitizedProviderCall(
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function parseProviderResponse<T>(schema: z.ZodType<T>, input: unknown): T {
   const result = schema.safeParse(input);
   if (!result.success) {

@@ -190,6 +190,7 @@ const acquireOwnedPublishedDraft = async (
       // Classification only selects the lookup. The canonical successful receipt
       // and exact owned provider PR/head still have to be proved below.
       proposalDigest = sealed.proposal.digest;
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve absent optional publication metadata as undefined under the existing contract.
       recoveredOrigin = undefined;
       selectedCurrentSeal = true;
     }
