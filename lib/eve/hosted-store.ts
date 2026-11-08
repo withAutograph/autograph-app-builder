@@ -2446,7 +2446,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     ) {
       throw new Error("Canonical SEND delivery is not proved.");
     }
-    return { operation, current };
+    return { current, operation };
   }
 
   private async provedSendDelivery(

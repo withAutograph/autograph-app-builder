@@ -474,12 +474,11 @@ export const createHostedOperatorTenantBindingReadback =
     const scopes =
       plan.access.length > 0
         ? plan.access.flatMap((access) =>
-            access.roles.map((role) => ({
-              appId: plan.selection.appId,
-              actorId: access.actorId,
-              organizationId: access.organizationId,
-              role,
-            })),
+            access.roles.map((role) => {
+              const { appId } = plan.selection;
+              const { actorId, organizationId } = access;
+              return { actorId, appId, organizationId, role };
+            }),
           )
         : await readInstallationReadinessScopes(deps, input);
     const allowedCustomers = new Set(plan.appInstallation?.customerIds);
@@ -712,8 +711,8 @@ export const createHostedOperatorAppReadiness =
         error,
         undefined,
         {
-          stage: "final_runtime_readiness",
           runtimeReadinessStage,
+          stage: "final_runtime_readiness",
         },
       );
       throw reject();

@@ -109,7 +109,7 @@ export const createRepositoryProductionRuntimeBinding = (input: {
         : [];
     });
     if (row === undefined) {
-      return { expected, row: undefined, dispatched: checkpoints.length > 0 };
+      return { dispatched: checkpoints.length > 0, expected, row: undefined };
     }
     if (
       row.comment !== expected.marker ||
@@ -134,7 +134,7 @@ export const createRepositoryProductionRuntimeBinding = (input: {
     ) {
       throw new Error("repository_production_runtime_binding_conflict");
     }
-    return { expected, row, dispatched: true };
+    return { dispatched: true, expected, row };
   };
   return {
     async apply(context: RepositoryProductionEffectContext, runtimeUrl: string) {

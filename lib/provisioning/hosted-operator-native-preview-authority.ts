@@ -198,16 +198,16 @@ const readVerifiedOwnerNativeStore = async (
   const native = await observeOperatorPlanStage(
     context.target.sessionId,
     "neon_native_store",
-    async () =>
-      await readVercelNativeNeonBinding({
-        configurationId: binding.configurationId,
+    async () => {
+      const { configurationId, sourceProjectId, resourceId } = binding;
+      const { neonProjectId } = input;
+      return await readVercelNativeNeonBinding({
+        configurationId,
         fail: (reason) => {
           reportStoreFailure(reason);
           return fail();
         },
-        sourceProjectId: binding.sourceProjectId,
-        resourceId: binding.resourceId,
-        neonProjectId: input.neonProjectId,
+        neonProjectId,
         request: async (pathname) => {
           await input.assertCurrentOwner(context);
           const credential = await readCredential();
@@ -237,7 +237,10 @@ const readVerifiedOwnerNativeStore = async (
             }
           }
         },
-      }),
+        resourceId,
+        sourceProjectId,
+      });
+    },
     input.diagnosticSink,
   );
   if (native.resourceId !== binding.resourceId || native.neonProjectId !== input.neonProjectId) {
@@ -419,11 +422,12 @@ const createAuthority = (
   return {
     ...approvedAuthority,
     async readCurrentOwnerNativeStore(context, binding) {
+      const { fetch: providerFetch, diagnosticSink } = input;
       return await readVerifiedOwnerNativeStore(
         {
           assertCurrentOwner: assertApprovedObservationPhase ?? assertPhase,
-          fetch: input.fetch,
-          diagnosticSink: input.diagnosticSink,
+          diagnosticSink,
+          fetch: providerFetch,
           nativeStore: expectedStore,
           neonProjectId: plan.neon.projectId,
           readCredential: input.controlPlane.readCredential,
@@ -553,11 +557,12 @@ export const createNativePreviewNeonPlanningAuthority = (input: {
       requested: HostedOperatorContext,
       binding: NativePreviewNeonStoreBinding,
     ) {
+      const { fetch: providerFetch, diagnosticSink } = input;
       return await readVerifiedOwnerNativeStore(
         {
           assertCurrentOwner,
-          fetch: input.fetch,
-          diagnosticSink: input.diagnosticSink,
+          diagnosticSink,
+          fetch: providerFetch,
           nativeStore,
           neonProjectId: scope.projectId,
           readCredential: input.controlPlane.readCredential,
