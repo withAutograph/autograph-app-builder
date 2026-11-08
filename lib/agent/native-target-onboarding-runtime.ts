@@ -62,11 +62,11 @@ export interface NativeTargetCapturedRelease {
 /** All ports are private server capabilities; none are constructed from tool input. */
 export type NativeTargetNonCreationReason = NativeTargetNoCreationReason;
 const nonCreationReason = {
+  authorization_denied: "not_dispatched",
   collision: "name_conflict",
   permission_denied: "provider_permission_denied",
   provider_rejected: "provider_validation_failed",
   rate_limited: "provider_rate_limited",
-  authorization_denied: "not_dispatched",
 } as const;
 export interface NativeTargetOnboardingRuntimePorts {
   /** Reauthorizes current owner/app and reads captured immutable release metadata. */
@@ -184,13 +184,19 @@ const publicStatus = (stage: NativeTargetOnboardingRow["record"]["stage"]) => {
   }
   return "pending" as const;
 };
-const publicResult = (row: NativeTargetOnboardingRow) => ({
-  ...envelope(row),
-  status: publicStatus(row.record.stage),
-  ...(row.record.stage === "ready"
-    ? { projectId: row.record.registration.observed.projectId }
-    : {}),
-});
+const publicResult = (row: NativeTargetOnboardingRow) => {
+  const result: NativeTargetPreparationRequest & {
+    status: ReturnType<typeof publicStatus>;
+    projectId?: string;
+  } = {
+    ...envelope(row),
+    status: publicStatus(row.record.stage),
+  };
+  if (row.record.stage === "ready") {
+    result.projectId = row.record.registration.observed.projectId;
+  }
+  return result;
+};
 
 /** Source provenance is checked at planning; later execution resumes the frozen operation. */
 const resourceIdentity = (plan: NativeTargetOnboardingPlan) => ({

@@ -543,7 +543,7 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       if (renewal !== undefined && project.trustedSources === undefined) {
         throw unavailable();
       }
-      return { sources, missing: !covered };
+      return { missing: !covered, sources };
     };
     const bindTrustedSources = async () => {
       const observed = await observeTrustedSources();
@@ -797,18 +797,18 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       await guard();
     };
     return {
+      bindTrustedSources,
       checkpoint,
       checkpointCleanup,
-      inspectCleanup,
       comment,
       expected,
       guard,
       inspect,
+      inspectCleanup,
       matchesExpectedValues,
-      reference,
       observeTrustedSources,
-      bindTrustedSources,
       previewGitBranch,
+      reference,
       request,
       target: deploymentTarget,
     };

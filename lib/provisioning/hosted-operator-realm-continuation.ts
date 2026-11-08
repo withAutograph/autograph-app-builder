@@ -359,7 +359,7 @@ const identityWaitContext = async (
     if (context === undefined) {
       throw new HostedOperatorError("authorization_required");
     }
-    return { context, resources, adapterSessionId: owner.adapterSessionId };
+    return { adapterSessionId: owner.adapterSessionId, context, resources };
   } catch (error) {
     await resources.controlPlane.close();
     throw error;

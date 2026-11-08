@@ -233,6 +233,16 @@ export const createPostgresPublicRealmCallbackResolver = (input: {
 }) =>
   createPublicRealmCallbackResolver({
     ...input,
+    readEnrollment: async (context, enrollmentRef) =>
+      await readPublicRealmLinkConfiguration({
+        database: input.database,
+        keyring: input.keyring,
+        authority: context.authority,
+        enrollmentRef,
+        assertCurrentOwner: async () => {
+          await input.assertCurrentOwner(context);
+        },
+      }),
     readReleases: async (context, binding) =>
       await input.database
         .select({
@@ -259,16 +269,6 @@ export const createPostgresPublicRealmCallbackResolver = (input: {
           ),
         )
         .limit(2),
-    readEnrollment: async (context, enrollmentRef) =>
-      await readPublicRealmLinkConfiguration({
-        database: input.database,
-        keyring: input.keyring,
-        authority: context.authority,
-        enrollmentRef,
-        assertCurrentOwner: async () => {
-          await input.assertCurrentOwner(context);
-        },
-      }),
     readValues: async (context, plan) => {
       const store = createPublicReleaseRuntimeConfigurationStore({
         database: input.database,
