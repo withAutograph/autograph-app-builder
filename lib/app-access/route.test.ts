@@ -146,10 +146,10 @@ describe("session-owned app access route", () => {
   it("streams a bounded command body even without a content-length header", async () => {
     const execute = vi.fn();
     const handler = createAppAccessRouteHandler({
-      origin,
-      resolveOwner: async () => routeOwner,
-      read: vi.fn(),
       execute,
+      origin,
+      read: vi.fn(),
+      resolveOwner: async () => routeOwner,
     });
     const response = await handler(request({ ...command, email: "x".repeat(70_000) }), "session");
     expect(response.status).toBe(400);

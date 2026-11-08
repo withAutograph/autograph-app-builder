@@ -34,8 +34,8 @@ it("uses the selected release's actual published repository, ref and commit", ()
   expect(resolvePublishedAppDelivery(application, { ...release, publishedSource })).toEqual({
     branch: publishedSource.branch,
     gitSha: publishedSource.gitSha,
-    repoId: publishedSource.repositoryId,
     projectId: application.projectId,
+    repoId: publishedSource.repositoryId,
   });
   expect(application.branch).toBe("main");
 });
@@ -88,9 +88,9 @@ it("freezes configured project settings alongside the selected release source", 
   ).toEqual({
     branch: publishedSource.branch,
     gitSha: publishedSource.gitSha,
-    repoId: publishedSource.repositoryId,
     projectId: application.projectId,
     projectSettings,
+    repoId: publishedSource.repositoryId,
   });
 });
 it.each(["apps/spend-review", "apps/revised-product"])(

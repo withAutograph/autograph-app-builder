@@ -786,6 +786,13 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
   // oxlint-disable-next-line eslint/require-await -- The recovery test transport has no model or provider.
   const emptyRecovery = async () => ({ events: [], status: "waiting" as const });
   const recoveryTransport: HostedEveTransport = {
+    activateRecovery: async ({ operationId }) => {
+      const operation = await original.store.getPrivateOperation(principal, operationId);
+      if (operation?.state !== "succeeded" || operation.nativeRecoveryReceipt === undefined) {
+        throw new Error("Expected committed canonical recovery child and receipt.");
+      }
+      return operation.nativeRecoveryReceipt;
+    },
     cancel: emptyRecovery,
     get: emptyRecovery,
     respond: emptyRecovery,
@@ -816,13 +823,6 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
         recoveryBinding,
         snapshot: await emptyRecovery(),
       };
-    },
-    activateRecovery: async ({ operationId }) => {
-      const operation = await original.store.getPrivateOperation(principal, operationId);
-      if (operation?.state !== "succeeded" || operation.nativeRecoveryReceipt === undefined) {
-        throw new Error("Expected committed canonical recovery child and receipt.");
-      }
-      return operation.nativeRecoveryReceipt;
     },
   };
   const recovered = await createHostedEveSessionService({
@@ -906,9 +906,6 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
     activateRecovery: recoveryTransport.activateRecovery,
     cancel: empty,
     get: empty,
-    respond: empty,
-    send: empty,
-    start: async () => ({ adapterSessionId: "unused", snapshot: await empty() }),
     observe: async (input) => {
       observed.push({ adapterSessionId: input.adapterSessionId, sessionId: input.sessionId });
       observation += 1;
@@ -951,20 +948,23 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
         status: "waiting",
       };
     },
+    respond: empty,
+    send: empty,
+    start: async () => ({ adapterSessionId: "unused", snapshot: await empty() }),
   };
   const service = () =>
     createHostedEveSessionService({ now: () => 20, principal, store, transport });
   return {
     child,
     childId,
-    originalId,
-    original,
     metadata: () => metadata,
-    requestedPlan,
-    requestedInput,
     observed,
-    writes,
+    original,
+    originalId,
+    requestedInput,
+    requestedPlan,
     service,
+    writes,
   };
 };
 

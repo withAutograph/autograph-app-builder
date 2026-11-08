@@ -28,10 +28,10 @@ const fixture = () => {
     effect: "publish-release-source",
     priorPhase: "idle",
     bindings: {
-      read: async () => ({}),
       claim: async () => {
         throw new Error("unused");
       },
+      read: async () => ({}),
       recordAccepted: async () => {},
       recordVerified: async () => {},
     },
@@ -102,12 +102,21 @@ const fixture = () => {
     }),
   });
   return {
-    plan,
     context,
-    provider,
-    writes,
     foreignRepository: () => {
       description = "Shared platform repository";
+    },
+    lose: (accepted = true) => {
+      loseResponse = true;
+      applyWrite = accepted;
+    },
+    plan,
+    provider,
+    race: () => {
+      moveBeforeWrite = true;
+    },
+    revoke: () => {
+      authorized = false;
     },
     setProduction: (v: string) => {
       production = v;
@@ -115,16 +124,7 @@ const fixture = () => {
     setSource: (v: string) => {
       source = v;
     },
-    revoke: () => {
-      authorized = false;
-    },
-    lose: (accepted = true) => {
-      loseResponse = true;
-      applyWrite = accepted;
-    },
-    race: () => {
-      moveBeforeWrite = true;
-    },
+    writes,
   };
 };
 
@@ -134,8 +134,8 @@ it("publishes the approved commit with atomic expected-before and independently 
   await f.provider.publish(f.context);
   expect(f.writes).toEqual([
     {
-      beforeOid: f.plan.source.expectedProductionSha,
       afterOid: f.plan.source.sourceSha,
+      beforeOid: f.plan.source.expectedProductionSha,
       name: "refs/heads/main",
       repositoryId: "repository-node",
     },

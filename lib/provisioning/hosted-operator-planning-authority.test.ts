@@ -313,9 +313,9 @@ describe("prepared Preview release planning", () => {
         appSpecDigest: selected.appSpecDigest,
         artifactRef: selected.artifactRef,
         publishedSource: {
-          repositoryId: f.published.publishedSource.repositoryId,
           branch: target.branch,
           gitSha: f.published.publishedSource.gitSha,
+          repositoryId: f.published.publishedSource.repositoryId,
         },
       },
     );

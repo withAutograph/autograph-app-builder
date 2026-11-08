@@ -53,7 +53,7 @@ const fixture = () => {
   const script = path.join(staging, "import.cjs");
   writeFileSync(script, applicationSourceImportProgram({ ...plan, root }));
   const run = () => spawnSync(process.execPath, [script], { encoding: "utf-8" });
-  return { root, staging, receipt, files, bytes, run };
+  return { bytes, files, receipt, root, run, staging };
 };
 describe("source-only application materialization", () => {
   it("preserves binary bytes and mode without executing source, and resumes without overwriting edits", () => {
@@ -115,17 +115,17 @@ it("does not stage source after cancellation or owner rejection", async () => {
   const controller = new AbortController();
   controller.abort();
   await expect(
-    materializeApplicationSource({ sandbox, validated, receipt, abortSignal: controller.signal }),
+    materializeApplicationSource({ abortSignal: controller.signal, receipt, sandbox, validated }),
   ).rejects.toThrow();
   await expect(
     materializeApplicationSource({
-      sandbox,
-      validated,
-      receipt,
       assertCurrent: async () => {
         await Promise.resolve();
         throw new Error("Owner changed");
       },
+      receipt,
+      sandbox,
+      validated,
     }),
   ).rejects.toThrow("Owner changed");
   expect(run).not.toHaveBeenCalled();

@@ -61,7 +61,7 @@ const fixture = () => {
     descriptor,
     ports,
   };
-  return { input, deps, receipt, state };
+  return { deps, input, receipt, state };
 };
 const captureFailure = async (f, original, expectedStage) => {
   const logged = [];

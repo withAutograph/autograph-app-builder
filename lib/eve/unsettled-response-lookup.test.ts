@@ -150,9 +150,9 @@ describe.each([
     const reader = store.readUnsettledResponseOperations.bind(store);
     const read = (cursor?: { createdAtEpochMs: number; operationId: string }) => {
       const request: Parameters<typeof reader>[0] = {
+        limit: 1,
         principal,
         sessionId: "session-1",
-        limit: 1,
       };
       if (cursor) {
         request.cursor = cursor;
@@ -169,15 +169,15 @@ describe.each([
     ]).toEqual(["a", "b", "c"]);
     expect(third.nextCursor).toBeUndefined();
     const other = await store.readUnsettledResponseOperations({
+      limit: 5,
       principal: foreignOwner,
       sessionId: "session-1",
-      limit: 5,
     });
     expect(other.operations.map((item) => item.operationId)).toEqual(["foreign-owner"]);
     const session = await store.readUnsettledResponseOperations({
+      limit: 5,
       principal,
       sessionId: "session-2",
-      limit: 5,
     });
     expect(session.operations.map((item) => item.operationId)).toEqual(["other-session"]);
   });
@@ -187,17 +187,17 @@ describe.each([
       throw new Error("missing response reader");
     }
     await expect(
-      store.readUnsettledResponseOperations({ principal, sessionId: "", limit: 1 }),
+      store.readUnsettledResponseOperations({ limit: 1, principal, sessionId: "" }),
     ).rejects.toThrow();
     await expect(
-      store.readUnsettledResponseOperations({ principal, sessionId: "session-1", limit: 0 }),
+      store.readUnsettledResponseOperations({ limit: 0, principal, sessionId: "session-1" }),
     ).rejects.toThrow();
     await expect(
       store.readUnsettledResponseOperations({
+        cursor: { createdAtEpochMs: -1, operationId: "a" },
+        limit: 1,
         principal,
         sessionId: "session-1",
-        limit: 1,
-        cursor: { createdAtEpochMs: -1, operationId: "a" },
       }),
     ).rejects.toThrow();
   });
