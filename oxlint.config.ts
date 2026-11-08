@@ -16,6 +16,44 @@ export default defineConfig({
   },
   overrides: [
     {
+      // Preserve existing runtime contracts pending focused migration.
+      files: ["lib/eve/same-origin-http.ts"],
+      rules: { "typescript/no-misused-spread": "off" },
+    },
+    {
+      // Preserve existing runtime contracts pending focused migration.
+      files: ["lib/eve/public-events.ts", "lib/eve/service.ts"],
+      rules: { "typescript/switch-exhaustiveness-check": "off" },
+    },
+    {
+      // Preserve existing runtime contracts pending focused migration.
+      files: ["scripts/design-quality/archive-entry.ts", "scripts/test-capability-preload.mjs"],
+      rules: { "typescript/no-unsafe-return": "off" },
+    },
+    {
+      // Preserve exhaustive-switch errors for unexpected runtime values.
+      files: [
+        "lib/auth/preview-user-management.ts",
+        "lib/eve/hosted-service.test.ts",
+        "scripts/eval-self-reproduction.mts",
+      ],
+      rules: { "typescript/restrict-template-expressions": "off" },
+    },
+    {
+      // Preserve existing callback and abort behavior pending contract review.
+      files: ["lib/development/mcp-readiness.ts"],
+      rules: { "typescript/only-throw-error": "off" },
+    },
+    {
+      // Preserve existing callback and abort behavior pending contract review.
+      files: [
+        "components/auth/additional-field.tsx",
+        "lib/agent/product-behavior.test.ts",
+        "scripts/self-reproduction-live.mts",
+      ],
+      rules: { "typescript/no-misused-promises": "off" },
+    },
+    {
       // Existing findings awaiting behavior-preserving contract changes.
       files: [
         "lib/auth/postgres-organization-user-authority.ts",
@@ -218,7 +256,6 @@ export default defineConfig({
   rules: {
     // Temporary migration baseline; remove these as findings are fixed.
     "typescript/promise-function-async": "off",
-    "typescript/switch-exhaustiveness-check": "off",
     "anti-slop/no-conditional-empty-object-spread": "off",
     "anti-slop/no-known-value-widening": "off",
     "anti-slop/no-runtime-typeof": "off",
@@ -261,17 +298,12 @@ export default defineConfig({
     "typescript/consistent-return": "off",
     "typescript/no-base-to-string": "off",
     "typescript/no-confusing-void-expression": "off",
-    "typescript/no-misused-promises": "off",
-    "typescript/no-misused-spread": "off",
     "typescript/no-unsafe-argument": "off",
     "typescript/no-unsafe-assignment": "off",
     "typescript/no-unsafe-call": "off",
     "typescript/no-unsafe-member-access": "off",
-    "typescript/no-unsafe-return": "off",
     "typescript/no-unsafe-type-assertion": "off",
-    "typescript/only-throw-error": "off",
     "typescript/prefer-nullish-coalescing": "off",
-    "typescript/restrict-template-expressions": "off",
     "typescript/strict-boolean-expressions": "off",
     "typescript/strict-void-return": "off",
     "typescript/unbound-method": "off",
