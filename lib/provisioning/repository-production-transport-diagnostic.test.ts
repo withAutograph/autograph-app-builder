@@ -10,11 +10,11 @@ import type {
 const privateCredentials = Buffer.from("synthetic private role credentials");
 const runId = "11111111-1111-4111-a111-111111111111";
 const worker: ProtectedInstallerWorkerDescriptor = {
+  executablePath: "/worker/resource",
   id: "neon-resource-bootstrap-v1",
   operationScope: "neon-resource-bootstrap-v1",
-  executablePath: "/worker/resource",
-  subcommand: "neon-resource-bootstrap",
   sha256: "a".repeat(64),
+  subcommand: "neon-resource-bootstrap",
 };
 const context: ResourceBootstrapContextWire = {
   version: 1,

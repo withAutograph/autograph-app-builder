@@ -435,13 +435,13 @@ describe("closed owner key custody invocation", () => {
     const productionPlan = custodyPlanSchema.parse({
       ...plan,
       action: "transfer-active-vercel-token-key-to-operator-production",
-      operationRef: productionRef,
       destination: { ...plan.destination, environment: "production" },
+      operationRef: productionRef,
     });
     const productionGrant = {
       ...setupGrant,
-      operationRef: productionRef,
       approvedPlanDigest: custodyPlanDigest(productionPlan),
+      operationRef: productionRef,
     };
     const productionRecord = custodyRecordSchema.parse({
       ...record,

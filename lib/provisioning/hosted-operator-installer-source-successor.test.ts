@@ -162,7 +162,7 @@ const makeIdleRecord = (sourcePlan: HostedOperatorPlan = plan): HostedRuntimeJou
     planDigest: operator.planDigest,
     callId: record.approvedByCallId,
     approvalId: requireDefined(operator.approvalId),
-    outcome: { status: "blocked", code: "resource_mismatch" },
+    outcome: { code: "resource_mismatch", status: "blocked" },
   };
   return record;
 };
@@ -222,8 +222,8 @@ describe("hosted operator installer source successor", () => {
       case "nonblocked observation": {
         record.executionObservation = {
           ...observation,
-          state: "settled",
           outcome: { status: "prepared" },
+          state: "settled",
         };
         break;
       }

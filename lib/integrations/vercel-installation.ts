@@ -399,7 +399,7 @@ export function createVercelInstallationAuthorization(input: {
         ? new URL("/local-connections/vercel", config.issuer)
         : new URL(`/integrations/${config.slug}/new`, "https://vercel.com");
       url.searchParams.set("state", state);
-      if (input.emulation && returnState.resumeKey) {
+      if (input.emulation && returnState.resumeKey !== undefined && returnState.resumeKey !== "") {
         url.searchParams.set("resume", returnState.resumeKey);
       }
       return url.toString();
@@ -415,7 +415,8 @@ export function createVercelInstallationAuthorization(input: {
         .min(1)
         .max(256)
         .parse(url.searchParams.get("configurationId"));
-      const teamId = url.searchParams.get("teamId") || undefined;
+      const requestedTeamId = url.searchParams.get("teamId");
+      const teamId = requestedTeamId === "" ? undefined : (requestedTeamId ?? undefined);
       if (!(await input.membership.isActiveMember(authority))) {
         throw new Error(MEMBERSHIP_INACTIVE_ERROR);
       }
@@ -538,7 +539,11 @@ export function verifyVercelWebhook(input: {
   signature: string | null;
   secret: string;
 }) {
-  if (!input.signature || !/^[a-f0-9]{40}$/iu.test(input.signature)) {
+  if (
+    input.signature === null ||
+    input.signature === "" ||
+    !/^[a-f0-9]{40}$/iu.test(input.signature)
+  ) {
     return false;
   }
   const expected = createHmac("sha1", input.secret).update(input.body).digest();
