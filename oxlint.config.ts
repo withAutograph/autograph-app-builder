@@ -198,7 +198,6 @@ export default defineConfig({
         "evals/support/self-reproduction-reference-navigation.ts",
         "evals/support/self-reproduction-reference-runtime.ts",
         "evals/support/self-reproduction-template-source.ts",
-        sharedLintFile15,
         "lib/development/dev-package.ts",
         sharedLintFile16,
         "lib/development/process-supervisor.ts",
@@ -393,7 +392,6 @@ export default defineConfig({
     {
       // Preserve existing falsy-value fallback behavior.
       files: [
-        "app/ui/use-builder-draft-autosave.ts",
         additionalAuthFieldPath,
         sharedLintFile6,
         sharedLintFile22,
@@ -586,7 +584,6 @@ export default defineConfig({
         "lib/repository/canonical-acquisition-alignment.test.ts",
         "lib/repository/local-planning-source.test.ts",
         "lib/repository/local-preview-auth-origin.test.ts",
-        "oxlint.config.ts",
         "scripts/eve-recovery-holder-observation.test.mjs",
       ],
       rules: { "unicorn/consistent-function-scoping": "off" },
