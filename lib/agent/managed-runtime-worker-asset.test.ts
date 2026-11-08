@@ -277,8 +277,8 @@ it.each([false, true])(
       expect(f.createOptions[0]).not.toHaveProperty("source");
     } else {
       expect(f.createOptions[0]).toHaveProperty("source", {
-        type: "snapshot",
         snapshotId: "snap_operator_workers",
+        type: "snapshot",
       });
       expect(f.createOptions[0]).not.toHaveProperty("image");
     }
@@ -435,7 +435,7 @@ it("disposes a retained named source without target access or another create", a
 
 it("disposal alone preserves unresolved create and never creates or installs", async () => {
   const f = fixture();
-  f.setState({ sourceCreationAttempted: true, disposed: false });
+  f.setState({ disposed: false, sourceCreationAttempted: true });
   await expect(f.dispose()).rejects.toMatchObject({ code: "reconciliation_required" });
   expect(f.stats.creates).toBe(0);
   expect(f.stats.writes).toBe(0);

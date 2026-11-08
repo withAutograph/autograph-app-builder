@@ -629,7 +629,7 @@ describe("unchanged paged observation reuse", () => {
           winner = durableHostedSessionRecordSchema.parse({
             ...f.saved,
             ...(change === "cancellation"
-              ? { cancellationRevision: 1, status: "cancelled", stage: "needs_attention" }
+              ? { cancellationRevision: 1, stage: "needs_attention", status: "cancelled" }
               : { adapterGeneration: 2, adapterSessionId: "adapter_replacement" }),
           });
           f.getSession.mockImplementation(

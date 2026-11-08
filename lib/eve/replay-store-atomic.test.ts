@@ -36,15 +36,15 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
     },
   },
   project: {
-    name: "requests-app",
-    teamId: "team",
     installationId: "installation",
+    name: "requests-app",
     projectSettings: {
       framework: "nextjs",
       rootDirectory: "apps/requests",
       sourceFilesOutsideRootDirectory: true,
     },
     protection: nativeTargetRequiredProjectProtection,
+    teamId: "team",
   },
   branch: "preview",
   appDatabase: {
@@ -67,13 +67,13 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
     },
   },
   worker: {
-    id: "worker",
     executablePath: "/trusted/worker",
-    sha256: "d".repeat(64),
+    id: "worker",
     operationScope: "generated-app-release-install-v1",
+    sha256: "d".repeat(64),
     subcommand: "protected-generated-app-install",
   },
-  cost: { ownership: "current-owner", description: "Preview usage" },
+  cost: { description: "Preview usage", ownership: "current-owner" },
   retention: { policy: "Until approved cleanup" },
   conflictPolicy: "stop-on-conflict",
 });
