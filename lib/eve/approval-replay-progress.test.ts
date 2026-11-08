@@ -7,17 +7,17 @@ import {
 const fixture = () => ({
   version: 1 as const,
   binding: {
+    adapterGeneration: 2,
+    adapterSessionId: "adapter",
+    approvalSessionId: "original-session",
     principal: {
-      issuer: "https://identity.example",
       audience: "builder",
-      workspaceId: "workspace",
+      issuer: "https://identity.example",
       ownerUserId: "owner",
       scopes: ["autograph:get"],
+      workspaceId: "workspace",
     },
     sessionId: "session",
-    approvalSessionId: "original-session",
-    adapterSessionId: "adapter",
-    adapterGeneration: 2,
   },
   sourceCheckpoint: {
     id: "00000000-0000-4000-8000-000000000001",

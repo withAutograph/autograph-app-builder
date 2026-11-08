@@ -9,8 +9,8 @@ const scope = {
   workspaceId: "workspace",
 };
 const fixture = () => ({
-  descriptor: { logicalSessionId: "logical" },
   binding: { logicalSessionId: "logical", ownerRunId: "physical" },
+  descriptor: { logicalSessionId: "logical" },
   payload: {
     binding: { logicalSessionId: "logical", ownerRunId: "physical" },
     candidates: [
@@ -114,8 +114,8 @@ for (const phase of ["applied", "apply_failed"]) {
     const workflow = state["autograph-app-builder.workflow.v17"];
     workflow.phase = phase;
     const receipt = {
-      appliedByCallId: "call",
       appSpecDigest: "spec",
+      appliedByCallId: "call",
       proposalDigest: "proposal",
       workspaceDigest: "workspace-digest",
     };

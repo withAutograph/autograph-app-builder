@@ -133,15 +133,11 @@ const historyFixture = () => {
       let predicate: SQL;
       let maximum = Number.POSITIVE_INFINITY;
       const query = {
-        where: (condition: SQL) => {
-          predicate = condition;
-          return query;
-        },
-        orderBy: () => query,
         limit: (limit: number) => {
           maximum = limit;
           return query;
         },
+        orderBy: () => query,
         // oxlint-disable-next-line unicorn/no-thenable -- Drizzle query builders are awaitable as well as chainable.
         then: <Result>(resolve: (value: FixtureRow[]) => Result) => {
           const selected = (rows.get(name) ?? [])
@@ -159,43 +155,15 @@ const historyFixture = () => {
           // oxlint-disable-next-line github/no-then -- Implement the query builder thenable boundary.
           return Promise.resolve(result).then(resolve);
         },
+        where: (condition: SQL) => {
+          predicate = condition;
+          return query;
+        },
       };
       return query;
     },
   });
   const fake = {
-    select,
-    insert: (table: Parameters<typeof getTableName>[0]) => ({
-      values: async (input: FixtureRow | FixtureRow[]) => {
-        const name = getTableName(table);
-        if (name === failTable) {
-          failTable = undefined;
-          throw new Error("Injected database write failure.");
-        }
-        const values = (Array.isArray(input) ? input : [input]).map((row) => {
-          const value = { ...row };
-          if (name === "agent_session_checkpoint_manifest") {
-            value.publishedAt = null;
-          }
-          return value;
-        });
-        calls.push({ kind: "insert", rowCount: values.length, table: name });
-        rows.set(name, [...(rows.get(name) ?? []), ...values]);
-      },
-    }),
-    update: (table: Parameters<typeof getTableName>[0]) => ({
-      set: (values: FixtureRow) => ({
-        where: (predicate: SQL) => {
-          const name = getTableName(table);
-          const selected = (rows.get(name) ?? []).filter((row) => matches(row, predicate));
-          for (const row of selected) {
-            Object.assign(row, values);
-          }
-          calls.push({ kind: "update", rowCount: selected.length, table: name });
-          return Object.assign(Promise.resolve(selected), { returning: async () => selected });
-        },
-      }),
-    }),
     delete: (table: Parameters<typeof getTableName>[0]) => ({
       where: (predicate: SQL) => {
         const name = getTableName(table);
@@ -226,6 +194,38 @@ const historyFixture = () => {
         }
         return Object.assign(Promise.resolve(selected), { returning: async () => selected });
       },
+    }),
+    insert: (table: Parameters<typeof getTableName>[0]) => ({
+      values: async (input: FixtureRow | FixtureRow[]) => {
+        const name = getTableName(table);
+        if (name === failTable) {
+          failTable = undefined;
+          throw new Error("Injected database write failure.");
+        }
+        const values = (Array.isArray(input) ? input : [input]).map((row) => {
+          const value = { ...row };
+          if (name === "agent_session_checkpoint_manifest") {
+            value.publishedAt = null;
+          }
+          return value;
+        });
+        calls.push({ kind: "insert", rowCount: values.length, table: name });
+        rows.set(name, [...(rows.get(name) ?? []), ...values]);
+      },
+    }),
+    select,
+    update: (table: Parameters<typeof getTableName>[0]) => ({
+      set: (values: FixtureRow) => ({
+        where: (predicate: SQL) => {
+          const name = getTableName(table);
+          const selected = (rows.get(name) ?? []).filter((row) => matches(row, predicate));
+          for (const row of selected) {
+            Object.assign(row, values);
+          }
+          calls.push({ kind: "update", rowCount: selected.length, table: name });
+          return Object.assign(Promise.resolve(selected), { returning: async () => selected });
+        },
+      }),
     }),
   };
   // SAFETY: This terminal fixture implements all query chains exercised by the real history reader and publisher.

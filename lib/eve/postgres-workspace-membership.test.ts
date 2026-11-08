@@ -20,9 +20,9 @@ function databaseReturning<T extends Record<string, unknown>>(rows: T[]) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const limit = vi.fn(async () => rows);
   const where = vi.fn(() => ({ limit }));
-  const joined = { innerJoin: undefined as unknown, where };
-  const innerJoin = vi.fn(() => joined);
-  joined.innerJoin = innerJoin;
+  const innerJoin = vi.fn();
+  const joined = { innerJoin, where };
+  innerJoin.mockReturnValue(joined);
   const from = vi.fn(() => joined);
   const select = vi.fn(() => ({ from }));
   return {
