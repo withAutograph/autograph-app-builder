@@ -721,21 +721,21 @@ describe("independent application source review", () => {
     for (const [offset, expected] of [{ text }, { items: evidence.sourceFiles }].entries()) {
       expect(results).toContainEqual(
         expect.objectContaining({
-          toolCallId: `step-1-${offset}`,
           output: { type: "json", value: expected },
+          toolCallId: `step-1-${offset}`,
         }),
       );
       expect(results).toContainEqual(
         expect.objectContaining({
-          toolCallId: `step-2-${offset}`,
           output: {
             type: "json",
             value: {
-              kind: "retained-evidence-result",
               firstToolCallId: `step-1-${offset}`,
+              kind: "retained-evidence-result",
               resultDigest: createHash("sha256").update(JSON.stringify(expected)).digest("hex"),
             },
           },
+          toolCallId: `step-2-${offset}`,
         }),
       );
     }
@@ -752,8 +752,8 @@ describe("independent application source review", () => {
     );
     expect(newest).toContainEqual(
       expect.objectContaining({
-        toolCallId: "step-4-1",
         output: { type: "json", value: { items: evidence.sourceFiles } },
+        toolCallId: "step-4-1",
       }),
     );
     for (const call of model.doGenerateCalls) {
@@ -1111,18 +1111,18 @@ describe("independent application source review", () => {
       expect(prompt).toContain(input.appSpec);
       expect(prompt).toContain("Keep the server save requirement.");
       expect(call.prompt).toContainEqual({
-        role: "user",
         content: [
           {
-            type: "text",
             text: JSON.stringify({
               requirements: evidence.requirements,
               changedPaths: evidence.changedPaths,
               sourceDigest: input.sourceDigest,
               appSpecDigest: input.appSpecDigest,
             }),
+            type: "text",
           },
         ],
+        role: "user",
       });
       const calls = call.prompt.flatMap((message) =>
         message.role === "assistant"
