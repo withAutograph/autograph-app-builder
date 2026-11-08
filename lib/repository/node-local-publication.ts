@@ -532,17 +532,15 @@ const dirtyEntry = async function dirtyEntry(
     throw new Error("Git reported an unsafe dirty path.");
   }
   const state = await fileState(nodePath.resolve(root, parsed.path));
-  return {
-    ...parsed,
-    kind: state.kind,
-    ...(state.mode === undefined ? {} : { mode: state.mode }),
-    ...(state.digest === undefined || state.size === undefined
-      ? {}
-      : {
-          contentDigest: state.digest,
-          size: state.size,
-        }),
-  };
+  const entry: DirtyPathSnapshot = { ...parsed, kind: state.kind };
+  if (state.mode !== undefined) {
+    entry.mode = state.mode;
+  }
+  if (state.digest !== undefined && state.size !== undefined) {
+    entry.contentDigest = state.digest;
+    entry.size = state.size;
+  }
+  return entry;
 };
 
 const gitOwnedPath = async function gitOwnedPath(root: string, name: string): Promise<string> {
@@ -800,12 +798,16 @@ const acquireLock = async function acquireLock(root: string): Promise<() => Prom
 const pathEvidence = function pathEvidence(
   proposal: LocalPublicationProposal,
 ): readonly PublicationPathEvidence[] {
-  return proposal.changes.map((change) => ({
-    operation: change.kind,
-    path: change.path,
-    ...(change.before === undefined ? {} : { before: change.before }),
-    ...(change.after === undefined ? {} : { after: change.after }),
-  }));
+  return proposal.changes.map((change) => {
+    const evidence: PublicationPathEvidence = { operation: change.kind, path: change.path };
+    if (change.before !== undefined) {
+      evidence.before = change.before;
+    }
+    if (change.after !== undefined) {
+      evidence.after = change.after;
+    }
+    return evidence;
+  });
 };
 
 const verifyPreconditions = async function verifyPreconditions(input: {

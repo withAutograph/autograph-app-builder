@@ -163,20 +163,17 @@ export const planFrameworkUpgrade = async (
         bytes === null
           ? undefined
           : await sandbox.run({ command: `stat -c %a /workspace/repository/${path}` });
-      return {
-        path,
-        ...(bytes === null
-          ? {}
-          : {
-              before: {
-                digest: createHash("sha256").update(bytes).digest("hex"),
-                mode:
-                  stat?.exitCode === 0 && /^[0-7]{3,4}$/u.test(stat.stdout.trim())
-                    ? stat.stdout.trim()
-                    : "644",
-              },
-            }),
-      };
+      const entry: FrameworkUpgrade["baseline"][number] = { path };
+      if (bytes !== null) {
+        entry.before = {
+          digest: createHash("sha256").update(bytes).digest("hex"),
+          mode:
+            stat?.exitCode === 0 && /^[0-7]{3,4}$/u.test(stat.stdout.trim())
+              ? stat.stdout.trim()
+              : "644",
+        };
+      }
+      return entry;
     }),
   );
   return { baseline, scope: "workspace", versions: frameworkVersionsSchema.parse(versions) };
