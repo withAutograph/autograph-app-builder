@@ -406,10 +406,10 @@ const hasExactKeys = <Value extends object>(
 const pathIdentityKeys = ["path", "device", "inode", "uid", "mode", "nlink"] as const;
 const executableIdentityKeys = [...pathIdentityKeys, "sha256"] as const;
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+const isRecord = <Value>(value: Value): value is Value & Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const isPathIdentity = (value: unknown): value is PathIdentity => {
+const isPathIdentity = <Value>(value: Value): value is Value & PathIdentity => {
   if (!isRecord(value) || !hasExactKeys(value, pathIdentityKeys)) {
     return false;
   }

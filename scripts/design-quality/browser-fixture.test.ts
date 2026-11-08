@@ -8,7 +8,7 @@ const browser = vi.hoisted(() => {
     goto: vi.fn(() => Promise.resolve({ ok: () => true })),
     screenshot: vi.fn(),
   };
-  const close = vi.fn(() => Promise.resolve());
+  const close = vi.fn<() => Promise<void>>().mockResolvedValue();
   return { close, page };
 });
 vi.mock("playwright", () => ({
