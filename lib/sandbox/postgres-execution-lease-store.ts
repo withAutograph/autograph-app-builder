@@ -69,21 +69,26 @@ const leaseValues = (lease: SandboxExecutionLease) => ({
 export const parseSandboxExecutionLeaseRow = (input: unknown) => {
   const row = input as ReturnType<typeof leaseValues>;
   const lease = sandboxExecutionLeaseSchema.parse(row.record);
-  if (
+  const authorityMismatch =
     row.issuer !== lease.principal.issuer ||
     row.audience !== lease.principal.audience ||
     row.workspaceId !== lease.principal.workspaceId ||
-    row.ownerUserId !== lease.principal.ownerUserId ||
+    row.ownerUserId !== lease.principal.ownerUserId;
+  const leaseMismatch =
+    authorityMismatch ||
     row.adapterSessionId !== lease.adapterSessionId ||
     row.providerSandboxId !== lease.providerSandboxId ||
-    row.epoch !== lease.epoch ||
+    row.epoch !== lease.epoch;
+  const recordMismatch =
+    leaseMismatch ||
     row.state !== lease.state ||
     row.policyDigest !== lease.policyDigest ||
-    row.acquiredAt.getTime() !== lease.acquiredAtEpochMs ||
+    row.acquiredAt.getTime() !== lease.acquiredAtEpochMs;
+  const timestampsMismatch =
+    recordMismatch ||
     row.heartbeatAt.getTime() !== lease.heartbeatAtEpochMs ||
-    row.expiresAt.getTime() !== lease.expiresAtEpochMs ||
-    (row.releasedAt?.getTime() ?? undefined) !== lease.releasedAtEpochMs
-  ) {
+    row.expiresAt.getTime() !== lease.expiresAtEpochMs;
+  if (timestampsMismatch || (row.releasedAt?.getTime() ?? undefined) !== lease.releasedAtEpochMs) {
     throw new Error("Sandbox execution lease row is not canonically bound.");
   }
   return lease;

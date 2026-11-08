@@ -17,10 +17,11 @@ const appUrl = (path: string, origin: string): string => {
     !path.startsWith("/") ||
     path.startsWith("//") ||
     path.includes("\\") ||
-    url.origin !== origin ||
-    url.hash ||
-    url.pathname.startsWith("/__autograph_preview")
+    url.origin !== origin
   ) {
+    throw new Error("Invalid application path");
+  }
+  if (url.hash || url.pathname.startsWith("/__autograph_preview")) {
     throw new Error("Invalid application path");
   }
   return url.href;
@@ -30,13 +31,17 @@ class InvalidApplicationReadError extends Error {
   override name = "InvalidApplicationReadError";
 }
 
-const validAuthority = (launch: URL, expiresAt: number): boolean =>
-  launch.protocol === "https:" &&
-  !launch.username &&
-  !launch.password &&
-  launch.pathname === "/__autograph_preview_launch" &&
-  Number.isFinite(expiresAt) &&
-  expiresAt > Date.now();
+const validAuthority = (launch: URL, expiresAt: number): boolean => {
+  if (
+    launch.protocol !== "https:" ||
+    launch.username ||
+    launch.password ||
+    launch.pathname !== "/__autograph_preview_launch"
+  ) {
+    return false;
+  }
+  return Number.isFinite(expiresAt) && expiresAt > Date.now();
+};
 
 const validScenario = (scenario: ProductReadbackScenario): boolean =>
   Boolean(scenario.markerField) &&

@@ -501,14 +501,12 @@ async function isPublicDiscoveryRequest(request: Request): Promise<boolean> {
     const messages = Array.isArray(body) ? body : [body];
     return (
       messages.length > 0 &&
-      messages.every(
-        (message) =>
-          typeof message === "object" &&
-          message !== null &&
-          "method" in message &&
-          typeof message.method === "string" &&
-          publicDiscoveryMethods.has(message.method),
-      )
+      messages.every((message) => {
+        if (typeof message !== "object" || message === null || !("method" in message)) {
+          return false;
+        }
+        return typeof message.method === "string" && publicDiscoveryMethods.has(message.method);
+      })
     );
   } catch {
     return false;

@@ -42,10 +42,12 @@ export function prototypePreviewRequestUrl(input: {
   requestUrl: string;
 }): string {
   const { environment } = input;
-  const exactDevelopmentAdapter =
+  const localExecutionBundle =
     environment.APP_BUILDER_EXECUTION_MODE === "development" &&
     environment.APP_BUILDER_EXECUTION_BUNDLE === "local-development" &&
-    environment.APP_BUILDER_SANDBOX_PROVIDER === "vercel" &&
+    environment.APP_BUILDER_SANDBOX_PROVIDER === "vercel";
+  const exactDevelopmentAdapter =
+    localExecutionBundle &&
     environment.APP_BUILDER_LOCAL_ADAPTER === "1" &&
     environment.EVE_HOSTED_ADAPTER === "0";
   if (!exactDevelopmentAdapter) {
@@ -58,18 +60,13 @@ export function prototypePreviewRequestUrl(input: {
   }
   const origin = new URL(configured);
   const port = unprivilegedPortSchema.safeParse(origin.port);
-  if (
-    !(
-      (origin.protocol === "http:" && origin.hostname === "127.0.0.1") ||
-      (origin.protocol === "https:" && origin.hostname === "localhost")
-    ) ||
-    !port.success ||
-    origin.username !== "" ||
-    origin.password !== "" ||
-    origin.pathname !== "/" ||
-    origin.search !== "" ||
-    origin.hash !== ""
-  ) {
+  const allowedHost =
+    (origin.protocol === "http:" && origin.hostname === "127.0.0.1") ||
+    (origin.protocol === "https:" && origin.hostname === "localhost");
+  const hasCredentials = () => origin.username !== "" || origin.password !== "";
+  const hasExtraUrlParts = () =>
+    origin.pathname !== "/" || origin.search !== "" || origin.hash !== "";
+  if (!allowedHost || !port.success || hasCredentials() || hasExtraUrlParts()) {
     throw new Error(
       "The local development preview origin must be an exact unprivileged 127.0.0.1 HTTP or localhost HTTPS origin.",
     );

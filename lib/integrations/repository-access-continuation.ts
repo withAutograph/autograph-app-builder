@@ -77,17 +77,18 @@ function exactEveAuthorizationCallback(input: {
     callback.origin === input.callbackOrigin ||
     (callback.protocol === "http:" && loopback.has(callback.hostname));
   const bypass = callback.searchParams.getAll(VERCEL_PROTECTION_BYPASS_QUERY);
-  const allowedQuery =
-    callback.search === "" ||
-    (input.protectionBypassSecret !== undefined &&
+  let allowedQuery = callback.search === "";
+  if (!allowedQuery) {
+    allowedQuery =
+      input.protectionBypassSecret !== undefined &&
       bypass.length === 1 &&
       bypass[0] === input.protectionBypassSecret &&
-      [...callback.searchParams.keys()].length === 1);
+      [...callback.searchParams.keys()].length === 1;
+  }
+  if (!allowedOrigin || callback.username || callback.password || callback.hash) {
+    throw new Error("repository-access-callback-invalid");
+  }
   if (
-    !allowedOrigin ||
-    callback.username ||
-    callback.password ||
-    callback.hash ||
     !allowedQuery ||
     !/^\/eve\/v1\/connections\/[^/]+\/callback\/[^/]+\/[^/]+$/u.test(callback.pathname)
   ) {

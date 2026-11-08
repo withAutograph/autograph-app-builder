@@ -53,12 +53,13 @@ function ownerDirectory(path: string, label: string, ownerOnly = false) {
     throw new Error(`${label} was not an absolute canonical directory.`);
   }
   const info = lstatSync(path);
+  if (info.isSymbolicLink() || !info.isDirectory() || info.uid !== process.getuid?.()) {
+    throw new Error(`${label} was not owner-bound.`);
+  }
   if (
-    info.isSymbolicLink() ||
-    !info.isDirectory() ||
-    info.uid !== process.getuid?.() ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (info.mode & (ownerOnly ? 0o777 : 0o022)) !== (ownerOnly ? 0o700 : 0)
+    (info.mode & (ownerOnly ? 0o777 : 0o022)) !==
+    (ownerOnly ? 0o700 : 0)
   ) {
     throw new Error(`${label} was not owner-bound.`);
   }
@@ -151,27 +152,41 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactBinding(environment: Environment) {
+  const invalidAuthority = "Local Eve execution authority was not closed.";
   if (
     environment.APP_BUILDER_EXECUTION_MODE !== "development" ||
     environment.APP_BUILDER_EXECUTION_BUNDLE !== "local-development" ||
     environment.APP_BUILDER_SANDBOX_PROVIDER !== "vercel" ||
-    environment.APP_BUILDER_LOCAL_ADAPTER !== "1" ||
+    environment.APP_BUILDER_LOCAL_ADAPTER !== "1"
+  ) {
+    throw new Error(invalidAuthority);
+  }
+  if (
     environment.APP_BUILDER_LOCAL_PUBLICATION !== "0" ||
     environment.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "0" ||
     environment.APP_BUILDER_GITHUB_PUBLICATION_ENABLED !== "0" ||
-    environment.APP_BUILDER_FRESH_BOOTSTRAP_ENABLED !== "0" ||
+    environment.APP_BUILDER_FRESH_BOOTSTRAP_ENABLED !== "0"
+  ) {
+    throw new Error(invalidAuthority);
+  }
+  if (
     environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION !== "0" ||
     environment.APP_BUILDER_LOCAL_AUTH_EMULATION !== "0" ||
     environment.EVE_HOSTED_ADAPTER !== "0" ||
-    environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS !== "0" ||
+    environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS !== "0"
+  ) {
+    throw new Error(invalidAuthority);
+  }
+  if (
     environment.APP_BUILDER_SANDBOX_IMAGE !== undefined ||
     environment.MSB_HOME !== undefined ||
     environment.MSB_PATH !== undefined ||
-    environment.MSB_LIBKRUNFW_PATH !== undefined ||
-    environment.VERCEL_TOKEN !== undefined ||
-    environment.AI_GATEWAY_API_KEY !== undefined
+    environment.MSB_LIBKRUNFW_PATH !== undefined
   ) {
-    throw new Error("Local Eve execution authority was not closed.");
+    throw new Error(invalidAuthority);
+  }
+  if (environment.VERCEL_TOKEN !== undefined || environment.AI_GATEWAY_API_KEY !== undefined) {
+    throw new Error(invalidAuthority);
   }
   const port = required(environment, "APP_BUILDER_EVE_PORT");
   if (!/^\d{4,5}$/u.test(port) || Number(port) < 1024 || Number(port) > 65_535) {
