@@ -3816,7 +3816,7 @@ export const createHostedOperatorControlPlane = async (input: {
         await continuitySetup(context, plan);
         const { current, operator } = await preparedForContinuity(context);
         const boundary = operator.plan.deploymentBoundary;
-        const proof = current.record.proof;
+        const { proof } = current.record;
         if (boundary === undefined || proof === undefined) {
           throw new HostedOperatorError("resource_mismatch");
         }

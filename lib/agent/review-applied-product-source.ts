@@ -235,7 +235,11 @@ export const reviewApplicationWithJournal = async (
   if (!completedReviewForInput(recorded, input.reviewInput)) {
     throw new Error("Completed application review could not be retained under the current policy.");
   }
-  return { ...recorded.assessment, ...(invocation === undefined ? {} : { invocation }) };
+  const result: ProductSourceAssessment = { ...recorded.assessment };
+  if (invocation !== undefined) {
+    result.invocation = invocation;
+  }
+  return result;
 };
 
 /** Shared post-validation assessment; never substitutes for executed product behavior. */
@@ -615,7 +619,11 @@ export const finalizeAppliedProductSourceReview = async (
       return unavailable();
     }
     retainScopedProductSourceAssessment(recorded.assessment, currentKey);
-    return { ...recorded.assessment, ...(invocation === undefined ? {} : { invocation }) };
+    const result: ProductSourceAssessment = { ...recorded.assessment };
+    if (invocation !== undefined) {
+      result.invocation = invocation;
+    }
+    return result;
   } catch {
     input.abortSignal?.throwIfAborted();
     return unavailable();

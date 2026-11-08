@@ -191,7 +191,7 @@ export const createParticipantSuccessorPlan = (
   void authMembership;
   void authSignupPolicy;
   void normalActorPreparation;
-  const gatewayBindings = prior.operator.plan.gatewayBindings;
+  const { gatewayBindings } = prior.operator.plan;
   const trustedSources = gatewayBindings?.trustedSources;
   return hostedOperatorPlanSchema.parse({
     ...base,

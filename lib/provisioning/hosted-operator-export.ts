@@ -534,7 +534,7 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
           },
           readCurrentFence: async () => {
             const latest = await read(context, exportId);
-            const claim = latest.journal.claim;
+            const { claim } = latest.journal;
             if (latest.journal.state === "complete") {
               return {
                 operationRef: exportId,
@@ -557,7 +557,7 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
           if (current.journal.state === "complete") {
             return tenantExportStatus(current.journal);
           }
-          const claim = current.journal.claim;
+          const { claim } = current.journal;
           if (claim === undefined) {
             throw unavailable();
           }

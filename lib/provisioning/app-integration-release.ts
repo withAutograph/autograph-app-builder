@@ -58,7 +58,7 @@ export const readAppIntegrationCapabilityForRelease = async (input: {
   const store = createPostgresAppIntegrationCapabilityStore(input.database);
   const observedRow = await store.read(input.owner.authority, input.pointer.operationRef);
   const { row, capability } = requirePrepared(observedRow, input.pointer.planDigest);
-  const plan = row.record.plan;
+  const { plan } = row.record;
   const { owned } = input;
   const selected = owned.description.integrations?.configuration?.find(
     (entry) => entry.provider === "quickbooks",

@@ -461,7 +461,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     context: HostedOperatorContext,
     prior: NonNullable<HostedRuntimeJournalRow["record"]["participantPreparationHistory"]>[number],
   ) => {
-    const approvalId = prior.operator.approvalId;
+    const { approvalId } = prior.operator;
     if (approvalId === undefined) {
       throw new Error("normal_actor_journal_authority_mismatch");
     }

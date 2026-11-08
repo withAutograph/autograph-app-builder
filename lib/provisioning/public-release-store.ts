@@ -39,7 +39,7 @@ export const initialPublicReleaseRecord = (plan: PublicReleasePlan): PublicRelea
   });
 const parse = (raw: typeof builderProvisioningJournals.$inferSelect): PublicReleaseRow => {
   const record = publicReleaseRecordSchema.parse(raw.record);
-  const authority = record.plan.authority;
+  const { authority } = record.plan;
   if (
     raw.requestDigest !== publicReleasePlanDigest(record.plan) ||
     raw.requestDigest !== record.planDigest ||
