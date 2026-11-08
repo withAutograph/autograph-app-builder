@@ -53,7 +53,7 @@ const dataset = (contents: Uint8Array[], worker: TenantExportWorkerInput = wire.
     return {
       kind: "data",
       name: `table-${String(index + 1).padStart(6, "0")}.ndjson`,
-      table: { schema: "public", name: `business_${index}` },
+      table: { name: `business_${index}`, schema: "public" },
       rowCount: bytes.byteLength === 0 ? "0" : "1",
       byteLength: String(bytes.length),
       sha256: hash(bytes),
@@ -166,8 +166,8 @@ test("streams arbitrary binary segments and opaque business bytes; preserves exa
     assertCurrent: f.current,
   });
   expect(await f.artifacts.inspect({ context, worker: wire.worker })).toEqual({
-    status: "complete",
     completion,
+    status: "complete",
   });
   expect(
     await readTenantExportManifest({
@@ -342,10 +342,10 @@ const completedFixture = async () => {
     authority,
     target: { ...context.target, projectId: "original-project", branch: "original-branch" },
     originalSetup: {
-      operationRef: "40000000-0000-4000-8000-000000000004",
-      planDigest: "1".repeat(64),
       approvalId: "setup-approval",
       approvedByCallId: "setup-call",
+      operationRef: "40000000-0000-4000-8000-000000000004",
+      planDigest: "1".repeat(64),
     },
     scope: wire.worker.scope,
     resource: wire.worker.resource,
@@ -353,8 +353,8 @@ const completedFixture = async () => {
     selection: wire.worker.selection,
     format: wire.worker.format,
     destination: {
-      kind: "owner-private-builder-artifact",
       artifactPrefix: `_protected-operator/artifacts/tenant-export/${wire.worker.exportId}`,
+      kind: "owner-private-builder-artifact",
     },
   });
   const planDigest = tenantExportPlanDigest(plan);
@@ -380,11 +380,11 @@ const completedFixture = async () => {
     state: "complete",
     approval: {
       action: "export",
-      planRef: plan.planRef,
-      planDigest,
-      idempotencyKey: "export-call",
       approvalId: "export-approval",
       approvedByCallId: "export-call",
+      idempotencyKey: "export-call",
+      planDigest,
+      planRef: plan.planRef,
     },
     attempts: [{ attemptId: worker.attemptId, snapshotId: worker.snapshotId, state: "complete" }],
     completion,

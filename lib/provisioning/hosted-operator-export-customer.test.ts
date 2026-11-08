@@ -112,14 +112,14 @@ const fixture = async () => {
     appDatabase: {
       database: "app",
       migratorRole: "app_owner",
-      runtimeRole: "app_runtime",
       resourceId: "app-resource",
+      runtimeRole: "app_runtime",
     },
     authDatabase: {
       database: "auth",
       migratorRole: "auth_owner",
-      runtimeRole: "auth_runtime",
       resourceId: "auth-resource",
+      runtimeRole: "auth_runtime",
     },
     cost: {
       class: "shared-recovery-group",
@@ -127,12 +127,12 @@ const fixture = async () => {
       owner: authority.ownerUserId,
     },
     effects: [
-      { id: "resources", kind: "resources", description: "Owned resources" },
-      { id: "install", kind: "install", description: "Compiled release" },
-      { id: "membership", kind: "auth-membership", description: "Original organization" },
-      { id: "access", kind: "access", description: "Approved app access" },
-      { id: "bindings", kind: "bindings", description: "Owned runtime" },
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Owned Gateway" },
+      { description: "Owned resources", id: "resources", kind: "resources" },
+      { description: "Compiled release", id: "install", kind: "install" },
+      { description: "Original organization", id: "membership", kind: "auth-membership" },
+      { description: "Approved app access", id: "access", kind: "access" },
+      { description: "Owned runtime", id: "bindings", kind: "bindings" },
+      { description: "Owned Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
     ],
     installer: { reference: "worker", sha256: "c".repeat(64) },
     neon: {
@@ -142,7 +142,7 @@ const fixture = async () => {
       connectionRef: "owned-connection",
       source: "synthetic-only",
     },
-    release: { id: "old-release", sha256: "d".repeat(64), artifactRef: "old-artifact" },
+    release: { artifactRef: "old-artifact", id: "old-release", sha256: "d".repeat(64) },
     retention: { expiresAt: "2027-01-01T00:00:00Z", policy: "Keep approved data" },
     selection: {
       appId: target.appId,
@@ -171,20 +171,20 @@ const fixture = async () => {
       teamId: "team",
       app: {
         branch: "preview",
-        projectId: target.projectId,
         deploymentId: "app-deployment",
         environment: "preview",
+        projectId: target.projectId,
       },
       gateway: {
         branch: "preview",
-        projectId: "gateway-project",
         deploymentId: "gateway-deployment",
         environment: "preview",
+        projectId: "gateway-project",
       },
       operator: {
-        projectId: "operator-project",
         deploymentId: "operator-deployment",
         environment: "preview",
+        projectId: "operator-project",
       },
       verification: {
         publicOrigin: link.issuer,
@@ -199,9 +199,9 @@ const fixture = async () => {
     appInstallation: { customerIds: ["original-org", "qa-org"] },
     access: [{ actorId: "qa-actor", organizationId: "qa-org", roles: ["reviewer"] }],
     release: {
+      artifactRef: "current-artifact",
       id: "different-current-release",
       sha256: "e".repeat(64),
-      artifactRef: "current-artifact",
     },
     effects: original.effects.filter((effect) => effect.kind !== "auth-membership"),
   };

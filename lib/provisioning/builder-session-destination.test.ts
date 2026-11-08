@@ -284,8 +284,8 @@ it("rechecks the saved epoch after real credential I/O before the Vercel POST", 
   );
   const dependencies: BuilderProvisioningDependencies = {
     journal: f.journal,
-    githubInstallations: { read: never, bind: never },
-    githubCredentials: { bind: never, read: never, rotate: never, deactivate: never },
+    githubInstallations: { bind: never, read: never },
+    githubCredentials: { bind: never, deactivate: never, read: never, rotate: never },
     githubConfig: {
       appId: "1",
       clientId: "unused",

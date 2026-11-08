@@ -47,33 +47,33 @@ const nativePlan = nativeTargetOnboardingPlanSchema.parse({
   version: 1,
   appId: "requests-app",
   origin: {
-    publicSessionId: "session_fixture",
-    adapterSessionId: "adapter_1",
     adapterGeneration: 1,
+    adapterSessionId: "adapter_1",
     appSpecDigest: "a".repeat(64),
+    publicSessionId: "session_fixture",
     release: {
-      id: "release",
       artifactRef: "artifact",
+      id: "release",
       manifestSha256: "b".repeat(64),
       schemaSha256: "c".repeat(64),
     },
   },
   project: {
-    name: "requests-app",
-    teamId: "team",
     installationId: "installation",
+    name: "requests-app",
     projectSettings: {
       framework: "nextjs",
       rootDirectory: "apps/requests",
       sourceFilesOutsideRootDirectory: true,
     },
     protection: nativeTargetRequiredProjectProtection,
+    teamId: "team",
   },
   branch: "preview",
   appDatabase: {
-    resourceId: "resource",
     database: "requests_data",
     migratorRole: "requests_owner",
+    resourceId: "resource",
     runtimeRole: "requests_runtime",
   },
   productRoles: [],
@@ -81,22 +81,22 @@ const nativePlan = nativeTargetOnboardingPlanSchema.parse({
     approvalReference: "scope",
     nativeStore: { configurationId: "config", resourceId: "store", sourceProjectId: "source" },
     scope: {
-      projectId: "project",
       branchId: "branch",
       endpointId: "endpoint",
       hostname: "ep-fixture.neon.tech",
       maintenanceDatabase: "maintenance",
       maintenanceRole: "installer",
+      projectId: "project",
     },
   },
   worker: {
-    id: "worker",
     executablePath: "/trusted/worker",
-    sha256: "d".repeat(64),
+    id: "worker",
     operationScope: "generated-app-release-install-v1",
+    sha256: "d".repeat(64),
     subcommand: "protected-generated-app-install",
   },
-  cost: { ownership: "current-owner", description: "Preview usage" },
+  cost: { description: "Preview usage", ownership: "current-owner" },
   retention: { policy: "Until approved cleanup" },
   conflictPolicy: "stop-on-conflict",
 });
@@ -625,11 +625,11 @@ describe("resource approval response acknowledgement", () => {
     });
     const recovered = await service.respond(request);
     expect(recovered).toMatchObject({
-      sessionId,
       cursor: 0,
-      events: [],
-      status: "working",
       error: { code: "session_read_delayed" },
+      events: [],
+      sessionId,
+      status: "working",
     });
     expect(respond).not.toHaveBeenCalled();
     const retry = await service.respond(request);
