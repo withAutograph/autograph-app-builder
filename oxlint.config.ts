@@ -71,7 +71,7 @@ export default defineConfig({
   overrides: [
     {
       // Exercise rejection of insecure non-loopback endpoints.
-      files: ["lib/mcp/hosted-route.test.ts", "scripts/eve-worker-environment.test.ts"],
+      files: ["scripts/eve-worker-environment.test.ts"],
       rules: { "sonarjs/no-clear-text-protocols": "off" },
     },
     {

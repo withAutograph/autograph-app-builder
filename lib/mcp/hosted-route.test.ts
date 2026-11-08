@@ -82,7 +82,7 @@ describe("hosted route composition", () => {
   it("fails closed without constructing storage when hosted configuration is invalid", async () => {
     await Promise.all(
       [
-        { ...environment, MCP_RESOURCE_URL: "http://local/mcp" },
+        { ...environment, MCP_RESOURCE_URL: "http://example.com/mcp" },
         { ...environment, EVE_HOSTED_VERCEL_ENVIRONMENT: "production" },
       ].map(async (invalidEnvironment) => {
         const openDatabase = vi.fn((): Database => {
