@@ -159,7 +159,7 @@ const runConfiguredPairedCaptures = async () => {
   const resolvedAdapter = await realpath(resolve(adapterFile));
   const adapterRelative = relative(evaluatorRoot, resolvedAdapter);
   if (
-    !adapterRelative ||
+    adapterRelative === "" ||
     adapterRelative === ".." ||
     adapterRelative.startsWith(`..${nodePath.sep}`) ||
     adapterRelative.startsWith(nodePath.sep)
@@ -407,7 +407,7 @@ const jsonFile = async (name: string, data: unknown) => {
 };
 
 const revision = (directory: string | undefined) => {
-  if (!directory) {
+  if (directory === undefined || directory === "") {
     return { reason: "Source checkout not supplied.", status: "unavailable" };
   }
   try {
@@ -483,7 +483,10 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
   if (values["report-only"] === true) {
     return { reason: "Report-only mode selected.", status: "not-run" };
   }
-  if (!values.generator && !arrustedRoot) {
+  if (
+    (values.generator === undefined || values.generator === "") &&
+    (arrustedRoot === undefined || arrustedRoot === "")
+  ) {
     return {
       reason:
         "Set SELF_REPRODUCTION_ARRUSTED_ROOT or --arrusted-root to the canonical Arrusted checkout.",
@@ -494,32 +497,33 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
   if (!Number.isSafeInteger(deadline) || deadline <= 0) {
     throw new Error("Generation timeout must be a positive integer.");
   }
-  const args = values.generator
-    ? (values["generator-arg"] ?? [])
-    : [
-        process.execPath,
-        "--import",
-        "tsx",
-        "scripts/run-eve-eval.mts",
-        "--gate-a-profile",
-        "sandbox",
-        "--gate-a-source-root",
-        resolve(arrustedRoot ?? root),
-        "--live-model",
-        "self-reproduction",
-        "--strict",
-        "--verbose",
-        "--skip-report",
-        "--json",
-        "--timeout",
-        String(deadline),
-      ];
+  const args =
+    values.generator !== undefined && values.generator !== ""
+      ? (values["generator-arg"] ?? [])
+      : [
+          process.execPath,
+          "--import",
+          "tsx",
+          "scripts/run-eve-eval.mts",
+          "--gate-a-profile",
+          "sandbox",
+          "--gate-a-source-root",
+          resolve(arrustedRoot ?? root),
+          "--live-model",
+          "self-reproduction",
+          "--strict",
+          "--verbose",
+          "--skip-report",
+          "--json",
+          "--timeout",
+          String(deadline),
+        ];
   const command = values.generator ?? resolve(root, ".config/mise/scripts/trusted-node-launcher");
   settings = {
     ...settings,
     args,
     command,
-    liveModel: !values.generator,
+    liveModel: values.generator === undefined || values.generator === "",
     strict: true,
     timeoutMs: deadline,
   };
@@ -551,7 +555,7 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
     });
     let force: ReturnType<typeof setTimeout> | undefined;
     const stop = (reason: string) => {
-      if (interrupted) {
+      if (interrupted !== undefined && interrupted !== "") {
         return;
       }
       interrupted = reason;
@@ -656,14 +660,15 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
 };
 
 const capture = async (label: string, url: string | undefined, sourceRoot: string | undefined) => {
-  if (!url) {
+  if (url === undefined || url === "") {
     return { files: [], label, status: "unassessed: URL not supplied" };
   }
   const destination = join(output, "captures", label);
   try {
     await mkdir(destination, { mode: 0o700, recursive: true });
     const { capturePreview } = await import("./design-quality/browser");
-    const sourceFiles = sourceRoot ? await readSource(sourceRoot) : [];
+    const sourceFiles =
+      sourceRoot === undefined || sourceRoot === "" ? [] : await readSource(sourceRoot);
     const previewFiles = await capturePreview({
       generatedSourcePaths: sourceFiles.map((file) => file.path),
       ignoreHTTPSErrors: label === "reference" && referenceFixtureRoot !== undefined,
@@ -1051,7 +1056,10 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     generation = await runGenerator(arrustedRoot);
     await saveReport();
     referenceFiles = await readSource(root);
-    const candidateRoot = values["candidate-root"] ? resolve(values["candidate-root"]) : undefined;
+    const candidateRoot =
+      values["candidate-root"] === undefined || values["candidate-root"] === ""
+        ? undefined
+        : resolve(values["candidate-root"]);
     if (candidateRoot) {
       try {
         candidateFiles = await readCandidateSource(candidateRoot);
@@ -1125,7 +1133,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       values["reference-runtime"] === true ||
       (values["report-only"] !== true && !values.generator && !values["reference-url"])
     ) {
-      if (!values["mise-executable"]) {
+      if (values["mise-executable"] === undefined || values["mise-executable"] === "") {
         throw new Error("Reference startup requires the mise-owned eval entrypoint.");
       }
       const reference = await startSelfReproductionReferenceRuntime({
@@ -1276,7 +1284,10 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       );
       await jsonFile(trustedWorkflowReceiptsFile, trustedWorkflowReceipts);
     }
-    if (values["reference-navigation-evidence"]) {
+    if (
+      values["reference-navigation-evidence"] !== undefined &&
+      values["reference-navigation-evidence"] !== ""
+    ) {
       const directory = resolve(values["reference-navigation-evidence"]);
       // Reuse evaluator evidence without rerunning production builds. Preserve its own provenance.
       await Promise.all(
@@ -1299,7 +1310,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       values["reference-navigation"] === true ||
       (values["report-only"] !== true && !values.generator)
     ) {
-      if (!values["mise-executable"]) {
+      if (values["mise-executable"] === undefined || values["mise-executable"] === "") {
         throw new Error("Reference navigation requires the mise-owned eval entrypoint.");
       }
       const { runReferenceNavigationEvidence } =

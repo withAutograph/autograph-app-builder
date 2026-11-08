@@ -8,7 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const required = (name: string) => {
   const value = process.env[name];
-  if (!value) {
+  if (value === undefined || value === "") {
     throw new Error(`${name} was required for the live self-reproduction run.`);
   }
   return value;
