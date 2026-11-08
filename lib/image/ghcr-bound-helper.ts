@@ -74,10 +74,11 @@ export function assertBoundGhcrPayload(
   if (
     Object.keys(record).toSorted().join(",") !== "Secret,ServerURL,Username" ||
     record.ServerURL !== registry ||
-    record.Username !== expectedUsername ||
-    typeof record.Secret !== "string" ||
-    !/^[A-Za-z0-9_]{20,4096}$/u.test(record.Secret)
+    record.Username !== expectedUsername
   ) {
+    throw new Error("GHCR provider identity did not match approval.");
+  }
+  if (typeof record.Secret !== "string" || !/^[A-Za-z0-9_]{20,4096}$/u.test(record.Secret)) {
     throw new Error("GHCR provider identity did not match approval.");
   }
   const secret = Buffer.from(record.Secret, "ascii");
@@ -175,7 +176,11 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
     Object.keys(value).toSorted().join(",") !==
       "active,gitProtocol,host,login,scopes,state,tokenSource" ||
     value.active !== true ||
-    value.gitProtocol !== "https" ||
+    value.gitProtocol !== "https"
+  ) {
+    throw new Error("GitHub keyring identity did not match approval.");
+  }
+  if (
     value.host !== githubHost ||
     value.login !== expectedUsername ||
     value.state !== "success" ||
@@ -229,10 +234,10 @@ export function githubConfigDigest(configRoot: string): string {
   }
   const uid = process.getuid?.();
   const rootStat = lstatSync(configRoot);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink() || uid === undefined) {
+    throw new Error("GitHub configuration root is unsafe.");
+  }
   if (
-    !rootStat.isDirectory() ||
-    rootStat.isSymbolicLink() ||
-    uid === undefined ||
     rootStat.uid !== uid ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (rootStat.mode & 0o022) !== 0
@@ -274,10 +279,10 @@ export function assertGithubStateRoot(stateRoot: string): void {
   }
   const uid = process.getuid?.();
   const rootStat = lstatSync(stateRoot);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink() || uid === undefined) {
+    throw new Error(unsafeGitHubStateRoot);
+  }
   if (
-    !rootStat.isDirectory() ||
-    rootStat.isSymbolicLink() ||
-    uid === undefined ||
     rootStat.uid !== uid ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (rootStat.mode & 0o777) !== 0o700
@@ -329,9 +334,11 @@ export function assertGithubStateRoot(stateRoot: string): void {
     deviceStat.nlink !== 1 ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (deviceStat.mode & 0o022) !== 0 ||
-    deviceStat.size === 0 ||
-    deviceStat.size > 256
+    deviceStat.size === 0
   ) {
+    throw new Error(unsafeGitHubStateRoot);
+  }
+  if (deviceStat.size > 256) {
     throw new Error(unsafeGitHubStateRoot);
   }
 }

@@ -660,15 +660,15 @@ const fixture = async (options = {}) => {
   assert.equal(authorized, true);
   return {
     collected,
+    events,
+    incoming,
+    latest,
+    latestPair,
+    nativeEvents,
+    originalGrant,
     readOperations,
     source,
-    latest,
     sourcePair,
-    latestPair,
-    originalGrant,
-    incoming,
-    events,
-    nativeEvents,
   };
 };
 

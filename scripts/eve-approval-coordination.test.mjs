@@ -45,7 +45,7 @@ it("settles native approval before dispatch, preserves results and authorizers, 
       agent: { system: "", tools: [], modelReference: { id: "model", provider: "test" } },
       sessionId: "session",
       continuationToken: "token",
-      compaction: { threshold: 1e6, recentWindowSize: 10 },
+      compaction: { recentWindowSize: 10, threshold: 1e6 },
       history: [{ role: "assistant", content: [...calls, ...approvals] }],
     };
     session = setPendingCoordinationBatch({
@@ -396,7 +396,7 @@ it.each([
           turnId: "mixed-turn",
         },
       },
-      compaction: { threshold: 1e6, recentWindowSize: 10 },
+      compaction: { recentWindowSize: 10, threshold: 1e6 },
     };
     const { attachClientContext } = await import(`${sdk}internal/client-context.js`);
     const firstInput = { message: "do work" };
@@ -617,7 +617,7 @@ it.each([400, 503])(
         sessionId: "failed-session",
         continuationToken: "token",
         history: [],
-        compaction: { threshold: 1e6, recentWindowSize: 10 },
+        compaction: { recentWindowSize: 10, threshold: 1e6 },
       },
       { message: "do work" },
     );
@@ -737,7 +737,7 @@ it.each(["generic", "typed"])(
         sessionId: "cancel-authorizer",
         continuationToken: "token",
         history: [],
-        compaction: { threshold: 1e6, recentWindowSize: 10 },
+        compaction: { recentWindowSize: 10, threshold: 1e6 },
       },
       requests: [
         {

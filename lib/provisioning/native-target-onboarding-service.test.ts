@@ -113,8 +113,8 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
 });
 const request = () =>
   new Request("https://operator.example/v1/runtime", {
-    method: "POST",
     headers: { authorization: "Bearer verified-builder-token" },
+    method: "POST",
   });
 const fixture = (workloadAuthorized = true, selectedPlan = plan) => {
   const fixturePlan = selectedPlan;
@@ -288,7 +288,7 @@ describe("protected native target onboarding service", () => {
     const retained = await f.store.read({ appId: plan.appId, authority });
     expect(retained?.record.stage).toBe("approved");
     expect(retained?.record.previousAttempts.at(-1)?.reason).toBe("provider_permission_denied");
-    return { f, create, retained, planned };
+    return { create, f, planned, retained };
   };
 
   it("reads same-credential authorization evidence after a retired permission failure without another attempt or journal write", async () => {
