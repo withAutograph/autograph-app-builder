@@ -285,7 +285,9 @@ export const exerciseCandidateBrowserWorkflows = async (
       if (count > 0) {
         const href = await links.first().getAttribute("href");
         if (
-          !href ||
+          href === null ||
+          href === undefined ||
+          href === "" ||
           href.startsWith("#") ||
           !/^https?:/u.test(new URL(href, page.url()).protocol)
         ) {
@@ -355,7 +357,7 @@ export const exerciseCandidateBrowserWorkflows = async (
           requirementId,
           status: "unassessed",
         };
-      } else if (!response?.ok()) {
+      } else if (response?.ok() !== true) {
         outcome = {
           assertions: [],
           reason: "Candidate runtime did not answer successfully.",

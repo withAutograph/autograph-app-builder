@@ -135,7 +135,7 @@ export async function waitForDevelopmentMcp(input: {
       await delay(Math.min(retryIntervalMs, remainingMs), undefined, { signal: input.signal });
       retryIntervalMs = Math.min(retryIntervalMs * 2, maximumIntervalMs);
     } catch {
-      if (input.signal?.aborted) {
+      if (input.signal?.aborted ?? false) {
         throw abortReason(input.signal);
       }
       throw new Error("Development MCP readiness wait failed.");

@@ -181,7 +181,7 @@ export const writePreviewObservationReport = async (
     )
     .join("");
   const figures = sanitized.viewports
-    .filter((item) => item.screenshot)
+    .filter((item) => Boolean(item.screenshot))
     .map(
       (item) =>
         `<figure><figcaption>${escapeHtml(item.viewport.name)}</figcaption><img src="${escapeHtml(

@@ -105,10 +105,10 @@ export async function writePairedCaptureManifest(
           const capture: PairedCaptureManifestRow["reference"] = {
             disposition: observation?.disposition ?? "not-run",
           };
-          if (observation?.artifacts.includes(`${prefix}.png`)) {
+          if (observation?.artifacts.includes(`${prefix}.png`) === true) {
             capture.png = `${prefix}.png`;
           }
-          if (observation?.artifacts.includes(`${prefix}.json`)) {
+          if (observation?.artifacts.includes(`${prefix}.json`) === true) {
             capture.receipt = `${prefix}.json`;
           }
           return [side, capture];

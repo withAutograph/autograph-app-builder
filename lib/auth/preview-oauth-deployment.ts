@@ -42,10 +42,13 @@ function getPreviewOAuthDeploymentRuntime(
     providerEmulation = readProviderEmulation(environment);
   } catch (error) {
     const invalidFields =
-      error && typeof error === "object" && "issues" in error && Array.isArray(error.issues)
+      typeof error === "object" &&
+      error !== null &&
+      "issues" in error &&
+      Array.isArray(error.issues)
         ? error.issues
             .map((issue) =>
-              issue && typeof issue === "object" && "path" in issue
+              typeof issue === "object" && issue !== null && "path" in issue
                 ? String((issue as { path: unknown[] }).path[0] ?? "unknown")
                 : "unknown",
             )
