@@ -141,26 +141,51 @@ export const resumeApprovedAppBuild = async (
   updateExactWorkflow({
     expected: current,
     operation: "resume the approved build",
-    transition: () => ({
-      appSpec: base.appSpec,
-      applyReceipt: base.applyReceipt,
-      artifacts: current.artifacts,
-      ...(checkoutDependencyAttempts.size === 0
-        ? {}
-        : { checkoutDependencyAttempts: [...checkoutDependencyAttempts.values()] }),
-      dependencyReceipt: base.dependencyReceipt,
-      ...(base.githubSource === undefined ? {} : { githubSource: base.githubSource }),
-      identityReceipt: base.identityReceipt,
-      phase: "applied",
-      preparedByCallId: base.preparedByCallId,
-      proposal: base.proposal,
-      ...(publishedGitHubDraftProposalDigest === undefined
-        ? {}
-        : { publishedGitHubDraftProposalDigest }),
-      sourceReceipt: base.sourceReceipt,
-      version: base.version,
-      workspace: base.workspace,
-    }),
+    transition: () => {
+      type Applied = Extract<AppBuilderWorkflowState, { phase: "applied" }>;
+      const initial: Pick<
+        Applied,
+        "appSpec" | "applyReceipt" | "artifacts" | "checkoutDependencyAttempts"
+      > = {
+        appSpec: base.appSpec,
+        applyReceipt: base.applyReceipt,
+        artifacts: current.artifacts,
+      };
+      if (checkoutDependencyAttempts.size !== 0) {
+        initial.checkoutDependencyAttempts = [...checkoutDependencyAttempts.values()];
+      }
+      const withDependency: typeof initial & Pick<Applied, "dependencyReceipt" | "githubSource"> = {
+        ...initial,
+        dependencyReceipt: base.dependencyReceipt,
+      };
+      if (base.githubSource !== undefined) {
+        withDependency.githubSource = base.githubSource;
+      }
+      const resumed: typeof withDependency &
+        Pick<
+          Applied,
+          | "identityReceipt"
+          | "phase"
+          | "preparedByCallId"
+          | "proposal"
+          | "publishedGitHubDraftProposalDigest"
+        > = {
+        ...withDependency,
+        identityReceipt: base.identityReceipt,
+        phase: "applied",
+        preparedByCallId: base.preparedByCallId,
+        proposal: base.proposal,
+      };
+      if (publishedGitHubDraftProposalDigest !== undefined) {
+        resumed.publishedGitHubDraftProposalDigest = publishedGitHubDraftProposalDigest;
+      }
+      return {
+        ...resumed,
+        sourceReceipt: base.sourceReceipt,
+        version: base.version,
+        workspace: base.workspace,
+      };
+    },
   });
   existingAppRepairHistory.update((history) =>
     history.map((record) =>

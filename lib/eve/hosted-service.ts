@@ -3343,9 +3343,10 @@ export function createHostedEveSessionService(input: {
           observedNativeState !== undefined
         ) {
           const capturedAtEpochMs = now();
-          const metadata: HostedPagedCheckpointMetadata = {
-            capturedAtEpochMs,
-            ...(checkpointMetadata?.approvalReplayProgress !== undefined &&
+          const metadataDetails: Pick<HostedPagedCheckpointMetadata, "capturedAtEpochMs"> &
+            Partial<HostedPagedCheckpointMetadata> = { capturedAtEpochMs };
+          if (
+            checkpointMetadata?.approvalReplayProgress !== undefined &&
             checkpointMetadata.approvalReplayProgress.binding.sessionId === sessionId &&
             checkpointMetadata.approvalReplayProgress.binding.adapterSessionId ===
               session.adapterSessionId &&
@@ -3355,33 +3356,36 @@ export function createHostedEveSessionService(input: {
               checkpointMetadata.approvalReplayProgress.binding.principal,
               session.principal,
             )
-              ? { approvalReplayProgress: checkpointMetadata.approvalReplayProgress }
-              : {}),
-            ...(spool.observation.activeTurnId === undefined
-              ? {}
-              : { activeTurnId: spool.observation.activeTurnId }),
-            ...(spool.observation.pendingRequests.length === 0
-              ? {}
-              : { inputRequests: spool.observation.pendingRequests }),
-            ...(spool.observation.prototypeRef === undefined
-              ? {}
-              : { prototypeRef: spool.observation.prototypeRef }),
-            ...(observedNativeState === undefined
-              ? {}
-              : { nativeObservationState: observedNativeState }),
+          ) {
+            metadataDetails.approvalReplayProgress = checkpointMetadata.approvalReplayProgress;
+          }
+          if (spool.observation.activeTurnId !== undefined) {
+            metadataDetails.activeTurnId = spool.observation.activeTurnId;
+          }
+          if (spool.observation.pendingRequests.length !== 0) {
+            metadataDetails.inputRequests = spool.observation.pendingRequests;
+          }
+          if (spool.observation.prototypeRef !== undefined) {
+            metadataDetails.prototypeRef = spool.observation.prototypeRef;
+          }
+          if (observedNativeState !== undefined) {
+            metadataDetails.nativeObservationState = observedNativeState;
+          }
+          const metadataCapture = {
+            ...metadataDetails,
             privateApprovalCaptureState: spool.privateApprovalCaptureState,
-            ...(spool.observation.prototype === undefined
-              ? {}
-              : { prototype: spool.observation.prototype }),
-            status: spool.observation.status,
-            ...(spool.observation.uiPreview === undefined
-              ? {}
-              : { uiPreview: spool.observation.uiPreview }),
-            version: 1,
-            ...(spool.observation.workingPreview === undefined
-              ? {}
-              : { workingPreview: spool.observation.workingPreview }),
           };
+          if (spool.observation.prototype !== undefined) {
+            metadataCapture.prototype = spool.observation.prototype;
+          }
+          const metadataStatus = { ...metadataCapture, status: spool.observation.status };
+          if (spool.observation.uiPreview !== undefined) {
+            metadataStatus.uiPreview = spool.observation.uiPreview;
+          }
+          const metadata: HostedPagedCheckpointMetadata = { ...metadataStatus, version: 1 };
+          if (spool.observation.workingPreview !== undefined) {
+            metadata.workingPreview = spool.observation.workingPreview;
+          }
           const summaryDetails: Pick<z.input<typeof eveSessionResultSchema>, "cursor" | "events"> &
             Partial<z.input<typeof eveSessionResultSchema>> = { cursor: 0, events: [] };
           if (metadata.inputRequests !== undefined) {

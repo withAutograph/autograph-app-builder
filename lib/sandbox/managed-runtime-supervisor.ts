@@ -230,14 +230,20 @@ export const createManagedRuntimeSupervisor = (input: {
   const snapshot = (
     operation: ManagedLifecycleCommand["operation"],
     commandId?: string,
-  ): ManagedLifecycleReceipt =>
-    structuredClone({
+  ): ManagedLifecycleReceipt => {
+    const processState: Pick<ManagedLifecycleReceipt, "identity" | "state" | "process"> = {
       identity,
       state,
-      ...(current ? { process: current.observation } : {}),
-      operation,
-      ...(commandId === undefined ? {} : { commandId }),
-    });
+    };
+    if (current) {
+      processState.process = current.observation;
+    }
+    const receipt: ManagedLifecycleReceipt = { ...processState, operation };
+    if (commandId !== undefined) {
+      receipt.commandId = commandId;
+    }
+    return structuredClone(receipt);
+  };
   const assertCurrent = async () => {
     if (signal.aborted || now().getTime() >= input.expiresAt) {
       throw unavailable();

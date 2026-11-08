@@ -137,10 +137,13 @@ export function createPostgresVercelAuthorizationStateStore(
       if (!row || rows.length !== 1) {
         return;
       }
-      return parseProviderConnectionReturn({
+      const returnState: Parameters<typeof parseProviderConnectionReturn>[0] = {
         returnTo: row.returnTo,
-        ...(row.resumeKey ? { resumeKey: row.resumeKey } : {}),
-      });
+      };
+      if (row.resumeKey) {
+        returnState.resumeKey = row.resumeKey;
+      }
+      return parseProviderConnectionReturn(returnState);
     },
     async create(input) {
       await database.insert(vercelInstallationAuthorizationStates).values({
@@ -177,10 +180,13 @@ export function createPostgresVercelAuthorizationStateStore(
       if (!rows[0]) {
         return;
       }
-      return parseProviderConnectionReturn({
+      const returnState: Parameters<typeof parseProviderConnectionReturn>[0] = {
         returnTo: rows[0].returnTo,
-        ...(rows[0].resumeKey ? { resumeKey: rows[0].resumeKey } : {}),
-      });
+      };
+      if (rows[0].resumeKey) {
+        returnState.resumeKey = rows[0].resumeKey;
+      }
+      return parseProviderConnectionReturn(returnState);
     },
   };
 }

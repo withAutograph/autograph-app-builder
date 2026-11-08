@@ -153,9 +153,13 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
     ) {
       await checkpoint(row, { ...row.record, observation });
     }
+    const status = { status: observation.status };
+    const initial: typeof status & Pick<PublicReleasePlan, "purpose"> = status;
+    if (plan.purpose !== undefined) {
+      initial.purpose = plan.purpose;
+    }
     return {
-      status: observation.status,
-      ...(plan.purpose === undefined ? {} : { purpose: plan.purpose }),
+      ...initial,
       operationRef: row.operationRef,
       observation,
       authenticatedBehavior: "unassessed" as const,
@@ -252,12 +256,10 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
                   if (state.state !== "idle") {
                     return state;
                   }
-                  const next: PublicReleaseBindingState = {
-                    state: "pending",
-                    ...(expected.priorBinding === undefined
-                      ? {}
-                      : { acceptedEnvId: expected.priorBinding.id }),
-                  };
+                  const next: PublicReleaseBindingState = { state: "pending" };
+                  if (expected.priorBinding !== undefined) {
+                    next.acceptedEnvId = expected.priorBinding.id;
+                  }
                   await saveBinding(key, next);
                   return next;
                 },
