@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createLocalJWKSet, jwtVerify } from "jose";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -394,12 +394,13 @@ describe("real Better Auth Preview OAuth handler", () => {
     expect(tokenBody).not.toHaveProperty("tokenType");
 
     const signInStatuses: number[] = [];
+    const unknownUserPassword = randomUUID();
     for (let attempt = 0; attempt < 3; attempt += 1) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await customFetchImpl(`${issuer}/sign-in/email`, {
         body: JSON.stringify({
           email: `unknown-${attempt}@example.test`,
-          password: "not-a-valid-password",
+          password: unknownUserPassword,
         }),
         headers: { "content-type": "application/json", origin },
         method: "POST",
