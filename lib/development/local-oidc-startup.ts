@@ -172,7 +172,7 @@ export function ensureLocalDevelopmentOidc(input: {
   environment?: NodeJS.ProcessEnv;
   nowEpochSeconds?: number;
   runCommand?: LocalOidcStartupCommandRunner;
-}): { refreshed: boolean } {
+}) {
   const environment = input.environment ?? process.env;
   assertNoStaticCredential(environment);
 

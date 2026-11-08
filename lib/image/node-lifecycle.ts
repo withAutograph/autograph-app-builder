@@ -1034,18 +1034,7 @@ export const hasExactKeys = function hasExactKeys<Value extends object>(
   return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
 };
 
-const requireCurrentGhcrLogin = function requireCurrentGhcrLogin(
-  provenance: ImageProvenance,
-): Readonly<{
-  receipt: ReceiptEnvelope;
-  binding: GhcrCredentialBinding;
-  identity: Readonly<{
-    username: string;
-    digest: string;
-    provenanceDigest: string;
-    stateDigest: string;
-  }>;
-}> {
+const requireCurrentGhcrLogin = function requireCurrentGhcrLogin(provenance: ImageProvenance) {
   const receipt = readReceipt(
     provenance.builder.stateRoot,
     ghcrLoginReceiptFile,
@@ -1642,9 +1631,7 @@ type ProofRuntimeResult = Readonly<{
   ignoredInventory: "node_modules/";
 }>;
 
-const observeProofRuntime = function observeProofRuntime(
-  approval: LifecycleApproval,
-): Readonly<{ provenance: ImageProvenance; result: ProofRuntimeResult }> {
+const observeProofRuntime = function observeProofRuntime(approval: LifecycleApproval) {
   const provenance = observeImageProvenance(approval, process.cwd(), {
     allowProofRuntime: true,
   });
@@ -1706,7 +1693,7 @@ const prepareProofRuntimeUnlocked = function prepareProofRuntimeUnlocked(
 
 const requireCurrentProofRuntime = function requireCurrentProofRuntime(
   approval: LifecycleApproval,
-): Readonly<{ provenance: ImageProvenance; receipt: ReceiptEnvelope }> {
+) {
   const { provenance, result } = observeProofRuntime(approval);
   const receipt = readReceipt(
     provenance.builder.stateRoot,

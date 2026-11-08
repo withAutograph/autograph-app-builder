@@ -632,6 +632,12 @@ const requiresFiniteIdentifierEvidence = (
   return members.some((member) => member.flags & ts.TypeFlags.Object);
 };
 
+interface JsxAttributeCheckResult {
+  attributes: TypedJsxAttribute[];
+  limitations: string[];
+  implementationDiagnostics: ImplementationDiagnostic[];
+}
+
 /**
  * Type-check generated JSX through a virtual, read-only host configured from
  * the selected Arrusted checkout. This proves assignability only, never render
@@ -643,11 +649,7 @@ export const checkJsxAttributes = ({
 }: {
   arrustedRoot: string;
   files: { path: string; content: string }[];
-}): {
-  attributes: TypedJsxAttribute[];
-  limitations: string[];
-  implementationDiagnostics: ImplementationDiagnostic[];
-} => {
+}): JsxAttributeCheckResult => {
   const limitations: string[] = [];
   const config = ts.readConfigFile(nodePath.join(arrustedRoot, "tsconfig.json"), ts.sys.readFile);
   if (config.error) {

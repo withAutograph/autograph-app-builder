@@ -60,6 +60,11 @@ export type DevelopmentArguments = Readonly<{
   evePort: number;
 }>;
 
+type ParsedDevelopmentArguments = Omit<
+  { -readonly [Key in keyof DevelopmentArguments]: DevelopmentArguments[Key] },
+  "arrustedRoot"
+> & { arrustedRoot?: string };
+
 export type DevelopmentSnapshot = Readonly<{
   root: string;
   fingerprint: string;
@@ -132,22 +137,7 @@ const hostedSessionResource = (value: string): string => {
 
 // oxlint-disable-next-line eslint/complexity -- Each named development option validates only its own argument.
 export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentArguments => {
-  const parsed: {
-    arrustedRoot?: string;
-    stateRoot?: string;
-    destinationRoot?: string;
-    resumeCycle?: string;
-    emulatedWeb?: boolean;
-    installPlugin?: boolean;
-    webCertificate?: string;
-    webKey?: string;
-    webCa?: string;
-    nextPort: number;
-    hostedSessionResource?: string;
-    hostedSessionCodexBin?: string;
-    nextBundler?: "turbopack" | "webpack";
-    evePort: number;
-  } = { evePort: 2000, nextPort: 3000 };
+  const parsed: ParsedDevelopmentArguments = { evePort: 2000, nextPort: 3000 };
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index];
     if (name === undefined || !name.startsWith("--")) {

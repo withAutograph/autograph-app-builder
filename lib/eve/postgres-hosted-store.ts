@@ -1884,7 +1884,10 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           sessionId: result.sessionId,
           state: "succeeded",
         };
-        const sessionBinding: { sessionRecordDigest?: string } = {};
+        const sessionBinding: Pick<
+          Extract<HostedOperationRecord, { state: "succeeded" }>,
+          "sessionRecordDigest"
+        > = {};
         if (session !== undefined) {
           sessionBinding.sessionRecordDigest = hostedSessionCreationDigest(session);
         }

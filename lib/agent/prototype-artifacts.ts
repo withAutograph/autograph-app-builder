@@ -132,10 +132,7 @@ const isPrototypeArtifactFileName = (
   ["app-spec.md", "decisions.md", "index.html"].includes(value ?? "");
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function parsePrototypeArtifactPath(path: string): {
-  appId: string;
-  fileName: "app-spec.md" | "decisions.md" | "index.html";
-} {
+export function parsePrototypeArtifactPath(path: string) {
   const match = prototypeArtifactPathPattern.exec(path);
   const appId = match?.[1];
   const fileName = match?.[2];

@@ -426,7 +426,7 @@ export const toDurableHostedSessionRecord = (
 export const hostedSessionSummary = (input: HostedSessionRecord): PublicSessionSummary => {
   const record = toDurableHostedSessionRecord(input);
   const hasCheckpoint = record.checkpoint !== undefined || record.checkpointRef !== undefined;
-  const summary: { appId?: string } = {};
+  const summary: Pick<PublicSessionSummary, "appId"> = {};
   if (record.appId !== undefined) {
     summary.appId = record.appId;
   }
@@ -1944,7 +1944,10 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       sessionId: result.sessionId,
       state: "succeeded",
     };
-    const sessionBinding: { sessionRecordDigest?: string } = {};
+    const sessionBinding: Pick<
+      Extract<HostedOperationRecord, { state: "succeeded" }>,
+      "sessionRecordDigest"
+    > = {};
     if (session !== undefined) {
       sessionBinding.sessionRecordDigest = hostedSessionCreationDigest(session);
     }

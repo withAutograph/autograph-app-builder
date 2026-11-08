@@ -31,7 +31,7 @@ import {
 } from "../agent/local-build-continuation";
 import { reportApprovedBuildNoProgress } from "../agent/approved-build-continuation";
 import { Client, ClientError, parseInputResponses } from "eve/client";
-import type { ClientSession, MessageStreamEvent } from "eve/client";
+import type { ClientSession, InputResponse, MessageStreamEvent } from "eve/client";
 import { setTimeout as delay } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
 
@@ -182,7 +182,7 @@ export function toEveInputResponse(
     | { kind: "approve" }
     | { kind: "deny" }
     | { kind: "answer"; value: string; optionId?: string },
-): { requestId: string; optionId?: string; text?: string } {
+): InputResponse {
   if (response.kind === "approve") {
     return { optionId: "approve", requestId };
   }

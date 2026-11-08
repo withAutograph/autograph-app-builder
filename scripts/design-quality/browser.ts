@@ -1098,6 +1098,17 @@ export async function measureStyles(
   }
 }
 
+interface PreviewCapture {
+  height: number;
+  interaction: { status: string; expectedText?: string };
+  measurements: Awaited<ReturnType<typeof measurePage>>;
+  name: string;
+  path: string;
+  state: string;
+  styles: Awaited<ReturnType<typeof measureStyles>> | undefined;
+  width: number;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function capturePreview(input: {
   url: string;
@@ -1120,16 +1131,7 @@ export async function capturePreview(input: {
   preparePage?: (page: Page) => Promise<void>;
 }) {
   const browser = await chromium.launch();
-  const captures: {
-    height: number;
-    interaction: { status: string; expectedText?: string };
-    measurements: Awaited<ReturnType<typeof measurePage>>;
-    name: string;
-    path: string;
-    state: string;
-    styles: Awaited<ReturnType<typeof measureStyles>> | undefined;
-    width: number;
-  }[] = [];
+  const captures: PreviewCapture[] = [];
   try {
     await runSequentially(captureViewports(input.additionalDesktopSize), async (viewport) => {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -1161,7 +1163,7 @@ export async function capturePreview(input: {
         Array.from({ length: input.scenarios.length + 1 }, (_, index) => index),
         async (index) => {
           const scenario = index === 0 ? undefined : input.scenarios[index - 1];
-          let interaction: { status: string; expectedText?: string } = {
+          let interaction: PreviewCapture["interaction"] = {
             status: "not-run",
           };
           if (scenario) {

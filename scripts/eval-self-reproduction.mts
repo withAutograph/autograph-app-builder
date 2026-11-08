@@ -117,8 +117,23 @@ const records: Record<string, unknown>[] = [];
 const started = Date.now();
 const captures: { label: string; files: string[]; status: string }[] = [];
 let generation: Record<string, unknown> = { status: "pending" };
-let input: Record<string, unknown> = { status: "pending" };
-let revisions: Record<string, unknown> = {};
+type InputEvidence =
+  | { status: "pending" }
+  | {
+      files: Record<string, unknown>;
+      referenceSourceExposedToGenerator: false;
+      status: "preserved";
+    };
+interface SourceRevisions {
+  arrusted?: ReturnType<typeof revision> & TemplateAcquisition;
+  builder?: ReturnType<typeof revision>;
+}
+interface NativeFailure {
+  reason?: string;
+  status?: string;
+}
+let input: InputEvidence = { status: "pending" };
+let revisions: SourceRevisions = {};
 let settings: Record<string, unknown> = {};
 let candidateFiles: Awaited<ReturnType<typeof readSource>> | undefined;
 let referenceFiles: Awaited<ReturnType<typeof readSource>> | undefined;
@@ -651,7 +666,7 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
     nativeResults?.length === 1 &&
     nativeResults[0]?.id === "self-reproduction" &&
     nativeResults[0]?.verdict === "passed";
-  let nativeFailure: Record<string, string> = {};
+  let nativeFailure: NativeFailure = {};
   if (native === undefined) {
     nativeFailure = {
       reason: "Native result JSON unavailable; evidence is incomplete.",
