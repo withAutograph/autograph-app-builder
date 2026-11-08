@@ -26,6 +26,12 @@ const ownerContext = {
   principal: { ...authority, scopes: ["autograph:send"] },
   sessionId: context.target.sessionId,
 };
+const verifyWorkload = async (request: Request) => {
+  if (request.headers.get("authorization") !== "Bearer controlled-workload") {
+    throw new HostedOperatorError("authorization_required");
+  }
+};
+
 const unexpected = async () => {
   throw new Error("Approval recovery must not prepare another app or resource");
 };
@@ -116,11 +122,6 @@ const composed = async () => {
         };
       },
     });
-  };
-  const verifyWorkload = async (request: Request) => {
-    if (request.headers.get("authorization") !== "Bearer controlled-workload") {
-      throw new HostedOperatorError("authorization_required");
-    }
   };
   const authorize: ProtectedHostedOperatorDependencies["authorize"] = async (
     request,

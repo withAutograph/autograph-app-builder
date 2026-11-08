@@ -22,6 +22,10 @@ import type {
   OperatorArtifactStore,
 } from "./hosted-operator-artifact-store";
 
+const readTamperedMember = async function* readTamperedMember() {
+  yield Buffer.from("tampered\n");
+};
+
 const raw: unknown = JSON.parse(
   readFileSync(new URL("fixtures/tenant-export-wire-v1.json", import.meta.url), "utf-8"),
 );
@@ -315,9 +319,7 @@ test("new attempts are isolated and reject different scope, data or manifest byt
     ...worker,
     attemptId: "70000000-0000-4000-8000-000000000007",
   });
-  corrupt.source.readMember = async function* readMember() {
-    yield Buffer.from("tampered\n");
-  };
+  corrupt.source.readMember = readTamperedMember;
   await expect(
     f.artifacts.publish({
       context,
