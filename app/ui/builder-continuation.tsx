@@ -108,6 +108,7 @@ export function BuilderContinuation({
       return;
     }
     completedHandoff.current = continuation.handoff.handoffId;
+    // oxlint-disable-next-line react-doctor/nextjs-no-client-side-redirect -- Navigate only after the client continuation returns its handoff.
     router.replace(`/handoff/${continuation.handoff.handoffId}`);
   }, [continuation, continuationPending, router]);
 

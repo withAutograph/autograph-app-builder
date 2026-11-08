@@ -87,6 +87,7 @@ function cloneSnapshot<T>(snapshot: T): T {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function browserIsOnline() {
+  // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Treat only an explicit offline indication as offline.
   return typeof navigator === "undefined" || navigator.onLine !== false;
 }
 

@@ -14,6 +14,7 @@ it("covers existing desktop state combinations without phone or tablet captures"
 it("emits syntactically executable portable code with conservative transient evidence", () => {
   const { script } = sandboxCandidateInteractionCaptures();
   const body = script.replaceAll(/^import .*;$/gmu, "");
+  // oxlint-disable-next-line sonarjs/code-eval -- Compile generated evaluator code to verify its syntax.
   expect(() => new Script(`(async function() {${body}})`)).not.toThrow();
   expect(script).toContain("'not-run'");
   expect(script).toContain("'missing-functionality' : 'not-run'");

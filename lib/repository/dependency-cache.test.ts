@@ -184,6 +184,7 @@ function liveDependencySourceFixture(input?: { packageJson?: string; ordinarySou
   ]);
   const sourceFiles = [...contents].map(([path, content]) => ({
     mode: "100644" as const,
+    // oxlint-disable-next-line sonarjs/hashing -- Preserve the fixture's 40-character source object ID.
     objectId: createHash("sha1").update(content).digest("hex"),
     path,
     sha256: createHash("sha256").update(content).digest("hex"),

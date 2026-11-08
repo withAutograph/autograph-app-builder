@@ -180,8 +180,10 @@ function requestAuthorization() {
     writeSync(authorizationFd, `${JSON.stringify({ version: 2, ...request })}\n`);
     response = readFdFrame();
   } else {
+    // oxlint-disable-next-line typescript/no-unsafe-call -- The delegated worker port is supplied by the existing worker protocol.
     port.postMessage({ version: 2, ...request });
     response = readPortFrame(port);
+    // oxlint-disable-next-line typescript/no-unsafe-call -- Close the same delegated port after reading its response.
     port.close();
     Reflect.deleteProperty(workerData, workerPortKey);
   }

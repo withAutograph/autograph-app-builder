@@ -139,6 +139,7 @@ for (const capture of report.captures) {
       coveragePercent: number | null;
     };
     lines.push(
+      // oxlint-disable-next-line typescript/no-unsafe-call -- Archive reads observations from the saved report without changing malformed-report behavior.
       `| ${md(capture.name)} | ${md(category)} | ${capture.styles.observations?.filter((o: { category: string; provenance: string; classification: string }) => o.category === category && o.provenance === "generated" && o.classification === "semantic-token-reference").length ?? s.counts["token-reference"] ?? 0}/${s.assessed} | ${s.coveragePercent ?? "n/a"}% (${s.assessed}/${s.total}) |`,
     );
   }

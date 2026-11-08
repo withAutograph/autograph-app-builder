@@ -81,7 +81,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
   }
   const canRespond = Boolean(request?.clientId && session && client && !consent.isPending);
 
-  if (invalidRequest === true) {
+  if (invalidRequest) {
     return (
       <Card className={cn("w-full max-w-md", className)}>
         <CardHeader>
@@ -222,6 +222,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
             consent.mutate({ accept: false });
           }}
         >
+          {/* oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Show the cancellation spinner only for an explicit denial request. */}
           {consent.isPending && consent.variables?.accept === false ? <Spinner /> : null}
           {localization.cancel}
         </Button>

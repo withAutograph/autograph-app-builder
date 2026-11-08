@@ -81,6 +81,7 @@ function createStore(sql: Sql): PreviewActivationStore {
         await configureLoginRole(sql, "create", input.roleName, input.password);
       } else if (
         existing.length !== 1 ||
+        // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Require an explicitly login-capable existing role.
         existing[0]?.rolcanlogin !== true ||
         existing[0]?.membership_count !== 0
       ) {

@@ -1073,6 +1073,7 @@ const verifiedFileReader = (
 ): (() => AsyncIterable<Uint8Array>) =>
   async function* readVerifiedFile() {
     const sha256 = createHash("sha256");
+    // oxlint-disable-next-line sonarjs/hashing -- Verify the source against its Git SHA-1 blob ID.
     const sha1 = createHash("sha1").update(Buffer.from(`blob ${expectedSize}\0`));
     let total = 0;
     for await (const bytes of read()) {
@@ -1209,6 +1210,7 @@ const exactPreparedSourceTree = async (
     if (!Number.isSafeInteger(size) || contentHash.digest("hex") !== file.sha256) {
       throw new Error(`The prepared fresh-template source drifted at ${file.path}.`);
     }
+    // oxlint-disable-next-line sonarjs/hashing -- Bind source bytes to Git's SHA-1 blob ID.
     const gitHash = createHash("sha1").update(Buffer.from(`blob ${size}\0`));
     let verifiedSize = 0;
     // oxlint-disable-next-line eslint/no-await-in-loop -- Re-read to bind Git's size-prefixed blob identity.
@@ -1317,6 +1319,7 @@ const exactResultTree = async (input: {
     if (!Number.isSafeInteger(size) || contentHash.digest("hex") !== change.after.digest) {
       throw new Error(`The reviewed bootstrap overlay is stale at ${change.path}.`);
     }
+    // oxlint-disable-next-line sonarjs/hashing -- Bind reviewed overlay bytes to Git's SHA-1 blob ID.
     const gitHash = createHash("sha1").update(Buffer.from(`blob ${size}\0`));
     let verifiedSize = 0;
     // oxlint-disable-next-line eslint/no-await-in-loop -- Bind the reviewed bytes to Git's size-prefixed identity.

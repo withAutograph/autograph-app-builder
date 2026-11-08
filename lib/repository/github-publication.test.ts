@@ -51,6 +51,7 @@ const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(valu
 const sha = "1".repeat(40);
 const templateBytes = new TextEncoder().encode("# Template\n");
 const templateDigest = createHash("sha256").update(templateBytes).digest("hex");
+// oxlint-disable-next-line sonarjs/hashing -- Match Git's SHA-1 blob identity in this fixture.
 const templateObjectId = createHash("sha1")
   .update(Buffer.from(`blob ${templateBytes.byteLength}\0`))
   .update(templateBytes)
@@ -59,6 +60,7 @@ const treeContent = Buffer.concat([
   Buffer.from("100644 README.md\0"),
   Buffer.from(templateObjectId, "hex"),
 ]);
+// oxlint-disable-next-line sonarjs/hashing -- Match Git's SHA-1 tree identity in this fixture.
 const tree = createHash("sha1")
   .update(Buffer.from(`tree ${treeContent.byteLength}\0`))
   .update(treeContent)

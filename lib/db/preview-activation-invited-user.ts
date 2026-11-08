@@ -49,6 +49,7 @@ export const createInvitedUserProvisioner =
         ) {
           throw new Error(identityConflict);
         }
+        // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Require an explicitly verified email for the invited user.
         if (users[0]?.name !== input.githubLogin || users[0]?.email_verified !== true) {
           throw new Error(identityConflict);
         }
@@ -77,6 +78,7 @@ export const createInvitedUserProvisioner =
         const now = new Date(input.requestedAt);
         await transaction`insert into hosted_workspace_membership (issuer, audience, workspace_id, owner_user_id, active, updated_at) values (${input.issuer}, ${input.resource}, ${input.workspaceId}, ${input.userId}, true, ${now})`;
         membershipRowsAffected = 1;
+        // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Require an explicitly active existing membership.
       } else if (memberships.length !== 1 || memberships[0]?.active !== true) {
         throw new Error("Invited user membership conflicts with an existing row.");
       }

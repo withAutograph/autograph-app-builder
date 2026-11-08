@@ -312,6 +312,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     }
     dispatchHandoffView({ type: "renewal", result: renewal, currentHandoffId: data.handoffId });
     if (renewal.status === "renewed" && renewal.handoff.handoffId !== data.handoffId) {
+      // oxlint-disable-next-line react-doctor/nextjs-no-client-side-redirect -- Follow the replacement handoff only after renewal succeeds.
       router.replace(`/handoff/${encodeURIComponent(renewal.handoff.handoffId)}`);
     }
   }, [data.handoffId, destination, renewal, renewalPending, router]);

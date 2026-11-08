@@ -3379,6 +3379,7 @@ export function createHostedEveSessionService(input: {
             sessionId,
             stage: session.stage,
           });
+          // oxlint-disable-next-line typescript/return-await -- Keep checkpoint-result rejections outside this observation catch.
           return delayedCheckpointResult(sessionId, stored, cursor, limit);
         }
         if (
@@ -3510,6 +3511,7 @@ export function createHostedEveSessionService(input: {
               throw new HostedCheckpointObservationConflictError();
             }
             const result = await resultFromDurableCheckpoint(sessionId, current, cursor, limit);
+            // oxlint-disable-next-line typescript/return-await -- Keep continuation rejections outside this observation catch.
             return continueApprovedWork(sessionId, result, sendRead);
           }
           if (activationFailure !== undefined) {
@@ -3536,6 +3538,7 @@ export function createHostedEveSessionService(input: {
             }
           }
           const result = await resultFromDurableCheckpoint(sessionId, stored, cursor, limit);
+          // oxlint-disable-next-line typescript/return-await -- Keep continuation rejections outside this observation catch.
           return continueWork ? continueApprovedWork(sessionId, result, sendRead) : result;
         }
       } catch (error) {
@@ -3548,12 +3551,14 @@ export function createHostedEveSessionService(input: {
           // Read the committed owner-scoped winner without replaying its loser.
           const winner = await requireSession(sessionId);
           const result = await resultFromDurableCheckpoint(sessionId, winner, cursor, limit);
+          // oxlint-disable-next-line typescript/return-await -- Preserve winner continuation promise timing after conflict recovery.
           return continueWork ? continueApprovedWork(sessionId, result) : result;
         }
         if (error instanceof HostedSessionReadTimeoutError) {
           if (session.checkpoint === undefined && session.checkpointRef === undefined) {
             throw error;
           }
+          // oxlint-disable-next-line typescript/return-await -- Preserve delayed checkpoint promise timing after timeout recovery.
           return delayedCheckpointResult(sessionId, session, cursor, limit);
         }
         if (
@@ -3616,6 +3621,7 @@ export function createHostedEveSessionService(input: {
       if (idleCheckpointDue && canPageCheckpoint) {
         await observeSnapshot(sessionId, snapshot, "checkpoint", observedAt);
         const checkpointed = toDurableHostedSessionRecord(await requireSession(sessionId));
+        // oxlint-disable-next-line typescript/return-await -- Preserve durable checkpoint promise timing and rejection propagation.
         return resultFromDurableCheckpoint(sessionId, checkpointed, cursor, limit);
       }
       if (idleCheckpointDue && legacyCheckpoint !== undefined) {

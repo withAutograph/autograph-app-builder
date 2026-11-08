@@ -890,6 +890,7 @@ export const createRepositoryProductionNativeHandler =
         if (creatorEmail === undefined) return;
         const saved = await store.read(found.scope);
         const status = saved ? await creator.describe(saved) : undefined;
+        // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Only explicit account-choice permission permits changing the creator recipient.
         if (status && status.email !== creatorEmail && status.canChooseAccount !== true)
           throw new Error("repository_production_creator_recipient_locked");
         found.intent = { ...found.intent, creatorEmail };

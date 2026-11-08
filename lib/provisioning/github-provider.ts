@@ -105,6 +105,7 @@ function retryAfterMilliseconds(headers: unknown, now: number): number | undefin
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function gitBlobSha(bytes: Uint8Array) {
+  // oxlint-disable-next-line sonarjs/hashing -- Git blob object IDs use SHA-1 for this repository format.
   return createHash("sha1").update(`blob ${bytes.byteLength}\0`).update(bytes).digest("hex");
 }
 

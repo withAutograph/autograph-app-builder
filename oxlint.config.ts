@@ -7,7 +7,6 @@ import nextJsPlugins from "ultracite/oxlint/next/js-plugins";
 
 const previewActivationCli = "lib/db/preview-activation-cli.mts";
 
-const githubProviderPath = "lib/provisioning/github-provider.ts";
 const productionCreatorTestPath = "lib/provisioning/repository-production-creator.test.ts";
 
 const handoffControlsPath = "app/ui/handoff-controls.tsx";
@@ -441,36 +440,6 @@ export default defineConfig({
       rules: { "typescript/no-confusing-void-expression": "off" },
     },
     {
-      files: [
-        "app/(product)/auth/setting-up/page.tsx",
-        "app/ui/builder-continuation.tsx",
-        handoffControlsPath,
-      ],
-      rules: { "react-doctor/nextjs-no-client-side-redirect": "off" },
-    },
-    {
-      // Git object identity requires the existing SHA-1 format.
-      files: [
-        sharedLintFile9,
-        githubProviderPath,
-        sharedLintFile20,
-        sharedLintFile10,
-        "lib/repository/github-publication.test.ts",
-        nodeFreshBootstrapPath,
-      ],
-      rules: { "sonarjs/hashing": "off" },
-    },
-    {
-      files: [
-        "evals/support/self-reproduction-runtime.ts",
-        sharedLintFile30,
-        "scripts/design-quality/rescore.mts",
-        "scripts/smoke-portable-plugin.mts",
-        sharedLintFile4,
-      ],
-      rules: { "typescript/no-unsafe-call": "off" },
-    },
-    {
       // Existing findings awaiting behavior-preserving contract changes.
       files: [
         "lib/agent/prior-validated-private-artifact.test.ts",
@@ -491,21 +460,6 @@ export default defineConfig({
         "scripts/eve-recovery-holder-observation.test.mjs",
       ],
       rules: { "unicorn/consistent-function-scoping": "off" },
-    },
-    {
-      // Preserve explicit boolean distinctions in existing boundary checks.
-      files: [
-        ".storybook/main.ts",
-        draftAutosavePath,
-        sharedLintFile22,
-        "lib/auth/postgres-organization-user-authority.ts",
-        previewActivationCli,
-        "lib/db/preview-activation-invited-user.ts",
-        "lib/provisioning/repository-production-native.ts",
-        sharedLintFile10,
-        sharedLintFile11,
-      ],
-      rules: { "typescript/no-unnecessary-boolean-literal-compare": "off" },
     },
     {
       // Existing explicit undefined values awaiting contract review.
@@ -574,10 +528,6 @@ export default defineConfig({
       rules: { "anti-slop/no-chained-type-assertions": "off" },
     },
     {
-      files: [sharedLintFile26],
-      rules: { "typescript/return-await": "off" },
-    },
-    {
       // Eve derives public tool IDs from these existing filenames.
       files: ["agent/tools/*_*.ts"],
       rules: {
@@ -625,7 +575,6 @@ export default defineConfig({
       files: ["**/*.{test,spec}.{js,jsx,ts,tsx,mjs,mts,cjs,cts}"],
       rules: {
         "anti-slop/no-module-mocking": "off",
-        "sonarjs/code-eval": "off",
       },
     },
   ],

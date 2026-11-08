@@ -449,9 +449,11 @@ export const evaluateCandidateRuntime = async (input: {
       if (browser.exitCode === 0) {
         const browserProbes = JSON.parse(browser.stdout.trim());
         if (Array.isArray(browserProbes)) {
+          // oxlint-disable-next-line typescript/no-unsafe-call -- Keep the runtime-provided probe collection and its existing behavior.
           probes.push(...browserProbes);
         }
       } else {
+        // oxlint-disable-next-line typescript/no-unsafe-call -- Keep the runtime-provided probe collection and its existing behavior.
         probes.push({
           detail: `Evaluator browser was unavailable: ${browser.stderr || browser.stdout}`,
           disposition: infrastructureUnavailable,

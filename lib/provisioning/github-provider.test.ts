@@ -16,6 +16,7 @@ const authority = {
 };
 const requestId = "123e4567-e89b-42d3-a456-426614174000";
 const content = new TextEncoder().encode("# Starter\n");
+// oxlint-disable-next-line sonarjs/hashing -- Match Git's SHA-1 blob identity in this fixture.
 const blobSha = createHash("sha1")
   .update(`blob ${content.byteLength}\0`)
   .update(content)

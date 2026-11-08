@@ -46,6 +46,7 @@ if (sha256(marketplaceArchive) !== receipt.codexMarketplaceArchive.sha256) {
 const discovery = JSON.parse(
   await readFile(path.join(releaseRoot, "mock/tools-list.json"), "utf-8"),
 );
+// oxlint-disable-next-line typescript/no-unsafe-call -- Discovery is read from the generated MCP response without changing its error behavior.
 const discovered = discovery.result?.tools?.map((tool: { name?: unknown }) => tool.name);
 if (JSON.stringify(discovered) !== JSON.stringify(TOOL_NAMES)) {
   throw new Error("Offline MCP discovery did not return the exact five tools.");

@@ -177,6 +177,7 @@ export type FreshBootstrapLayout =
     };
 
 const sha1Object = (kind: "blob" | "tree" | "commit", bytes: Uint8Array) =>
+  // oxlint-disable-next-line sonarjs/hashing -- Git object IDs use SHA-1 for this repository format.
   createHash("sha1")
     .update(Buffer.from(`${kind} ${bytes.byteLength}\0`))
     .update(bytes)
@@ -591,6 +592,7 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
     !proposal.exactTree.every((file) => hasExactKeys(file, ["path", "mode", "blob"])) ||
     proposal.version !== FRESH_BOOTSTRAP_VERSION ||
     proposal.githubOutcome !== "unavailable" ||
+    // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Reject missing or malformed release flags in bootstrap proposals.
     proposal.releaseEnabled !== false
   ) {
     throw new Error(invalidProposal);
@@ -794,8 +796,10 @@ export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJour
     ((journal.status === "pending" || journal.status === "failed") &&
       (journal.stageCreated !== (journal.layout.phase !== "intent") ||
         journal.destinationPublished !== (journal.layout.phase === "published"))) ||
+    // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- A failed journal must explicitly require recovery.
     (journal.status === "failed" && journal.recoveryRequired !== true) ||
     (journal.status === "succeeded" &&
+      // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- A successful journal must explicitly indicate recovery is unnecessary.
       (journal.recoveryRequired !== false ||
         journal.commitCount !== 1 ||
         (journal.destinationPrestate.kind === emptyDirectoryKind) !==
