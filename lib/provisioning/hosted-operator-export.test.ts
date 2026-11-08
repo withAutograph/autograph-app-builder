@@ -484,14 +484,14 @@ describe("existing operator transport export dispatch", () => {
       },
     );
     const dispatch = createTenantExportDispatcher({
-      store: f.dependencies.store,
-      operations: f.operations,
+      authorize,
+      authorizeRead,
       bindWorkload,
+      operations: f.operations,
+      store: f.dependencies.store,
       verifyWorkload: async (request) => {
         expect(request.headers.get("authorization")).toBe("Bearer workload-token");
       },
-      authorize,
-      authorizeRead,
     });
     const handler = createProtectedHostedOperatorHandler({
       authorize,
@@ -592,11 +592,11 @@ describe("existing operator transport export dispatch", () => {
         },
       );
       const dispatch = createTenantExportDispatcher({
-        store: f.dependencies.store,
-        operations: f.operations,
-        verifyWorkload,
         authorize,
         authorizeRead,
+        operations: f.operations,
+        store: f.dependencies.store,
+        verifyWorkload,
       });
       const handler = createProtectedHostedOperatorHandler({
         authorize,
@@ -655,11 +655,11 @@ describe("existing operator transport export dispatch", () => {
       throw new HostedOperatorError("authorization_required");
     });
     const dispatch = createTenantExportDispatcher({
-      store: f.dependencies.store,
-      operations: f.operations,
-      verifyWorkload,
       authorize: async () => context,
       authorizeRead,
+      operations: f.operations,
+      store: f.dependencies.store,
+      verifyWorkload,
     });
     const ownerContext = {
       adapterGeneration: 1,
@@ -804,7 +804,7 @@ describe("export planning failure boundaries", () => {
       expect(consoleSink).toHaveBeenCalledOnce();
       expect(consoleSink.mock.calls[0]?.[1]).toMatchObject({
         boundary: "operator",
-        exportPlanningFailure: { stage, errorClass: "operator_error" },
+        exportPlanningFailure: { errorClass: "operator_error", stage },
       });
       expect(JSON.stringify(consoleSink.mock.calls)).not.toContain(context.target.sessionId);
       expect(f.dependencies.runWorker).not.toHaveBeenCalled();
@@ -873,13 +873,13 @@ describe("export planning failure boundaries", () => {
       throw new Error("sink unavailable");
     });
     const dispatch = createTenantExportDispatcher({
-      store: f.dependencies.store,
+      authorize: async () => context,
+      authorizeRead: async (_request, selected) => selected,
       operations: f.operations,
+      store: f.dependencies.store,
       verifyWorkload: async () => {
         throw failure;
       },
-      authorize: async () => context,
-      authorizeRead: async (_request, selected) => selected,
     });
     try {
       await expect(dispatch(diagnosticRequest(), input)).rejects.toBe(failure);
@@ -908,12 +908,12 @@ describe("approved installed tenant export scope", () => {
         return "customer-one";
       });
       const dispatch = createTenantExportDispatcher({
-        store: f.dependencies.store,
-        operations: f.operations,
-        verifyWorkload: async () => {},
         authorize: async () => context,
         authorizeRead: async (_request, selected) => selected,
+        operations: f.operations,
         resolveOwnerOrganization,
+        store: f.dependencies.store,
+        verifyWorkload: async () => {},
       });
       const response = await dispatch(
         new Request("https://operator.test/exports", { method: "POST" }),

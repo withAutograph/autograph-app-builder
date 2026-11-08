@@ -433,9 +433,9 @@ describe("approved hosted runtime consumers", () => {
         APP_RUNTIME_ALREADY_COMPILED?: string;
       }
       const expectedEnvironment: ExpectedCompiledEnvironment = {
+        APP_RUNTIME_STATE_DIR: "/private-state",
         APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
         PATH: "/sandbox/custom/bin:/usr/bin",
-        APP_RUNTIME_STATE_DIR: "/private-state",
       };
       if (alreadyCompiled && task !== "test-e2e") {
         expectedEnvironment.APP_RUNTIME_ALREADY_COMPILED = "1";
@@ -1053,12 +1053,11 @@ it("reports the failed description command stage without exposing its output", a
 
 it.each([
   {
-    stage: "app-identity",
     description: { ...descriptor, app: { ...descriptor.app, id: "private-app-canary" } },
+    stage: "app-identity",
   },
-  { stage: "backend-kind", description: { ...descriptor, backend: { kind: "static" } } },
+  { description: { ...descriptor, backend: { kind: "static" } }, stage: "backend-kind" },
   {
-    stage: "release-identity",
     description: {
       ...descriptor,
       backend: {
@@ -1066,9 +1065,9 @@ it.each([
         release: { ...descriptor.backend.release, id: "private-release-canary" },
       },
     },
+    stage: "release-identity",
   },
   {
-    stage: "artifact-identity",
     description: {
       ...descriptor,
       backend: {
@@ -1076,6 +1075,7 @@ it.each([
         release: { ...descriptor.backend.release, artifactHash: "sha256:private-artifact-canary" },
       },
     },
+    stage: "artifact-identity",
   },
 ])("reports only the closed $stage mismatch stage", async ({ stage, description }) => {
   const fixture = transport();

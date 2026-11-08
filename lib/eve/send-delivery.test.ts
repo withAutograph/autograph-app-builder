@@ -99,9 +99,9 @@ const fixture = async (
   const request = { clientRequestId: "send", message: "Continue", sessionId: started.sessionId };
   return {
     adapter,
-    getEvents: () => events,
     create,
     diagnostics,
+    getEvents: () => events,
     operation: async () =>
       await store.getPrivateOperation(principal, operationId(request.clientRequestId)),
     owner,
@@ -245,7 +245,7 @@ const attachPagedTransport = (f: Awaited<ReturnType<typeof fixture>>) => {
     await input.onAccepted?.(deliverySequence === 1 ? "ack" : `ack-${deliverySequence}`);
   });
   f.adapter.sendAccepted = accepted;
-  return { observe, accepted };
+  return { accepted, observe };
 };
 const queuedFixture = async () => {
   const f = await fixture({ store: new PagedSendDiagnosticStore(true) });
@@ -645,19 +645,19 @@ describe("canonical SEND delivery acknowledgement", () => {
       const candidate: Parameters<typeof canProjectQueuedSendAcknowledgement>[0] = {
         acknowledgement,
         current,
-        result,
         observation: {
-          nativeStartIndex: 1,
+          currentTurnPresent: false,
           nativeNextIndex: 1,
+          nativeStartIndex: 1,
           nativeTailIndex: 0,
           observationComplete: true,
-          currentTurnPresent: false,
         },
         observedBinding: {
           adapterSessionId: durable.adapterSessionId,
           adapterGeneration: durable.adapterGeneration,
           cancellationRevision: 0,
         },
+        result,
       };
       expect(canProjectQueuedSendAcknowledgement(candidate)).toBe(true);
       switch (fault) {

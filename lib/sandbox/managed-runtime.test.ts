@@ -189,19 +189,19 @@ const processFixture = async () => {
     },
   });
   return {
-    supervisor,
-    owner,
-    environment,
-    observation,
-    script,
-    source,
-    loseOwnership: () => {
-      authorized = false;
-    },
     close: async () => {
       await supervisor.close();
       await rm(directory, { recursive: true, force: true });
     },
+    environment,
+    loseOwnership: () => {
+      authorized = false;
+    },
+    observation,
+    owner,
+    script,
+    source,
+    supervisor,
   };
 };
 
@@ -475,18 +475,18 @@ const bridgeFixture = async () => {
   });
   const port = await listen(bridge.server);
   return {
-    bridge,
     app,
-    port,
+    bridge,
     capabilities,
-    current,
-    owner,
-    received,
-    verifyRequest,
     close: async () => {
       await bridge.close();
       await closeServer(app);
     },
+    current,
+    owner,
+    port,
+    received,
+    verifyRequest,
   };
 };
 
@@ -554,13 +554,13 @@ test("bridge rejects wrong capability, verifier denial, foreign runtime scope an
       ),
     ).toBe(403);
     f.current.fence = 2;
-    expect(await statusOf(exchange({ port: f.port, headers }))).toBe(403);
+    expect(await statusOf(exchange({ headers, port: f.port }))).toBe(403);
     f.current.fence = 1;
     f.current.state = "revoked";
-    expect(await statusOf(exchange({ port: f.port, headers }))).toBe(403);
+    expect(await statusOf(exchange({ headers, port: f.port }))).toBe(403);
     f.current.state = "ready";
     f.current.leaseExpiresAt = new Date(0).toISOString();
-    expect(await statusOf(exchange({ port: f.port, headers }))).toBe(403);
+    expect(await statusOf(exchange({ headers, port: f.port }))).toBe(403);
     expect(f.received).toEqual([]);
   } finally {
     await f.close();

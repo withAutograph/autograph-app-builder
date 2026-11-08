@@ -44,9 +44,9 @@ describe("normal Auth client", () => {
         )
         .mockImplementation(async () => await Promise.resolve(Response.json(session())));
       const client = createHostedOperatorNormalAuthClient({
-        origin,
-        fetch: mocked,
         assertApprovedEffect: approved,
+        fetch: mocked,
+        origin,
       });
       await client.signIn({ email: "member@example.com", password });
       expect(client.exportStorageState().cookies[0]?.expires).toBe(received / 1000 + 60);
@@ -55,8 +55,8 @@ describe("normal Auth client", () => {
       const saved = client.exportStorageState();
       expect(saved.cookies[0]?.expires).toBe(received / 1000 + 60);
       const resumed = createHostedOperatorNormalAuthClient({
-        origin,
         fetch: mocked,
+        origin,
         storageState: saved,
       });
       vi.setSystemTime(received + 61_000);
@@ -87,14 +87,14 @@ describe("normal Auth client", () => {
       return await auth.handler(request);
     };
     const owner = createHostedOperatorNormalAuthClient({
-      origin,
-      fetch: localFetch,
       assertApprovedEffect: approved,
+      fetch: localFetch,
+      origin,
     });
     const participant = createHostedOperatorNormalAuthClient({
-      origin,
-      fetch: localFetch,
       assertApprovedEffect: approved,
+      fetch: localFetch,
+      origin,
     });
     await owner.signUp({ email: "owner@example.com", name: "Owner", password });
     await participant.signUp({ email: "member@example.com", name: "Member", password });
@@ -129,9 +129,9 @@ describe("normal Auth client", () => {
     expect(await owner.listInvitations({ organizationId: created.id })).toEqual([invite]);
     const accepted = await participant.acceptInvitation({ invitationId: invite.id });
     expect(accepted.member).toMatchObject({
-      userId: actor.actorId,
       organizationId: created.id,
       role: "member",
+      userId: actor.actorId,
     });
     expect(accepted.invitation.status).toBe("accepted");
     const membership = await participant.listMembers({
@@ -140,8 +140,8 @@ describe("normal Auth client", () => {
     });
     expect(membership.total).toBe(1);
     expect(membership.members[0]).toMatchObject({
+      user: { email: actor.email, id: actor.actorId },
       userId: actor.actorId,
-      user: { id: actor.actorId, email: actor.email },
     });
 
     const resumed = createHostedOperatorNormalAuthClient({
@@ -151,9 +151,9 @@ describe("normal Auth client", () => {
     });
     expect(await resumed.getSession()).toEqual({ ...actor, activeOrganizationId: created.id });
     const reconciliation = createHostedOperatorNormalAuthClient({
-      origin,
-      fetch: localFetch,
       assertApprovedEffect: approved,
+      fetch: localFetch,
+      origin,
     });
     expect(await reconciliation.getSession()).toBeNull();
     await reconciliation.signIn({ email: actor.email, password });
@@ -173,9 +173,9 @@ describe("normal Auth client", () => {
     const localFetch: typeof fetch = async (target, init) =>
       await auth.handler(new Request(target, init));
     const owner = createHostedOperatorNormalAuthClient({
-      origin,
-      fetch: localFetch,
       assertApprovedEffect: approved,
+      fetch: localFetch,
+      origin,
     });
     await owner.signUp({ email: "owner@example.com", name: "Owner", password });
     const ids: string[] = [];
@@ -201,9 +201,9 @@ describe("normal Auth client", () => {
     const sessions = await Promise.all(
       ids.map(async (organizationId) => {
         const client = createHostedOperatorNormalAuthClient({
-          origin,
-          fetch: localFetch,
           assertApprovedEffect: approved,
+          fetch: localFetch,
+          origin,
         });
         await client.signIn({ email: "owner@example.com", password });
         await client.setActiveOrganization({ organizationId });
@@ -214,8 +214,8 @@ describe("normal Auth client", () => {
     expect(await sessions[0]?.client.getSession()).toMatchObject({ activeOrganizationId: ids[0] });
     expect(await sessions[1]?.client.getSession()).toMatchObject({ activeOrganizationId: ids[1] });
     const readOnly = createHostedOperatorNormalAuthClient({
-      origin,
       fetch: localFetch,
+      origin,
       storageState: sessions[0]?.client.exportStorageState(),
     });
     await expect(
@@ -249,9 +249,9 @@ describe("normal Auth client", () => {
       )
       .mockResolvedValueOnce(Response.json(session()));
     const client = createHostedOperatorNormalAuthClient({
-      origin,
-      fetch: mocked,
       assertApprovedEffect: approved,
+      fetch: mocked,
+      origin,
     });
     await client.signIn({ email: "member@example.com", password });
     const state = client.exportStorageState();
@@ -268,9 +268,9 @@ describe("normal Auth client", () => {
       sameSite: "Strict",
     });
     const resumed = createHostedOperatorNormalAuthClient({
+      fetch: mocked,
       origin,
       storageState: state,
-      fetch: mocked,
     });
     await resumed.getSession();
     expect(new Headers(mocked.mock.calls[1]?.[1]?.headers).get("cookie")).toBe(
@@ -292,7 +292,7 @@ describe("normal Auth client", () => {
     const mocked = vi
       .fn<typeof fetch>()
       .mockResolvedValue(Response.json({ members: [], total: 0 }));
-    const client = createHostedOperatorNormalAuthClient({ origin, fetch: mocked });
+    const client = createHostedOperatorNormalAuthClient({ fetch: mocked, origin });
     await expect(client.signIn({ email: "member@example.com", password })).rejects.toMatchObject({
       code: "approval_required",
     });
@@ -324,7 +324,7 @@ describe("normal Auth client", () => {
     `${origin}?private=1`,
   ])("rejects non-origin targets before any fetch", (value) => {
     const mocked = vi.fn<typeof fetch>();
-    expect(() => createHostedOperatorNormalAuthClient({ origin: value, fetch: mocked })).toThrow(
+    expect(() => createHostedOperatorNormalAuthClient({ fetch: mocked, origin: value })).toThrow(
       NormalAuthClientError,
     );
     expect(mocked).not.toHaveBeenCalled();
@@ -372,9 +372,9 @@ describe("normal Auth client", () => {
       )
       .mockResolvedValueOnce(Response.json({ privateResponse: password }));
     const client = createHostedOperatorNormalAuthClient({
-      origin,
-      fetch: mocked,
       assertApprovedEffect: approved,
+      fetch: mocked,
+      origin,
     });
     for (const expected of [
       { code: "transport_failed" },
@@ -416,7 +416,7 @@ describe("normal Auth client", () => {
       .mockResolvedValueOnce(
         Response.json({ ...session(), user: { id: "other-actor", email: "member@example.com" } }),
       );
-    const client = createHostedOperatorNormalAuthClient({ origin, fetch: mocked });
+    const client = createHostedOperatorNormalAuthClient({ fetch: mocked, origin });
     await expect(client.getSession()).rejects.toMatchObject({ code: "invalid_response" });
     await expect(client.getSession()).rejects.toMatchObject({ code: "transport_failed" });
     await expect(client.getSession()).rejects.toMatchObject({ code: "invalid_response" });

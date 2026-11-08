@@ -394,22 +394,22 @@ const fixture = async (
     resumeSessionId: source.sessionId,
   });
   return {
-    native,
-    store,
-    source,
-    service,
-    request,
-    ports,
     adapter,
-    sends,
     authorizationFailures,
     authorizedReads: () => authorizedReads,
-    revoke: () => {
-      allowed = false;
-    },
     idle: () => {
       currentSnapshot = { events: [], status: "waiting" };
     },
+    native,
+    ports,
+    request,
+    revoke: () => {
+      allowed = false;
+    },
+    sends,
+    service,
+    source,
+    store,
   };
 };
 
@@ -456,13 +456,13 @@ it("the public idle recovery path restores verified original review and latest c
   expect(child.sessionId).not.toBe(f.source.sessionId);
   const saved = await f.store.getSession(principal, child.sessionId);
   expect(saved).toMatchObject({
-    parentSessionId: f.source.sessionId,
     nativeRecoveryBinding: {
       executionTransfer: { kind: "idle-checkpoint" },
       logicalSessionId: logical,
       originalAuthoritySessionId: "public-authority",
       sourcePublicSessionId: f.source.sessionId,
     },
+    parentSessionId: f.source.sessionId,
   });
   const restored = restoredSchema.parse(f.native.starts[0]).checkpoint.serializedContext;
   expect(restored).toEqual({
