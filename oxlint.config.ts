@@ -25,6 +25,11 @@ const postgresExecutionLeasePath = "lib/sandbox/postgres-execution-lease-store.t
 
 const additionalAuthFieldPath = "components/auth/additional-field.tsx";
 
+const sharedLintFile1 = "evals/support/self-reproduction-reference-runtime.ts";
+const sharedLintFile2 = "lib/repository/supported-template.ts";
+const sharedLintFile3 = "scripts/self-reproduction-live.mts";
+const sharedLintFile4 = "scripts/test-capability-preload.mjs";
+
 export default defineConfig({
   extends: [core, next, jsPlugins, nextJsPlugins, antiSlop],
   ignorePatterns: core.ignorePatterns,
@@ -33,6 +38,56 @@ export default defineConfig({
     typeAware: true,
   },
   overrides: [
+    {
+      // Existing calls awaiting a focused contract review.
+      files: [
+        handoffControlsPath,
+        "components/auth/additional-field.tsx",
+        "components/auth/error-toaster.tsx",
+        "evals/cancel-dependency-preparation.eval.ts",
+        "evals/self-reproduction/workflow-adapter.ts",
+        "evals/support/self-reproduction-supplementary.ts",
+        "lib/auth/real-oauth-test-harness.ts",
+        "lib/eve/same-origin-http.test.ts",
+        "lib/integrations/postgres-vercel-installation.test.ts",
+        "lib/mcp/handoff-provider-test-harness.ts",
+        "lib/release/promotion.ts",
+        "lib/repository/reviewed-receipt-contract.test.ts",
+        "lib/testing/test-capability-registry.cjs",
+        "scripts/build-openai-package.mts",
+        "scripts/build-portable-release.mts",
+        "scripts/design-quality/archive.mts",
+        "scripts/design-quality/browser.ts",
+        "scripts/design-quality/rescore.mts",
+        "scripts/eve-eval-fetch-preload.mjs",
+        "scripts/smoke-portable-plugin.mts",
+        sharedLintFile4,
+        "scripts/test-portable-release.mts",
+      ],
+      rules: { "typescript/no-unsafe-argument": "off" },
+    },
+    {
+      // Existing calls awaiting a focused contract review.
+      files: [
+        "evals/branch-worktree-publication-negative.eval.ts",
+        "evals/branch-worktree-publication-stale.eval.ts",
+        "evals/branch-worktree-publication.eval.ts",
+        "evals/pre-journal-branch-worktree-publication.eval.ts",
+        "evals/support/self-reproduction-reference-runtime.test.ts",
+        sharedLintFile1,
+        "evals/support/supported-repository.ts",
+        "lib/image/lifecycle.test.ts",
+        "lib/repository/node-local-publication.ts",
+        "lib/repository/supported-template-development.test.ts",
+        sharedLintFile2,
+        "scripts/eval-design.mts",
+        "scripts/eval-self-reproduction.mts",
+        sharedLintFile3,
+        "scripts/self-reproduction-public.mts",
+        "scripts/trusted-node-launcher.test.ts",
+      ],
+      rules: { "sonarjs/no-os-command-from-path": "off" },
+    },
     {
       // Preserve existing falsy-value fallback behavior.
       files: [
@@ -70,7 +125,7 @@ export default defineConfig({
         nodeFreshBootstrapPath,
         nodeLocalPublicationPath,
         "lib/repository/sandbox-filesystem.ts",
-        "lib/repository/supported-template.ts",
+        sharedLintFile2,
         "lib/repository/target-apply.ts",
         "lib/repository/target-planning.ts",
         postgresExecutionLeasePath,
@@ -83,7 +138,7 @@ export default defineConfig({
         "evals/self-reproduction/default-capture-adapter.ts",
         "evals/support/self-reproduction-candidate-workflows.ts",
         referenceLifecyclePath,
-        "evals/support/self-reproduction-reference-runtime.ts",
+        sharedLintFile1,
         "lib/agent/github-pr-delivery-step.ts",
         "lib/agent/github-publication-runtime.ts",
         "lib/db/better-auth-membership-readiness-cli.mts",
@@ -98,7 +153,7 @@ export default defineConfig({
         "lib/repository/node-branch-worktree-publication.ts",
         nodeFreshBootstrapPath,
         nodeLocalPublicationPath,
-        "lib/repository/supported-template.ts",
+        sharedLintFile2,
         postgresExecutionLeasePath,
       ],
       rules: { "react-doctor/server-sequential-independent-await": "off" },
@@ -127,7 +182,7 @@ export default defineConfig({
         "app/ui/builder-form.tsx",
         "app/ui/builder-model-controls.tsx",
         "app/ui/builder-provider-controls.tsx",
-        "app/ui/handoff-controls.tsx",
+        handoffControlsPath,
         handoffProgressPath,
         "app/ui/route-error.test.tsx",
         builderControllerPath,
@@ -189,7 +244,7 @@ export default defineConfig({
     {
       files: [
         referenceLifecyclePath,
-        "evals/support/self-reproduction-reference-runtime.ts",
+        sharedLintFile1,
         "lib/agent/github-pr-delivery-step.ts",
         nodeFreshBootstrapPath,
       ],
@@ -227,7 +282,7 @@ export default defineConfig({
         "scripts/design-quality/archive.mts",
         "scripts/design-quality/rescore.mts",
         "scripts/smoke-portable-plugin.mts",
-        "scripts/test-capability-preload.mjs",
+        sharedLintFile4,
       ],
       rules: { "typescript/no-unsafe-call": "off" },
     },
@@ -290,7 +345,7 @@ export default defineConfig({
     },
     {
       // Preserve existing runtime contracts pending focused migration.
-      files: ["scripts/design-quality/archive-entry.ts", "scripts/test-capability-preload.mjs"],
+      files: ["scripts/design-quality/archive-entry.ts", sharedLintFile4],
       rules: { "typescript/no-unsafe-return": "off" },
     },
     {
@@ -309,11 +364,7 @@ export default defineConfig({
     },
     {
       // Preserve existing callback and abort behavior pending contract review.
-      files: [
-        additionalAuthFieldPath,
-        "lib/agent/product-behavior.test.ts",
-        "scripts/self-reproduction-live.mts",
-      ],
+      files: [additionalAuthFieldPath, "lib/agent/product-behavior.test.ts", sharedLintFile3],
       rules: { "typescript/no-misused-promises": "off" },
     },
     {
@@ -357,7 +408,7 @@ export default defineConfig({
     },
     {
       // Preserve existing rejection handling until its value contract is narrowed.
-      files: ["scripts/release-publish.mts", "scripts/self-reproduction-live.mts"],
+      files: ["scripts/release-publish.mts", sharedLintFile3],
       rules: { "typescript/use-unknown-in-catch-callback-variable": "off" },
     },
     {
@@ -531,13 +582,11 @@ export default defineConfig({
     "sonarjs/expression-complexity": "off",
     "sonarjs/function-name": "off",
     "sonarjs/max-union-size": "off",
-    "sonarjs/no-os-command-from-path": "off",
     "sonarjs/no-undefined-assignment": "off",
     "sonarjs/publicly-writable-directories": "off",
     "sonarjs/too-many-break-or-continue-in-loop": "off",
     "typescript/consistent-return": "off",
     "typescript/no-base-to-string": "off",
-    "typescript/no-unsafe-argument": "off",
     "typescript/no-unsafe-assignment": "off",
     "typescript/no-unsafe-member-access": "off",
     "typescript/no-unsafe-type-assertion": "off",
