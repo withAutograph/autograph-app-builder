@@ -368,10 +368,14 @@ const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value
 
 const isLiveTemplateDependencyInputPath = function isLiveTemplateDependencyInputPath(path: string) {
   const requiredInputs: readonly string[] = requiredLiveTemplateDependencyInputs;
-  return (
+  if (
     requiredInputs.includes(path) ||
     path.endsWith("/package.json") ||
-    path.endsWith("/Cargo.toml") ||
+    path.endsWith("/Cargo.toml")
+  ) {
+    return true;
+  }
+  return (
     path === "bunfig.toml" ||
     path.endsWith("/bunfig.toml") ||
     path === "rust-toolchain.toml" ||
@@ -1227,11 +1231,13 @@ const assertExactLiveTemplateClosure = function assertExactLiveTemplateClosure(
   manifest: z.infer<typeof liveTemplateDependencyCacheManifestSchema>,
   observation: z.infer<typeof liveTemplateClosureObservationSchema>,
 ) {
-  if (
+  const dependencyMismatch =
     observation.platform !== manifest.platform ||
     observation.nodeModulesDigest !== manifest.closure.nodeModulesDigest ||
     JSON.stringify(observation.workspaceNodeModules) !==
-      JSON.stringify(manifest.closure.workspaceNodeModules) ||
+      JSON.stringify(manifest.closure.workspaceNodeModules);
+  if (
+    dependencyMismatch ||
     JSON.stringify(observation.workspaceLinks) !==
       JSON.stringify(manifest.closure.workspaceLinks) ||
     observation.cargoHomeDigest !== manifest.closure.cargoHomeDigest ||

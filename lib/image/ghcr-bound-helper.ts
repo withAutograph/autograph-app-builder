@@ -172,22 +172,20 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
     throw new Error(malformedAuthenticationStatus);
   }
   const value = record as Record<string, unknown>;
+  const identityMismatch = "GitHub keyring identity did not match approval.";
   if (
     Object.keys(value).toSorted().join(",") !==
       "active,gitProtocol,host,login,scopes,state,tokenSource" ||
     value.active !== true ||
     value.gitProtocol !== "https"
   ) {
-    throw new Error("GitHub keyring identity did not match approval.");
+    throw new Error(identityMismatch);
   }
-  if (
-    value.host !== githubHost ||
-    value.login !== expectedUsername ||
-    value.state !== "success" ||
-    value.tokenSource !== "keyring" ||
-    typeof value.scopes !== "string"
-  ) {
-    throw new Error("GitHub keyring identity did not match approval.");
+  if (value.host !== githubHost || value.login !== expectedUsername || value.state !== "success") {
+    throw new Error(identityMismatch);
+  }
+  if (value.tokenSource !== "keyring" || typeof value.scopes !== "string") {
+    throw new Error(identityMismatch);
   }
   const scopes = new Set(
     value.scopes
@@ -480,11 +478,12 @@ function parseExactToken(raw: Buffer): Buffer {
   const token = Buffer.from(raw.subarray(0, end));
   // Keep token validation local to the parser.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
-  const validByte = (byte: number) =>
-    (byte >= 0x30 && byte <= 0x39) ||
-    (byte >= 0x41 && byte <= 0x5a) ||
-    byte === 0x5f ||
-    (byte >= 0x61 && byte <= 0x7a);
+  const validByte = (byte: number) => {
+    if ((byte >= 0x30 && byte <= 0x39) || (byte >= 0x41 && byte <= 0x5a)) {
+      return true;
+    }
+    return byte === 0x5f || (byte >= 0x61 && byte <= 0x7a);
+  };
   if (
     token.length < 20 ||
     token.length > maximumCredentialBytes ||

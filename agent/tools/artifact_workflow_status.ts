@@ -8,6 +8,20 @@ import {
 } from "@/lib/agent/workflow-state";
 import { approvalReceiptForDraftProposal } from "@/lib/agent/approval-receipt";
 
+const isFreshBootstrapPhase = (state: ReturnType<typeof appBuilderWorkflowState.get>) =>
+  state.phase === "fresh_bootstrap_pending" ||
+  state.phase === "fresh_bootstrap_failed" ||
+  state.phase === "published_fresh_bootstrap";
+
+const isBranchOrFreshPublication = (state: ReturnType<typeof appBuilderWorkflowState.get>) =>
+  state.phase === "branch_publication_pending" ||
+  state.phase === "branch_publication_failed" ||
+  state.phase === "published_branch_worktree" ||
+  isFreshBootstrapPhase(state);
+
+const isLocalOrLaterPublication = (state: ReturnType<typeof appBuilderWorkflowState.get>) =>
+  state.phase === "published_local" || isBranchOrFreshPublication(state);
+
 const isReviewedPhase = (
   state: ReturnType<typeof appBuilderWorkflowState.get>,
 ): state is Extract<
@@ -29,13 +43,7 @@ const isReviewedPhase = (
   state.phase === "reviewed" ||
   state.phase === "publication_pending" ||
   state.phase === "publication_failed" ||
-  state.phase === "published_local" ||
-  state.phase === "branch_publication_pending" ||
-  state.phase === "branch_publication_failed" ||
-  state.phase === "published_branch_worktree" ||
-  state.phase === "fresh_bootstrap_pending" ||
-  state.phase === "fresh_bootstrap_failed" ||
-  state.phase === "published_fresh_bootstrap";
+  isLocalOrLaterPublication(state);
 
 const acceptedUIReference = (state: ReturnType<typeof appBuilderWorkflowState.get>) => {
   if (!("appSpec" in state) || state.appSpec.uiRevision === undefined) {

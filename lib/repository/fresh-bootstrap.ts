@@ -192,10 +192,10 @@ export const gitTreeId = (files: readonly FreshBootstrapFile[]): string => {
   const paths = new Set<string>();
   for (const file of files) {
     const components = file.path.split("/");
+    const invalidFileIdentity =
+      !safeSourcePath(file.path) || !/^[0-9a-f]{40}$/u.test(file.blob) || paths.has(file.path);
     if (
-      !safeSourcePath(file.path) ||
-      !/^[0-9a-f]{40}$/u.test(file.blob) ||
-      paths.has(file.path) ||
+      invalidFileIdentity ||
       components.some((component) =>
         [".git", ".repository-bootstrap-claim"].includes(component.toLowerCase()),
       ) ||
@@ -763,10 +763,12 @@ export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJour
     if (journal.swappedOldIdentity !== undefined) {
       assertExactPathIdentity(journal.swappedOldIdentity, "swapped-old");
     }
-    if (
+    const invalidHead =
       journal.headReference !== `refs/heads/${journal.repositoryIdentity.initialBranch}` ||
       journal.headCommit !== journal.expectedInitialCommit ||
-      journal.headTree !== journal.expectedGitTree ||
+      journal.headTree !== journal.expectedGitTree;
+    if (
+      invalidHead ||
       !/^[0-9a-f]{64}$/u.test(journal.remoteDigest) ||
       !/^[0-9a-f]{64}$/u.test(journal.worktreeDigest)
     ) {

@@ -653,15 +653,20 @@ export const parseRemoteImageInspection = (
     !isPositiveSize(config.size) ||
     !Array.isArray(layers) ||
     layers.length === 0 ||
-    layers.some(
-      (layer) =>
+    layers.some((layer) => {
+      if (
         typeof layer !== "object" ||
         layer === null ||
-        !hasExactKeys(layer, ["digest", "mediaType", "size"]) ||
+        !hasExactKeys(layer, ["digest", "mediaType", "size"])
+      ) {
+        return true;
+      }
+      return (
         (layer as RemoteManifestDescriptor).mediaType !== ociLayerMediaType ||
         !isExactDigest((layer as RemoteManifestDescriptor).digest) ||
-        !isPositiveSize((layer as RemoteManifestDescriptor).size),
-    )
+        !isPositiveSize((layer as RemoteManifestDescriptor).size)
+      );
+    })
   ) {
     throw new Error("Remote platform reference did not return the exact OCI image manifest.");
   }

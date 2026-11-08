@@ -211,13 +211,16 @@ export interface GitHubInstallationMembershipAuthority {
 
 type Fetch = typeof fetch;
 
-const githubOAuthErrorCategory = (value: unknown) =>
-  value === "incorrect_client_credentials" ||
-  value === "redirect_uri_mismatch" ||
-  value === "bad_verification_code" ||
-  value === "unverified_user_email"
-    ? value
-    : undefined;
+const githubOAuthErrorCategory = (value: unknown) => {
+  if (
+    value === "incorrect_client_credentials" ||
+    value === "redirect_uri_mismatch" ||
+    value === "bad_verification_code"
+  ) {
+    return value;
+  }
+  return value === "unverified_user_email" ? value : undefined;
+};
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 

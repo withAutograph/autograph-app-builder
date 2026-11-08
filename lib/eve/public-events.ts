@@ -564,12 +564,20 @@ export const createInstalledPrototypeReferenceReducer = (input: {
       if (
         value.mediaType !== request.mediaType ||
         value.revision !== revision ||
-        (request.expectedDigest !== undefined && value.digest !== request.expectedDigest) ||
-        (request.chunkIndex !== undefined &&
-          (request.finalChunk !== true || value.chunkCount !== request.chunkIndex + 1)) ||
-        (request.chunkIndex === undefined &&
-          (value.digest !== sha256(request.content) ||
-            value.contentBytes !== Buffer.byteLength(request.content, "utf-8")))
+        (request.expectedDigest !== undefined && value.digest !== request.expectedDigest)
+      ) {
+        return;
+      }
+      if (
+        request.chunkIndex !== undefined &&
+        (request.finalChunk !== true || value.chunkCount !== request.chunkIndex + 1)
+      ) {
+        return;
+      }
+      if (
+        request.chunkIndex === undefined &&
+        (value.digest !== sha256(request.content) ||
+          value.contentBytes !== Buffer.byteLength(request.content, "utf-8"))
       ) {
         return;
       }
@@ -967,7 +975,12 @@ export const createInstalledPrototypeProjector = (
       if (
         output.data.appId !== appId ||
         output.data.path !== input.path ||
-        output.data.mediaType !== input.mediaType ||
+        output.data.mediaType !== input.mediaType
+      ) {
+        transfers.delete(input.path);
+        return;
+      }
+      if (
         output.data.digest !== (input.finalChunk === true ? input.expectedDigest : rollingDigest) ||
         output.data.size !== receivedBytes ||
         output.data.recordedByCallId !== callId
