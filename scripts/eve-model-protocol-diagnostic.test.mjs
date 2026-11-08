@@ -206,16 +206,14 @@ const fixture = async (options = {}) => {
   };
   const incoming = {
     runtimeResults: { results: options.missingResult === true ? [] : [actualRuntimeResult] },
-    ...(options.delivery === true
-      ? {
-          delivery: {
-            kind: "deliver",
-            auth: { principalId: ORIGINAL_OWNER_ID },
-            payloads: [{ message: "already admitted" }],
-          },
-        }
-      : {}),
   };
+  if (options.delivery === true) {
+    incoming.delivery = {
+      kind: "deliver",
+      auth: { principalId: ORIGINAL_OWNER_ID },
+      payloads: [{ message: "already admitted" }],
+    };
+  }
   const args = (value) =>
     serialization.dehydrateStepArguments({ args: [value], closureVars: [] }, ownerRunId);
   const output = (value) => serialization.dehydrateStepReturnValue(value, ownerRunId);

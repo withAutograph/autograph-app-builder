@@ -6,7 +6,7 @@ import path from "node:path";
 const promotionReceiptName = "promotion-receipt.json";
 
 const candidateInput = process.argv[process.argv.indexOf("--candidate-root") + 1];
-if (!candidateInput || !path.isAbsolute(candidateInput)) {
+if (candidateInput === undefined || candidateInput === "" || !path.isAbsolute(candidateInput)) {
   throw new Error("Usage: --candidate-root /absolute/proven/candidate");
 }
 const candidate = await realpath(path.resolve(candidateInput));
@@ -75,11 +75,11 @@ for (const file of files) {
 }
 const tag = `v${promotion.package.version}`;
 const gh = process.env.APP_BUILDER_RELEASE_GH_BIN;
-if (!gh || !path.isAbsolute(gh)) {
+if (gh === undefined || gh === "" || !path.isAbsolute(gh)) {
   throw new Error("mise must supply the gh executable.");
 }
 const githubToken = process.env.APP_BUILDER_RELEASE_GITHUB_TOKEN;
-if (!githubToken) {
+if (githubToken === undefined || githubToken === "") {
   throw new Error("The release workflow must supply its scoped GitHub token.");
 }
 execFileSync(

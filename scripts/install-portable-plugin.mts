@@ -10,7 +10,7 @@ const argument = (name: string) => {
     return;
   }
   const value = process.argv[index + 1];
-  if (!value || value.startsWith("--")) {
+  if (value === undefined || value === "" || value.startsWith("--")) {
     throw new Error(`Missing value for ${name}.`);
   }
   return value;
@@ -18,7 +18,16 @@ const argument = (name: string) => {
 const client = argument("--client");
 const sourceValue = argument("--source");
 const destinationValue = argument("--destination");
-if (!sourceValue || !destinationValue || !["vscode", "cursor", "codex"].includes(client ?? "")) {
+if (sourceValue === undefined || sourceValue === "") {
+  throw new Error(
+    "Usage: --client vscode|cursor|codex --source RELEASE_ROOT --destination DIRECTORY",
+  );
+}
+if (
+  destinationValue === undefined ||
+  destinationValue === "" ||
+  !["vscode", "cursor", "codex"].includes(client ?? "")
+) {
   throw new Error(
     "Usage: --client vscode|cursor|codex --source RELEASE_ROOT --destination DIRECTORY",
   );

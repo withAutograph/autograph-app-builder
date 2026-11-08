@@ -14,7 +14,7 @@ const gitObject = z.string().regex(/^[0-9a-f]{40}$/u);
 const option = (name: string) => {
   const index = process.argv.indexOf(name);
   const value = index === -1 ? undefined : process.argv[index + 1];
-  if (!value || value.startsWith("--")) {
+  if (value === undefined || value === "" || value.startsWith("--")) {
     throw new Error(`Missing ${name}.`);
   }
   if (process.argv.includes(name, index + 1)) {
@@ -73,7 +73,7 @@ gitObject.parse(source.sha);
 gitObject.parse(source.tree);
 
 const node = process.env.APP_BUILDER_RELEASE_NODE_BIN;
-if (!node || !path.isAbsolute(node)) {
+if (node === undefined || node === "" || !path.isAbsolute(node)) {
   throw new Error("mise must supply APP_BUILDER_RELEASE_NODE_BIN.");
 }
 const packageRoot = path.join(output, "package");
