@@ -180,7 +180,7 @@ describe("private app integrations installation", () => {
       providers: [],
       status: "omitted",
     });
-    const nextStep = z.object({ nextStep: z.string() }).parse(result).nextStep;
+    const { nextStep } = z.object({ nextStep: z.string() }).parse(result);
     expect(nextStep).toContain("normal app validation and delivery");
     expect(nextStep).toContain("preserve retained bindings and resources");
     expect(result).not.toHaveProperty("readiness");

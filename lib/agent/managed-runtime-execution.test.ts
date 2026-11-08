@@ -430,17 +430,23 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
       async () => {},
     ),
     readExecution: vi.fn<ManagedRuntimeExecutionDependencies["readExecution"]>(
-      async (_context, _plan, includeActors) => ({
-        environment,
-        proof: {
-          actors: 1,
-          tenants: 1,
-          artifactHash: preparedPlan.release.sha256,
-          releaseId: preparedPlan.release.id,
-          authenticatedBehavior: "unassessed",
-        },
-        ...(includeActors === true ? { normalActors: actors } : {}),
-      }),
+      async (_context, _plan, includeActors) => {
+        const execution: Awaited<ReturnType<ManagedRuntimeExecutionDependencies["readExecution"]>> =
+          {
+            environment,
+            proof: {
+              actors: 1,
+              tenants: 1,
+              artifactHash: preparedPlan.release.sha256,
+              releaseId: preparedPlan.release.id,
+              authenticatedBehavior: "unassessed",
+            },
+          };
+        if (includeActors === true) {
+          execution.normalActors = actors;
+        }
+        return execution;
+      },
     ),
     readPublicJwks: vi.fn<ManagedRuntimeExecutionDependencies["readPublicJwks"]>(async () => ({
       keys: profile.keys,

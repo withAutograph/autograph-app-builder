@@ -235,7 +235,7 @@ describe("current frozen proposal inspection", () => {
           break;
         }
         expect(result.continuation.offsetBytes).toBeGreaterThan(offsetBytes);
-        offsetBytes = result.continuation.offsetBytes;
+        ({ offsetBytes } = result.continuation);
       } while (pages < 20);
       expect(pages).toBeGreaterThan(1);
       expect(joined).toBe(content);
