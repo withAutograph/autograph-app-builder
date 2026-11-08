@@ -83,6 +83,13 @@ const inspectRepairCandidate = (
     ? inspectPublishedDraftRepair(input, candidate, ctx)
     : undefined;
 
+interface PublicationRecoverySubject {
+  branch: string;
+  proposalDigest: string;
+  releaseId?: string;
+  repositoryId: string;
+}
+
 const publicationRecoveryCall = (completion: DraftPublicationCompletion) =>
   "kind" in completion
     ? {
@@ -144,15 +151,15 @@ export default defineTool({
               "The accepted app specification changed while reading retained publication context. Read publication-recovery again for the current selection; no publication or association was attempted.",
           };
         }
-        recoveries.push({
+        const recovery: PublicationRecoverySubject = {
           proposalDigest: completion.proposal.digest,
           repositoryId: completion.proposal.repositoryId,
           branch: completion.proposal.branchName,
-          ...(completion.compilation.release.status === "published"
-            ? { releaseId: completion.compilation.release.selection.releaseId }
-            : {}),
-          nextCall: publicationRecoveryCall(completion),
-        });
+        };
+        if (completion.compilation.release.status === "published") {
+          recovery.releaseId = completion.compilation.release.selection.releaseId;
+        }
+        recoveries.push({ ...recovery, nextCall: publicationRecoveryCall(completion) });
       }
       return {
         status: "publication-recovery" as const,

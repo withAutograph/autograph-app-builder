@@ -7,6 +7,13 @@ import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contr
 import { AppAccessError } from "./errors";
 import type { AppAccessRouteOwner } from "./route";
 
+interface AppAccessForwardedAttributes {
+  "mcp:audience": OperatorOwnerContext["principal"]["audience"];
+  "mcp:scopes": OperatorOwnerContext["principal"]["scopes"];
+  "mcp:workspace-id": OperatorOwnerContext["principal"]["workspaceId"];
+  "autograph:source-handoff-id"?: string;
+}
+
 /** The browser handle names a build; verified lineage chooses its protected grant and worker. */
 export const createAppAccessOwnerResolver =
   (deps: {
@@ -52,17 +59,16 @@ export const createAppAccessOwnerResolver =
       throw new AppAccessError("app_access_denied");
     }
     const { principal } = session;
+    const attributes: AppAccessForwardedAttributes = {
+      "mcp:audience": principal.audience,
+      "mcp:scopes": principal.scopes,
+      "mcp:workspace-id": principal.workspaceId,
+    };
+    if (current.sourceHandoffId !== undefined) {
+      attributes["autograph:source-handoff-id"] = current.sourceHandoffId;
+    }
     const forwarded = {
-      attributes: {
-        "mcp:audience": principal.audience,
-        "mcp:scopes": principal.scopes,
-        "mcp:workspace-id": principal.workspaceId,
-        ...(current.sourceHandoffId === undefined
-          ? {}
-          : {
-              "autograph:source-handoff-id": current.sourceHandoffId,
-            }),
-      },
+      attributes,
       authenticator: "mcp-oauth-jwks",
       issuer: principal.issuer,
       principalId: principal.ownerUserId,

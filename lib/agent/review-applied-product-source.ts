@@ -326,7 +326,7 @@ export const reviewAppliedProductSource = async (input: {
       unexposedReleasePrefixes: marker?.unexposedReleasePrefixes,
     });
     currentInput.omissions.push(...visibility.omissions);
-    const evidence = createApplicationReviewEvidence({
+    const evidenceInput: Parameters<typeof createApplicationReviewEvidence>[0] = {
       abortSignal: input.abortSignal,
       applyRoot: input.applyReceipt.applyRoot,
       changedPaths: input.normalizedChanges.map((change) => change.path),
@@ -334,18 +334,17 @@ export const reviewAppliedProductSource = async (input: {
       reviewInput: currentInput,
       sandbox,
       visiblePaths: visibility.paths,
-      ...(input.appSpec.version === 2
-        ? {
-            appSpecParts: () =>
-              acceptedAppSpecTextParts({
-                accepted: input.appSpec,
-                artifacts: input.artifacts ?? [],
-                sessionAuth: input.sessionAuth,
-                sessionId: input.sessionId ?? "",
-              }),
-          }
-        : {}),
-    });
+    };
+    if (input.appSpec.version === 2) {
+      evidenceInput.appSpecParts = () =>
+        acceptedAppSpecTextParts({
+          accepted: input.appSpec,
+          artifacts: input.artifacts ?? [],
+          sessionAuth: input.sessionAuth,
+          sessionId: input.sessionId ?? "",
+        });
+    }
+    const evidence = createApplicationReviewEvidence(evidenceInput);
     const options: ApplicationSourceReviewOptions = {
       abortSignal: input.abortSignal,
       sessionId: input.sessionId,

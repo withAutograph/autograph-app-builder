@@ -60,10 +60,13 @@ export const integrationProviderHttpError = (response: Response) => {
   const requestRef = integrationProviderDiagnosticSchema.shape.requestRef.safeParse(
     response.headers.get("x-request-id") ?? response.headers.get("x-amzn-requestid") ?? undefined,
   );
-  return new IntegrationProviderError({
+  const diagnostic: IntegrationProviderDiagnostic = {
     provider: "ampersand",
     statusCode: status,
     code: httpCode(status),
-    ...(requestRef.success && requestRef.data !== undefined ? { requestRef: requestRef.data } : {}),
-  });
+  };
+  if (requestRef.success && requestRef.data !== undefined) {
+    diagnostic.requestRef = requestRef.data;
+  }
+  return new IntegrationProviderError(diagnostic);
 };

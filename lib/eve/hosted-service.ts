@@ -3185,15 +3185,22 @@ export function createHostedEveSessionService(input: {
                     : storedPrivateApprovalCaptureState.pendingRequests,
               });
         try {
-          const diagnostic = createHostedApprovalObservationDiagnostic({
+          const diagnosticDetails: Pick<
+            Parameters<typeof createHostedApprovalObservationDiagnostic>[0],
+            "coldReadProgress" | "inlineReceipts"
+          > &
+            Partial<Parameters<typeof createHostedApprovalObservationDiagnostic>[0]> = {
             coldReadProgress: coldReadProgress !== undefined,
             inlineReceipts: session.privateApprovalReceipts ?? [],
-            ...(nativeObservationState === undefined
-              ? {}
-              : { nativeState: nativeObservationState }),
-            ...(storedPrivateApprovalCaptureState === undefined
-              ? {}
-              : { privateCapture: storedPrivateApprovalCaptureState }),
+          };
+          if (nativeObservationState !== undefined) {
+            diagnosticDetails.nativeState = nativeObservationState;
+          }
+          if (storedPrivateApprovalCaptureState !== undefined) {
+            diagnosticDetails.privateCapture = storedPrivateApprovalCaptureState;
+          }
+          const diagnostic = createHostedApprovalObservationDiagnostic({
+            ...diagnosticDetails,
             publicPendingRequests:
               nativeObservationState?.pendingRequests ?? checkpointMetadata?.inputRequests ?? [],
             sessionId,
@@ -3204,13 +3211,24 @@ export function createHostedEveSessionService(input: {
         } catch {
           /* Approval observation is diagnostic only; never affect an ordinary read. */
         }
-        spool = await spoolObservedSession({
+        const spoolDetails: Pick<
+          Parameters<typeof spoolObservedSession>[0],
+          "adapterSessionId" | "allowPartialObservation"
+        > &
+          Partial<Parameters<typeof spoolObservedSession>[0]> = {
           adapterSessionId: session.adapterSessionId,
           allowPartialObservation:
             checkpointMetadata?.nativeObservationState === undefined ||
             coldReadProgress !== undefined,
-          ...(nativeObservationState === undefined ? {} : { nativeObservationState }),
-          ...(privateApprovalCaptureState === undefined ? {} : { privateApprovalCaptureState }),
+        };
+        if (nativeObservationState !== undefined) {
+          spoolDetails.nativeObservationState = nativeObservationState;
+        }
+        if (privateApprovalCaptureState !== undefined) {
+          spoolDetails.privateApprovalCaptureState = privateApprovalCaptureState;
+        }
+        spool = await spoolObservedSession({
+          ...spoolDetails,
           privateApprovalSessionId,
           principal,
           sessionId,

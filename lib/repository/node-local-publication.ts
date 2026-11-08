@@ -182,8 +182,12 @@ const runGitCapture = async function runGitCapture(
   child.stderr.pipe(diagnosticCapture.writer);
   const [code] = (await once(child, "close")) as [number | null, NodeJS.Signals | null];
   const stderrLogPath = await finishGitDiagnosticCapture(diagnosticCapture, code !== 0);
+  const initial: Pick<GitProcessResult, "stderrLogPath"> = {};
+  if (stderrLogPath !== undefined) {
+    initial.stderrLogPath = stderrLogPath;
+  }
   return {
-    ...(stderrLogPath === undefined ? {} : { stderrLogPath }),
+    ...initial,
     status: code ?? -1,
     stdout: Buffer.concat(output),
   };

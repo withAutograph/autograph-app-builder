@@ -87,8 +87,12 @@ export function deriveNormalizedChangeSet(
   repositoryContractDigest: string = contractDigest,
 ): NormalizedChangeSet {
   const canonicalChanges = apply.changes;
+  const initial: Pick<NormalizedChangeSet, "frameworkUpgrade"> = {};
+  if (apply.frameworkUpgrade !== undefined) {
+    initial.frameworkUpgrade = apply.frameworkUpgrade;
+  }
   const unsigned = {
-    ...(apply.frameworkUpgrade === undefined ? {} : { frameworkUpgrade: apply.frameworkUpgrade }),
+    ...initial,
     appSpecDigest: apply.appSpecDigest,
     appSpecPath: apply.appSpecPath,
     applyDigest: apply.digest,

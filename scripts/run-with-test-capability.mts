@@ -58,17 +58,15 @@ const allowedEnvironment = [
 ] as const;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function childEnvironment(): NodeJS.ProcessEnv {
-  const environment: NodeJS.ProcessEnv = {
-    PATH: testExecutablePath,
-  };
+function childEnvironment() {
+  const environment = new Map<string, string>([["PATH", testExecutablePath]]);
   for (const name of allowedEnvironment) {
     const value = process.env[name];
     if (value !== undefined) {
-      environment[name] = value;
+      environment.set(name, value);
     }
   }
-  return environment;
+  return Object.fromEntries(environment);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -234,6 +232,7 @@ export async function runWithTestCapability(options: {
       APP_BUILDER_TEST_MODEL: undefined,
       EVE_DEV_WORKER_APP_ROOT: options.profile === "eve" ? repositoryRoot : undefined,
       HOME: evalRuntime?.home ?? process.env.HOME,
+      NODE_ENV: process.env.NODE_ENV,
       NODE_OPTIONS:
         options.profile === "eve"
           ? `--import=${preload} --import=${evalFetchPreload}`
