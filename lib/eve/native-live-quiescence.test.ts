@@ -284,13 +284,13 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
   dependencies.reconcileLineagePreflight = () => reconcile(candidate);
   dependencies.readLogicalInboxOwner = () => {
     if (ready) {
-      return Promise.resolve({ runId: ready.ownerRunId, logicalSessionId: "logical" });
+      return Promise.resolve({ logicalSessionId: "logical", runId: ready.ownerRunId });
     }
     if (nativeStatus === "cancelled") {
       const absent: undefined = ready;
       return Promise.resolve(absent);
     }
-    return Promise.resolve({ runId: physicalOwner, logicalSessionId: "logical" });
+    return Promise.resolve({ logicalSessionId: "logical", runId: physicalOwner });
   };
   return {
     ports,
@@ -1266,8 +1266,8 @@ describe("owned running-lineage execution transfer", () => {
   it("refuses an inbox owned outside the reconstructed verified lineage", async () => {
     const f = twoOwners();
     f.dependencies.readLogicalInboxOwner = async () => ({
-      runId: "unverified-owner",
       logicalSessionId: "logical",
+      runId: "unverified-owner",
     });
     expect(await f.run()).toMatchObject({
       kind: "uncertain",
@@ -1617,8 +1617,8 @@ it("refuses another operation's ready hook before stopping any owner", async () 
 it("does not accept a caller-supplied parked owner without its exact native ready hook", async () => {
   const f = fixture();
   f.dependencies.readLogicalInboxOwner = async () => ({
-    runId: "forged-ready",
     logicalSessionId: "logical",
+    runId: "forged-ready",
   });
   const forged: TerminalRecoveryBinding = {
     ...descriptor,

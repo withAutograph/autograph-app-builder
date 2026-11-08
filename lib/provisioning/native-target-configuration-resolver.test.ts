@@ -246,9 +246,9 @@ interface ConfigurationFixtureBody {
 }
 const request = (body: ConfigurationFixtureBody) =>
   new Request("https://operator.example/v1/runtime", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+    headers: { "content-type": "application/json" },
+    method: "POST",
   });
 const setup = () => {
   const order: string[] = [];
@@ -1297,8 +1297,8 @@ it("closed receipt ingress has no request-selected app or unbounded pre-authoriz
   const fixture = setup();
   const result = await fixture.resolve(
     new Request("https://operator.example/v1/central-deployment-events", {
-      method: "POST",
       body: "not-json; the authenticated receipt handler owns bounded parsing",
+      method: "POST",
     }),
   );
   expect(result).toEqual(configuration());

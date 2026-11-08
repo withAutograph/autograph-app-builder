@@ -198,7 +198,6 @@ const fixture = (selectedPreparation = preparationInput) => {
       }
     },
     store: {
-      read: async () => structuredClone(row),
       compareAndSet: async (input): Promise<HostedRuntimeJournalRow | undefined> => {
         if (conflict) {
           conflict = false;
@@ -215,6 +214,7 @@ const fixture = (selectedPreparation = preparationInput) => {
         };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
     },
   });
   return {
@@ -424,6 +424,7 @@ describe("retained actual normal actor journal", () => {
       assertAccountApproval: async () => undefined,
       assertMutationAuthority: async () => undefined,
       store: {
+        compareAndSet: async () => undefined,
         read: async () => {
           reads += 1;
           if (reads === 2) {
@@ -438,7 +439,6 @@ describe("retained actual normal actor journal", () => {
           }
           return structuredClone(value.row);
         },
-        compareAndSet: async () => undefined,
       },
     });
     const retained = await journal.read(context);
@@ -459,6 +459,7 @@ describe("retained actual normal actor journal", () => {
         assertAccountApproval: async () => undefined,
         assertMutationAuthority: async () => undefined,
         store: {
+          compareAndSet: async () => undefined,
           read: async () => {
             reads += 1;
             if (reads === 2) {
@@ -486,7 +487,6 @@ describe("retained actual normal actor journal", () => {
             }
             return structuredClone(value.row);
           },
-          compareAndSet: async () => undefined,
         },
       });
       await expect(journal.read(context)).rejects.toThrow("normal_actor_journal_changed");
@@ -540,7 +540,7 @@ describe("retained actual normal actor journal", () => {
       }),
     };
     const guard = createNormalActorJournalAuthority({
-      store: { read: async () => structuredClone(value.row), compareAndSet: async () => undefined },
+      store: { compareAndSet: async () => undefined, read: async () => structuredClone(value.row) },
       keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
       now: () => now,
       assertCanonicalOwner: async () => undefined,
@@ -594,7 +594,7 @@ describe("retained actual normal actor journal", () => {
       record: { ...value.row.record, leaseExpiresAt: new Date(now + 60_000).toISOString() },
     };
     const guard = createNormalActorJournalAuthority({
-      store: { read: async () => structuredClone(value.row), compareAndSet: async () => undefined },
+      store: { compareAndSet: async () => undefined, read: async () => structuredClone(value.row) },
       keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
       now: () => now,
       assertCanonicalOwner: async () => undefined,
@@ -646,7 +646,6 @@ describe("retained actual normal actor journal", () => {
         }
       },
       store: {
-        read: async () => structuredClone(value.row),
         compareAndSet: async (input) => {
           if (input.expectedRevision !== value.row.revision) {
             return undefined;
@@ -655,6 +654,7 @@ describe("retained actual normal actor journal", () => {
           value.row = { revision: value.row.revision + 1, record: input.record };
           return structuredClone(value.row);
         },
+        read: async () => structuredClone(value.row),
       },
     });
     await journal.checkpoint(context, initial.state);
@@ -675,7 +675,7 @@ describe("retained actual normal actor journal", () => {
       id: "00000000-0000-4000-8000-000000000004",
     };
     const guard = createNormalActorJournalAuthority({
-      store: { read: async () => structuredClone(value.row), compareAndSet: async () => undefined },
+      store: { compareAndSet: async () => undefined, read: async () => structuredClone(value.row) },
       keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
       now: Date.now,
       assertCanonicalOwner: async () => undefined,

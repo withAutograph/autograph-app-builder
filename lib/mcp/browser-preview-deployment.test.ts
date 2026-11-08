@@ -273,10 +273,10 @@ describe("deployment Browser preview route", () => {
     await expect(response.text()).resolves.toBe(content);
     expect(resume).toHaveBeenCalledTimes(1);
     expect(resume).toHaveBeenCalledWith({
-      principal: owner,
-      sessionId: fixture.publicId,
       adapterSessionId: fixture.record.adapterSessionId,
       environment: { EVE_HOSTED_ADAPTER: "1" },
+      principal: owner,
+      sessionId: fixture.publicId,
     });
   });
 

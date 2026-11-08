@@ -4092,12 +4092,12 @@ describe("approved historical organization inspection", () => {
     expect(f.assertMembershipCapture).toHaveBeenCalledWith(f.input);
     expect(f.inspect).toHaveBeenCalledWith(
       expect.objectContaining({
-        plan: f.prior,
-        operationRef: f.input.operationRef,
+        directDatabaseUrl: "private-current-auth",
         fenceGeneration: 9,
         leaseId: "current-lease",
+        operationRef: f.input.operationRef,
+        plan: f.prior,
         readbackOnly: true,
-        directDatabaseUrl: "private-current-auth",
       }),
     );
     expect(f.execute).not.toHaveBeenCalled();
@@ -4549,7 +4549,7 @@ describe("retained active schema installation scope", () => {
     const f = await deploymentFixture();
     await expect(f.read(context, f.desired)).resolves.toEqual(["original-org"]);
     expect(f.readBindings).toHaveBeenCalledWith(
-      expect.objectContaining({ record: f.row.record, plan: f.prior }),
+      expect.objectContaining({ plan: f.prior, record: f.row.record }),
     );
     expect(f.readMetadata).toHaveBeenCalledWith(
       expect.objectContaining({

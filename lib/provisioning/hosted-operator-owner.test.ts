@@ -347,8 +347,8 @@ const makeFixture = (
     keyResolver,
     listVercelInstallations,
     membership,
-    readVercelCredential,
     readReadyNativeTarget,
+    readVercelCredential,
     workloadPolicy,
   });
   return {
@@ -359,8 +359,8 @@ const makeFixture = (
     handoffs,
     listVercelInstallations,
     membership,
-    readVercelCredential,
     readReadyNativeTarget,
+    readVercelCredential,
   };
 };
 

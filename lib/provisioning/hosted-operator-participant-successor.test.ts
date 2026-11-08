@@ -589,8 +589,8 @@ describe("approved additive capture participant state", () => {
         }),
       });
       f.approvals.set("current-app-call", {
-        id: "current-app-approval",
         digest: operatorPlanDigest(current),
+        id: "current-app-approval",
       });
       clock.mockReturnValue(
         Date.parse(
@@ -633,26 +633,26 @@ describe("approved additive capture participant state", () => {
       });
       const scopes = [
         {
-          callId: f.original.accountApprovedByCallId,
           approvalId: f.original.accountApprovalId,
+          callId: f.original.accountApprovedByCallId,
           operationRef: f.original.accountOperationRef,
           plan: f.original.accountPlan,
         },
         {
-          callId: f.predecessor.approvedByCallId,
           approvalId: f.predecessor.operator.approvalId,
+          callId: f.predecessor.approvedByCallId,
           operationRef: f.predecessor.operator.operationRef,
           plan: f.predecessor.operator.plan,
         },
         {
-          callId: f.input.callId,
           approvalId: f.input.approvalId,
+          callId: f.input.callId,
           operationRef: f.input.operationRef,
           plan: f.input.plan,
         },
         {
-          callId: "current-app-call",
           approvalId: "current-app-approval",
+          callId: "current-app-call",
           operationRef: currentOperation,
           plan: current,
         },
@@ -1052,14 +1052,14 @@ describe("approved additive capture participant state", () => {
         {
           callId: f.original.accountApprovedByCallId,
           id: f.original.accountApprovalId,
-          plan: f.original.accountPlan,
           operationRef: f.original.accountOperationRef,
+          plan: f.original.accountPlan,
         },
         {
           callId: f.predecessor.approvedByCallId,
           id: f.predecessor.operator.approvalId,
-          plan: f.predecessor.operator.plan,
           operationRef: f.predecessor.operator.operationRef,
+          plan: f.predecessor.operator.plan,
         },
       ].map((entry, sequence) =>
         privateHostedApprovalReceiptSchema.parse({
@@ -1157,12 +1157,12 @@ describe("approved additive capture participant state", () => {
     };
     expect(() =>
       createParticipantSuccessorPlan(record, f.input.plan.normalActorProgram, Date.now(), {
-        version: 1,
-        organizationId: "qa-org",
-        eligibility: "public",
         appPath: "/qa",
-        membershipRole: "member",
         appRoles: ["member"],
+        eligibility: "public",
+        membershipRole: "member",
+        organizationId: "qa-org",
+        version: 1,
       }),
     ).toThrow();
   });
