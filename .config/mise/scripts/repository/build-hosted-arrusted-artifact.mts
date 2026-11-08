@@ -150,7 +150,7 @@ function packageVersion(packagePath: string): string {
     version?: string;
   };
   if (typeof manifest.version !== "string") {
-    throw new Error("Dependency package version is missing.");
+    throw new TypeError("Dependency package version is missing.");
   }
   return manifest.version;
 }
@@ -188,7 +188,7 @@ function dependencyClosure(root: string): Map<string, string> {
       optionalDependencies?: Record<string, string>;
     };
     if (typeof manifest.version !== "string") {
-      throw new Error("Dependency package version is missing.");
+      throw new TypeError("Dependency package version is missing.");
     }
     if (name === REQUIRED_PACKAGE && manifest.version !== REQUIRED_PACKAGE_VERSION) {
       throw new Error("The required microfrontends version drifted.");

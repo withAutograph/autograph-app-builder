@@ -76,8 +76,8 @@ const run = async (
     child.stdin.end();
   }
   const closed = once(child, "close");
-  const [code] = await closed.catch((error: Error) => {
-    spawnError = error;
+  const [code] = await closed.catch((error: unknown) => {
+    spawnError = error instanceof Error ? error : new Error(String(error));
     return [null];
   });
   clearTimeout(timer);

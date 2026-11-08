@@ -670,11 +670,6 @@ export default defineConfig({
       rules: { "unicorn/consistent-function-scoping": "off" },
     },
     {
-      // Preserve existing rejection handling until its value contract is narrowed.
-      files: ["scripts/release-publish.mts", sharedLintFile3],
-      rules: { "typescript/use-unknown-in-catch-callback-variable": "off" },
-    },
-    {
       // Preserve explicit boolean distinctions in existing boundary checks.
       files: [
         ".storybook/main.ts",
@@ -712,14 +707,6 @@ export default defineConfig({
         productionCreatorTestPath,
       ],
       rules: { "unicorn/no-useless-undefined": "off" },
-    },
-    {
-      // Preserve the existing error classes at these validation boundaries.
-      files: [
-        ".config/mise/scripts/repository/build-hosted-arrusted-artifact.mts",
-        "lib/provisioning/starter-source.ts",
-      ],
-      rules: { "unicorn/prefer-type-error": "off" },
     },
     {
       // These files are owned by concurrent work and retain their existing findings.
