@@ -378,7 +378,7 @@ export async function getBuilderHandoffPageData(
   const { isCursorClientReady } = dependencies
     ? await dependencies.loadCursorClient()
     : await import("../auth/cursor-client");
-  return {
+  const page: BuilderHandoffPageData = {
     cursorInstallReady: await isCursorClientReady(context.database, context.preview.resource),
     destination: record.intent.destination ?? "codex",
     expiresAt: record.expiresAt.toISOString(),
@@ -389,8 +389,11 @@ export async function getBuilderHandoffPageData(
     mcpUrl: context.preview.resource,
     status,
     version: 1,
-    ...(currentProvisioning ? { provisioningRevision: currentProvisioning.revision } : {}),
   };
+  if (currentProvisioning) {
+    page.provisioningRevision = currentProvisioning.revision;
+  }
+  return page;
 }
 
 /**

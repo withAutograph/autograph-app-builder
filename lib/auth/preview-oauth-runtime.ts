@@ -94,7 +94,7 @@ interface GitHubOAuthTokens {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function readBoundedJson(response: Response, limit: number): Promise<unknown | null> {
+async function readBoundedJson(response: Response, limit: number): Promise<unknown> {
   if (!response.ok) {
     return null;
   }
