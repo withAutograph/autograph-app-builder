@@ -633,12 +633,15 @@ const nativeTargetApprovalDescription = (input: unknown): string | undefined => 
     "This does not deploy the app or activate Production.",
   ].join("\n\n");
 };
+const isApprovalInputRecord = (input: unknown): input is Record<string, unknown> =>
+  typeof input === "object" && input !== null && !Array.isArray(input);
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function otherPublicApprovalDescription(input: unknown, toolName?: string): string | undefined {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+  if (!isApprovalInputRecord(input)) {
     return undefined;
   }
-  const record = input as Record<string, unknown>;
+  const record = input;
   if (toolName === "prepare-app-central-integrations")
     return centralHostApprovalDescription(record);
   if (toolName === "prepare-app-native-target") return nativeTargetApprovalDescription(record);

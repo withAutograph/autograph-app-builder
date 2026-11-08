@@ -24,7 +24,7 @@ import type { GitHubDraftPullRequestContent, FreshRepositoryProposal } from "./g
 import { createReviewedChangeSetReceipt } from "./reviewed-change-set";
 import type { NormalizedChangeSet } from "./reviewed-change-set";
 import { compareOverlayPaths } from "./target-apply";
-import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
+import type { ExistingDraftUpdateProposal } from "./github-draft-update";
 import type {
   ExistingDraftReconciliationProposal,
   ReconciliationContent,
@@ -1607,12 +1607,12 @@ describe("existing draft publication origin", () => {
       }
       throw new Error(`Unexpected URL: ${url}`);
     };
-    return (await createProvider(implementation).inspectExistingDraft({
+    return await createProvider(implementation).inspectExistingDraft({
       name: "example-app",
       number: 1500,
       owner: "withAutograph",
       repositoryId: "100",
-    })) as ExistingDraftObservation;
+    });
   };
 
   it.each([
@@ -1816,12 +1816,12 @@ describe("existing draft update provider", () => {
       repositoryId: "REPO_NODE",
     });
     observedHead = newCommit;
-    const observed = (await provider.inspectExistingDraft({
+    const observed = await provider.inspectExistingDraft({
       name: proposal.name,
       number: proposal.pullRequestNumber,
       owner: proposal.owner,
       repositoryId: proposal.repositoryId,
-    })) as ExistingDraftObservation;
+    });
     expect(observed.verifiedBuilderOrigin).toEqual({
       appId: "123",
       authorId: "900",
@@ -1997,19 +1997,19 @@ describe("existing draft reconciliation provider", () => {
     await expect(provider.inspectExistingDraft(inspection)).rejects.toThrow(
       "pull-request-head-out-of-date",
     );
-    const observed = (await provider.inspectExistingDraft({
+    const observed = await provider.inspectExistingDraft({
       ...inspection,
       reconciliation: proposal,
-    })) as ExistingDraftObservation;
+    });
     expect(observed).toMatchObject({ headSha: mergeCommit, headTree: resolvedTree });
     await expect(provider.inspectAppliedDraftReconciliation(proposal, observed)).resolves.toBe(
       true,
     );
     merged = true;
-    const mergedPull = (await provider.inspectExistingDraft({
+    const mergedPull = await provider.inspectExistingDraft({
       ...inspection,
       reconciliation: proposal,
-    })) as ExistingDraftObservation;
+    });
     expect(mergedPull).toMatchObject({ draft: false, headSha: mergeCommit, state: "closed" });
     await expect(provider.inspectAppliedDraftReconciliation(proposal, mergedPull)).resolves.toBe(
       true,

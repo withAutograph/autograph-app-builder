@@ -126,6 +126,11 @@ const assertArtifactChunkFitsEve = (input: Parameters<typeof artifactChunkEnvelo
   }
 };
 
+const isPrototypeArtifactFileName = (
+  value: string | undefined,
+): value is "app-spec.md" | "decisions.md" | "index.html" =>
+  ["app-spec.md", "decisions.md", "index.html"].includes(value ?? "");
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parsePrototypeArtifactPath(path: string): {
   appId: string;
@@ -134,16 +139,12 @@ export function parsePrototypeArtifactPath(path: string): {
   const match = prototypeArtifactPathPattern.exec(path);
   const appId = match?.[1];
   const fileName = match?.[2];
-  if (
-    appId === undefined ||
-    !validAppId(appId) ||
-    !["app-spec.md", "decisions.md", "index.html"].includes(fileName ?? "")
-  ) {
+  if (appId === undefined || !validAppId(appId) || !isPrototypeArtifactFileName(fileName)) {
     throw new Error("Prototype artifact path is not allowed.");
   }
   return {
     appId,
-    fileName: fileName as "app-spec.md" | "decisions.md" | "index.html",
+    fileName,
   };
 }
 

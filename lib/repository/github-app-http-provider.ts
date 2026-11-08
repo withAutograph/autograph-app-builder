@@ -155,6 +155,9 @@ export interface GitHubPublicationFile {
 export interface GitHubAppHttpProvider
   extends GitHubAppInstallationProvider, GitHubTargetAccessProvider {
   prDelivery: GitHubPrDeliveryProvider;
+  inspectExistingDraft: (
+    input: ExistingDraftInspectionRequest,
+  ) => Promise<ExistingDraftObservation>;
   inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown>;
   inspectHistoricalAppSource: (input: {
     repositoryId: string;
