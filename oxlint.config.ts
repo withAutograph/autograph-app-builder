@@ -14,8 +14,6 @@ export default defineConfig({
   },
   rules: {
     // Temporary migration baseline; remove these as findings are fixed.
-    "typescript/promise-function-async": "off",
-    "anti-slop/require-safety-comment-for-type-assertion": "off",
     "sonarjs/cognitive-complexity": "off",
     "typescript/no-unsafe-type-assertion": "off",
     "eslint/complexity": "off",
