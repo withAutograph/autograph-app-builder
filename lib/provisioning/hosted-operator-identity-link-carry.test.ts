@@ -142,19 +142,19 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
     resourcesInstaller: plan.installer,
     effects: [
       {
+        description: "Observe owned Auth",
         id: "auth-resources",
         kind: "resources",
         resourceId: plan.authDatabase.resourceId,
-        description: "Observe owned Auth",
       },
       {
+        description: "Observe owned app",
         id: "app-resources",
         kind: "resources",
         resourceId: plan.appDatabase.resourceId,
-        description: "Observe owned app",
       },
       ...plan.effects.filter((effect) => effect.kind !== "resources"),
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind shared Gateway" },
+      { description: "Bind shared Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
     ],
   });
   const operationRef = "00000000-0000-4000-8000-000000000001";
@@ -192,11 +192,11 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
       },
       proof: {
         actors: 0,
-        tenants: 1,
-        authenticatedBehavior: "unassessed",
         artifactHash: "c".repeat(64),
+        authenticatedBehavior: "unassessed",
         manifestSha256: originalPlan.release.sha256,
         releaseId: originalPlan.release.id,
+        tenants: 1,
       },
       operator: {
         mode: "protected-operator-v1",
@@ -210,9 +210,9 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
           assetSha256: "1".repeat(64),
           catalogFingerprint: "2".repeat(64),
           database: originalPlan.authDatabase.database,
+          observedAt: "2026-10-19T12:00:00Z",
           runtimeRole: originalPlan.authDatabase.runtimeRole,
           targetDigest: originalPlan.authSchema?.targetDigest,
-          observedAt: "2026-10-19T12:00:00Z",
         },
         receipts: originalPlan.effects.map((effect) => ({
           effectId: effect.id,
@@ -397,20 +397,20 @@ describe("participant proposal identity continuity", () => {
             scope === "browser" ? "https://next-auth.example.test" : identityLink.browserOrigin,
         },
         normalActorProgram: {
-          version: 1,
-          appId: selection.appId,
-          origin: publicOrigin,
           actors: [
             {
-              actorKey: "reviewer",
-              name: "Reviewer",
-              email: "reviewer@example.test",
               account: "create-email-password",
+              actorKey: "reviewer",
+              email: "reviewer@example.test",
+              name: "Reviewer",
             },
           ],
-          organizations: [],
-          memberships: [],
           appAccess: [],
+          appId: selection.appId,
+          memberships: [],
+          organizations: [],
+          origin: publicOrigin,
+          version: 1,
         },
       });
       f.deps.plan = async () => proposal;
@@ -453,16 +453,16 @@ describe("consumed proof after Gateway selection advances", () => {
       effects: [
         ...original.plan.effects,
         {
+          description: "Deliver the approved Gateway",
           id: "gateway-delivery",
           kind: "gateway-delivery",
-          description: "Deliver the approved Gateway",
         },
       ],
       gatewayDelivery: {
-        projectId: "prj_gateway",
         branch: "preview",
-        repoId: "gateway-repo",
         gitSha: "c".repeat(40),
+        projectId: "prj_gateway",
+        repoId: "gateway-repo",
       },
       deploymentBoundary: {
         ...original.plan.deploymentBoundary,

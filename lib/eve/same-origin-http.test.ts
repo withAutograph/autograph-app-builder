@@ -819,8 +819,8 @@ describe("same-origin canonical Eve transport", () => {
       transport.activateRecovery?.({ operationId: recovery.operationId, principal, recovery }),
     ).resolves.toEqual(recoveryBinding);
     expect(JSON.parse(String(fetchImplementation.mock.calls[1]?.[1]?.body))).toMatchObject({
-      recoveryPhase: "activate",
       recovery,
+      recoveryPhase: "activate",
     });
     await expect(
       transport.sendAccepted?.({
@@ -2643,15 +2643,19 @@ describe("activation transport diagnostics", () => {
   const secret = "never-log-private-activation-body";
   it.each([
     {
-      name: "dispatch failure",
-      response: () => Promise.reject(new Error(secret)),
-      phase: "transport_dispatch",
       category: "unclassified_failure",
-      rejected: false,
       malformed: false,
+      name: "dispatch failure",
+      phase: "transport_dispatch",
+      rejected: false,
+      response: () => Promise.reject(new Error(secret)),
     },
     {
+      category: "rejected_before_dispatch",
+      malformed: false,
       name: "HTTP403",
+      phase: "transport_acceptance",
+      rejected: true,
       response: () =>
         Promise.resolve(
           Response.json(
@@ -2659,13 +2663,13 @@ describe("activation transport diagnostics", () => {
             { status: 403 },
           ),
         ),
-      phase: "transport_acceptance",
-      category: "rejected_before_dispatch",
-      rejected: true,
-      malformed: false,
     },
     {
+      category: "unclassified_failure",
+      malformed: false,
       name: "HTTP503",
+      phase: "transport_acceptance",
+      rejected: false,
       response: () =>
         Promise.resolve(
           Response.json(
@@ -2673,13 +2677,13 @@ describe("activation transport diagnostics", () => {
             { status: 503 },
           ),
         ),
-      phase: "transport_acceptance",
-      category: "unclassified_failure",
-      rejected: false,
-      malformed: false,
     },
     {
+      category: "unclassified_failure",
+      malformed: true,
       name: "accepted missing receipt",
+      phase: "transport_acceptance",
+      rejected: false,
       response: () =>
         Promise.resolve(
           Response.json(
@@ -2691,13 +2695,13 @@ describe("activation transport diagnostics", () => {
             { status: 202 },
           ),
         ),
-      phase: "transport_acceptance",
-      category: "unclassified_failure",
-      rejected: false,
-      malformed: true,
     },
     {
+      category: "unclassified_failure",
+      malformed: false,
       name: "accepted owner mismatch",
+      phase: "transport_acceptance",
+      rejected: false,
       response: () =>
         Promise.resolve(
           Response.json(
@@ -2710,10 +2714,6 @@ describe("activation transport diagnostics", () => {
             { status: 202 },
           ),
         ),
-      phase: "transport_acceptance",
-      category: "unclassified_failure",
-      rejected: false,
-      malformed: false,
     },
   ])(
     "reports $name without changing transport errors or retrying",
@@ -2732,10 +2732,10 @@ describe("activation transport diagnostics", () => {
       ).rejects.toBeInstanceOf(rejected ? SubmissionRejectedBeforeDispatchError : unknownError);
       expect(sink).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({
-          phase,
           category,
-          operationKind: "start",
           operationIdHash: `sha256:${createHash("sha256").update(recovery.operationId).digest("hex")}`,
+          operationKind: "start",
+          phase,
         }),
       );
       expect(fetchImplementation).toHaveBeenCalledOnce();

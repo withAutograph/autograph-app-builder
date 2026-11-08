@@ -149,16 +149,16 @@ const fixture = () => {
     record: initialRecord(),
   };
   const dispatch = vi.fn<RealmContinuationPorts["dispatch"]>(async (request) => ({
-    version: 1,
-    dispatchId: request.dispatchId,
     adapterSessionId: "native-session",
+    dispatchId: request.dispatchId,
     status: "accepted",
+    version: 1,
   }));
   const reconcile = vi.fn<RealmContinuationPorts["reconcile"]>(async (request) => ({
-    version: 1,
-    dispatchId: request.dispatchId,
     adapterSessionId: "native-session",
+    dispatchId: request.dispatchId,
     status: "unknown",
+    version: 1,
   }));
   const observe = vi.fn<RealmContinuationPorts["observe"]>(async () => structuredClone(observed));
   const ports: RealmContinuationPorts = {
@@ -195,10 +195,10 @@ describe("Realm continuation durable dispatcher", () => {
     f.dispatch.mockImplementation(async (request) => {
       expect(f.row().record.realmContinuation?.status).toBe("claimed");
       return {
-        version: 1,
-        dispatchId: request.dispatchId,
         adapterSessionId: "native-session",
+        dispatchId: request.dispatchId,
         status: "accepted",
+        version: 1,
       };
     });
     expect(await f.run(context)).toBe("accepted");
@@ -211,10 +211,10 @@ describe("Realm continuation durable dispatcher", () => {
     f.dispatch.mockRejectedValue(new Error("connection lost after native acceptance"));
     expect(await f.run(context)).toBe("unknown");
     f.reconcile.mockImplementation(async (request) => ({
-      version: 1,
-      dispatchId: request.dispatchId,
       adapterSessionId: "native-session",
+      dispatchId: request.dispatchId,
       status: "accepted",
+      version: 1,
     }));
     expect(await f.run(context)).toBe("accepted");
     expect(f.dispatch).toHaveBeenCalledOnce();
@@ -225,10 +225,10 @@ describe("Realm continuation durable dispatcher", () => {
     f.dispatch.mockRejectedValueOnce(new Error("crash before native receiver"));
     await f.run(context);
     f.reconcile.mockImplementation(async (request) => ({
-      version: 1,
-      dispatchId: request.dispatchId,
       adapterSessionId: "native-session",
+      dispatchId: request.dispatchId,
       status: "not-submitted",
+      version: 1,
     }));
     expect(await f.run(context)).toBe("accepted");
     expect(f.dispatch.mock.calls[0]?.[0].dispatchId).toBe(f.dispatch.mock.calls[1]?.[0].dispatchId);
@@ -248,10 +248,10 @@ describe("Realm continuation durable dispatcher", () => {
   it("rejects foreign native receipts and changed canonical authority", async () => {
     const f = fixture();
     f.dispatch.mockImplementation(async (request) => ({
-      version: 1,
-      dispatchId: request.dispatchId,
       adapterSessionId: "foreign-session",
+      dispatchId: request.dispatchId,
       status: "accepted",
+      version: 1,
     }));
     await expect(f.run(context)).rejects.toThrow("authorization");
     f.observe.mockRejectedValue(new Error("owner revoked"));
@@ -266,10 +266,10 @@ describe("Realm continuation durable dispatcher", () => {
         row.record.realmContinuation.receiverClaimedAt = "2026-10-15T00:00:00.000Z";
       }
       return {
-        version: 1,
-        dispatchId: request.dispatchId,
         adapterSessionId: "native-session",
+        dispatchId: request.dispatchId,
         status: "accepted",
+        version: 1,
       };
     });
     await f.run(context);
