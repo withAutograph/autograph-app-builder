@@ -9,6 +9,8 @@ import {
   validateLocalVercelOidcClaims,
 } from "../eve/local-vercel-oidc";
 
+const localEnvironmentFile = ".env.local";
+
 const MINIMUM_TOKEN_LIFETIME_SECONDS = 300;
 
 export interface LocalOidcStartupInvocation {
@@ -98,14 +100,17 @@ function installedOidcNeedsRefresh(input: {
   }
   let environment: string;
   try {
-    environment = readOwnerBoundLocalFile(path.resolve(input.repositoryRoot, ".env.local"), {
-      confidential: true,
-    });
+    environment = readOwnerBoundLocalFile(
+      path.resolve(input.repositoryRoot, localEnvironmentFile),
+      {
+        confidential: true,
+      },
+    );
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return true;
     }
-    const credentialPath = path.resolve(input.repositoryRoot, ".env.local");
+    const credentialPath = path.resolve(input.repositoryRoot, localEnvironmentFile);
     const stat = lstatSync(credentialPath);
     const ownerId = process.getuid?.();
     if (
@@ -202,7 +207,7 @@ export function ensureLocalDevelopmentOidc(input: {
   }
   try {
     runCommand({
-      args: ["env", "pull", ".env.local", "--environment=development", "--yes"],
+      args: ["env", "pull", localEnvironmentFile, "--environment=development", "--yes"],
       cwd: repositoryRoot,
       environment: childEnvironment,
       executable: input.vercelExecutable,

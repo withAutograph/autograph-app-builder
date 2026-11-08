@@ -4,6 +4,8 @@ import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { operatorOwnerContextSchema } from "./hosted-operator-contract";
 import { centralHostCanonicalBytes } from "./central-integration-host-contract";
 
+const REPOSITORY_PRODUCTION_SETUP_KIND = "repository-production-setup-v1";
+
 const id = z.string().min(1);
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 const sqlName = z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u);
@@ -60,7 +62,7 @@ const checkpointSchema = z.strictObject({
 });
 export const repositoryProductionRecordSchema = z.strictObject({
   version: z.literal(1),
-  kind: z.literal("repository-production-setup-v1"),
+  kind: z.literal(REPOSITORY_PRODUCTION_SETUP_KIND),
   scope: repositoryProductionScopeSchema,
   intent: repositoryProductionIntentSchema,
   resource: repositoryProductionResourceSchema.optional(),
@@ -99,7 +101,7 @@ export const repositoryProductionDigest = (value: z.infer<ReturnType<typeof z.js
 /** Source revisions and worker sessions never choose a new app resource identity. */
 export const repositoryProductionOperationRef = (scope: RepositoryProductionScope) => {
   const digest = repositoryProductionDigest({
-    kind: "repository-production-setup-v1",
+    kind: REPOSITORY_PRODUCTION_SETUP_KIND,
     authority: scope.authority,
     appId: scope.appId,
     repositoryId: scope.repositoryId,
@@ -124,7 +126,7 @@ export const initialRepositoryProductionRecord = (
 ): RepositoryProductionRecord =>
   repositoryProductionRecordSchema.parse({
     version: 1,
-    kind: "repository-production-setup-v1",
+    kind: REPOSITORY_PRODUCTION_SETUP_KIND,
     scope,
     intent,
     ...(intent.storage.kind === "none"

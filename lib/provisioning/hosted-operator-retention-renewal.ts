@@ -8,6 +8,7 @@ import type {
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 
+const GATEWAY_BINDINGS_KIND = "gateway-bindings";
 const RENEWAL_WINDOW_MS = 24 * 60 * 60 * 1000;
 const RENEWED_BINDINGS_DESCRIPTION =
   "Bind app-owned runtime URL and public verification context, and allow the configured Gateway Preview to reach this app Preview.";
@@ -136,7 +137,7 @@ const renewalPlanFrom = (prior: HostedOperatorPlan, expiresAt: string) => {
       if (effect.kind === "bindings") {
         return { ...effect, description: RENEWED_BINDINGS_DESCRIPTION };
       }
-      if (effect.kind === "gateway-bindings") {
+      if (effect.kind === GATEWAY_BINDINGS_KIND) {
         return { ...effect, description: RENEWED_GATEWAY_BINDINGS_DESCRIPTION };
       }
       return effect;
@@ -221,7 +222,7 @@ export const retentionRenewalBindingProvenance = (
     if (
       prior.pendingEffectId !== effectId ||
       prior.pendingEffectAttempt === undefined ||
-      (effect?.kind !== "bindings" && effect?.kind !== "gateway-bindings")
+      (effect?.kind !== "bindings" && effect?.kind !== GATEWAY_BINDINGS_KIND)
     ) {
       continue;
     }
@@ -288,7 +289,7 @@ export const isRetentionRenewalSuccessor = (
     operator.planDigest === operatorPlanDigest(operator.plan),
     pendingEffectId !== undefined &&
       pending !== undefined &&
-      (["bindings", "gateway-bindings", "gateway-delivery"].includes(pending.kind) ||
+      (["bindings", GATEWAY_BINDINGS_KIND, "gateway-delivery"].includes(pending.kind) ||
         (pending.kind === "delivery" &&
           operator.plan.hostProtection !== undefined &&
           operator.plan.appDeliveryReplacement !== undefined)),

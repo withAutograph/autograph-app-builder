@@ -80,11 +80,21 @@ const fixture = async (approval = false) => {
     },
   };
 };
+const actionResultEvent = "action.result";
+const toolResultKind = "tool-result";
+const dynamicInitial = "dynamic-initial";
+const staticHold = "static-hold";
+const staticIdle = "static-idle";
+const dynamicIdle = "dynamic-idle";
+const staticRestored = "static-restored";
+const dynamicRestored = "dynamic-restored";
+const staticApproval = "static-approval";
+
 const collect = async (response) => {
   const output = [];
   for await (const event of response) {
     assert.notEqual(event.type, "session.failed");
-    if (event.type === "action.result" && event.data.result.kind === "tool-result") {
+    if (event.type === actionResultEvent && event.data.result.kind === toolResultKind) {
       assert.equal(event.data.status, "completed");
       assert.notEqual(event.data.result.isError, true);
       output.push(event.data.result.output);
@@ -100,15 +110,15 @@ test("actual Eve keeps in-flight A, dispatches idle B static/dynamic, restores t
   try {
     await first.writeGeneration("A");
     const client = await first.start();
-    const created = await client.sessions.create({ message: "dynamic-initial" });
+    const created = await client.sessions.create({ message: dynamicInitial });
     const sessionId = created.session.state.sessionId;
     assert.deepEqual(await collect(created.response), {
       count: 1,
       generation: "A",
-      nonce: "dynamic-initial",
+      nonce: dynamicInitial,
       sessionId,
     });
-    const held = collect(await created.session.send("static-hold"));
+    const held = collect(await created.session.send(staticHold));
     await vi.waitFor(() => access(path.join(first.root, "started")), {
       timeout: 30_000,
       interval: 20,
@@ -129,13 +139,13 @@ test("actual Eve keeps in-flight A, dispatches idle B static/dynamic, restores t
       { timeout: 60_000, interval: 50 },
     );
     await writeFile(path.join(first.root, "release"), "release");
-    assert.deepEqual(await held, { count: 2, generation: "A", nonce: "static-hold", sessionId });
-    const next = await collect(await created.session.send("static-idle"));
-    assert.deepEqual(next, { count: 3, generation: "B", nonce: "static-idle", sessionId });
-    assert.deepEqual(await collect(await created.session.send("dynamic-idle")), {
+    assert.deepEqual(await held, { count: 2, generation: "A", nonce: staticHold, sessionId });
+    const next = await collect(await created.session.send(staticIdle));
+    assert.deepEqual(next, { count: 3, generation: "B", nonce: staticIdle, sessionId });
+    assert.deepEqual(await collect(await created.session.send(dynamicIdle)), {
       count: 4,
       generation: "B",
-      nonce: "dynamic-idle",
+      nonce: dynamicIdle,
       sessionId,
     });
     await other.writeGeneration("C");
@@ -148,16 +158,16 @@ test("actual Eve keeps in-flight A, dispatches idle B static/dynamic, restores t
     await first.stop();
     const resumed = await first.start(true);
     const same = resumed.sessions.attach(sessionId);
-    assert.deepEqual(await collect(await same.send("static-restored")), {
+    assert.deepEqual(await collect(await same.send(staticRestored)), {
       count: 5,
       generation: "B",
-      nonce: "static-restored",
+      nonce: staticRestored,
       sessionId,
     });
-    assert.deepEqual(await collect(await same.send("dynamic-restored")), {
+    assert.deepEqual(await collect(await same.send(dynamicRestored)), {
       count: 6,
       generation: "B",
-      nonce: "dynamic-restored",
+      nonce: dynamicRestored,
       sessionId,
     });
     const peer = await collect(await parallelCreated.session.send("static-peer-preserved"));
@@ -166,18 +176,18 @@ test("actual Eve keeps in-flight A, dispatches idle B static/dynamic, restores t
     const history = await same.snapshot();
     assert.equal(history.session.sessionId, sessionId);
     for (const nonce of [
-      "dynamic-initial",
-      "static-hold",
-      "static-idle",
-      "dynamic-idle",
-      "static-restored",
-      "dynamic-restored",
+      dynamicInitial,
+      staticHold,
+      staticIdle,
+      dynamicIdle,
+      staticRestored,
+      dynamicRestored,
     ]) {
       assert.ok(
         history.events.some(
           (event) =>
-            event.type === "action.result" &&
-            event.data.result.kind === "tool-result" &&
+            event.type === actionResultEvent &&
+            event.data.result.kind === toolResultKind &&
             event.data.result.output?.nonce === nonce,
         ),
       );
@@ -192,18 +202,18 @@ test("actual pending approval survives B activation and restore with its A execu
   try {
     await f.writeGeneration("A");
     const client = await f.start();
-    const created = await client.sessions.create({ message: "static-approval" });
+    const created = await client.sessions.create({ message: staticApproval });
     const sessionId = created.session.state.sessionId;
     let pending;
     for await (const event of created.response) {
       assert.notEqual(event.type, "session.failed");
-      assert.notEqual(event.type, "action.result");
+      assert.notEqual(event.type, actionResultEvent);
       if (event.type === "input.requested") {
         pending = event.data.requests.find((request) => request.kind === "tool-approval");
       }
     }
     assert.ok(pending);
-    assert.deepEqual(pending.action.input, { nonce: "static-approval" });
+    assert.deepEqual(pending.action.input, { nonce: staticApproval });
     const prior = readActiveDevelopmentRuntimeArtifactsSnapshot(f.app)?.runtimeAppRoot;
     await f.writeGeneration("B");
     await vi.waitFor(
@@ -222,7 +232,7 @@ test("actual pending approval survives B activation and restore with its A execu
     const approved = await collect(
       await same.respond([{ requestId: pending.requestId, optionId: "approve" }]),
     );
-    assert.deepEqual(approved, { count: 1, generation: "A", nonce: "static-approval", sessionId });
+    assert.deepEqual(approved, { count: 1, generation: "A", nonce: staticApproval, sessionId });
     const afterApproval = await same.snapshot();
     const continuation = restored.sessions.attach(sessionId, {
       streamIndex: afterApproval.session.streamIndex,
@@ -231,14 +241,14 @@ test("actual pending approval survives B activation and restore with its A execu
       { requestId: pending.requestId, optionId: "approve" },
     ]);
     for await (const event of duplicate) {
-      assert.notEqual(event.type, "action.result");
+      assert.notEqual(event.type, actionResultEvent);
     }
     const history = await same.snapshot();
     const writes = history.events.filter(
       (event) =>
-        event.type === "action.result" &&
-        event.data.result.kind === "tool-result" &&
-        event.data.result.output?.nonce === "static-approval",
+        event.type === actionResultEvent &&
+        event.data.result.kind === toolResultKind &&
+        event.data.result.output?.nonce === staticApproval,
     );
     assert.equal(writes.length, 1);
     assert.deepEqual(await collect(await continuation.send("static-after-approval")), {

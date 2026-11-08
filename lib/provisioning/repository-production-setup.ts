@@ -72,6 +72,8 @@ export interface RepositoryProductionSetupResult {
   signInUrl?: string;
   expiresAt?: string;
 }
+const CREATOR_ACCESS_EFFECT = "creator-access";
+
 const unfinished = (record: RepositoryProductionRecord) =>
   record.appAccessUpgrade?.state === "pending" ||
   record.creatorRoleUpdate?.state === "pending" ||
@@ -79,7 +81,7 @@ const unfinished = (record: RepositoryProductionRecord) =>
 const selectedEffects = (record: RepositoryProductionRecord): RepositoryProductionEffect[] =>
   record.intent.storage.kind === "none"
     ? ["creator-access"]
-    : ["allocate-storage", "install-schema", "creator-access", "bind-runtime"];
+    : ["allocate-storage", "install-schema", CREATOR_ACCESS_EFFECT, "bind-runtime"];
 
 /** Same-app delivery continuation; no Preview prerequisite, deployment mutation or product-test gate. */
 export const createRepositoryProductionSetup = (ports: RepositoryProductionSetupPorts) => ({
@@ -176,7 +178,7 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
             });
           },
         });
-        if (effect === "creator-access" && row.record.appAccessUpgrade?.state === "pending") {
+        if (effect === CREATOR_ACCESS_EFFECT && row.record.appAccessUpgrade?.state === "pending") {
           if (!ports.reconcileAppAccessUpgrade) {
             throw new Error("repository_production_access_upgrade_unavailable");
           }
@@ -186,7 +188,7 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
         }
         // Once initially granted, access management owns revocation and role changes.
         // Neither an ordinary revision nor setup retry may restore an intentionally removed grant.
-        if (effect === "creator-access" && row.record.effects[effect].state === "applied") {
+        if (effect === CREATOR_ACCESS_EFFECT && row.record.effects[effect].state === "applied") {
           const update = row.record.creatorRoleUpdate;
           if (update?.state === "pending") {
             if (!ports.reconcileCreatorRoles) {
@@ -197,7 +199,7 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
           }
           continue;
         }
-        if (effect === "creator-access") {
+        if (effect === CREATOR_ACCESS_EFFECT) {
           await ports.prepareCreatorIdentity?.({
             row,
             effect,

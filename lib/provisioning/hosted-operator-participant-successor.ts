@@ -13,6 +13,8 @@ import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 import type { NormalActorProgram } from "./hosted-operator-normal-actor-program";
 import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
 
+const AUTH_PARTICIPANTS_STAGE = "auth-participants";
+
 type Predecessor = NonNullable<HostedRuntimeJournalRecord["participantPreparationHistory"]>[number];
 
 /** Organization-proof migration is deliberately outside this capture-only successor. */
@@ -56,7 +58,7 @@ const completed = (record: HostedRuntimeJournalRecord, now: number): Predecessor
     preparation.accountsCompletedAt !== undefined,
     preparation.programDigest === normalActorProgramDigest(preparation.program),
     preparation.accountPlanDigest === operatorPlanDigest(preparation.accountPlan),
-    preparation.accountPlan.stage === "auth-participants",
+    preparation.accountPlan.stage === AUTH_PARTICIPANTS_STAGE,
     preparation.accountPlan.normalActorProgram !== undefined &&
       normalActorProgramDigest(preparation.accountPlan.normalActorProgram) ===
         preparation.programDigest,
@@ -107,7 +109,7 @@ export const readParticipantSuccessorPredecessor = (
 ): Predecessor | undefined => {
   const pointer = plan.normalActorPredecessor;
   const program = plan.normalActorProgram;
-  if (pointer === undefined || program === undefined || plan.stage !== "auth-participants") {
+  if (pointer === undefined || program === undefined || plan.stage !== AUTH_PARTICIPANTS_STAGE) {
     return undefined;
   }
   const candidates = [completed(record, now), ...(record.participantPreparationHistory ?? [])];
@@ -205,7 +207,7 @@ export const createParticipantSuccessorPlan = (
                 : undefined,
           },
         }),
-    stage: "auth-participants",
+    stage: AUTH_PARTICIPANTS_STAGE,
     access: [],
     normalActorProgram: program,
     normalActorPredecessor: {
@@ -239,7 +241,7 @@ export const isParticipantProgramSuccessor = (
     completed(record, now)?.operator.operationRef === prior.operator.operationRef ||
     [
       record.operator?.planDigest === operatorPlanDigest(plan),
-      record.operator?.plan.stage === "auth-participants",
+      record.operator?.plan.stage === AUTH_PARTICIPANTS_STAGE,
       record.leaseId === undefined,
       record.leaseExpiresAt === undefined,
       record.operator?.pendingEffectId === undefined,

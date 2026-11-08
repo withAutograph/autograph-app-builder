@@ -35,6 +35,9 @@ export interface SourceAnalysis {
   limitations: string[];
 }
 
+const TOKEN_REFERENCE_EVIDENCE = "token-reference";
+const RAW_LITERAL_EVIDENCE = "raw-literal";
+
 const varReference = /var\(\s*(?<name>--[A-Za-z0-9_-]+)\s*(?:,[^)]+)?\)/gu;
 const cssLiteral =
   /(?:#[0-9a-fA-F]{3,8}\b|(?:rgb|hsl)a?\([^)]*\)|-?(?:\d*\.\d+|\d+)(?:px|rem|em|vh|vw|vmin|vmax|deg|ms|s)\b)/gu;
@@ -429,7 +432,7 @@ export function analyzeSource({
                 ? `CSS declaration uses declared semantic token ${ref}.`
                 : `CSS declaration references ${ref}, whose semantic token status cannot be established.`,
               source,
-              "token-reference",
+              TOKEN_REFERENCE_EVIDENCE,
             ),
           );
         }
@@ -448,7 +451,7 @@ export function analyzeSource({
                 ? `CSS declaration uses raw literal ${literal}; matching a token value is not token provenance.`
                 : `CSS selector is not referenced by static rendered class evidence.`,
               source,
-              "raw-literal",
+              RAW_LITERAL_EVIDENCE,
             ),
           );
         }
@@ -635,7 +638,7 @@ export function analyzeSource({
                     verdict,
                     summary,
                     position(source, attribute),
-                    "token-reference",
+                    TOKEN_REFERENCE_EVIDENCE,
                   ),
                 );
               }
@@ -649,7 +652,7 @@ export function analyzeSource({
                     "nonconforming",
                     `className uses raw literal ${literal}; matching a token value is not token provenance.`,
                     position(source, attribute),
-                    "raw-literal",
+                    RAW_LITERAL_EVIDENCE,
                   ),
                 );
               }
@@ -714,7 +717,7 @@ export function analyzeSource({
                     verdict,
                     summary,
                     position(source, property),
-                    "token-reference",
+                    TOKEN_REFERENCE_EVIDENCE,
                   ),
                 );
               }
@@ -731,7 +734,7 @@ export function analyzeSource({
                     "nonconforming",
                     `style uses raw literal ${literal}; matching a token value is not token provenance.`,
                     position(source, property),
-                    "raw-literal",
+                    RAW_LITERAL_EVIDENCE,
                   ),
                 );
               }

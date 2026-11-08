@@ -54,6 +54,9 @@ import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 
+const unavailableDiagnosticLog = "an unavailable private diagnostic log";
+const localPublicationGitPath = "app-builder/local-publication.json";
+
 interface FileState {
   kind: "absent" | "regular" | "directory" | "symlink" | "special";
   mode?: string;
@@ -232,7 +235,7 @@ const fixedGitApply = async function fixedGitApply(
   const stderrLogPath = await finishGitDiagnosticCapture(diagnosticCapture, code !== 0);
   if (code !== 0) {
     const statusDetail = signal ?? `exit ${code}`;
-    const diagnosticPath = stderrLogPath ?? "an unavailable private diagnostic log";
+    const diagnosticPath = stderrLogPath ?? unavailableDiagnosticLog;
     throw new Error(
       `Git apply failed for ${root} using patch ${patchPath} (${statusDetail}); sanitized stderr is available at ${diagnosticPath}.`,
     );
@@ -348,7 +351,7 @@ const buildExactGitPatch = async function buildExactGitPatch(input: {
       const stderrLogPath = await finishGitDiagnosticCapture(diagnosticCapture, code !== 1);
       if (code !== 1) {
         const statusDetail = signal ?? `exit ${code}`;
-        const diagnosticPath = stderrLogPath ?? "an unavailable private diagnostic log";
+        const diagnosticPath = stderrLogPath ?? unavailableDiagnosticLog;
         throw new Error(
           `Could not build the exact publication patch for ${path} in ${input.gitDirectoryPath} (${statusDetail}); sanitized stderr is available at ${diagnosticPath}.`,
         );
@@ -369,7 +372,7 @@ const git = async function git(path: string, args: readonly string[]): Promise<s
   const result = await runGitCapture(["-C", path, ...args]);
   if (result.status !== 0) {
     throw new Error(
-      `Git ${args[0] ?? "command"} failed for ${path} (${result.status}); sanitized stderr is available at ${result.stderrLogPath ?? "an unavailable private diagnostic log"}.`,
+      `Git ${args[0] ?? "command"} failed for ${path} (${result.status}); sanitized stderr is available at ${result.stderrLogPath ?? unavailableDiagnosticLog}.`,
     );
   }
   return result.stdout.toString("utf-8");
@@ -379,7 +382,7 @@ const gitBuffer = async function gitBuffer(path: string, args: readonly string[]
   const result = await runGitCapture(["-C", path, ...args]);
   if (result.status !== 0) {
     throw new Error(
-      `Git ${args[0] ?? "command"} failed for ${path} (${result.status}); sanitized stderr is available at ${result.stderrLogPath ?? "an unavailable private diagnostic log"}.`,
+      `Git ${args[0] ?? "command"} failed for ${path} (${result.status}); sanitized stderr is available at ${result.stderrLogPath ?? unavailableDiagnosticLog}.`,
     );
   }
   return result.stdout;
@@ -766,7 +769,7 @@ export const readLocalPublicationJournal = async function readLocalPublicationJo
   destinationPath: string,
 ): Promise<LocalPublicationJournal | undefined> {
   const root = await resolveAllowedRepository(destinationPath);
-  const path = await gitOwnedPath(root, "app-builder/local-publication.json");
+  const path = await gitOwnedPath(root, localPublicationGitPath);
   try {
     const journal = JSON.parse(await readFile(path, "utf-8")) as LocalPublicationJournal;
     assertJournal(journal);
@@ -1007,10 +1010,7 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       ...pendingUnsigned,
       digest: stableDigest(pendingUnsigned),
     };
-    const journalPath = await gitOwnedPath(
-      snapshot.canonicalPath,
-      "app-builder/local-publication.json",
-    );
+    const journalPath = await gitOwnedPath(snapshot.canonicalPath, localPublicationGitPath);
     await createInitialJournal(journalPath, pending);
     pendingWritten = true;
     await input.hooks?.afterPendingJournal?.();
@@ -1241,7 +1241,7 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
     if (pendingWritten) {
       const journalPath = await gitOwnedPath(
         input.proposal.destinationPath,
-        "app-builder/local-publication.json",
+        localPublicationGitPath,
       );
       await input.hooks?.beforeTerminalJournalWrite?.("failed");
       await writeJournal(journalPath, receipt);

@@ -15,6 +15,8 @@ import type { ProviderConnectionReturn } from "./provider-connection-return";
 import type { ProviderEmulation } from "./local-provider-emulation";
 import { VercelTokenDecryptionKeyError } from "./vercel-token-decryption-key-error";
 
+const MEMBERSHIP_INACTIVE_ERROR = "membership-inactive";
+
 export { VercelTokenDecryptionKeyError } from "./vercel-token-decryption-key-error";
 
 type Authority = HostedAdminPlanRequest["authority"];
@@ -377,7 +379,7 @@ export function createVercelInstallationAuthorization(input: {
     ) {
       const authority = hostedTenantAuthoritySchema.parse(authorityInput);
       if (!(await input.membership.isActiveMember(authority))) {
-        throw new Error("membership-inactive");
+        throw new Error(MEMBERSHIP_INACTIVE_ERROR);
       }
       const state = nonce();
       const issuedAt = now();
@@ -411,7 +413,7 @@ export function createVercelInstallationAuthorization(input: {
         .parse(url.searchParams.get("configurationId"));
       const teamId = url.searchParams.get("teamId") || undefined;
       if (!(await input.membership.isActiveMember(authority))) {
-        throw new Error("membership-inactive");
+        throw new Error(MEMBERSHIP_INACTIVE_ERROR);
       }
       const returnState = await input.states.consume({
         authority,
@@ -513,7 +515,7 @@ export function createVercelInstallationAuthorization(input: {
         };
       }
       if (!(await input.membership.isActiveMember(authority))) {
-        throw new Error("membership-inactive");
+        throw new Error(MEMBERSHIP_INACTIVE_ERROR);
       }
       const persistedBinding = await input.installations.bind({
         authority,

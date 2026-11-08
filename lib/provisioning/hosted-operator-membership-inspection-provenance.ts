@@ -14,6 +14,8 @@ import type {
 } from "./hosted-operator-contract";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 
+const createOwnedOrganizationKind = "create-owned-organization";
+
 export interface RetainedMembershipInspectionProvenance {
   approvedByCallId: string;
   operator: HostedOperatorRecordBase;
@@ -40,7 +42,7 @@ const membershipEffect = (
     plan.action !== "prepare" ||
     plan.stage !== "app" ||
     plan.normalActorProgram !== undefined ||
-    plan.authMembership?.kind !== "create-owned-organization"
+    plan.authMembership?.kind !== createOwnedOrganizationKind
   ) {
     return null;
   }
@@ -53,7 +55,7 @@ const selectedMembership = (plan: HostedOperatorPlan, organizationId: string) =>
     return null;
   }
   const organizations =
-    plan.authMembership.kind === "create-owned-organization"
+    plan.authMembership.kind === createOwnedOrganizationKind
       ? [plan.authMembership]
       : plan.authMembership.organizations;
   const spec = organizations.find((entry) => entry.organizationId === organizationId);
@@ -101,7 +103,7 @@ const selectedMembershipAuthority = (
 
 const originalOwnershipReadback = (operator: HostedOperatorRecordBase): string | null => {
   const membership = operator.plan.authMembership;
-  if (membership?.kind !== "create-owned-organization") {
+  if (membership?.kind !== createOwnedOrganizationKind) {
     return null;
   }
   // These fixed keys are in the worker's canonical alphabetical order. The
@@ -275,7 +277,7 @@ const inspectionOrganizationIds = (plan: HostedOperatorPlan): readonly (string |
   if (membership === undefined) {
     return [];
   }
-  if (membership.kind === "create-owned-organization") {
+  if (membership.kind === createOwnedOrganizationKind) {
     return [membership.organizationId];
   }
   return membership.organizations.map((entry) => entry.organizationId);

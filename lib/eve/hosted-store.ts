@@ -65,6 +65,8 @@ import {
 } from "./private-hosted-approval";
 import type { PrivateResourceApprovalReceipt } from "./private-hosted-approval";
 
+const hostedOperationDigestMismatchMessage = "Hosted operation cannot settle at this digest.";
+
 export const hostedOperationKindSchema = z.enum(["start", "resume", "send", "respond"]);
 export type HostedOperationKind = z.infer<typeof hostedOperationKindSchema>;
 
@@ -1871,7 +1873,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     const operationKey = InMemoryHostedEveStore.operationKey(input.principal, input.operationId);
     const pendingOperation = this.operations.get(operationKey);
     if (pendingOperation === undefined || pendingOperation.requestDigest !== input.requestDigest) {
-      throw new Error("Hosted operation cannot settle at this digest.");
+      throw new Error(hostedOperationDigestMismatchMessage);
     }
     const [provedResponse, provedSend, provedApproval] = await Promise.all([
       this.provedSessionLimitResponse(pendingOperation, input.sessionLimitResolution),
@@ -1885,7 +1887,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
         [provedResponse, provedSend, provedApproval].some(Boolean),
       )
     ) {
-      throw new Error("Hosted operation cannot settle at this digest.");
+      throw new Error(hostedOperationDigestMismatchMessage);
     }
     const result = eveSessionResultSchema.parse(input.result);
     let session =
@@ -2401,7 +2403,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       InMemoryHostedEveStore.operationKey(input.principal, input.operationId),
     );
     if (operation === undefined || operation.requestDigest !== input.requestDigest) {
-      throw new Error("Hosted operation cannot settle at this digest.");
+      throw new Error(hostedOperationDigestMismatchMessage);
     }
     const current =
       operation.sessionId === undefined

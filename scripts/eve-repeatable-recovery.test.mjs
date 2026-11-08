@@ -9,6 +9,10 @@ import { MockLanguageModelV4 } from "ai/test";
 import { z } from "zod";
 import { authorizeRepeatablePrivateApplyCalls } from "../lib/eve/native-recovery-repeatable-apply.ts";
 
+const TOOL_RESULT_TYPE = "tool-result";
+const ORIGINAL_INPUT_VALUE = "original-input";
+const ORIGINAL_TURN_ID = "original-turn";
+
 const require = createRequire(import.meta.url);
 const eve = path.dirname(require.resolve("eve/package.json"));
 const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
@@ -29,7 +33,7 @@ const logical = "logical-session";
 const owner = "physical-owner";
 const callId = "native-call";
 const result = {
-  type: "tool-result",
+  type: TOOL_RESULT_TYPE,
   toolCallId: "deferred-call",
   toolName: "deferred",
   output: { type: "text", value: "actual-deferred-result" },
@@ -47,7 +51,7 @@ const history = (tail = "mixed", approved = true) => [
         type: "tool-call",
         toolCallId: callId,
         toolName: "native",
-        input: { value: "original-input" },
+        input: { value: ORIGINAL_INPUT_VALUE },
       },
       { type: "tool-approval-request", approvalId: "native-approval", toolCallId: callId },
       { type: "tool-call", toolCallId: "deferred-call", toolName: "deferred", input: {} },
@@ -78,7 +82,7 @@ const fixture = async (options = {}) => {
         sessionStarted: true,
         sequence: 5,
         stepIndex: 4,
-        turnId: "original-turn",
+        turnId: ORIGINAL_TURN_ID,
       },
     },
     history: options.history ?? history(),
@@ -92,12 +96,12 @@ const fixture = async (options = {}) => {
           kind: "workflow-task",
           callId,
           toolName: "native",
-          input: { value: "original-input" },
+          input: { value: ORIGINAL_INPUT_VALUE },
           workflowId: "workflow:native",
         },
       ],
       responseMessages: [],
-      event: { sequence: 5, stepIndex: 4, turnId: "original-turn" },
+      event: { sequence: 5, stepIndex: 4, turnId: ORIGINAL_TURN_ID },
     });
   }
   if (options.pending === "human") {
@@ -111,11 +115,11 @@ const fixture = async (options = {}) => {
             kind: "tool-call",
             callId,
             toolName: "native",
-            input: { value: "original-input" },
+            input: { value: ORIGINAL_INPUT_VALUE },
           },
         },
       ],
-      event: { sequence: 5, stepIndex: 4, turnId: "original-turn" },
+      event: { sequence: 5, stepIndex: 4, turnId: ORIGINAL_TURN_ID },
     });
   }
   const pair = {
@@ -195,7 +199,7 @@ const runNextModel = async (ready) => {
     inputSchema: z.object({ value: z.string() }),
     execute: (value) => {
       executions += 1;
-      assert.equal(value.value, "original-input");
+      assert.equal(value.value, ORIGINAL_INPUT_VALUE);
       return "actual-native-output";
     },
   });
@@ -207,7 +211,7 @@ const runNextModel = async (ready) => {
         inputSchema: z.object({ value: z.string() }),
         execute: (value) => {
           executions += 1;
-          assert.equal(value.value, "original-input");
+          assert.equal(value.value, ORIGINAL_INPUT_VALUE);
           return "actual-native-output";
         },
       }),
@@ -233,7 +237,7 @@ test("mixed retained call/approval/deferred result is uncertain before any inval
 test("a genuine result already retained pairs the call and is not executed again", async () => {
   const messages = history();
   messages.at(-1).content.push({
-    type: "tool-result",
+    type: TOOL_RESULT_TYPE,
     toolCallId: callId,
     toolName: "native",
     output: { type: "text", value: "real-retained-native-output" },
@@ -289,7 +293,7 @@ test("emitted native result alone never becomes a committed result or permission
           sequence: 1,
           stepIndex: 1,
           result: {
-            kind: "tool-result",
+            kind: TOOL_RESULT_TYPE,
             callId,
             toolName: "native",
             output: "actual-but-uncommitted-output",

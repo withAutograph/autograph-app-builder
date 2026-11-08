@@ -13,6 +13,8 @@ import {
   operatorDeploymentCandidateSchema,
 } from "./hosted-operator-contract";
 
+const RECONCILIATION_REQUIRED = "reconciliation-required";
+
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const origin = z.url().refine((value) => {
@@ -123,14 +125,7 @@ export const continuityIdentitySchema = z.strictObject({
   providerSessionId: id,
 });
 export const continuityCurrentSchema = continuityIdentitySchema.extend({
-  state: z.enum([
-    "starting",
-    "ready",
-    "restarting",
-    "revoked",
-    "expired",
-    "reconciliation-required",
-  ]),
+  state: z.enum(["starting", "ready", "restarting", "revoked", "expired", RECONCILIATION_REQUIRED]),
   leaseExpiresAt: z.iso.datetime(),
 });
 export type ContinuityCurrent = z.infer<typeof continuityCurrentSchema>;
@@ -212,7 +207,7 @@ export const continuityRecordSchema = z
       "revoking",
       "revoked",
       "settled",
-      "reconciliation-required",
+      RECONCILIATION_REQUIRED,
     ]),
     fence: z.number().int().nonnegative(),
     attemptId: z.uuid().optional(),
@@ -262,7 +257,7 @@ export const canRebindUndispatchedContinuityRuntime = (record: ContinuityRecord)
     return false;
   }
   return [
-    ["starting", "reconciliation-required"].includes(record.state),
+    ["starting", RECONCILIATION_REQUIRED].includes(record.state),
     record.pendingStage === "runtime",
     record.supersededBy === undefined,
     record.cancelled !== true,
