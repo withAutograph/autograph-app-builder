@@ -493,10 +493,18 @@ describe("branded public tool mapping", () => {
       (result.tools ?? [])
         .map(({ name }) => name)
         .toSorted((left, right) => {
-          if (left === undefined) return 1;
-          if (right === undefined) return -1;
-          if (left < right) return -1;
-          if (left > right) return 1;
+          if (left === undefined) {
+            return 1;
+          }
+          if (right === undefined) {
+            return -1;
+          }
+          if (left < right) {
+            return -1;
+          }
+          if (left > right) {
+            return 1;
+          }
           return 0;
         }),
     ).toEqual(exactTools);

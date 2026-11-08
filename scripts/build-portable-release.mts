@@ -251,8 +251,12 @@ const auxiliaryFiles = new Map<string, Uint8Array>();
 const compareDefaultSort = (left: unknown, right: unknown) => {
   const a = String(left);
   const b = String(right);
-  if (a < b) return -1;
-  if (a > b) return 1;
+  if (a < b) {
+    return -1;
+  }
+  if (a > b) {
+    return 1;
+  }
   return 0;
 };
 for (const directory of [mockRoot, clientRoot]) {

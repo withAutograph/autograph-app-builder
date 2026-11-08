@@ -2,7 +2,6 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import type { Browser } from "playwright";
 import { describe, expect, it, vi } from "vitest";
 
 import { assessParity, requirements } from "./self-reproduction-parity";
@@ -28,7 +27,7 @@ const adapter = (input?: {
   missing?: WorkflowId;
   unavailable?: WorkflowId;
   fail?: WorkflowId;
-}): TrustedBrowserWorkflowAdapter => ({
+}): TrustedBrowserWorkflowAdapter<object> => ({
   exercise: async (_page, id, freshPage) => {
     if (id === "authentication" || id === "durable-draft" || id === "session-recovery") {
       await freshPage();
@@ -78,7 +77,7 @@ const browser = () => {
   const close = vi.fn<() => Promise<void>>().mockResolvedValue();
   const newPage = vi.fn(() => Promise.resolve({}));
   const newContext = vi.fn(() => Promise.resolve({ close, newPage }));
-  return { close, newContext, newPage, value: { newContext } as unknown as Browser };
+  return { close, newContext, newPage, value: { newContext } };
 };
 
 describe("trusted browser workflow adapters", () => {

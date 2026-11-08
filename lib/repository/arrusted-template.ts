@@ -102,7 +102,9 @@ const assertNewCanonicalMain = async (
     command: `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 node -e ${quoteAcquisitionProgram(canonicalMainAcquisitionProofProgram())}`,
     workingDirectory: "/workspace",
   });
-  if (result.exitCode !== 0) throw fail();
+  if (result.exitCode !== 0) {
+    throw fail();
+  }
   let raw: unknown;
   try {
     raw = JSON.parse(result.stdout);
@@ -118,14 +120,17 @@ const assertNewCanonicalMain = async (
       originMatches: z.literal(true),
     })
     .safeParse(raw);
-  if (!proof.success) throw fail();
+  if (!proof.success) {
+    throw fail();
+  }
   if (
     proof.data.sourceSha !== snapshot.sourceSha ||
     proof.data.sourceTree !== snapshot.sourceTree ||
     proof.data.sourceSha !== proof.data.mainSha ||
     proof.data.sourceTree !== proof.data.mainTree
-  )
+  ) {
     throw fail();
+  }
 };
 
 /**

@@ -115,7 +115,9 @@ export const seedIdentity = async function seedIdentity(context: BrowserContext,
     },
   ]);
   const response = await context.request.get(`${fixture.origin}/api/auth/get-session`);
-  if (!response.ok()) throw new Error("Seeded Better Auth session was rejected.");
+  if (!response.ok()) {
+    throw new Error("Seeded Better Auth session was rejected.");
+  }
   const session: unknown = await response.json();
   if (!z.object({ user: z.object({ id: z.literal(id) }) }).safeParse(session).success) {
     throw new Error("Seeded Better Auth session did not resolve the expected identity.");

@@ -178,7 +178,9 @@ const initializeSeeds = async (input: {
   let bytes = 0;
   let transferredFiles = 0;
   const flush = async () => {
-    if (batch.length === 0) return;
+    if (batch.length === 0) {
+      return;
+    }
     await input.native.writeFiles(batch, {});
     transferredFiles += batch.length;
     console.info(JSON.stringify({ event: "autograph.sandbox.seed-transfer", transferredFiles }));
@@ -193,10 +195,16 @@ const initializeSeeds = async (input: {
     const preserveExisting =
       input.recovered || destination === SANDBOX_WORKSPACE || destination.startsWith("/workspace/");
     // Preserve the original sequential first-seed-wins behavior for retained paths.
-    if (preserveExisting && initialized.has(destination)) continue;
-    if (!(await shouldInitializeSeed(input.native, destination, preserveExisting))) continue;
+    if (preserveExisting && initialized.has(destination)) {
+      continue;
+    }
+    if (!(await shouldInitializeSeed(input.native, destination, preserveExisting))) {
+      continue;
+    }
     const content = Buffer.from(file.content, "base64");
-    if (bytes + content.byteLength > SEED_UPLOAD_BATCH_BYTES) await flush();
+    if (bytes + content.byteLength > SEED_UPLOAD_BATCH_BYTES) {
+      await flush();
+    }
     const directory = path.posix.dirname(destination);
     if (!directories.has(directory)) {
       await input.native.fs.mkdir(directory, { recursive: true });
@@ -205,7 +213,9 @@ const initializeSeeds = async (input: {
     batch.push({ content, path: destination });
     initialized.add(destination);
     bytes += content.byteLength;
-    if (bytes >= SEED_UPLOAD_BATCH_BYTES) await flush();
+    if (bytes >= SEED_UPLOAD_BATCH_BYTES) {
+      await flush();
+    }
   }
   await flush();
 };
@@ -365,7 +375,9 @@ export const createBuilderVercelProvider = (
       // Vercel or freeze live repository bytes into a provider snapshot.
       const files: SandboxProviderTargetFile[] = [];
       for (const tree of [context.resources.workspace, context.resources.skills]) {
-        if (tree === undefined) continue;
+        if (tree === undefined) {
+          continue;
+        }
         for (const file of tree.files) {
           files.push({
             content: file.content,
@@ -383,8 +395,9 @@ export const createBuilderVercelProvider = (
     async resume(context, _artifact, state) {
       // Reconnect only: do not recreate source selection or initialization.
       const current = await Sandbox.get({ ...transport, name: state.name, resume: false });
-      if (current.status === "running")
+      if (current.status === "running") {
         return handle(current, context.session.id, state.workspaceDrive);
+      }
       await assertPrivateComputeResumeAllowed(current, async () => {
         await assertHostedSandboxCommandAuthority({ sessionId: context.session.id });
       });
@@ -433,8 +446,9 @@ export const createBuilderVercelProvider = (
       try {
         await native.fs.mkdir(SANDBOX_WORKSPACE, { recursive: true });
         const home = await native.runCommand({ args: ["HOME"], cmd: "printenv" });
-        if (home.exitCode !== 0)
+        if (home.exitCode !== 0) {
           throw new Error("Vercel Sandbox did not expose its managed home directory.");
+        }
         const homeOutput = await home.stdout();
         const homePath = homeOutput.trim();
         await initializeSeeds({ native, files: artifact.files, homePath, recovered });

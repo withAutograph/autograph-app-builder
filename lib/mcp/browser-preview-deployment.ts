@@ -252,14 +252,18 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
           return new Response(null, { status: 404, headers });
         }
         const context = await hostedContextForRequest(request);
-        if (context === undefined) return new Response(null, { status: 404, headers });
+        if (context === undefined) {
+          return new Response(null, { status: 404, headers });
+        }
         const receipt = await readCommittedRecoveryReceipt(context.database, {
           principal: context.principal,
           authoritySessionId: selection.sessionId,
           logicalSessionId: selection.logicalSessionId,
           ownerRunId: selection.ownerRunId,
         });
-        if (receipt === null) return new Response(null, { status: 404, headers });
+        if (receipt === null) {
+          return new Response(null, { status: 404, headers });
+        }
         return Response.json(
           {
             operationId: receipt.operationId,

@@ -26,7 +26,7 @@ describe("preview runtime initialization", () => {
         ],
       },
       routes: ["/", "/details"],
-    } as unknown as UiPreviewInput;
+    };
     const entryFile = uiPreviewRendererFiles(input).files.find((file) => file.path === "entry.tsx");
     if (!entryFile) {
       throw new Error("Generated preview entry is missing");
@@ -115,7 +115,7 @@ describe("preview stylesheet provenance", () => {
         screens: [{ entry: "page.tsx", route: "/" }],
       },
       routes: ["/"],
-    } as unknown as UiPreviewInput;
+    };
     const rendererFile = uiPreviewRendererFiles(input).files.find(
       (file) => file.path === "render.mts",
     );

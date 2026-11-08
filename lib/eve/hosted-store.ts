@@ -577,11 +577,12 @@ export const hostedOperationRecordSchema = z
     if (
       record.internalAuthoringContinuation !== undefined &&
       (record.kind !== "send" || conflictingAuthoringPurpose)
-    )
+    ) {
       context.addIssue({
         code: "custom",
         message: "Authoring continuation must have one distinct send purpose.",
       });
+    }
     if (
       record.nativeRecovery !== undefined &&
       (record.kind !== "start" ||
@@ -595,7 +596,9 @@ export const hostedOperationRecordSchema = z
     }
     if (record.nativeRecoveryReceipt !== undefined) {
       try {
-        if (record.nativeRecovery === undefined) throw new Error("Recovery reservation absent.");
+        if (record.nativeRecovery === undefined) {
+          throw new Error("Recovery reservation absent.");
+        }
         assertNativeRecoveryReceipt(record.nativeRecovery, record.nativeRecoveryReceipt);
       } catch {
         context.addIssue({
@@ -720,7 +723,9 @@ export const assertNativeRecoverySessionReceipt = (
   operation: HostedOperationRecord,
   session: HostedSessionRecord,
 ): void => {
-  if (operation.nativeRecovery === undefined) return;
+  if (operation.nativeRecovery === undefined) {
+    return;
+  }
   const receipt = operation.nativeRecoveryReceipt;
   if (
     // oxlint-disable-next-line sonarjs/expression-complexity -- Child creation requires its exact committed native receipt.
@@ -821,8 +826,9 @@ export const inheritRecoveryBuildDecision = (
     authorityAuthoring,
     sourceIsCurrentChild,
   );
-  if (latestDecision === undefined && latestAuthoring === undefined && destination === undefined)
+  if (latestDecision === undefined && latestAuthoring === undefined && destination === undefined) {
     return child;
+  }
   const recovered = { ...toDurableHostedSessionRecord(child) };
   if (latestDecision !== undefined) {
     recovered.privateBuildDecision = recoveredBuildDecision(latestDecision, child);
@@ -942,13 +948,15 @@ export const isProvedSessionLimitResponse = (
     operation.internalSessionLimitResponse === undefined ||
     current === null ||
     proof === undefined
-  )
+  ) {
     return false;
+  }
   if (
     operation.sessionId !== current.sessionId ||
     tenantKeyFor(operation.principal) !== tenantKeyFor(current.principal)
-  )
+  ) {
     return false;
+  }
   const durable = toDurableHostedSessionRecord(current);
   const marker = operation.internalSessionLimitResponse;
   return (
@@ -966,10 +974,14 @@ export const isProvedResourceApprovalResponse = (
   metadata: HostedPagedCheckpointMetadata | null,
 ): boolean => {
   const parsed = resourceApprovalResponseProofSchema.safeParse(proofInput);
-  if (!parsed.success || current?.version !== 2 || metadata === null) return false;
+  if (!parsed.success || current?.version !== 2 || metadata === null) {
+    return false;
+  }
   const proof = parsed.data;
   const native = metadata.nativeObservationState;
-  if (current.checkpointRef === undefined || native === undefined) return false;
+  if (current.checkpointRef === undefined || native === undefined) {
+    return false;
+  }
   const invalidBinding = [
     operation.kind !== "respond",
     operation.internalSessionLimitResponse !== undefined,
@@ -982,20 +994,24 @@ export const isProvedResourceApprovalResponse = (
     native.adapterSessionId !== current.adapterSessionId,
     native.publicEventCount !== current.checkpointRef.eventCount,
   ].some(Boolean);
-  if (invalidBinding) return false;
+  if (invalidBinding) {
+    return false;
+  }
   const marker = operation.resourceApprovalResponse;
   if (marker === undefined) {
     // Historical reservations did not save a binding. Only a never-replaced original adapter can prove one.
     if (
       current.adapterGeneration !== 1 ||
       current.adapterSessionId !== current.originAdapterSessionId
-    )
+    ) {
       return false;
+    }
   } else if (
     marker.adapterSessionId !== current.adapterSessionId ||
     marker.adapterGeneration !== current.adapterGeneration
-  )
+  ) {
     return false;
+  }
   return provesResourceApprovalResponse({
     clientRequestId: operation.clientRequestId,
     requestDigest: operation.requestDigest,
@@ -1016,27 +1032,32 @@ export const bindSendDelivery = (
   marker: SendDelivery,
 ): HostedOperationRecord => {
   const delivery = sendDeliverySchema.parse(marker);
-  if (operation.kind !== "send" || hasInternalSendPurpose(operation) || current === null)
+  if (operation.kind !== "send" || hasInternalSendPurpose(operation) || current === null) {
     throw new Error(SEND_BINDING_UNAVAILABLE);
+  }
   if (
     operation.sessionId !== delivery.sessionId ||
     operation.requestDigest !== delivery.requestDigest ||
     current.sessionId !== delivery.sessionId
-  )
+  ) {
     throw new Error(SEND_BINDING_UNAVAILABLE);
+  }
   if (
     tenantKeyFor(operation.principal) !== tenantKeyFor(current.principal) ||
     (operation.state !== "reserved" && operation.state !== "submission_unknown")
-  )
+  ) {
     throw new Error(SEND_BINDING_UNAVAILABLE);
+  }
   const durable = toDurableHostedSessionRecord(current);
   if (
     durable.adapterSessionId !== delivery.adapterSessionId ||
     durable.adapterGeneration !== delivery.adapterGeneration
-  )
+  ) {
     throw new Error("Canonical SEND acknowledgement binding changed.");
-  if (operation.sendDelivery !== undefined && digest(operation.sendDelivery) !== digest(delivery))
+  }
+  if (operation.sendDelivery !== undefined && digest(operation.sendDelivery) !== digest(delivery)) {
     throw new Error("Canonical SEND acknowledgement binding changed.");
+  }
   return hostedOperationRecordSchema.parse({ ...operation, sendDelivery: delivery });
 };
 export const isProvedSendDelivery = (
@@ -1045,14 +1066,19 @@ export const isProvedSendDelivery = (
   proof: NativeDeliveryState | undefined,
 ): boolean => {
   const marker = operation.sendDelivery;
-  if (operation.kind !== "send" || marker === undefined || current === null) return false;
+  if (operation.kind !== "send" || marker === undefined || current === null) {
+    return false;
+  }
   if (
     operation.sessionId !== current.sessionId ||
     marker.requestDigest !== operation.requestDigest ||
     marker.sessionId !== operation.sessionId
-  )
+  ) {
     return false;
-  if (tenantKeyFor(operation.principal) !== tenantKeyFor(current.principal)) return false;
+  }
+  if (tenantKeyFor(operation.principal) !== tenantKeyFor(current.principal)) {
+    return false;
+  }
   const durable = toDurableHostedSessionRecord(current);
   return (
     durable.adapterSessionId === marker.adapterSessionId &&
@@ -1083,21 +1109,32 @@ export const canProjectQueuedSendAcknowledgement = (input: {
     hasInternalSendPurpose(operation) ||
     marker === undefined ||
     cancellationRevisionAtDispatch === null
-  )
+  ) {
     return false;
-  if (operation.state !== "reserved" && operation.state !== "submission_unknown") return false;
-  if (input.result.status !== "waiting" && input.result.status !== "working") return false;
-  if (input.result.error !== undefined || (input.result.inputRequests?.length ?? 0) > 0)
+  }
+  if (operation.state !== "reserved" && operation.state !== "submission_unknown") {
     return false;
-  if (["cancelled", "completed", "failed", "input_required"].includes(current.status)) return false;
+  }
+  if (input.result.status !== "waiting" && input.result.status !== "working") {
+    return false;
+  }
+  if (input.result.error !== undefined || (input.result.inputRequests?.length ?? 0) > 0) {
+    return false;
+  }
+  if (["cancelled", "completed", "failed", "input_required"].includes(current.status)) {
+    return false;
+  }
   if (
     input.observation.observationComplete !== true ||
     input.observation.nativeNextIndex === undefined ||
     input.observation.nativeTailIndex === undefined ||
     input.observation.nativeNextIndex !== input.observation.nativeTailIndex + 1
-  )
+  ) {
     return false;
-  if (isProvedSendDelivery(operation, current, input.proof)) return false;
+  }
+  if (isProvedSendDelivery(operation, current, input.proof)) {
+    return false;
+  }
   return [
     operation.sessionId === current.sessionId,
     input.result.sessionId === current.sessionId,
@@ -1141,8 +1178,12 @@ const maySettleHostedOperation = (
   operation: HostedOperationRecord,
   provedResolution = false,
 ): boolean => {
-  if (operation.state === "reserved" || isDeliveredInternalContinuation(operation)) return true;
-  if (operation.state !== "submission_unknown") return false;
+  if (operation.state === "reserved" || isDeliveredInternalContinuation(operation)) {
+    return true;
+  }
+  if (operation.state !== "submission_unknown") {
+    return false;
+  }
   return operation.kind === "start" || provedResolution;
 };
 
@@ -1201,7 +1242,9 @@ export const attachBuilderDestinationRecord = (
     current.checkpointDigest === input.expected.checkpointDigest,
     (current.checkpoint?.inputRequests?.length ?? 0) === 0,
   ].every(Boolean);
-  if (!matches) throw new Error("Builder destination selection is stale or unavailable.");
+  if (!matches) {
+    throw new Error("Builder destination selection is stale or unavailable.");
+  }
   const existing = current.builderDestination;
   if (
     existing !== undefined &&
@@ -1458,7 +1501,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     const authority = this.sessions.get(
       InMemoryHostedEveStore.sessionKey(principal, authoritySessionId),
     );
-    if (authority === undefined) throw new Error(SESSION_NOT_FOUND);
+    if (authority === undefined) {
+      throw new Error(SESSION_NOT_FOUND);
+    }
     const tenant = tenantKeyFor(principal);
     const children = [...this.sessions.values()].filter(
       (candidate) =>
@@ -1468,8 +1513,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
         candidate.nativeRecoveryBinding.logicalSessionId === logicalSessionId,
     );
     for (const child of children) {
-      if (child.version !== 2 || child.nativeRecoveryBinding === undefined)
+      if (child.version !== 2 || child.nativeRecoveryBinding === undefined) {
         throw new Error(SESSION_NOT_FOUND);
+      }
       assertRecoveredBuildContinuationChild(
         authoritySessionId,
         logicalSessionId,
@@ -1488,7 +1534,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
           (child) => child.version === 2 && child.parentSessionId === candidate.sessionId,
         ),
     );
-    if (leaves.length > 1) throw new Error("Recovered build continuation owner is ambiguous.");
+    if (leaves.length > 1) {
+      throw new Error("Recovered build continuation owner is ambiguous.");
+    }
     const current = leaves[0] ?? authority;
     if (leaves.length === 0 && current.adapterSessionId !== logicalSessionId) {
       throw new Error(SESSION_NOT_FOUND);
@@ -1519,7 +1567,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       throw new Error("Hosted store principal mismatch.");
     }
     const session = await this.getSession(principal, candidate.sessionId);
-    if (session === null) throw new Error(SESSION_NOT_FOUND);
+    if (session === null) {
+      throw new Error(SESSION_NOT_FOUND);
+    }
     assertExistingStartSession(candidate, session);
     const key = InMemoryHostedEveStore.operationKey(principal, candidate.operationId);
     const existing = this.operations.get(key);
@@ -1579,9 +1629,15 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     if (
       targetSessionId !== undefined &&
       [...this.operations.values()].some((record) => {
-        if (tenantKeyFor(record.principal) !== tenantKeyFor(principal)) return false;
-        if (record.resumeSessionId !== targetSessionId) return false;
-        if (record.nativeRecovery?.executionTransfer === undefined) return false;
+        if (tenantKeyFor(record.principal) !== tenantKeyFor(principal)) {
+          return false;
+        }
+        if (record.resumeSessionId !== targetSessionId) {
+          return false;
+        }
+        if (record.nativeRecovery?.executionTransfer === undefined) {
+          return false;
+        }
         return (
           record.state === "reserved" ||
           record.state === "submission_unknown" ||
@@ -1662,19 +1718,23 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     assertNativeRecoveryReceipt(descriptor, receipt);
     const key = InMemoryHostedEveStore.operationKey(input.principal, descriptor.operationId);
     const operation = this.operations.get(key);
-    if (operation === undefined) throw new Error("Native recovery reservation is unavailable.");
+    if (operation === undefined) {
+      throw new Error("Native recovery reservation is unavailable.");
+    }
     const source =
       this.sessions.get(
         InMemoryHostedEveStore.sessionKey(input.principal, descriptor.sourcePublicSessionId),
       ) ?? null;
     assertNativeRecoverySourceBinding(operation, source, descriptor);
     if (operation.nativeRecoveryReceipt !== undefined) {
-      if (JSON.stringify(operation.nativeRecoveryReceipt) !== JSON.stringify(receipt))
+      if (JSON.stringify(operation.nativeRecoveryReceipt) !== JSON.stringify(receipt)) {
         throw new Error("Native recovery owner receipt conflicts.");
+      }
       return structuredClone(operation.nativeRecoveryReceipt);
     }
-    if (operation.state === "succeeded")
+    if (operation.state === "succeeded") {
       throw new Error("Native recovery receipt was not committed before activation.");
+    }
     this.operations.set(
       key,
       hostedOperationRecordSchema.parse({
@@ -1709,7 +1769,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   ): Promise<HostedSessionRecord> {
     const key = InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId);
     const current = this.sessions.get(key);
-    if (current === undefined) throw new Error(SESSION_NOT_FOUND);
+    if (current === undefined) {
+      throw new Error(SESSION_NOT_FOUND);
+    }
     const durable = toDurableHostedSessionRecord(current);
     const updated = durableHostedSessionRecordSchema.parse({
       ...durable,
@@ -1726,7 +1788,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   ): Promise<HostedOperationRecord> {
     const key = InMemoryHostedEveStore.operationKey(input.principal, input.operationId);
     const operation = this.operations.get(key);
-    if (operation === undefined) throw new Error("Canonical SEND is unavailable.");
+    if (operation === undefined) {
+      throw new Error("Canonical SEND is unavailable.");
+    }
     const current = await this.getSession(input.principal, input.delivery.sessionId);
     const updated = hostedOperationRecordSchema.parse({
       ...bindSendDelivery(operation, current, input.delivery),
@@ -2036,7 +2100,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   ) {
     const key = InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId);
     const current = this.sessions.get(key);
-    if (current === undefined) throw new Error(SESSION_NOT_FOUND);
+    if (current === undefined) {
+      throw new Error(SESSION_NOT_FOUND);
+    }
     const pending = [...this.operations.values()].some(
       (operation) =>
         tenantKeyFor(operation.principal) === tenantKeyFor(input.principal) &&
@@ -2044,8 +2110,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
           operation.resumeSessionId === input.sessionId) &&
         ["reserved", "submission_unknown"].includes(operation.state),
     );
-    if (pending)
+    if (pending) {
       throw new Error("Builder destination selection requires settled session operations.");
+    }
     const updated = attachBuilderDestinationRecord(current, input);
     this.sessions.set(key, structuredClone(updated));
     return await Promise.resolve(structuredClone(updated));
@@ -2101,7 +2168,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     );
     const key = InMemoryHostedEveStore.sessionKey(input.principal, current.sessionId);
     const boundDecision = recoveredBuildDecision(decision, current);
-    if (boundDecision === undefined) throw new Error(SESSION_NOT_FOUND);
+    if (boundDecision === undefined) {
+      throw new Error(SESSION_NOT_FOUND);
+    }
     if ((current.privateBuildDecision?.turnSequence ?? -1) > decision.turnSequence) {
       return;
     }
@@ -2173,7 +2242,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     );
     const key = InMemoryHostedEveStore.sessionKey(input.principal, current.sessionId);
     const boundDecision = recoveredAuthoringDecision(decision, current);
-    if (boundDecision === undefined) throw new Error(SESSION_NOT_FOUND);
+    if (boundDecision === undefined) {
+      throw new Error(SESSION_NOT_FOUND);
+    }
     if ((current.privateAuthoringDecision?.turnSequence ?? -1) > decision.turnSequence) {
       return;
     }
@@ -2211,8 +2282,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     if (
       current.status === "cancelled" ||
       (current.cancellationRevision ?? 0) !== (current.resumedCancellationRevision ?? 0)
-    )
+    ) {
       return false;
+    }
     const wrongIdentity =
       operation.sessionId !== current.sessionId ||
       marker.decision.adapterSessionId !== current.adapterSessionId ||
@@ -2393,7 +2465,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     operation: HostedOperationRecord,
     proof: ResourceApprovalResponseProof | undefined,
   ): Promise<boolean> {
-    if (proof === undefined) return false;
+    if (proof === undefined) {
+      return false;
+    }
     const current =
       operation.sessionId === undefined
         ? null
@@ -2402,8 +2476,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       current?.version !== 2 ||
       current.checkpointRef === undefined ||
       this.readCheckpointPage === undefined
-    )
+    ) {
       throw new Error("Resource approval settlement is not proved.");
+    }
     const page = await this.readCheckpointPage({
       principal: operation.principal,
       sessionId: current.sessionId,
@@ -2421,7 +2496,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       page.totalEvents === current.checkpointRef.eventCount &&
       isProvedResourceApprovalResponse(operation, latest, proof, page.metadata) &&
       digest(unchangedOperation) === digest(operation);
-    if (!valid) throw new Error("Resource approval settlement is not proved.");
+    if (!valid) {
+      throw new Error("Resource approval settlement is not proved.");
+    }
     return true;
   }
 
@@ -2457,14 +2534,17 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       operation.kind !== "send" ||
       operation.internalBuildContinuation !== undefined ||
       operation.internalAuthoringContinuation !== undefined
-    )
+    ) {
       return false;
+    }
     const current =
       operation.sessionId === undefined
         ? null
         : await this.getSession(operation.principal, operation.sessionId);
     const proved = isProvedSendDelivery(operation, current, proof);
-    if (!proved) throw new Error("Canonical SEND delivery is not proved.");
+    if (!proved) {
+      throw new Error("Canonical SEND delivery is not proved.");
+    }
     return proved;
   }
 
@@ -2472,8 +2552,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     operation: HostedOperationRecord,
     proof: z.infer<typeof privateInputStateSchema> | undefined,
   ): Promise<boolean> {
-    if (operation.internalSessionLimitResponse === undefined || operation.sessionId === undefined)
+    if (operation.internalSessionLimitResponse === undefined || operation.sessionId === undefined) {
       return false;
+    }
     const current = await this.getSession(operation.principal, operation.sessionId);
     return isProvedSessionLimitResponse(operation, current, proof);
   }

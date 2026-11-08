@@ -88,7 +88,9 @@ function expectGitHubControlAndNoOAuthLeak(page: Page, rawValues: readonly strin
   page.on("console", (message) => messages.push(message.text()));
   return async () => {
     await expect(page.getByRole("checkbox", { name: /GitHub/u })).toBeVisible();
-    for (const rawValue of rawValues) expect(messages.join("\n")).not.toContain(rawValue);
+    for (const rawValue of rawValues) {
+      expect(messages.join("\n")).not.toContain(rawValue);
+    }
   };
 }
 
@@ -367,7 +369,9 @@ test("provider substitution and malformed callback fail without a binding", asyn
   await page.getByRole("button", { name: "Continue with GitHub" }).click();
   const state = new URL(page.url()).searchParams.get("state");
   expect(state).toBeTruthy();
-  if (state === null || state === "") throw new Error("Expected GitHub callback state");
+  if (state === null || state === "") {
+    throw new Error("Expected GitHub callback state");
+  }
 
   await page.goto(
     `/vercel/installations/callback?code=substituted&state=${encodeURIComponent(state)}`,
@@ -395,7 +399,9 @@ for (const provider of emulatedProviders) {
     await expect(page.locator("#app-brief")).toHaveValue(brief);
     let callbackUrl = "";
     page.on("request", (request) => {
-      if (new URL(request.url()).pathname === descriptor.callbackPath) callbackUrl = request.url();
+      if (new URL(request.url()).pathname === descriptor.callbackPath) {
+        callbackUrl = request.url();
+      }
     });
     await installProvider(page, provider);
     expect(callbackUrl).toContain("state=");
@@ -437,8 +443,9 @@ for (const provider of emulatedProviders) {
           provider === "GitHub" ? "Authorize emulated GitHub" : localApprovalButtonName(provider),
       })
       .click();
-    if (new URL(page.url()).origin === descriptor.emulatorOrigin)
+    if (new URL(page.url()).origin === descriptor.emulatorOrigin) {
       await page.getByRole("button", { name: /autograph-dev/u }).click();
+    }
 
     await expect(page).toHaveURL(new RegExp(`${descriptor.slug}=failed`, "u"));
     await waitForBuilderReady(page);

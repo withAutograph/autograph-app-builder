@@ -58,9 +58,12 @@ const fixture = () => {
     expect(url.pathname).toContain("/projects/app-project/env");
     const readPhase = url.pathname.endsWith("/env-id") ? "detail" : "list";
     const phase = init?.method === "POST" ? "write" : readPhase;
-    if (rejection !== undefined) throw rejection;
-    if (httpFailure?.phase === phase)
+    if (rejection !== undefined) {
+      throw rejection;
+    }
+    if (httpFailure?.phase === phase) {
       return new Response("private-response-body", { status: httpFailure.status });
+    }
     if (init?.method === "POST") {
       writes += 1;
       const body = z.string().parse(init.body);
@@ -115,14 +118,21 @@ describe("Production runtime credential binding", () => {
       const f = fixture();
       await f.service.apply(f.context, runtimeUrl);
       const row = f.row();
-      if (variation === "dispatch") f.context.row.record.workerCheckpoints = [];
-      if (variation === "owner") f.replaceRow({ ...row, comment: "foreign-owner" });
-      if (variation === "recorded-row")
+      if (variation === "dispatch") {
+        f.context.row.record.workerCheckpoints = [];
+      }
+      if (variation === "owner") {
+        f.replaceRow({ ...row, comment: "foreign-owner" });
+      }
+      if (variation === "recorded-row") {
         f.context.row.record.workerCheckpoints.push({
           ...z.record(z.string(), z.json()).parse(f.context.row.record.workerCheckpoints[0]),
           rowId: "foreign-row",
         });
-      if (variation === "environment") f.replaceRow({ ...row, target: ["production", "preview"] });
+      }
+      if (variation === "environment") {
+        f.replaceRow({ ...row, target: ["production", "preview"] });
+      }
       f.detail({
         key: "REQUESTS_DATABASE_URL",
         type: "encrypted",
@@ -191,7 +201,9 @@ describe("Production runtime credential binding", () => {
     "reports a closed %s HTTP failure without provider content",
     async (phase) => {
       const f = fixture();
-      if (phase === "detail") await f.service.apply(f.context, runtimeUrl);
+      if (phase === "detail") {
+        await f.service.apply(f.context, runtimeUrl);
+      }
       f.failHttp(phase, 403);
       await expect(f.service.apply(f.context, runtimeUrl)).rejects.toThrow(
         "runtime_provider_failed",
@@ -205,8 +217,9 @@ describe("Production runtime credential binding", () => {
         "provider-token",
         "api.vercel.com",
         "app-project",
-      ])
+      ]) {
         expect(output).not.toContain(secret);
+      }
     },
   );
   it("reports detail grammar and hash failures separately without raw validation issues", async () => {

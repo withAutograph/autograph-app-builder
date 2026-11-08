@@ -77,7 +77,9 @@ export const createBuildReadyAppSpecScanner = () => {
         fence = undefined;
         return;
       }
-      if (fence.json) body.push(line);
+      if (fence.json) {
+        body.push(line);
+      }
     },
     result(): AppSpecValidationResult {
       return ready
@@ -105,7 +107,9 @@ export function normalizeBuildReadyAppSpec(content: string): string {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function validateBuildReadyAppSpec(content: string): AppSpecValidationResult {
   const scanner = createBuildReadyAppSpecScanner();
-  for (const line of content.split(/\r\n?|\n/u)) scanner.consumeLine(line);
+  for (const line of content.split(/\r\n?|\n/u)) {
+    scanner.consumeLine(line);
+  }
   return scanner.result();
 }
 

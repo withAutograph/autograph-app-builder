@@ -549,7 +549,9 @@ function safeName(value: unknown): value is string {
 const hasControlCharacters = (value: string): boolean => {
   for (const character of value) {
     const code = character.codePointAt(0) ?? 0;
-    if (code < 32 || code === 127) return true;
+    if (code < 32 || code === 127) {
+      return true;
+    }
   }
   return false;
 };

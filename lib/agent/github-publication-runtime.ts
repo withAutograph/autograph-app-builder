@@ -1057,8 +1057,9 @@ export function composeGitHubPublicationRuntime(input: {
       }
       assertExactDraftPullRequestProposal(proposal);
       const prior = await receipts.read(proposal.digest);
-      if (prior === undefined)
+      if (prior === undefined) {
         throw new Error("The original published draft receipt is unavailable.");
+      }
       assertCanonicalGitHubMutationReceipt(prior);
       if (
         prior.kind !== draftReceiptKind ||

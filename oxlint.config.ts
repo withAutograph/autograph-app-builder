@@ -14,6 +14,58 @@ export default defineConfig({
   },
   overrides: [
     {
+      // Preserve the existing error classes at these validation boundaries.
+      files: [
+        ".config/mise/scripts/repository/build-hosted-arrusted-artifact.mts",
+        "lib/provisioning/starter-source.ts",
+      ],
+      rules: { "unicorn/prefer-type-error": "off" },
+    },
+    {
+      // These files are owned by concurrent work and retain their existing findings.
+      files: [
+        "app/ui/app-access.tsx",
+        "app/ui/app-access.test.tsx",
+        "lib/app-access/management.ts",
+        "lib/app-access/native-management.ts",
+        "lib/eve/private-repository-production-approval.test.ts",
+        "lib/provisioning/repository-production-creator.ts",
+        "lib/provisioning/repository-production-creator.test.ts",
+        "lib/provisioning/repository-production-native.ts",
+        "lib/provisioning/repository-production-setup.test.ts",
+        "scripts/eve-eval-fetch-preload.mjs",
+      ],
+      rules: { "eslint/curly": "off" },
+    },
+    {
+      // Existing assertions awaiting behavior-preserving type boundaries.
+      files: [
+        "e2e/support/harness.ts",
+        "lib/agent/accept-app-spec-resume.test.ts",
+        "lib/auth/cursor-client.test.ts",
+        "lib/auth/preview-cimd-transport.ts",
+        "lib/eve/postgres-workspace-membership.test.ts",
+        "lib/eve/same-origin-http.ts",
+        "lib/eve/service.test.ts",
+        "lib/handoff/postgres-store.test.ts",
+        "lib/integrations/postgres-vercel-installation.test.ts",
+        "lib/provisioning/github-provider.test.ts",
+        "lib/provisioning/github-webhook.test.ts",
+        "lib/repository/direct-app-creation.test.ts",
+        "lib/repository/postgres-github-publication-receipt-store.test.ts",
+        "lib/repository/source-receipt.ts",
+        "lib/sandbox/deployment-execution-lease.ts",
+        "lib/sandbox/hosted-bun-runtime.test.ts",
+        "lib/sandbox/postgres-execution-lease-store.ts",
+        "lib/sandbox/working-preview-lifecycle.test.ts",
+        "lib/sandbox/working-preview-runtime.test.ts",
+        "lib/testing/test-capability.ts",
+        "scripts/design-quality/source.ts",
+        "scripts/test-capability-preload.test.ts",
+      ],
+      rules: { "anti-slop/no-chained-type-assertions": "off" },
+    },
+    {
       files: ["lib/eve/hosted-service.ts"],
       rules: { "typescript/return-await": "off" },
     },
@@ -85,7 +137,6 @@ export default defineConfig({
     "typescript/switch-exhaustiveness-check": "off",
     "typescript/no-unnecessary-type-parameters": "off",
     "typescript/use-unknown-in-catch-callback-variable": "off",
-    "anti-slop/no-chained-type-assertions": "off",
     "anti-slop/no-conditional-empty-object-spread": "off",
     "anti-slop/no-known-value-widening": "off",
     "anti-slop/no-runtime-typeof": "off",
@@ -145,7 +196,6 @@ export default defineConfig({
     "unicorn/consistent-function-scoping": "off",
     "unicorn/no-useless-undefined": "off",
     "eslint/complexity": "off",
-    "eslint/curly": "off",
     // Temporary migration items: re-enable after the existing findings are fixed.
     "eslint/sort-keys": "off",
   },

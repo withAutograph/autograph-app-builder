@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReadyRepositoryAccess } from "../integrations/repository-access";
 import type { RepositoryAccessRuntime } from "./deployment-repository-access-runtime";
 import { resolveRepositoryAccessForTool } from "./repository-access-tool";
+import type { RepositoryAccessToolContext } from "./repository-access-tool";
 
 vi.mock("eve/context", () => ({
   defineState: () => ({
@@ -32,14 +33,15 @@ const ready: ReadyRepositoryAccess = {
 };
 const reference = { fullName: "acme/stock", name: "stock", owner: "acme" };
 const input = { repository: reference.fullName };
-const getToken = vi.fn();
-const requireAuth = vi.fn();
+const getToken = vi.fn<ToolContext["getToken"]>();
+const requireAuth = vi.fn<ToolContext["requireAuth"]>();
+const session = { auth: {}, id: "ses_one" };
 const ctx = {
   callId: "call_one",
   getToken,
   requireAuth,
-  session: { auth: {}, id: "ses_one" },
-} as unknown as ToolContext;
+  session,
+} satisfies RepositoryAccessToolContext;
 const runtime = {
   acquireExistingSourceCredential: vi.fn(),
   authorization: vi.fn(),

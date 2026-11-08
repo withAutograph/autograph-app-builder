@@ -256,8 +256,9 @@ describe("PostgreSQL explicit SEND cancellation authority", () => {
       resumedCancellationRevision: 1,
       status: "working",
     });
-    if (f.store.recordCancellationIntent === undefined)
+    if (f.store.recordCancellationIntent === undefined) {
       throw new Error("Missing cancellation writer");
+    }
     await f.store.recordCancellationIntent({
       nowEpochMs: 5000,
       principal,
@@ -764,9 +765,15 @@ const checkpointReadFixture = () => {
     const afterItem = /"item_index" > \$(?<parameter>\d+)/u.exec(query.sql);
     const afterPart = /"part_index" > \$(?<parameter>\d+)/u.exec(query.sql);
     const selected = (rows.get(name) ?? []).filter((row) => {
-      if (!keys.every((key, index) => row[key] === query.params[index])) return false;
-      if (indexes !== undefined && !indexes.includes(row.itemIndex)) return false;
-      if (afterItem === null) return true;
+      if (!keys.every((key, index) => row[key] === query.params[index])) {
+        return false;
+      }
+      if (indexes !== undefined && !indexes.includes(row.itemIndex)) {
+        return false;
+      }
+      if (afterItem === null) {
+        return true;
+      }
       const itemCursor = Number(query.params[Number(afterItem.groups?.parameter) - 1]);
       return (
         Number(row.itemIndex) > itemCursor ||
@@ -1031,7 +1038,9 @@ const queuedSendFixture = () => {
     table: PgTable,
     predicate: SQL,
   ): (SendFixtureOperationRow | typeof session)[] => {
-    if (getTableName(table) === "agent_session") return [session];
+    if (getTableName(table) === "agent_session") {
+      return [session];
+    }
     const { params, sql } = dialect.sqlToQuery(predicate);
     const equalities = [...sql.matchAll(/"(?<column>[a-z_]+)" = \$(?<parameter>\d+)/gu)];
     const afterDate = /"created_at" > \$(?<parameter>\d+)/u.exec(sql);
@@ -1039,7 +1048,9 @@ const queuedSendFixture = () => {
     return operations.filter((row) => {
       for (const match of equalities) {
         const column = match.groups?.column ?? "";
-        if (column === "created_at") continue;
+        if (column === "created_at") {
+          continue;
+        }
         const key = columnKey(column);
         if (key !== undefined && row[key] !== params[Number(match.groups?.parameter) - 1]) {
           return false;
@@ -1121,7 +1132,9 @@ const queuedSendFixture = () => {
           returning: () => {
             const rows = selectedRows(table, predicate);
             writes.push({ locks: [...locks], values });
-            for (const row of rows) Object.assign(row, values);
+            for (const row of rows) {
+              Object.assign(row, values);
+            }
             return Promise.resolve(rows);
           },
         }),
@@ -1171,7 +1184,9 @@ const queuedSendFixture = () => {
     sessionId: session.sessionId,
   };
   const acknowledge = (row: SendFixtureOperationRow, cancellationRevisionAtDispatch?: number) => {
-    if (store.recordSendDelivery === undefined) throw new Error("Expected ACK writer.");
+    if (store.recordSendDelivery === undefined) {
+      throw new Error("Expected ACK writer.");
+    }
     return store.recordSendDelivery({
       cancellationRevisionAtDispatch,
       delivery,
@@ -1189,8 +1204,9 @@ const queuedSendFixture = () => {
       limit?: number;
     } = {},
   ) => {
-    if (store.readUnsettledSendAcknowledgements === undefined)
+    if (store.readUnsettledSendAcknowledgements === undefined) {
       throw new Error("Expected ACK reader.");
+    }
     return store.readUnsettledSendAcknowledgements({
       limit: 2,
       principal,
@@ -1272,7 +1288,9 @@ describe("PostgreSQL queued SEND acknowledgement sidecar", () => {
     const f = queuedSendFixture();
     const row = f.add();
     f.session.record = { ...f.session.record, cancellationRevision: 3, status: "cancelled" };
-    if (f.store.recordSendDelivery === undefined) throw new Error("Expected ACK writer.");
+    if (f.store.recordSendDelivery === undefined) {
+      throw new Error("Expected ACK writer.");
+    }
     const result = await f.store.recordSendDelivery({
       cancellationRevisionAtDispatch: 3,
       delivery: { ...f.delivery, resumeCancellationRevision: 3 },
@@ -1391,7 +1409,9 @@ describe("PostgreSQL queued SEND acknowledgement sidecar", () => {
         return f.read({ principal: { ...principal, [field]: `${principal[field]}/missing` } });
       }),
     );
-    for (const missingPage of missingPages) expect(missingPage.acknowledgements).toEqual([]);
+    for (const missingPage of missingPages) {
+      expect(missingPage.acknowledgements).toEqual([]);
+    }
     const page = await f.read();
     expect(page.acknowledgements.map(({ operation }) => operation.operationId)).toEqual([
       first.operationId,

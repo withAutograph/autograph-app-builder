@@ -281,8 +281,13 @@ export const withLifecycleLock = async function withLifecycleLock<T>(
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const acquired = await listening.then(
       () => true,
-      (error: NodeJS.ErrnoException) => {
-        if (error.code === "EADDRINUSE") {
+      (error: unknown) => {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "EADDRINUSE"
+        ) {
           return false;
         }
         throw error;

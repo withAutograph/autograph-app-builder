@@ -201,7 +201,9 @@ export const validationOutputExcerpt = (
       // CUE and Rust often put the source excerpt or the underlying cause on
       // following lines that do not repeat the error prefix.
       for (let next = index + 1; next < Math.min(index + 4, lines.length); next += 1) {
-        if (!diagnosticContinuationPattern.test(lines[next] ?? "")) break;
+        if (!diagnosticContinuationPattern.test(lines[next] ?? "")) {
+          break;
+        }
         retained.add(next);
       }
     }
@@ -550,7 +552,9 @@ exit "$status"`;
         while (true) {
           // oxlint-disable-next-line eslint/no-await-in-loop -- Durable writes apply output backpressure.
           const next = await reader.read();
-          if (next.done) break;
+          if (next.done) {
+            break;
+          }
           const content = decoder.decode(next.value, { stream: true });
           if (content) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- Each stream read waits for durable storage.
@@ -558,7 +562,9 @@ exit "$status"`;
           }
         }
         const tail = decoder.decode();
-        if (tail) await onChunk(channel, tail);
+        if (tail) {
+          await onChunk(channel, tail);
+        }
       } finally {
         reader.releaseLock();
       }
@@ -614,9 +620,15 @@ const failureReceipt = (
     status: "failed" as const,
     validatedByCallId: attempt.startedByCallId,
   };
-  if (commandFailure !== undefined) unsigned.commandFailure = commandFailure;
-  if (diagnostics !== undefined && diagnostics.length !== 0) unsigned.diagnostics = diagnostics;
-  if (output !== undefined) unsigned.output = output;
+  if (commandFailure !== undefined) {
+    unsigned.commandFailure = commandFailure;
+  }
+  if (diagnostics !== undefined && diagnostics.length !== 0) {
+    unsigned.diagnostics = diagnostics;
+  }
+  if (output !== undefined) {
+    unsigned.output = output;
+  }
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 };
 
@@ -707,8 +719,12 @@ export const executeProposalBoundValidation = (input: {
       const elapsedMs = Math.round(performance.now() - startedMonotonic);
       if (stdoutLog !== undefined && stderrLog !== undefined) {
         // Fixture executors return strings; hosted Sandbox executors stream.
-        if (result.stdout) await stdoutLog.append(result.stdout);
-        if (result.stderr) await stderrLog.append(result.stderr);
+        if (result.stdout) {
+          await stdoutLog.append(result.stdout);
+        }
+        if (result.stderr) {
+          await stderrLog.append(result.stderr);
+        }
         const stdout = await stdoutLog.finish();
         const stderr = await stderrLog.finish();
         durableOutput = { stderr, stdout };

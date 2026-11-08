@@ -29,7 +29,9 @@ export const materializeBuilderSandboxGitSource = async (
   await builder.materializeGitSource(source);
 };
 
-export const getBuilderSandboxId = (sandbox: SandboxSession): string => {
+export const getBuilderSandboxId = (
+  sandbox: SandboxSession | Pick<BuilderSandboxSession, "id">,
+): string => {
   const builder: Partial<BuilderSandboxSession> = sandbox;
   if (builder.id === undefined) {
     if (hasTestCapability("simulated-target")) {

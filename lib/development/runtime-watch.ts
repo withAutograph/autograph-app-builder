@@ -184,11 +184,15 @@ export const observeDevelopmentRuntimeChanges = async (input: {
       ...input,
       expectedFingerprint: observedFingerprint,
     });
-    if (!changed || input.signal.aborted) return;
+    if (!changed || input.signal.aborted) {
+      return;
+    }
     // Refresh the baseline before rearming, so one edit cannot cause repeated notifications.
     // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop
     observedFingerprint = await fingerprintDevelopmentRuntime(input.repositoryRoot);
-    if (input.signal.aborted) return;
+    if (input.signal.aborted) {
+      return;
+    }
     input.onChanged();
   }
 };

@@ -338,8 +338,12 @@ describe("trusted Node launcher", () => {
       delete cleanEnvironment.NODE_OPTIONS;
       delete cleanEnvironment.XDG_DATA_HOME;
       delete cleanEnvironment.APP_BUILDER_DEV_RUNTIME_HOME;
-      if (dataHome !== undefined) cleanEnvironment.XDG_DATA_HOME = dataHome;
-      if (privateHome) cleanEnvironment.APP_BUILDER_DEV_RUNTIME_HOME = runtimeHome;
+      if (dataHome !== undefined) {
+        cleanEnvironment.XDG_DATA_HOME = dataHome;
+      }
+      if (privateHome) {
+        cleanEnvironment.APP_BUILDER_DEV_RUNTIME_HOME = runtimeHome;
+      }
       const probe = `
         const { ensureLocalDevelopmentOidc } = await import(process.argv[1]);
         const { writeFileSync } = await import("node:fs");

@@ -64,7 +64,9 @@ function reportPasskeyFailures(page: Page) {
       return;
     }
     const body = await response.text().catch(() => {});
-    if (body === undefined) return;
+    if (body === undefined) {
+      return;
+    }
     console.error(
       "passkey request failed",
       response.status(),
@@ -179,13 +181,17 @@ test("Sign In and Sign Up are passive, reciprocal, and geometrically identical",
   expect(passkeyRequests).toBe(0);
   expect(await authCounts()).toEqual(emptyAuthCounts);
 
-  if (signUpHref === null || signUpHref === "") throw new Error("Sign Up link must have an href");
+  if (signUpHref === null || signUpHref === "") {
+    throw new Error("Sign Up link must have an href");
+  }
   const signUpURL = new URL(signUpHref, page.url());
   expect(signUpURL.searchParams.get("redirectTo")).toBe(
     "/auth/setting-up?callbackURL=%2Fdashboard%3Ftab%3Drecent%26tab%3Dsaved%23complete",
   );
   const signInHref = await signInLink.getAttribute("href");
-  if (signInHref === null || signInHref === "") throw new Error("Sign In link must have an href");
+  if (signInHref === null || signInHref === "") {
+    throw new Error("Sign In link must have an href");
+  }
   const signInURL = new URL(signInHref, page.url());
   expect(signInURL.searchParams.get("redirectTo")).toBe(signUpURL.searchParams.get("redirectTo"));
 });
@@ -271,7 +277,9 @@ test("passkey registration guards Sign Up and supports returning login", async (
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
     await page.addInitScript(() => {
-      if (window.PublicKeyCredential === undefined) return;
+      if (window.PublicKeyCredential === undefined) {
+        return;
+      }
       Object.defineProperty(
         window.PublicKeyCredential,
         "isUserVerifyingPlatformAuthenticatorAvailable",
@@ -346,7 +354,9 @@ test("passkey registration keeps the alternate authenticator flow when platform 
 }) => {
   reportPasskeyFailures(page);
   await page.addInitScript(() => {
-    if (window.PublicKeyCredential === undefined) return;
+    if (window.PublicKeyCredential === undefined) {
+      return;
+    }
     Object.defineProperty(
       window.PublicKeyCredential,
       "isUserVerifyingPlatformAuthenticatorAvailable",

@@ -181,7 +181,9 @@ export const createRepositoryProductionRuntimeBinding = (input: {
     ) {
       conflict("runtime_binding_ownership");
     }
-    if (hash(detail.value) !== expected.valueSha256) conflict("runtime_binding_value");
+    if (hash(detail.value) !== expected.valueSha256) {
+      conflict("runtime_binding_value");
+    }
     return { dispatched: true, expected, row };
   };
   return {

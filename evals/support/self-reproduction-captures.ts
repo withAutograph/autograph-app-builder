@@ -243,23 +243,37 @@ export async function captureParity<TPage extends CapturePage>(input: {
  * manifest records evidence locations only; it never turns visual similarity
  * into functional credit.
  */
+export const createPairedCaptureRunner =
+  <TPage extends CapturePage>(
+    launch: () => Promise<CaptureBrowser<TPage> & { close: () => Promise<void> }>,
+  ) =>
+  async (input: {
+    outputRoot: string;
+    adapters: Partial<Record<(typeof sides)[number], CaptureAdapter<TPage>>>;
+  }): Promise<PairedCaptureRun> => {
+    const browser = await launch();
+    let observations: Record<(typeof sides)[number], Observation[]>;
+    try {
+      observations = await captureParity({
+        adapters: input.adapters,
+        browser,
+        outputRoot: input.outputRoot,
+      });
+    } finally {
+      await browser.close();
+    }
+    const manifest = await writePairedCaptureManifest(input.outputRoot, observations);
+    return { manifest, observations };
+  };
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function runPairedCaptureEvidence(input: {
   outputRoot: string;
   adapters: Partial<Record<(typeof sides)[number], CaptureAdapter>>;
   launch?: () => Promise<Browser>;
 }): Promise<PairedCaptureRun> {
-  const browser = await (input.launch ?? (() => chromium.launch({ headless: true })))();
-  let observations: Record<(typeof sides)[number], Observation[]>;
-  try {
-    observations = await captureParity({
-      adapters: input.adapters,
-      browser,
-      outputRoot: input.outputRoot,
-    });
-  } finally {
-    await browser.close();
-  }
-  const manifest = await writePairedCaptureManifest(input.outputRoot, observations);
-  return { manifest, observations };
+  const run = createPairedCaptureRunner(
+    input.launch ?? (() => chromium.launch({ headless: true })),
+  );
+  return await run(input);
 }

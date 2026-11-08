@@ -16,14 +16,20 @@ const installCatalogFixture = () => {
   if (!readProductionNavigationRuntimeConfig(process.env)) {
     throw new Error("The cache probe requires a guarded production-navigation artifact.");
   }
-  if (installed) return;
+  if (installed) {
+    return;
+  }
   const realFetch = globalThis.fetch;
   // oxlint-disable-next-line eslint/require-await -- preserve Promise<Response> fetch contract
   globalThis.fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
-    if (url !== catalogUrl) return await realFetch(input, init);
+    if (url !== catalogUrl) {
+      return await realFetch(input, init);
+    }
     upstreamCalls += 1;
-    if (unavailable) return new Response(null, { status: 503 });
+    if (unavailable) {
+      return new Response(null, { status: 503 });
+    }
     return Response.json({
       data: [
         {
@@ -50,7 +56,9 @@ export const GET = async () => {
 export const POST = async (request: Request) => {
   installCatalogFixture();
   const text = await request.text();
-  if (text.length > 32) return new Response(null, { status: 400 });
+  if (text.length > 32) {
+    return new Response(null, { status: 400 });
+  }
   switch (text) {
     case "reset": {
       upstreamCalls = 0;
