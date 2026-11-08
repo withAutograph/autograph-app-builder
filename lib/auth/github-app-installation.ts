@@ -77,19 +77,32 @@ export type GitHubInstallationValidationSubstage =
   | "personal-installation-mismatch"
   | "installation-handoff";
 
+interface GitHubInstallationAuthorizationDiagnostic {
+  stage: GitHubInstallationAuthorizationFailureStage;
+  category?: GitHubOAuthErrorCategory | GitHubOAuthCallbackError;
+  callback?: GitHubCallbackDiagnostic;
+  stateValidation?: GitHubStateValidationDiagnostic;
+  installationValidation?: GitHubInstallationValidationSubstage;
+}
+
 export const githubInstallationAuthorizationDiagnostic = (error: unknown) => {
   if (!(error instanceof GitHubInstallationAuthorizationError)) {
     return;
   }
-  return {
-    stage: error.stage,
-    ...(error.category === undefined ? {} : { category: error.category }),
-    ...(error.callback === undefined ? {} : { callback: error.callback }),
-    ...(error.stateValidation === undefined ? {} : { stateValidation: error.stateValidation }),
-    ...(error.installationValidation === undefined
-      ? {}
-      : { installationValidation: error.installationValidation }),
-  };
+  const diagnostic: GitHubInstallationAuthorizationDiagnostic = { stage: error.stage };
+  if (error.category !== undefined) {
+    diagnostic.category = error.category;
+  }
+  if (error.callback !== undefined) {
+    diagnostic.callback = error.callback;
+  }
+  if (error.stateValidation !== undefined) {
+    diagnostic.stateValidation = error.stateValidation;
+  }
+  if (error.installationValidation !== undefined) {
+    diagnostic.installationValidation = error.installationValidation;
+  }
+  return diagnostic;
 };
 
 type HostedTenantAuthority = z.infer<typeof hostedTenantAuthoritySchema>;

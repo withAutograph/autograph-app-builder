@@ -388,20 +388,21 @@ function resultForEvents(
   const prototype = latestInstalledPrototype(snapshotEvents);
   const uiPreview = latestInstalledUiPreview(snapshotEvents);
   const workingPreview = latestInstalledWorkingPreview(snapshotEvents);
-  return {
+  const result: EveSessionResult = {
     cursor: Math.min(cursor + events.length, projected.length),
     events,
     sessionId,
     status: options.status ?? deriveInstalledEveStatus(snapshotEvents),
-    ...(inputRequests.length === 0 || options.suppressInputRequests === true
-      ? {}
-      : { inputRequests }),
-    ...(applicationSource === undefined ? {} : { applicationSource }),
-    ...(prototype === undefined ? {} : { prototype }),
-    ...(uiPreview === undefined ? {} : { uiPreview }),
-    ...(workingPreview === undefined ? {} : { workingPreview }),
-    ...(options.error === undefined ? {} : { error: options.error }),
   };
+  if (inputRequests.length !== 0 && options.suppressInputRequests !== true) {
+    result.inputRequests = inputRequests;
+  }
+  if (applicationSource !== undefined) result.applicationSource = applicationSource;
+  if (prototype !== undefined) result.prototype = prototype;
+  if (uiPreview !== undefined) result.uiPreview = uiPreview;
+  if (workingPreview !== undefined) result.workingPreview = workingPreview;
+  if (options.error !== undefined) result.error = options.error;
+  return result;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -413,16 +414,17 @@ function acceptedResult(
   const prototype = latestInstalledPrototype(snapshotEvents);
   const uiPreview = latestInstalledUiPreview(snapshotEvents);
   const workingPreview = latestInstalledWorkingPreview(snapshotEvents);
-  return {
+  const result: EveSessionResult = {
     cursor: 0,
     events: [],
     sessionId,
     status: "working",
-    ...(applicationSource === undefined ? {} : { applicationSource }),
-    ...(prototype === undefined ? {} : { prototype }),
-    ...(uiPreview === undefined ? {} : { uiPreview }),
-    ...(workingPreview === undefined ? {} : { workingPreview }),
   };
+  if (applicationSource !== undefined) result.applicationSource = applicationSource;
+  if (prototype !== undefined) result.prototype = prototype;
+  if (uiPreview !== undefined) result.uiPreview = uiPreview;
+  if (workingPreview !== undefined) result.workingPreview = workingPreview;
+  return result;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -804,20 +806,19 @@ export function createLocalEveSessionService(
       };
     }
     const interruption = state.modelInterruptions.get(sessionId);
-    return {
+    const result: { status: "waiting" | undefined; error?: EveSessionResult["error"] } = {
       status:
         interruption !== undefined || state.restartInterrupted.has(sessionId)
           ? ("waiting" as const)
           : undefined,
-      ...(interruption === undefined
-        ? {}
-        : {
-            error: {
-              code: "model_turn_interrupted",
-              message: interruption.message,
-            },
-          }),
     };
+    if (interruption !== undefined) {
+      result.error = {
+        code: "model_turn_interrupted",
+        message: interruption.message,
+      };
+    }
+    return result;
   }
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

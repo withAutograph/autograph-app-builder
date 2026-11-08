@@ -1032,8 +1032,10 @@ export const createGitHubAppHttpProvider = (input: {
       pullRequestId: decimalProperty(pull.body, "id"),
       repositoryId: repository.repositoryId,
       state: z.enum(["open", "closed"]).parse(stringProperty(pull.body, "state")),
-      ...(verifiedBuilderOrigin === undefined ? {} : { verifiedBuilderOrigin }),
     };
+    if (verifiedBuilderOrigin !== undefined) {
+      observed.verifiedBuilderOrigin = verifiedBuilderOrigin;
+    }
     if (stalePull) {
       if (
         !(await provenDraftHead(draftRequest, observed, snapshotHeadSha, repository.accessToken))
@@ -1312,14 +1314,17 @@ export const createGitHubAppHttpProvider = (input: {
       ) {
         return false;
       }
-      const current = await inspectExistingDraft({
+      const inspection: ExistingDraftInspectionRequest = {
         name: proposal.name,
         number: proposal.pullRequestNumber,
         owner: proposal.owner,
         repositoryId: proposal.repositoryId,
         reconciliation: proposal,
-        ...(recovery === undefined ? {} : { recovery }),
-      });
+      };
+      if (recovery !== undefined) {
+        inspection.recovery = recovery;
+      }
+      const current = await inspectExistingDraft(inspection);
       if (current.headSha !== observed.headSha || current.headTree !== observed.headTree) {
         return false;
       }
@@ -1864,13 +1869,16 @@ export const createGitHubAppHttpProvider = (input: {
       } catch {
         return { code: invalidPublicationMaterialCode, status: "rejected" };
       }
-      const current = await inspectExistingDraft({
+      const inspection: ExistingDraftInspectionRequest = {
         name: proposal.name,
         number: proposal.pullRequestNumber,
         owner: proposal.owner,
         repositoryId: proposal.repositoryId,
-        ...(recovery === undefined ? {} : { recovery }),
-      });
+      };
+      if (recovery !== undefined) {
+        inspection.recovery = recovery;
+      }
+      const current = await inspectExistingDraft(inspection);
       if (
         current.pullRequestId !== proposal.pullRequestId ||
         !current.draft ||
@@ -1905,13 +1913,16 @@ export const createGitHubAppHttpProvider = (input: {
       }
       const accessToken = await token(draftPermissions, [proposal.repositoryId]);
       for (const change of content.changes) {
+        const preimageChange: Parameters<typeof reviewedPreimageMatches>[0]["change"] = {
+          path: change.path,
+        };
+        if (change.before !== undefined) {
+          preimageChange.before = change.before;
+        }
         // oxlint-disable-next-line eslint/no-await-in-loop -- verify every base preimage before publishing a merge commit
         const matches = await reviewedPreimageMatches({
           accessToken,
-          change: {
-            path: change.path,
-            ...(change.before === undefined ? {} : { before: change.before }),
-          },
+          change: preimageChange,
           headSha: base.headSha,
           headTree: base.headTree,
           owner: proposal.owner,
@@ -2037,13 +2048,16 @@ export const createGitHubAppHttpProvider = (input: {
       }
       const accessToken = await token(draftPermissions, [proposal.repositoryId]);
       for (const change of content.changes) {
+        const preimageChange: Parameters<typeof reviewedPreimageMatches>[0]["change"] = {
+          path: change.path,
+        };
+        if (change.kind !== "added") {
+          preimageChange.before = change.before;
+        }
         // oxlint-disable-next-line eslint/no-await-in-loop -- inspect every reviewed preimage before any ref mutation
         const matches = await reviewedPreimageMatches({
           accessToken,
-          change: {
-            path: change.path,
-            ...(change.kind === "added" ? {} : { before: change.before }),
-          },
+          change: preimageChange,
           headSha: current.headSha,
           headTree: current.headTree,
           owner: proposal.owner,

@@ -159,21 +159,27 @@ function endpoint(config: z.infer<typeof sameOriginConfigSchema>, path: string):
   return new URL(path, `${config.baseUrl}/`).href;
 }
 
+interface ForwardedPrincipalAttributes {
+  "mcp:audience": HostedPrincipal["audience"];
+  "mcp:scopes": HostedPrincipal["scopes"];
+  "mcp:workspace-id": HostedPrincipal["workspaceId"];
+  "autograph:source-handoff-id"?: string;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function forwardedPrincipal(principalInput: HostedPrincipal, sourceHandoffId?: string) {
   const principal = hostedPrincipalSchema.parse(principalInput);
+  const attributes: ForwardedPrincipalAttributes = {
+    "mcp:audience": principal.audience,
+    "mcp:scopes": principal.scopes,
+    "mcp:workspace-id": principal.workspaceId,
+  };
+  if (sourceHandoffId !== undefined) {
+    attributes["autograph:source-handoff-id"] = z.uuid().parse(sourceHandoffId);
+  }
   return {
     current: {
-      attributes: {
-        "mcp:audience": principal.audience,
-        "mcp:scopes": principal.scopes,
-        "mcp:workspace-id": principal.workspaceId,
-        ...(sourceHandoffId === undefined
-          ? {}
-          : {
-              "autograph:source-handoff-id": z.uuid().parse(sourceHandoffId),
-            }),
-      },
+      attributes,
       authenticator: "mcp-oauth-jwks",
       issuer: principal.issuer,
       principalId: principal.ownerUserId,
@@ -1140,18 +1146,30 @@ async function readInstalledSnapshot(
   const workingPreview = latestInstalledWorkingPreview(events);
   const privateInputState = retainedPrivateInputState(privateInputForEvents(events));
   const nativeDeliveryState = retainedNativeDeliveryState(nativeDeliveryForEvents(events));
-  return {
-    installed: events,
-    snapshot: {
-      events: projected,
-      ...(privateInputState === undefined ? {} : { privateInputState }),
-      ...(nativeDeliveryState === undefined ? {} : { nativeDeliveryState }),
-      status: nativeRecoveryBootFailed ? "failed" : deriveInstalledEveStatus(events),
-      ...(prototype === undefined ? {} : { prototype }),
-      ...(uiPreview === undefined ? {} : { uiPreview }),
-      ...(workingPreview === undefined ? {} : { workingPreview }),
-    },
+  const snapshotFields: Pick<
+    HostedEngineSnapshot,
+    "events" | "privateInputState" | "nativeDeliveryState"
+  > = { events: projected };
+  if (privateInputState !== undefined) {
+    snapshotFields.privateInputState = privateInputState;
+  }
+  if (nativeDeliveryState !== undefined) {
+    snapshotFields.nativeDeliveryState = nativeDeliveryState;
+  }
+  const snapshot: HostedEngineSnapshot = {
+    ...snapshotFields,
+    status: nativeRecoveryBootFailed ? "failed" : deriveInstalledEveStatus(events),
   };
+  if (prototype !== undefined) {
+    snapshot.prototype = prototype;
+  }
+  if (uiPreview !== undefined) {
+    snapshot.uiPreview = uiPreview;
+  }
+  if (workingPreview !== undefined) {
+    snapshot.workingPreview = workingPreview;
+  }
+  return { installed: events, snapshot };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -1175,17 +1193,27 @@ async function readSnapshot(
     observation.nativeObservationState.privateInputState === undefined
       ? undefined
       : retainedPrivateInputState(observation.nativeObservationState.privateInputState);
-  return {
-    events,
-    ...(privateInputState === undefined ? {} : { privateInputState }),
-    ...(nativeDeliveryState === undefined ? {} : { nativeDeliveryState }),
-    status: observation.status,
-    ...(latest === undefined ? {} : { prototype: latest }),
-    ...(observation.uiPreview === undefined ? {} : { uiPreview: observation.uiPreview }),
-    ...(observation.workingPreview === undefined
-      ? {}
-      : { workingPreview: observation.workingPreview }),
-  };
+  const snapshotFields: Pick<
+    HostedEngineSnapshot,
+    "events" | "privateInputState" | "nativeDeliveryState"
+  > = { events };
+  if (privateInputState !== undefined) {
+    snapshotFields.privateInputState = privateInputState;
+  }
+  if (nativeDeliveryState !== undefined) {
+    snapshotFields.nativeDeliveryState = nativeDeliveryState;
+  }
+  const snapshot: HostedEngineSnapshot = { ...snapshotFields, status: observation.status };
+  if (latest !== undefined) {
+    snapshot.prototype = latest;
+  }
+  if (observation.uiPreview !== undefined) {
+    snapshot.uiPreview = observation.uiPreview;
+  }
+  if (observation.workingPreview !== undefined) {
+    snapshot.workingPreview = observation.workingPreview;
+  }
+  return snapshot;
 }
 
 /** A create reply may name a losing candidate; only its started stream proves ownership. */

@@ -2160,18 +2160,23 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         if (status === "prepared" && signupReady) {
           status = "waiting_for_signup";
         }
-        return {
+        const result: OperatorPublicResult = {
           appId,
           authenticatedBehavior: "unassessed",
           operationRef,
           planDigest,
           status,
-          ...(preparationProgressRequested
-            ? { preparationProgress: readOperatorPreparationProgress(record, now()) }
-            : {}),
-          ...(appUrl === undefined ? {} : { appUrl }),
-          ...(signupUrl === undefined ? {} : { signupUrl }),
         };
+        if (preparationProgressRequested) {
+          result.preparationProgress = readOperatorPreparationProgress(record, now());
+        }
+        if (appUrl !== undefined) {
+          result.appUrl = appUrl;
+        }
+        if (signupUrl !== undefined) {
+          result.signupUrl = signupUrl;
+        }
+        return result;
       };
       if (input.action === "auth-identity-input") {
         if (plan.normalActorProgram !== undefined && plan.stage !== AUTH_PARTICIPANTS_STAGE) {
@@ -2528,12 +2533,15 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                   await executionResponse.clone().json(),
                 );
                 await assertFence();
-                await ownedUpdate((record) =>
-                  settleOperatorExecution(record, leaseId, {
+                await ownedUpdate((record) => {
+                  const outcome: Parameters<typeof settleOperatorExecution>[2] = {
                     status: result.status,
-                    ...(result.code === undefined ? {} : { code: result.code }),
-                  }),
-                );
+                  };
+                  if (result.code !== undefined) {
+                    outcome.code = result.code;
+                  }
+                  return settleOperatorExecution(record, leaseId, outcome);
+                });
               });
               return executionResponse;
             } catch (error) {
@@ -3079,13 +3087,16 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                     }
                   }),
                 );
-                effectInput.readyReplacement = {
+                const readyReplacement: NonNullable<
+                  HostedOperatorEffectContext["readyReplacement"]
+                > = {
                   originatingOperator: predecessor.originatingOperator,
                   appCandidate: predecessor.appCandidate,
-                  ...(predecessor.gatewayCandidate
-                    ? { gatewayCandidate: predecessor.gatewayCandidate }
-                    : {}),
                 };
+                if (predecessor.gatewayCandidate) {
+                  readyReplacement.gatewayCandidate = predecessor.gatewayCandidate;
+                }
+                effectInput.readyReplacement = readyReplacement;
               }
               // Always inspect before first execution as well as uncertain retry. Provider timeouts cannot create new identities.
               const observed = await observePrepare("effect_reconciliation", async () => {

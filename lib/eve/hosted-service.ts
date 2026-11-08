@@ -799,14 +799,15 @@ async function spoolObservedSession(input: {
     );
   }
   const path = nodePath.join(directory, "events.ndjson");
-  const recorder = createPrivateHostedApprovalRecorder({
+  const recorderInput: Parameters<typeof createPrivateHostedApprovalRecorder>[0] = {
     principal: input.principal,
     sessionId: input.privateApprovalSessionId,
     store: input.store,
-    ...(input.privateApprovalCaptureState === undefined
-      ? {}
-      : { state: input.privateApprovalCaptureState }),
-  });
+  };
+  if (input.privateApprovalCaptureState !== undefined) {
+    recorderInput.state = input.privateApprovalCaptureState;
+  }
+  const recorder = createPrivateHostedApprovalRecorder(recorderInput);
   const capture = input.deferPrivateApprovalPersistence
     ? createPrivateHostedApprovalCapture(
         input.privateApprovalSessionId,
@@ -1458,18 +1459,22 @@ export function createHostedEveSessionService(input: {
           nativeObservationState: progress.nativeObservationState,
           privateApprovalCaptureState: progress.privateApprovalCaptureState,
           status: observation.status,
-          ...(observation.pendingRequests.length === 0
-            ? {}
-            : { inputRequests: observation.pendingRequests }),
-          ...(observation.prototype === undefined ? {} : { prototype: observation.prototype }),
-          ...(observation.prototypeRef === undefined
-            ? {}
-            : { prototypeRef: observation.prototypeRef }),
-          ...(observation.uiPreview === undefined ? {} : { uiPreview: observation.uiPreview }),
-          ...(observation.workingPreview === undefined
-            ? {}
-            : { workingPreview: observation.workingPreview }),
         };
+        if (observation.pendingRequests.length !== 0) {
+          publishedMetadata.inputRequests = observation.pendingRequests;
+        }
+        if (observation.prototype !== undefined) {
+          publishedMetadata.prototype = observation.prototype;
+        }
+        if (observation.prototypeRef !== undefined) {
+          publishedMetadata.prototypeRef = observation.prototypeRef;
+        }
+        if (observation.uiPreview !== undefined) {
+          publishedMetadata.uiPreview = observation.uiPreview;
+        }
+        if (observation.workingPreview !== undefined) {
+          publishedMetadata.workingPreview = observation.workingPreview;
+        }
         const summary = eveSessionResultSchema.parse({
           cursor: 0,
           events: [],
