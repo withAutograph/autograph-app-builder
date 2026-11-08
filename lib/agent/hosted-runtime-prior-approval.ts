@@ -381,12 +381,15 @@ export const captureHostedRuntimeApproval = async (input: {
   const owner = operatorOwnerContextSchema.parse(input.ownerContext);
   const seed = await readApprovalCaptureSeed(input.store, owner, input.execution);
   input.signal.throwIfAborted();
-  const recorder = createPrivateHostedApprovalRecorder({
+  const recorderInput: Parameters<typeof createPrivateHostedApprovalRecorder>[0] = {
     principal: owner.principal,
     sessionId: owner.sessionId,
     store: input.store,
-    ...(seed === null ? {} : { state: seed.capture }),
-  });
+  };
+  if (seed !== null) {
+    recorderInput.state = seed.capture;
+  }
+  const recorder = createPrivateHostedApprovalRecorder(recorderInput);
   const transport = createSameOriginEveTransport({
     config: { baseUrl: input.baseUrl },
     workloadIdentity: input.workloadIdentity,

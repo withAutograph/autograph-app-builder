@@ -2300,26 +2300,30 @@ export function createHostedEveSessionService(input: {
       ]),
     );
     const timestamp = now();
-    const candidate = hostedOperationRecordSchema.parse({
+    const candidateDetails: Partial<z.input<typeof hostedOperationRecordSchema>> = {
       clientRequestId: options.request.clientRequestId,
       createdAtEpochMs: timestamp,
       kind: options.kind,
-      ...(options.internalSessionLimitResponse === undefined
-        ? {}
-        : { internalSessionLimitResponse: options.internalSessionLimitResponse }),
-      ...(options.resourceApprovalResponse === undefined
-        ? {}
-        : { resourceApprovalResponse: options.resourceApprovalResponse }),
-      operationId,
-      principal,
-      ...(options.nativeRecovery === undefined
-        ? {}
-        : { nativeRecovery: { ...options.nativeRecovery, operationId } }),
-      requestDigest,
-      ...(options.sessionId === undefined ? {} : { sessionId: options.sessionId }),
-      ...(options.resumeSessionId === undefined
-        ? {}
-        : { resumeSessionId: options.resumeSessionId }),
+    };
+    if (options.internalSessionLimitResponse !== undefined) {
+      candidateDetails.internalSessionLimitResponse = options.internalSessionLimitResponse;
+    }
+    if (options.resourceApprovalResponse !== undefined) {
+      candidateDetails.resourceApprovalResponse = options.resourceApprovalResponse;
+    }
+    const candidateIdentity = { ...candidateDetails, operationId, principal };
+    if (options.nativeRecovery !== undefined) {
+      candidateIdentity.nativeRecovery = { ...options.nativeRecovery, operationId };
+    }
+    const candidateRequest = { ...candidateIdentity, requestDigest };
+    if (options.sessionId !== undefined) {
+      candidateRequest.sessionId = options.sessionId;
+    }
+    if (options.resumeSessionId !== undefined) {
+      candidateRequest.resumeSessionId = options.resumeSessionId;
+    }
+    const candidate = hostedOperationRecordSchema.parse({
+      ...candidateRequest,
       state: "reserved",
       updatedAtEpochMs: timestamp,
       version: 1,

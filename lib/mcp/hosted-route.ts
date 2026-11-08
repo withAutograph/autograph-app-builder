@@ -27,15 +27,25 @@ type RecheckRepositoryAccess = (input: {
   repository: string;
 }) => ReturnType<HostedBuilderHandoffRuntime["recheckRepositoryAccess"]>;
 
+interface ForwardedSessionAttributes {
+  "mcp:audience": HostedPrincipal["audience"];
+  "mcp:scopes": HostedPrincipal["scopes"];
+  "mcp:workspace-id": HostedPrincipal["workspaceId"];
+  "autograph:source-handoff-id"?: string;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function forwardedSessionAuth(principal: HostedPrincipal, sourceHandoffId?: string) {
+  const attributes: ForwardedSessionAttributes = {
+    "mcp:audience": principal.audience,
+    "mcp:scopes": principal.scopes,
+    "mcp:workspace-id": principal.workspaceId,
+  };
+  if (sourceHandoffId !== undefined) {
+    attributes["autograph:source-handoff-id"] = sourceHandoffId;
+  }
   const context = {
-    attributes: {
-      "mcp:audience": principal.audience,
-      "mcp:scopes": principal.scopes,
-      "mcp:workspace-id": principal.workspaceId,
-      ...(sourceHandoffId === undefined ? {} : { "autograph:source-handoff-id": sourceHandoffId }),
-    },
+    attributes,
     authenticator: "mcp-oauth-jwks" as const,
     issuer: principal.issuer,
     principalId: principal.ownerUserId,

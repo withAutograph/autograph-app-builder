@@ -678,9 +678,12 @@ export const executeTargetIdentityAndPlanning = async (input: {
     const hasSchema =
       schemaChange === undefined ? observedSchema : schemaChange.operation !== "delete";
     const proposalSchema = targetIterationProposalSchemaForTopology(microfrontendsConfigPath);
+    const proposalBase = creationPlan(identity, input.appSpecDigest, hasSchema);
+    if (frameworkUpgrade !== undefined) {
+      proposalBase.frameworkUpgrade = frameworkUpgrade;
+    }
     const proposalInput: z.input<typeof proposalSchema> = {
-      ...creationPlan(identity, input.appSpecDigest, hasSchema),
-      ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
+      ...proposalBase,
       iteration: { changes, digest: iterationDigest },
       operation: "iterate-existing-app",
     };
@@ -703,11 +706,17 @@ export const executeTargetIdentityAndPlanning = async (input: {
     command: `test -f ${identity.cueSourcePath}`,
     workingDirectory: repositoryWorkspacePath,
   });
+  const initial: Pick<TargetProposal, "privateCompute"> = {};
+  if (privateCompute !== undefined) {
+    initial.privateCompute = privateCompute;
+  }
   const proposal = {
-    ...(privateCompute === undefined ? {} : { privateCompute }),
+    ...initial,
     ...creationPlan(identity, input.appSpecDigest, cue.exitCode === 0),
-    ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
   };
+  if (frameworkUpgrade !== undefined) {
+    proposal.frameworkUpgrade = frameworkUpgrade;
+  }
   const result = { identity, proposal, ...overlay };
   planningMarker(targetIdentityPlanningMarker, "finish");
   return result;

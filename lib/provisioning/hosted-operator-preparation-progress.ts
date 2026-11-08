@@ -39,7 +39,7 @@ export const readOperatorPreparationProgress = (
   const missingEffectKinds = [...missingKinds];
   const pendingEffect = plan.effects.find((effect) => effect.id === operator.pendingEffectId);
   const preparation = record.accountPreparation;
-  return {
+  const progress: OperatorPreparationProgress = {
     ...(plan.stage === undefined ? {} : { planStage: plan.stage }),
     lease,
     hasPendingEffect: operator.pendingEffectId !== undefined,
@@ -49,11 +49,10 @@ export const readOperatorPreparationProgress = (
     missingEffectKinds,
     hasAccountPreparation: preparation !== undefined,
     accountsCompleted: preparation?.accountsCompletedAt !== undefined,
-    ...(preparation === undefined || plan.normalActorProgram === undefined
-      ? {}
-      : {
-          accountProgramMatchesPlan:
-            preparation.programDigest === normalActorProgramDigest(plan.normalActorProgram),
-        }),
   };
+  if (preparation !== undefined && plan.normalActorProgram !== undefined) {
+    progress.accountProgramMatchesPlan =
+      preparation.programDigest === normalActorProgramDigest(plan.normalActorProgram);
+  }
+  return progress;
 };

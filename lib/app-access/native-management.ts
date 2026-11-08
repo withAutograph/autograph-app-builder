@@ -403,13 +403,14 @@ export const createRepositoryProductionManagement = (
           throw new AppAccessError("request_invalid");
         }
         const pageSize = 50;
-        return {
+        const page: Pick<AppAccessSnapshot, "members" | "invitations" | "nextCursor"> = {
           members: people.slice(offset, offset + pageSize),
           invitations: visible.slice(offset, offset + pageSize),
-          ...(Math.max(people.length, visible.length) > offset + pageSize
-            ? { nextCursor: String(offset + pageSize) }
-            : {}),
         };
+        if (Math.max(people.length, visible.length) > offset + pageSize) {
+          page.nextCursor = String(offset + pageSize);
+        }
+        return page;
       });
     },
     execute: async (scope, command, effect) => {
