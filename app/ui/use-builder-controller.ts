@@ -21,7 +21,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import type { FormEvent, SetStateAction } from "react";
+import type { SyntheticEvent, SetStateAction } from "react";
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
 import { builderDraftFormSchema } from "@/lib/builder-drafts/contracts";
@@ -899,7 +899,7 @@ export function useBuilderController({
     router.push(`/${provider}/installations?returnTo=%2F&resume=${activeDraftId.current}`);
   };
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-  async function submit(event: FormEvent) {
+  async function submit(event: SyntheticEvent) {
     event.preventDefault();
     if (checkpointing.current || submissionPending || !canSubmit) {
       return;

@@ -84,6 +84,8 @@ export function ConnectionsSection({
   selected: string[];
   showMore: boolean;
 }) {
+  const selectedNames = new Set(selected);
+  const connectedNames = new Set(connected);
   const normalizedSearch = search.trim().toLowerCase();
   const available = (
     showMore || normalizedSearch ? allConnectionNames : allConnectionNames.slice(0, 2)
@@ -110,7 +112,7 @@ export function ConnectionsSection({
       </label>
       <div className={styles.connectionGrid}>
         {available
-          .filter((name) => !selected.includes(name))
+          .filter((name) => !selectedNames.has(name))
           .map((name) => {
             const comingSoon = comingSoonConnections.has(name);
             if (comingSoon && !comingSoonEnabled) {
@@ -148,7 +150,7 @@ export function ConnectionsSection({
                 <p>{connectionDescription(name)}</p>
               </div>
               <button type="button" onClick={() => onCustomize(name)}>
-                {connected.includes(name) ? "Customize" : "Connect"}
+                {connectedNames.has(name) ? "Customize" : "Connect"}
               </button>
               <button type="button" aria-label={`Remove ${name}`} onClick={() => onRemove(name)}>
                 <X size={17} />

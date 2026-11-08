@@ -6,6 +6,9 @@ import type { GitHubPrDeliveryApproval } from "./github-pr-delivery-approval";
 import type { GitHubPrDeliveryObservation } from "../repository/github-pr-delivery";
 import type { GitHubPrEffectReceipt } from "../repository/github-pr-effect-journal";
 
+const WAITING_FOR_CHECKS = "waiting-for-checks";
+const READY_CYCLE_CHANGED = "ready-cycle-changed";
+
 const startReadyCycle = async (input: {
   approvedReadyAt: string | undefined;
   observed: GitHubPrDeliveryObservation;
@@ -14,12 +17,12 @@ const startReadyCycle = async (input: {
   const { approvedReadyAt, observed } = input;
   if (approvedReadyAt !== undefined) {
     return !observed.draft && observed.readyAt === approvedReadyAt
-      ? { status: "waiting-for-checks" as const, readyAt: approvedReadyAt }
-      : { status: "ready-cycle-changed" as const };
+      ? { status: WAITING_FOR_CHECKS satisfies typeof WAITING_FOR_CHECKS, readyAt: approvedReadyAt }
+      : { status: READY_CYCLE_CHANGED satisfies typeof READY_CYCLE_CHANGED };
   }
   const result = await input.runReady(!observed.draft);
   if (result === undefined) {
-    return { status: "ready-cycle-changed" as const };
+    return { status: READY_CYCLE_CHANGED satisfies typeof READY_CYCLE_CHANGED };
   }
   if (result.status === "failed") {
     return { status: "ready-rejected" as const, reason: result.code };
@@ -27,7 +30,10 @@ const startReadyCycle = async (input: {
   if (result.status !== "succeeded" || result.evidence.kind !== "pr-ready") {
     return { status: "ready-unconfirmed" as const };
   }
-  return { status: "waiting-for-checks" as const, readyAt: result.evidence.readyAt };
+  return {
+    status: WAITING_FOR_CHECKS satisfies typeof WAITING_FOR_CHECKS,
+    readyAt: result.evidence.readyAt,
+  };
 };
 
 const mergeResult = (result: GitHubPrEffectReceipt | undefined) => {
@@ -114,13 +120,13 @@ export async function continueGitHubPrDelivery(
     });
   }
   if (observed.draft || observed.readyAt !== readyAt) {
-    return { status: "ready-cycle-changed" as const };
+    return { status: READY_CYCLE_CHANGED satisfies typeof READY_CYCLE_CHANGED };
   }
   if (observed.checks === "failed") {
     return { status: "checks-failed" as const };
   }
   if (observed.checks !== "passed") {
-    return { status: "waiting-for-checks" as const, readyAt };
+    return { status: WAITING_FOR_CHECKS satisfies typeof WAITING_FOR_CHECKS, readyAt };
   }
 
   ctx.abortSignal.throwIfAborted();

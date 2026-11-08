@@ -298,7 +298,7 @@ export const planMicrofrontendRegistration=(bytes,input)=>{
           stderr: "",
         };
       }
-      let command = input.command;
+      let { command } = input;
       if (command.startsWith("bun -e ")) {
         if (availableBun === undefined) {
           const proposed = text({

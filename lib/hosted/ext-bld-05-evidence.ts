@@ -8,6 +8,8 @@ import {
 } from "../eve/hosted-store";
 import { hostedDeploymentEnvironmentSchema } from "./deployment-environment";
 
+const CANONICAL_SESSION_CREDENTIAL = "not-applicable-canonical-session-id-only";
+
 const sha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const gitObjectSchema = z.string().regex(/^[a-f0-9]{40}$/u);
 
@@ -53,7 +55,7 @@ export const extBld05EvidenceInputSchema = z.strictObject({
   source: z.strictObject({ sha: gitObjectSchema, tree: gitObjectSchema }),
   sourceValidation: proofReferenceSchema
     .extend({
-      continuationCredential: z.literal("not-applicable-canonical-session-id-only"),
+      continuationCredential: z.literal(CANONICAL_SESSION_CREDENTIAL),
       evePackageVersion: z.literal("0.43.0"),
       expiredSessionDeniedBeforeTransport: z.literal(true),
       expiredSessionsExcludedFromActiveCompute: z.literal(true),
@@ -75,7 +77,7 @@ export type ExtBld05EvidenceInput = z.infer<typeof extBld05EvidenceInputSchema>;
 export const extBld05EvidenceReceiptSchema = z.strictObject({
   claims: z.strictObject({
     completeInputBatchesRespondedAtomically: z.literal(true),
-    continuationCredential: z.literal("not-applicable-canonical-session-id-only"),
+    continuationCredential: z.literal(CANONICAL_SESSION_CREDENTIAL),
     credentialsDisclosed: z.literal(false),
     discardedStartResponseRecovered: z.literal(true),
     immediateTokenRevocationClaimed: z.literal(false),
@@ -124,7 +126,7 @@ export function buildExtBld05EvidenceReceipt(input: unknown): ExtBld05EvidenceRe
   return extBld05EvidenceReceiptSchema.parse({
     claims: {
       completeInputBatchesRespondedAtomically: true,
-      continuationCredential: "not-applicable-canonical-session-id-only",
+      continuationCredential: CANONICAL_SESSION_CREDENTIAL,
       credentialsDisclosed: false,
       discardedStartResponseRecovered: true,
       immediateTokenRevocationClaimed: false,

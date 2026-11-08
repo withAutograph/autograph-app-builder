@@ -49,6 +49,8 @@ import {
 } from "../../../../../lib/provisioning/hosted-operator-contract";
 
 const postgresFlag = process.argv.indexOf("--postgres-bin");
+const observedEnvironmentId = "env-observed";
+const fixtureKeyVersion = "fixture-v1";
 const postgresBin = postgresFlag === -1 ? undefined : process.argv[postgresFlag + 1];
 if (postgresBin === undefined || !path.isAbsolute(postgresBin)) {
   throw new Error("An explicit local PostgreSQL binary directory is required");
@@ -149,7 +151,9 @@ try {
   assert.equal(await store.compareAndSet(initial, initial.record), undefined);
   const accepted = await store.compareAndSet(pending, {
     ...pending.record,
-    bindings: { INVOICE_APP_DATABASE_URL: { acceptedEnvId: "env-observed", state: "pending" } },
+    bindings: {
+      INVOICE_APP_DATABASE_URL: { acceptedEnvId: observedEnvironmentId, state: "pending" },
+    },
   });
   assert.ok(accepted);
   await assert.rejects(
@@ -166,13 +170,17 @@ try {
   );
   const verified = await store.compareAndSet(accepted, {
     ...accepted.record,
-    bindings: { INVOICE_APP_DATABASE_URL: { acceptedEnvId: "env-observed", state: "applied" } },
+    bindings: {
+      INVOICE_APP_DATABASE_URL: { acceptedEnvId: observedEnvironmentId, state: "applied" },
+    },
   });
   assert.ok(verified);
   await assert.rejects(
     store.compareAndSet(verified, {
       ...verified.record,
-      bindings: { INVOICE_APP_DATABASE_URL: { acceptedEnvId: "env-observed", state: "pending" } },
+      bindings: {
+        INVOICE_APP_DATABASE_URL: { acceptedEnvId: observedEnvironmentId, state: "pending" },
+      },
     }),
   );
   const owner = operatorOwnerContextSchema.parse({
@@ -241,7 +249,7 @@ try {
     assertCurrentOwner: checkpointInput.assertCurrentOwner,
 
     database: drizzle(writer, { schema }),
-    keyring: { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: "fixture-v1" },
+    keyring: { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: fixtureKeyVersion },
     target: privateTarget,
   });
   const privateScope = {
@@ -292,7 +300,7 @@ try {
     createPublicReleaseRuntimeConfigurationStore({
       assertCurrentOwner: checkpointInput.assertCurrentOwner,
       database: drizzle(writer, { schema }),
-      keyring: { tokenKey: Buffer.alloc(32, 8), tokenKeyVersion: "fixture-v1" },
+      keyring: { tokenKey: Buffer.alloc(32, 8), tokenKeyVersion: fixtureKeyVersion },
 
       target: privateTarget,
     }).read(privateScope),
@@ -300,7 +308,7 @@ try {
   const seedInput = {
     assertCurrentOwner: checkpointInput.assertCurrentOwner,
     database: drizzle(writer, { schema }),
-    keyring: { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: "fixture-v1" },
+    keyring: { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: fixtureKeyVersion },
     scope: {
       ...privateTarget,
       authResourceIdentity: "e".repeat(64),
@@ -479,7 +487,10 @@ try {
   assert.equal(await store.read(authority, otherRef), undefined);
   const restarted = createPostgresPublicReleaseStore(drizzle(writer, { schema }));
   const observed = await restarted.read(authority, initial.operationRef);
-  assert.equal(observed?.record.bindings.INVOICE_APP_DATABASE_URL.acceptedEnvId, "env-observed");
+  assert.equal(
+    observed?.record.bindings.INVOICE_APP_DATABASE_URL.acceptedEnvId,
+    observedEnvironmentId,
+  );
   console.log(
     "Public release PostgreSQL proof passed: restricted writer, restart readback, stale CAS, immutable target/row receipt, foreign owner and record-kind isolation, revision credential reuse with new AAD and revoked current/original approval denial.",
   );

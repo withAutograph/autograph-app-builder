@@ -248,6 +248,13 @@ const marketplaceArchiveName = `${portable.name}-codex-marketplace-${portable.ve
 await writeFile(path.join(output, marketplaceArchiveName), marketplaceArchive);
 
 const auxiliaryFiles = new Map<string, Uint8Array>();
+const compareDefaultSort = (left: unknown, right: unknown) => {
+  const a = String(left);
+  const b = String(right);
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+};
 for (const directory of [mockRoot, clientRoot]) {
   // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   const directoryEntries = await readdir(directory);
@@ -260,7 +267,9 @@ for (const directory of [mockRoot, clientRoot]) {
 const receipt = {
   archive: { name: archiveName, sha256: sha256(archive) },
   auxiliaryFiles: Object.fromEntries(
-    [...auxiliaryFiles].toSorted().map(([filePath, content]) => [filePath, sha256(content)]),
+    [...auxiliaryFiles]
+      .toSorted(compareDefaultSort)
+      .map(([filePath, content]) => [filePath, sha256(content)]),
   ),
   codexMarketplaceArchive: {
     name: marketplaceArchiveName,
@@ -276,7 +285,9 @@ const receipt = {
     }),
   ),
   coreFiles: Object.fromEntries(
-    [...files].toSorted().map(([filePath, content]) => [filePath, sha256(content)]),
+    [...files]
+      .toSorted(compareDefaultSort)
+      .map(([filePath, content]) => [filePath, sha256(content)]),
   ),
   endpoint: `${endpoint}/mcp`,
   format: "autograph-portable-plugin-release-v3",

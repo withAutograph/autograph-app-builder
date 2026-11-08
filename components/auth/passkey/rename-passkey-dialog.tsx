@@ -4,7 +4,7 @@ import type { PasskeyAuthClient } from "@better-auth-ui/core/plugins/passkey";
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react";
 import { useUpdatePasskey } from "@better-auth-ui/react/plugins/passkey";
 import { useState } from "react";
-import type { FormEvent } from "react";
+import type { SyntheticEvent } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
@@ -37,7 +37,7 @@ export function RenamePasskeyDialog({
   const updatePasskey = useUpdatePasskey(authClient, {
     onSuccess: () => onOpenChange(false),
   });
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextName = name.trim();
     if (nextName) {

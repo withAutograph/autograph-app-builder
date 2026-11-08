@@ -262,7 +262,7 @@ describe("concrete protected Production worker composition", () => {
     await expect(f.workers.reconcile(f.context)).resolves.toMatchObject({ state: "applied" });
     expect(f.calls.map((call) => call.readOnly)).toEqual([false, true]);
     for (const call of f.calls) {
-      const context = call.context;
+      const { context } = call;
       if (!("kind" in context)) {
         throw new Error("Fixture storage worker context is missing");
       }

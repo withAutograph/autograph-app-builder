@@ -1003,18 +1003,18 @@ describe("native externally managed policy recovery integration", () => {
         verifyReadyDeliveryReplacement: async (_context, plan, predecessor) => {
           await native.verify(plan, predecessor);
         },
-        readApproval: async (input) => ({
-          ...input,
-          approved: input.callId !== "new-human-call" || approved,
-          approvalId:
-            input.callId === "approval-call-notes"
-              ? "approval-notes"
-              : input.callId === "approval-call-first"
-                ? "approval-first-renewal"
-                : input.callId === "approval-call-current"
-                  ? "approval-current"
-                  : "new-human-approval",
-        }),
+        readApproval: async (input) => {
+          const result = { ...input, approved: input.callId !== "new-human-call" || approved };
+          let approvalId = "new-human-approval";
+          if (input.callId === "approval-call-notes") {
+            approvalId = "approval-notes";
+          } else if (input.callId === "approval-call-first") {
+            approvalId = "approval-first-renewal";
+          } else if (input.callId === "approval-call-current") {
+            approvalId = "approval-current";
+          }
+          return { ...result, approvalId };
+        },
         withResourceLease: async (_input, run) => await run(async () => {}),
         reconcile: async (input) => {
           await input.assertCurrent();

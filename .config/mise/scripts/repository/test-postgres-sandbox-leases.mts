@@ -24,6 +24,7 @@ function argument(name: string) {
 }
 
 const host = argument("--host");
+const recoveryInProgressReason = "recovery-in-progress";
 const port = Number(argument("--port"));
 if (!Number.isInteger(port) || port < 1 || port > 65_535)
   throw new Error("Invalid PostgreSQL port.");
@@ -198,8 +199,8 @@ try {
       }),
     ]),
     [
-      { disposition: "rejected", reason: "recovery-in-progress" },
-      { disposition: "rejected", reason: "recovery-in-progress" },
+      { disposition: "rejected", reason: recoveryInProgressReason },
+      { disposition: "rejected", reason: recoveryInProgressReason },
     ],
   );
   const [reclaimed] = await store.claimExpired({ limit: 1, nowEpochMs: 0 });
@@ -213,7 +214,7 @@ try {
       principal: reclaimed.principal,
       providerSandboxId: reclaimed.providerSandboxId,
     }),
-    { disposition: "rejected", reason: "recovery-in-progress" },
+    { disposition: "rejected", reason: recoveryInProgressReason },
   );
   assert.equal(
     await store.settleRecovery({
@@ -273,8 +274,8 @@ try {
       acquire("user_failed", "batch_failed"),
     ]),
     [
-      { disposition: "rejected", reason: "recovery-in-progress" },
-      { disposition: "rejected", reason: "recovery-in-progress" },
+      { disposition: "rejected", reason: recoveryInProgressReason },
+      { disposition: "rejected", reason: recoveryInProgressReason },
     ],
   );
   const stoppedReacquired = await acquire("user_stopped", "batch_stopped");

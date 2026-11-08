@@ -70,7 +70,7 @@ const liveTemplateExecutionScope = "live-template-execution";
 const sandboxWorkspaceRoot = "/workspace";
 const liveTemplatePlatformSchema = z.union([z.literal(linuxArm64), z.literal(linuxX8664)]);
 
-const dependencyCacheManifestShapeSchema = z.strictObject({
+const dependencyCacheManifestRecordSchema = z.strictObject({
   closure: z.strictObject({
     archiveBytes: z.number().int().positive(),
     archivePath: z.literal(DEPENDENCY_CACHE_ARCHIVE_PATH),
@@ -240,13 +240,13 @@ const liveTemplateDependencyCacheManifestSchema = z.strictObject({
   version: z.literal(4),
 });
 
-export const dependencyCacheManifestSchema = dependencyCacheManifestShapeSchema.refine(
+export const dependencyCacheManifestSchema = dependencyCacheManifestRecordSchema.refine(
   ({ target }) => target.sha === ARRUSTED_TARGET_SHA && target.tree === ARRUSTED_TARGET_TREE,
   "dependency target does not match the committed source binding",
 );
 
 export type DependencyCacheManifest =
-  | z.infer<typeof dependencyCacheManifestShapeSchema>
+  | z.infer<typeof dependencyCacheManifestRecordSchema>
   | z.infer<typeof hostedExecutionDependencyCacheManifestSchema>
   | z.infer<typeof developmentDependencyCacheManifestSchema>
   | z.infer<typeof liveTemplateDependencyCacheManifestSchema>;
@@ -897,7 +897,7 @@ const DEFAULT_FIXTURE_TARGET: ExactSourceBinding = {
 
 const fixtureManifest = function fixtureManifest(
   target: ExactSourceBinding = DEFAULT_FIXTURE_TARGET,
-): z.infer<typeof dependencyCacheManifestShapeSchema> {
+): z.infer<typeof dependencyCacheManifestRecordSchema> {
   return {
     closure: {
       archiveBytes: 1,

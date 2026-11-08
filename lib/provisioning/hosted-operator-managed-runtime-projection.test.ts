@@ -523,7 +523,7 @@ it("does not repeat an unknown unobserved environment POST or adopt a foreign va
   f.faults.rejectPost = false;
   await expect(f.publish()).rejects.toMatchObject({ code: "reconciliation_required" });
   expect(f.calls.filter((c) => c.method === "POST")).toHaveLength(1);
-  const key = f.record.environmentWrites[0].key;
+  const { key } = f.record.environmentWrites[0];
   f.rows.push({
     comment: `App Builder managed runtime ${f.record.requestId}`,
     id: "foreign",

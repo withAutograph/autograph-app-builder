@@ -17,6 +17,7 @@ import { createPostgresPublicReleaseStore } from "../../../../lib/provisioning/p
 import { plan, authority } from "../../../../lib/provisioning/public-release-test-fixture";
 
 const postgresFlag = process.argv.indexOf("--postgres-bin");
+const observedEnvironmentId = "env-observed";
 const postgresBin = postgresFlag === -1 ? undefined : process.argv[postgresFlag + 1];
 if (postgresBin === undefined || !path.isAbsolute(postgresBin)) {
   throw new Error("An explicit local PostgreSQL binary directory is required");
@@ -110,7 +111,7 @@ try {
   assert.equal(await store.compareAndSet(initial, initial.record), undefined);
   const accepted = await store.compareAndSet(pending, {
     ...pending.record,
-    bindings: { APP_DATABASE_URL: { state: "pending", acceptedEnvId: "env-observed" } },
+    bindings: { APP_DATABASE_URL: { state: "pending", acceptedEnvId: observedEnvironmentId } },
   });
   assert.ok(accepted);
   await assert.rejects(
@@ -127,13 +128,13 @@ try {
   );
   const verified = await store.compareAndSet(accepted, {
     ...accepted.record,
-    bindings: { APP_DATABASE_URL: { state: "applied", acceptedEnvId: "env-observed" } },
+    bindings: { APP_DATABASE_URL: { state: "applied", acceptedEnvId: observedEnvironmentId } },
   });
   assert.ok(verified);
   await assert.rejects(
     store.compareAndSet(verified, {
       ...verified.record,
-      bindings: { APP_DATABASE_URL: { state: "pending", acceptedEnvId: "env-observed" } },
+      bindings: { APP_DATABASE_URL: { state: "pending", acceptedEnvId: observedEnvironmentId } },
     }),
   );
   const otherRef = randomUUID();
@@ -141,7 +142,10 @@ try {
   assert.equal(await store.read(authority, otherRef), undefined);
   const restarted = createPostgresPublicReleaseStore(drizzle(writer, { schema }));
   const restartedOperation = await restarted.read(authority, initial.operationRef);
-  assert.equal(restartedOperation?.record.bindings.APP_DATABASE_URL.acceptedEnvId, "env-observed");
+  assert.equal(
+    restartedOperation?.record.bindings.APP_DATABASE_URL.acceptedEnvId,
+    observedEnvironmentId,
+  );
   console.log(
     "Public release PostgreSQL proof passed: restricted writer, restart readback, stale CAS, immutable target/row receipt, foreign owner and record-kind isolation.",
   );

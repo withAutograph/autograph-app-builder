@@ -326,9 +326,12 @@ const operatorEffectSummaries = (plan: HostedOperatorPlan) => {
 const signupApprovalDescription = (plan: HostedOperatorPlan) => {
   const signupPolicy = plan.authSignupPolicy;
   if (signupPolicy === undefined || !planHasEffect(plan, "auth-signup-policy")) return "";
-  return plan.action === "cleanup"
-    ? `Sign-up access:\n- Remove sign-up access for ${signupPolicy.eligibility === "public" ? "anyone" : "approved email addresses only"}, including its ${signupPolicy.membershipRole} membership and app roles: ${signupPolicy.appRoles.join(", ")}.`
-    : `Sign-up access:\n- Eligibility: ${signupPolicy.eligibility === "public" ? "anyone" : "approved email addresses only"}.\n- New members receive the ${signupPolicy.membershipRole} membership and these app roles: ${signupPolicy.appRoles.join(", ")}.`;
+  const { action } = plan;
+  const eligibility =
+    signupPolicy.eligibility === "public" ? "anyone" : "approved email addresses only";
+  return action === "cleanup"
+    ? `Sign-up access:\n- Remove sign-up access for ${eligibility}, including its ${signupPolicy.membershipRole} membership and app roles: ${signupPolicy.appRoles.join(", ")}.`
+    : `Sign-up access:\n- Eligibility: ${eligibility}.\n- New members receive the ${signupPolicy.membershipRole} membership and these app roles: ${signupPolicy.appRoles.join(", ")}.`;
 };
 const operatorActorLookups = (plan: HostedOperatorPlan) => {
   const program = plan.normalActorProgram;

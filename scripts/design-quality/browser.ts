@@ -852,24 +852,24 @@ export async function measureStyles(
         // through spreads), so a signature is reviewer evidence, never scored
         // declaration provenance. A direct stylesheet source is required.
         const generatedByPath = generatedSource(path, generatedSourcePaths);
-        const generatedRule =
-          !rule?.media?.length && !rule?.layers?.length
-            ? generatedCssRule(
-                generatedCssRules,
-                sharedCssRules,
-                selector,
-                property,
-                uniqueDeclarationEntries.length === 1
-                  ? uniqueDeclarationEntries[0]?.p.value
-                  : undefined,
-                (rule?.style.cssProperties ?? []).filter(
-                  (entry) =>
-                    entry.disabled !== true &&
-                    entry.parsedOk !== false &&
-                    typeof entry.text === "string",
-                ),
-              )
-            : undefined;
+        let generatedRule: ReturnType<typeof generatedCssRule>;
+        if (!rule?.media?.length && !rule?.layers?.length) {
+          generatedRule = generatedCssRule(
+            generatedCssRules,
+            sharedCssRules,
+            selector,
+            property,
+            uniqueDeclarationEntries.length === 1
+              ? uniqueDeclarationEntries[0]?.p.value
+              : undefined,
+            (rule?.style.cssProperties ?? []).filter(
+              (entry) =>
+                entry.disabled !== true &&
+                entry.parsedOk !== false &&
+                typeof entry.text === "string",
+            ),
+          );
+        }
         const mappedSourceContent = mapped && styleMap?.sourcesContent?.[mapped.sourceIndex];
         const mappedFile = generatedCssSourceFiles.find(
           (file) =>
@@ -956,17 +956,17 @@ export async function measureStyles(
           x: quad[0] ?? 0,
           y: quad[1] ?? 0,
         };
-        const cssSource = generatedRule
-          ? generatedRule.source
-          : (mappedShared?.source ??
-            mapped ??
-            (path !== undefined && path !== ""
-              ? {
-                  column: (rule?.style?.range?.startColumn ?? 0) + 1,
-                  line: (rule?.style?.range?.startLine ?? 0) + 1,
-                  path,
-                }
-              : undefined));
+        let cssSource = generatedRule?.source;
+        if (!generatedRule) {
+          cssSource = mappedShared?.source ?? mapped ?? undefined;
+          if (cssSource === undefined && path !== undefined && path !== "") {
+            cssSource = {
+              column: (rule?.style?.range?.startColumn ?? 0) + 1,
+              line: (rule?.style?.range?.startLine ?? 0) + 1,
+              path,
+            };
+          }
+        }
         let originCandidate: BrowserStyleObservation["originCandidate"];
         if (signatureGenerated && signatureOrigin.source) {
           originCandidate = {

@@ -548,6 +548,14 @@ function safeName(value: unknown): value is string {
   );
 }
 
+const hasControlCharacters = (value: string): boolean => {
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    if (code < 32 || code === 127) return true;
+  }
+  return false;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function safeBranch(value: unknown): value is string {
   if (typeof value !== "string") {
@@ -563,10 +571,8 @@ function safeBranch(value: unknown): value is string {
     return false;
   }
   return (
-    ![...value].some((character) => {
-      const code = character.codePointAt(0) ?? 0;
-      return code < 32 || code === 127;
-    }) && value.split("/").every((part) => part.length > 0 && !part.startsWith("."))
+    !hasControlCharacters(value) &&
+    value.split("/").every((part) => part.length > 0 && !part.startsWith("."))
   );
 }
 
@@ -1535,10 +1541,7 @@ function safeTitle(value: string): boolean {
     value === value.trim() &&
     value.length > 0 &&
     value.length <= 120 &&
-    ![...value].some((character) => {
-      const code = character.codePointAt(0) ?? 0;
-      return code < 32 || code === 127;
-    })
+    !hasControlCharacters(value)
   );
 }
 

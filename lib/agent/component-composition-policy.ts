@@ -12,7 +12,11 @@ const gitObject = z.string().regex(/^[a-f0-9]{40}$/u);
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sortedUnique<T extends z.ZodType<string>>(item: T) {
   return z.array(item).superRefine((values, context) => {
-    const sorted = [...values].toSorted();
+    const sorted = [...values].toSorted((left, right) => {
+      if (left < right) return -1;
+      if (left > right) return 1;
+      return 0;
+    });
     if (
       new Set(values).size !== values.length ||
       values.some((value, index) => value !== sorted[index])

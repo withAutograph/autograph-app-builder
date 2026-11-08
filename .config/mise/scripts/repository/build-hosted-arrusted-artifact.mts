@@ -24,6 +24,7 @@ import { create as createTar } from "tar";
 import { deterministicGzip } from "../../../../lib/sandbox/deterministic-gzip.ts";
 
 const TARGET_SHA = "d378904a05e1bc2c0896886e6fbd3b816babaee2";
+const dependencyStageDirectory = "dependency-stage";
 const TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
 const OUTPUT_NAME = "arrusted-d378904a-dependencies.tar.gz";
 const REQUIRED_PACKAGE = "@vercel/microfrontends";
@@ -266,7 +267,7 @@ try {
   const dependencyRoot = path.join(seed, "dependency-cache");
   mkdirSync(dependencyRoot, { recursive: true });
 
-  const dependencyStage = path.join(scratch, "dependency-stage", "node_modules");
+  const dependencyStage = path.join(scratch, dependencyStageDirectory, "node_modules");
   mkdirSync(dependencyStage, { recursive: true });
   const packages = dependencyClosure(arrustedRoot);
   for (const [name, source] of packages) {
@@ -298,9 +299,9 @@ try {
     ["--input-type=module", "--eval", 'await import("@autograph/vite-config")'],
     { cwd: dependencyStage, encoding: "utf-8" },
   );
-  normalizeTree(path.join(scratch, "dependency-stage"));
+  normalizeTree(path.join(scratch, dependencyStageDirectory));
   const dependencyArchive = path.join(dependencyRoot, "node-modules.tar.gz");
-  writeGzipTar(path.join(scratch, "dependency-stage"), ["node_modules"], dependencyArchive);
+  writeGzipTar(path.join(scratch, dependencyStageDirectory), ["node_modules"], dependencyArchive);
   const archiveBytes = statSync(dependencyArchive).size;
   const archiveSha256 = sha256(readFileSync(dependencyArchive));
   const dependencyManifest = {

@@ -129,6 +129,8 @@ export function renderReport(report: {
         })
         .join("")}</details>`
     : "";
+  const adherenceScore = (value: Adherence) =>
+    value.score === null ? "Not assessed" : `${value.score}/100`;
   const measuredSummary =
     (report.case
       ? `<section><h2>${escapeHtml(report.case.title)}</h2><p>${escapeHtml(report.case.notes)}</p><details><summary>Case evidence and review questions</summary><ul>${report.case.evidence.map(renderCaseEvidence).join("")}</ul><h3>Review questions</h3><ul>${report.case.reviewQuestions.map(renderListItem).join("")}</ul><h3>Intended outcomes, not asserted results</h3><ul>${report.case.outcomes.map(renderListItem).join("")}</ul></details></section>`
@@ -137,7 +139,7 @@ export function renderReport(report: {
       ? `<details><summary>Capture context and limitations</summary><ul>${report.evaluationNotes.map(renderListItem).join("")}</ul></details>`
       : "") +
     (adherence
-      ? `<h2>Arrusted adherence: ${adherence.score === null ? "Not assessed" : `${adherence.score}/100`} · ${escapeHtml(adherence.status)}</h2><p>Evidence coverage: ${pct(adherence.coveragePercent)}. Evaluator ${adherence.version}. This measures inspected evidence, not all rendered UI.</p><table><thead><tr><th>Dimension</th><th>Conforming</th><th>Nonconforming</th><th>Unassessed</th><th>Adherence</th><th>Static / browser</th></tr></thead><tbody>${Object.entries(
+      ? `<h2>Arrusted adherence: ${adherenceScore(adherence)} · ${escapeHtml(adherence.status)}</h2><p>Evidence coverage: ${pct(adherence.coveragePercent)}. Evaluator ${adherence.version}. This measures inspected evidence, not all rendered UI.</p><table><thead><tr><th>Dimension</th><th>Conforming</th><th>Nonconforming</th><th>Unassessed</th><th>Adherence</th><th>Static / browser</th></tr></thead><tbody>${Object.entries(
           adherence.dimensions,
         )
           .map(

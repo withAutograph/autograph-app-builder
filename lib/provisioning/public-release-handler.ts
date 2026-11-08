@@ -18,6 +18,8 @@ import type {
   PublicReleaseBindingState,
 } from "./public-release-contract";
 
+const RECONCILIATION_REQUIRED = "reconciliation-required";
+
 const bindProductionRuntimeEffect = "bind-production-runtime";
 
 export interface PublicReleaseInvocation {
@@ -189,7 +191,11 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
       const unfinished = plan.effects.find((effect) => row.record.effects[effect] !== "applied");
       if (unfinished !== undefined) {
         if (row.record.effects[unfinished] === "pending") {
-          return { status: "reconciliation-required" as const, operationRef, effect: unfinished };
+          return {
+            status: RECONCILIATION_REQUIRED satisfies typeof RECONCILIATION_REQUIRED,
+            operationRef,
+            effect: unfinished,
+          };
         }
         throw unavailable();
       }
@@ -286,7 +292,11 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
             const reconciled = await ports.reconcileEffect(context);
             row = await refresh();
             if (reconciled === "unknown") {
-              return { status: "reconciliation-required" as const, operationRef, effect };
+              return {
+                status: RECONCILIATION_REQUIRED satisfies typeof RECONCILIATION_REQUIRED,
+                operationRef,
+                effect,
+              };
             }
             await authorize(invocation, plan, true);
             if (reconciled === "applied") {
@@ -311,7 +321,11 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
             row = await refresh();
             await authorize(invocation, plan, true);
             if ((await ports.reconcileEffect(context)) !== "applied") {
-              return { status: "reconciliation-required" as const, operationRef, effect };
+              return {
+                status: RECONCILIATION_REQUIRED satisfies typeof RECONCILIATION_REQUIRED,
+                operationRef,
+                effect,
+              };
             }
             row = await refresh();
             if (
