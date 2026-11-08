@@ -78,7 +78,7 @@ export function archiveFiles(archive: Uint8Array) {
     const name = header.subarray(0, 100).toString("utf-8").replace(/\0.*$/u, "");
     const sizeText = header.subarray(124, 136).toString("ascii").replace(/\0.*$/u, "").trim();
     const size = Number.parseInt(sizeText, 8);
-    const [type] = header.slice(156);
+    const [type] = header.subarray(156);
     if (!safeRelative(name) || !Number.isSafeInteger(size) || size < 0) {
       throw new Error("Archive entry name or size was invalid.");
     }

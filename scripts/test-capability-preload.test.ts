@@ -230,7 +230,7 @@ describe("test capability preload", () => {
       const exitArguments: unknown[] = await once(child, "exit");
       const [status] = exitArguments;
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await authorizationClosed;
+      await authorizationClosed.promise;
       expect(status, stderr).toBe(0);
       expect(stdout).toBe("false");
       expect(authorizationErrors.every((code) => ["ECONNRESET", "EPIPE"].includes(code))).toBe(
