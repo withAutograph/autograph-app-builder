@@ -242,8 +242,8 @@ describe("PostgreSQL explicit SEND cancellation authority", () => {
       adapterGeneration: f.record.adapterGeneration,
       adapterSessionId: f.record.adapterSessionId,
       cancellationRevision: 1,
-      resumedCancellationRevision: 1,
       resumability: "live",
+      resumedCancellationRevision: 1,
       sessionId: f.record.sessionId,
       status: "working",
     });
@@ -259,9 +259,9 @@ describe("PostgreSQL explicit SEND cancellation authority", () => {
     if (f.store.recordCancellationIntent === undefined)
       throw new Error("Missing cancellation writer");
     await f.store.recordCancellationIntent({
+      nowEpochMs: 5000,
       principal,
       sessionId: f.record.sessionId,
-      nowEpochMs: 5000,
     });
     expect(f.row().record).toMatchObject({
       cancellationRevision: 2,

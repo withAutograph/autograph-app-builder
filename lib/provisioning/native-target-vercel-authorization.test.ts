@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { inspectNativeTargetVercelAuthorization } from "./native-target-vercel-authorization";
 
 const metadata = () => ({
-  id: "icfg_expected",
-  teamId: "team_expected",
-  ownerId: "team_expected",
-  scopes: ["read-write:project"],
-  projectSelection: "all",
   arbitrary: "private extra metadata",
+  id: "icfg_expected",
+  ownerId: "team_expected",
+  projectSelection: "all",
+  scopes: ["read-write:project"],
+  teamId: "team_expected",
 });
 const fixture = (response: Response = Response.json(metadata())) => {
   const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response);
@@ -18,11 +18,11 @@ const fixture = (response: Response = Response.json(metadata())) => {
   const input = {
     expectedInstallationId: "icfg_expected",
     expectedTeamId: "team_expected",
-    readInstallationToken,
     fetch,
+    readInstallationToken,
     signal: controller.signal,
   };
-  return { fetch, controller, input, run: () => inspectNativeTargetVercelAuthorization(input) };
+  return { controller, fetch, input, run: () => inspectNativeTargetVercelAuthorization(input) };
 };
 
 describe("read-only installation authorization metadata", () => {
@@ -51,10 +51,10 @@ describe("read-only installation authorization metadata", () => {
       "https://api.vercel.com/v1/integrations/configuration/icfg_expected?teamId=team_expected",
     );
     expect(options).toEqual({
-      method: "GET",
       headers: { authorization: "Bearer private-installation-token" },
-      signal: f.controller.signal,
+      method: "GET",
       redirect: "error",
+      signal: f.controller.signal,
     });
   });
   it.each(["id", "teamId", "ownerId"] as const)(
@@ -82,8 +82,8 @@ describe("read-only installation authorization metadata", () => {
         Response.json({
           ...metadata(),
           disabledAt: 0,
-          scopes: ["read:project"],
           projectSelection: "selected",
+          scopes: ["read:project"],
         }),
       ).run(),
     ).toMatchObject({
@@ -105,10 +105,10 @@ describe("read-only installation authorization metadata", () => {
       ),
     ).run();
     expect(result).toEqual({
-      status: "unavailable",
       failure: "provider_rejected",
-      statusCode: 403,
       providerCode: code === "private-provider-code" ? "unknown" : code,
+      status: "unavailable",
+      statusCode: 403,
     });
     expect(JSON.stringify(result)).not.toContain("private");
   });
@@ -145,10 +145,10 @@ describe("read-only installation authorization metadata", () => {
       new Response(
         new ReadableStream(
           {
+            cancel,
             pull() {
               reading(null);
             },
-            cancel,
           },
           { highWaterMark: 0 },
         ),

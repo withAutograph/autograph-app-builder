@@ -329,14 +329,14 @@ describe.skipIf(tools === undefined)(
       let checks = 0;
       await expect(
         store.select({
-          authority,
-          scope: target,
-          publicOrigin: "https://revoked.example",
-          expectedPublicOrigin: null,
           assertCurrent: () => {
             checks += 1;
             return checks === 2 ? Promise.reject(new Error("revoked")) : Promise.resolve();
           },
+          authority,
+          expectedPublicOrigin: null,
+          publicOrigin: "https://revoked.example",
+          scope: target,
         }),
       ).rejects.toThrow("revoked");
       expect(await store.read({ authority, scope: target })).toBeUndefined();

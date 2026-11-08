@@ -116,14 +116,14 @@ describe("expired pre-delivery captured account", () => {
       throw new Error("ordinary invitation");
     });
     const deps: NormalActorOperationsDependencies = {
-      journalPorts,
-      assertPlanningAuthorized: async () => {},
       assertCurrentPlan: async () => {},
-      normalRealmFetch: async () => network,
-      prepareActorCapture: invitation,
+      assertPlanningAuthorized: async () => {},
       collectOrganizationOwnerProof: vi.fn(),
       executeOrganization: vi.fn(),
       inspectOrganization: vi.fn(),
+      journalPorts,
+      normalRealmFetch: async () => network,
+      prepareActorCapture: invitation,
     };
     const operations = createHostedOperatorNormalActorOperations(deps);
     const input = {
