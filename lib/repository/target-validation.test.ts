@@ -457,15 +457,18 @@ describe("target validation", () => {
         validationRoot: "/workspace/repository",
       });
       expect(result).toMatchObject({ exitCode: 0, stdout: "checks passed" });
-      expect(runTask).toHaveBeenCalledWith(
-        expect.objectContaining({
-          environment,
-          onChunk,
-          task,
-          ...(shard ? { shard } : {}),
-          ...(alreadyCompiled ? { alreadyCompiled: true } : {}),
-        }),
-      );
+      const expected: Partial<Parameters<PreparedRuntimeExecution["runTask"]>[0]> = {
+        environment,
+        onChunk,
+        task,
+      };
+      if (shard !== undefined && shard !== "") {
+        expected.shard = shard;
+      }
+      if (alreadyCompiled) {
+        expected.alreadyCompiled = true;
+      }
+      expect(runTask).toHaveBeenCalledWith(expect.objectContaining(expected));
     },
   );
   it("links a filtered failure receipt to its complete sanitized durable log", async () => {

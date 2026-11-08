@@ -599,12 +599,15 @@ export const reconcileExistingDraft = async (input: {
   try {
     result = await input.adapter.reconcileExistingDraft(proposal, content, input.recovery);
   } catch (error) {
-    const latest = await inspectDraftAfterWrite({
+    const readback: Parameters<typeof inspectDraftAfterWrite>[0] = {
       adapter: input.adapter,
       proposal,
       writeError: error,
-      ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
-    });
+    };
+    if (input.recovery !== undefined) {
+      readback.recovery = input.recovery;
+    }
+    const latest = await inspectDraftAfterWrite(readback);
     if (
       sameDraft(proposal, latest) &&
       (await input.adapter.inspectAppliedDraftReconciliation(proposal, latest, input.recovery))
@@ -619,11 +622,14 @@ export const reconcileExistingDraft = async (input: {
       `GitHub rejected the draft reconciliation (${result.code}${location}). Refresh both branch heads and the reviewed merge before retrying.`,
     );
   }
-  const updated = await inspectDraftAfterWrite({
+  const readback: Parameters<typeof inspectDraftAfterWrite>[0] = {
     adapter: input.adapter,
     proposal,
-    ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
-  });
+  };
+  if (input.recovery !== undefined) {
+    readback.recovery = input.recovery;
+  }
+  const updated = await inspectDraftAfterWrite(readback);
   if (
     !sameDraft(proposal, updated) ||
     !(await input.adapter.inspectAppliedDraftReconciliation(proposal, updated, input.recovery))

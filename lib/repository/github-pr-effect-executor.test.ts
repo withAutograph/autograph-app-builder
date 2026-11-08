@@ -63,14 +63,19 @@ const fixture = (initial: GitHubPrDeliveryObservation, onClaim?: () => void) => 
     intent: GitHubPrEffectIntent,
     approvedByCallId = "original-approval",
     abortSignal?: AbortSignal,
-  ) =>
-    executeApprovedGitHubPrEffect({
-      ...(abortSignal === undefined ? {} : { abortSignal }),
+  ) => {
+    const signal: Pick<Parameters<typeof executeApprovedGitHubPrEffect>[0], "abortSignal"> = {};
+    if (abortSignal !== undefined) {
+      signal.abortSignal = abortSignal;
+    }
+    return executeApprovedGitHubPrEffect({
+      ...signal,
       intent,
       approvedByCallId,
       store,
       provider,
     });
+  };
   const reconcile = (intent: GitHubPrEffectIntent) =>
     reconcileApprovedGitHubPrEffect({ intent, approvedByCallId: "recovery-call", store, provider });
   return { execute, provider, reconcile, rows, store };
