@@ -68,8 +68,8 @@ const associatedDataFor = (scope: PublicReleaseAuthSeedScope, version: 1 | 2) =>
 };
 export const createFreshPublicAuthSeed = (): PublicReleaseAuthSeed => {
   const key = generateKeyPairSync("ed25519", {
-    privateKeyEncoding: { type: "pkcs8", format: "pem" },
-    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { format: "pem", type: "pkcs8" },
+    publicKeyEncoding: { format: "pem", type: "spki" },
   });
   return {
     BETTER_AUTH_SECRET: randomBytes(32).toString("base64url"),
@@ -188,11 +188,13 @@ export const reservePublicReleaseAuthSeed = async (input: {
       throw unavailable();
     }
   }
+  const { tokenKey } = input.keyring;
+  const token = JSON.stringify(seed);
   const sealed = {
     ...encryptVercelToken({
-      key: input.keyring.tokenKey,
-      token: JSON.stringify(seed),
       associatedData,
+      key: tokenKey,
+      token,
     }),
     keyVersion: input.keyring.tokenKeyVersion,
   };

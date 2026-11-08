@@ -197,7 +197,7 @@ const executeCatalogProgram = async (input: {
   if (completed.exitCode !== 0) {
     throw new Error(`Builder could not normalize candidate dependency metadata: ${diagnostic}`);
   }
-  return { stdout, diagnostic };
+  return { diagnostic, stdout };
 };
 
 export const planCandidateDependencyCatalog = async (input: {
@@ -208,11 +208,14 @@ export const planCandidateDependencyCatalog = async (input: {
 }): Promise<CandidateDependencyCatalogIntent> => {
   const dependency = catalogDependencyName.parse(input.dependency);
   await assertDraftReconciliationCandidateAvailable(input);
+  const commandInput = { ...input };
+  const { root } = input.prepared;
+  const args = [input.prepared.root, input.prepared.appId, dependency];
   const result = await executeCatalogProgram({
-    ...input,
-    root: input.prepared.root,
+    ...commandInput,
+    args,
     program: normalizeCandidateCatalogProgram,
-    args: [input.prepared.root, input.prepared.appId, dependency],
+    root,
   });
   return candidateDependencyCatalogIntentSchema.parse({
     ...JSON.parse(result.stdout),
@@ -242,11 +245,14 @@ export const normalizeCandidateDependencyCatalog = async (input: {
       path: relativeIntentPath,
       content: JSON.stringify(intent),
     });
+    const commandInput = { ...input };
+    const { root } = input.prepared;
+    const args = [input.prepared.root, intentPath];
     result = await executeCatalogProgram({
-      ...input,
-      root: input.prepared.root,
+      ...commandInput,
+      args,
       program: applyCandidateCatalogProgram,
-      args: [input.prepared.root, intentPath],
+      root,
     });
   } finally {
     try {

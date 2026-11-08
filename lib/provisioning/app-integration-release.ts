@@ -35,7 +35,7 @@ const requirePrepared = (row: AppIntegrationCapabilityRow | undefined, digest: s
   if (row.record.planDigest !== digest || row.record.approvalReceipts.length === 0) {
     throw unavailable();
   }
-  return { row, capability: row.record.prepared };
+  return { capability: row.record.prepared, row };
 };
 /** A model may select a reference; only the independent approved journal and private custody supply its values. */
 export const readAppIntegrationCapabilityForRelease = async (input: {
@@ -96,10 +96,12 @@ export const readAppIntegrationCapabilityForRelease = async (input: {
   if (matches.includes(false)) {
     throw unavailable();
   }
+  const planVersion = plan.version;
+  const { readCentralReady: readLegacy, readExistingPlatformReady: readExisting } = input;
   const central = await readAppIntegrationCentralReference({
-    planVersion: plan.version,
-    readLegacy: input.readCentralReady,
-    readExisting: input.readExistingPlatformReady,
+    planVersion,
+    readExisting,
+    readLegacy,
     scope: {
       authority: input.owner.authority,
       appId: plan.selection.appId,
@@ -118,14 +120,23 @@ export const readAppIntegrationCapabilityForRelease = async (input: {
   ) {
     throw unavailable();
   }
+  const {
+    database: approvalDatabase,
+    builderOrigin,
+    request,
+    owner,
+    authority,
+    assertCurrent: assertCurrentOwner,
+    fetch: approvalFetch,
+  } = input;
   const approval = createAppIntegrationCapabilityApprovalAuthority({
-    database: input.database,
-    builderOrigin: input.builderOrigin,
-    request: input.request,
-    owner: input.owner,
-    authority: input.authority,
-    assertCurrentOwner: input.assertCurrent,
-    fetch: input.fetch,
+    assertCurrentOwner,
+    authority,
+    builderOrigin,
+    database: approvalDatabase,
+    fetch: approvalFetch,
+    owner,
+    request,
   });
   for (const receipt of row.record.approvalReceipts) {
     // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each retained committed approval is independently re-read and may revoke capability custody.
@@ -144,18 +155,19 @@ export const readAppIntegrationCapabilityForRelease = async (input: {
     controlResource: plan.control.database,
     controlNeon: plan.control.neon,
   };
+  const { database: custodyDatabase, keyring, assertCurrent } = input;
   const custody = createAppIntegrationPrivateCustody({
-    database: input.database,
-    keyring: input.keyring,
     app: appScope,
-    assertCurrent: input.assertCurrent,
+    assertCurrent,
+    database: custodyDatabase,
+    keyring,
   });
   const scopeSha256 = preparedIntegrationScopeDigest(capability);
   const configuration = await custody.read({
     app: appScope,
+    checkpoint: `${row.record.planDigest}:${scopeSha256}`,
     purpose: "runtime-configuration",
     version: 1,
-    checkpoint: `${row.record.planDigest}:${scopeSha256}`,
   });
   if (
     configuration === undefined ||
@@ -177,8 +189,8 @@ export const readAppIntegrationCapabilityForRelease = async (input: {
   const attachment: AppIntegrationReleaseAttachment = appIntegrationReleaseAttachmentSchema.parse({
     ...input.pointer,
     capability,
-    scopeSha256,
     readinessPath: plan.readinessPath,
+    scopeSha256,
   });
   await input.assertCurrent();
   const latest = await store.read(input.owner.authority, input.pointer.operationRef);

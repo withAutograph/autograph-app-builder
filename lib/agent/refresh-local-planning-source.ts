@@ -60,7 +60,7 @@ const observe = async (current: SourceWorkflow) => {
   const changed =
     capture.generation.workspaceDigest !== baseline.workspaceDigest ||
     (prior !== undefined && prior.sourceSnapshotTree !== capture.snapshotTree);
-  return { receipt, capture, changed };
+  return { capture, changed, receipt };
 };
 export const refreshLocalPlanningSource = async (
   ctx: Pick<ToolContext, "callId" | "getSandbox"> &

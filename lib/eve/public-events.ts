@@ -1373,8 +1373,8 @@ const productionIdentityEvents = (
   if (isPrepare) {
     const prepared = z
       .object({
-        setup: productionSetupStatusSchema,
         creator: z.object({ expiresAt: z.string().optional() }).optional(),
+        setup: productionSetupStatusSchema,
       })
       .safeParse(output);
     if (!prepared.success) {
