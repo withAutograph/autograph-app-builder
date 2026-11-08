@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const preload = pathToFileURL(
@@ -36,10 +37,9 @@ function inspectAmbientPreload(environment: NodeJS.ProcessEnv) {
     env: environment,
   });
   expect(result.status, result.stderr).toBe(0);
-  return JSON.parse(result.stdout) as {
-    capability: unknown;
-    nodeOptions: string | null;
-  };
+  return z
+    .object({ capability: z.unknown(), nodeOptions: z.string().nullable() })
+    .parse(JSON.parse(result.stdout));
 }
 
 describe("test capability preload", () => {
@@ -122,7 +122,9 @@ describe("test capability preload", () => {
       const environment = { ...process.env, EVE_DEV: hostileEveDev };
       const hostileWorker = new Worker(workerFixture, { env: environment });
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const [hostileResult] = (await once(hostileWorker, "message")) as [{ eveDev: string | null }];
+      const hostileMessages: unknown[] = await once(hostileWorker, "message");
+      const [hostileMessage] = hostileMessages;
+      const hostileResult = z.object({ eveDev: z.string().nullable() }).parse(hostileMessage);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await hostileWorker.terminate();
       expect(hostileResult.eveDev).toBeNull();
