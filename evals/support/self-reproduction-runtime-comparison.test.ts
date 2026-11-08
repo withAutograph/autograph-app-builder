@@ -22,7 +22,7 @@ describe("live sandbox comparison", () => {
       artifactPaths: ["screenshots/root.png"],
       payload,
       script: "// evaluator",
-      session: session as never,
+      session,
     });
     expect(result.status).toBe("completed");
     expect(result.output).toEqual({ observations: [] });
@@ -42,7 +42,7 @@ describe("live sandbox comparison", () => {
       artifactPaths: ["missing.png", "present.png"],
       payload: {},
       script: "// evaluator",
-      session: session as never,
+      session,
     });
     expect(result.status).toBe("failed");
     expect(result.command.stderr).toBe("diagnostic stderr");
@@ -108,7 +108,7 @@ describe("live sandbox comparison", () => {
         artifactPaths: ["../credential"],
         payload: {},
         script: "",
-        session: session as never,
+        session,
       }),
     ).rejects.toThrow("relative child path");
     expect(session.run).not.toHaveBeenCalled();

@@ -52,9 +52,7 @@ async function defaultContinuation(
       appId: "test-app",
       github: input.provisioningEnabled
         ? {
-            code: (input.provisioningEnabled ? "not_selected" : "feature_disabled") as
-              | "not_selected"
-              | "feature_disabled",
+            code: input.provisioningEnabled ? "not_selected" : "feature_disabled",
             retryable: false,
             status: "skipped" as const,
           }
@@ -69,9 +67,7 @@ async function defaultContinuation(
       updatedAt: "2026-08-30T12:00:00.000Z",
       vercel: input.provisioningEnabled
         ? {
-            code: (input.provisioningEnabled ? "not_selected" : "feature_disabled") as
-              | "not_selected"
-              | "feature_disabled",
+            code: input.provisioningEnabled ? "not_selected" : "feature_disabled",
             retryable: false,
             status: "skipped" as const,
           }
@@ -368,7 +364,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
     builderActions.loadActiveBuilderDraft
       .mockImplementationOnce(() => pending.promise)
-      .mockResolvedValueOnce(remoteDraft(3, "Fresh remote brief.") as never);
+      .mockResolvedValueOnce(remoteDraft(3, "Fresh remote brief."));
     // oxlint-disable-next-line eslint/require-await -- Preserve the Server Action test interface.
     builderActions.saveActiveBuilderDraft.mockImplementation(async (input) => ({
       draftId: input.draftId,
@@ -434,7 +430,7 @@ describe("Vercel-faithful App Builder flow", () => {
       return { ...autosave, discardSupersededByRemoteRevision: delayedDiscard };
     });
     builderActions.loadActiveBuilderDraft.mockResolvedValueOnce(
-      remoteDraft(2, "Remote brief before the local edit.") as never,
+      remoteDraft(2, "Remote brief before the local edit."),
     );
     const view = await render(<AppBuilder authenticated />);
     const brief = requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief"));
@@ -451,7 +447,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
     builderActions.loadActiveBuilderDraft
       .mockImplementationOnce(() => pending.promise)
-      .mockResolvedValueOnce(remoteDraft(3, "Newest remote brief.") as never);
+      .mockResolvedValueOnce(remoteDraft(3, "Newest remote brief."));
     const view = await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => {
@@ -479,7 +475,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
     builderActions.loadActiveBuilderDraft
       .mockImplementationOnce(() => pending.promise)
-      .mockResolvedValueOnce(remoteDraft(2, "Recovered remote brief.") as never);
+      .mockResolvedValueOnce(remoteDraft(2, "Recovered remote brief."));
     const view = await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => vi.advanceTimersByTimeAsync(10_000));

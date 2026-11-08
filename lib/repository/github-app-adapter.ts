@@ -11,10 +11,8 @@ import {
   githubPermissionsFor,
 } from "./github-publication";
 import type {
-  DraftPublicationReadBack,
   DraftPullRequestProposal,
   FreshRepositoryProposal,
-  GitHubMutationAcknowledgement,
   GitHubOperation,
   GitHubPublicationAdapter,
   GitHubSourceResolutionAdapter,
@@ -459,7 +457,7 @@ export function createGitHubAppPublicationAdapter(
           () => provider.createPrivateFreshHistoryRepository(proposal, content),
           "create the private repository",
         ),
-      ) as GitHubMutationAcknowledgement;
+      );
     },
     async inspectAppliedDraftReconciliation(proposal, observed, recovery) {
       return z
@@ -528,7 +526,7 @@ export function createGitHubAppPublicationAdapter(
       return {
         ...unsigned,
         digest: hash(unsigned),
-      } as DraftPublicationReadBack;
+      };
     },
     async inspectExistingDraft(input) {
       return parseProviderResponse(
@@ -537,7 +535,7 @@ export function createGitHubAppPublicationAdapter(
           () => provider.inspectExistingDraft(input),
           "inspect the existing draft PR",
         ),
-      ) as ExistingDraftObservation;
+      );
     },
     async inspectFreshRepositoryOutcome(proposal) {
       const raw = await sanitizedProviderCall(
@@ -581,7 +579,7 @@ export function createGitHubAppPublicationAdapter(
           () => provider.publishDraftPullRequest(proposal, content),
           "publish the draft PR",
         ),
-      ) as GitHubMutationAcknowledgement;
+      );
     },
     async reconcileExistingDraft(proposal, content, recovery) {
       return parseProviderResponse(
@@ -590,7 +588,7 @@ export function createGitHubAppPublicationAdapter(
           () => provider.reconcileExistingDraft(proposal, content, recovery),
           "update the existing draft PR",
         ),
-      ) as GitHubMutationAcknowledgement;
+      );
     },
     async updateExistingDraft(proposal, content) {
       return parseProviderResponse(
@@ -599,7 +597,7 @@ export function createGitHubAppPublicationAdapter(
           () => provider.updateExistingDraft(proposal, content),
           "update the existing draft PR",
         ),
-      ) as GitHubMutationAcknowledgement;
+      );
     },
   };
   const destinationFileSchema = z.object({

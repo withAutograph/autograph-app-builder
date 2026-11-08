@@ -64,7 +64,7 @@ describe("trusted framework evidence", () => {
     const fixture = browser();
     const runInstant = vi.fn(() => Promise.resolve());
     const result = await runTrustedFrameworkEvidence({
-      adapters: { candidate: adapter as never },
+      adapters: { candidate: adapter },
       browser: fixture.value,
       outputRoot,
       runInstant,
@@ -98,7 +98,7 @@ describe("trusted framework evidence", () => {
               ready: false as const,
               reason: "Production instant-navigation runtime was unavailable.",
             }),
-        } as never,
+        },
       },
       browser: fixture.value,
       outputRoot,
@@ -117,7 +117,7 @@ it("retains sanitized diagnostics and blocks an evaluator exception", async () =
       candidate: {
         ...adapter,
         reviewSource: () => Promise.reject(new Error("Fixture unavailable Bearer private-secret")),
-      } as never,
+      },
     },
     browser: browser().value,
     outputRoot,
@@ -163,7 +163,7 @@ it("retains an executed instant assertion failure as observed failure", async ()
     path.join(tmpdir(), "self-reproduction-framework-instant-failure-"),
   );
   const result = await runTrustedFrameworkEvidence({
-    adapters: { candidate: adapter as never },
+    adapters: { candidate: adapter },
     browser: browser().value,
     outputRoot,
     runInstant: () => Promise.reject(new Error("Resolved content never appeared")),

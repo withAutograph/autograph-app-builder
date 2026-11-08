@@ -32,7 +32,6 @@ import type {
   FreshRepositoryReadBack,
   GitHubInstallationIdentity,
   GitHubMutationAcknowledgement,
-  GitHubMutationReceipt,
   GitHubOperation,
   GitHubPublicationAdapter,
   GitHubDraftPullRequestContent,
@@ -582,7 +581,7 @@ describe("closed GitHub publication contract", () => {
       assertExactInstallationIdentity({
         ...identity,
         permissions: { ...identity.permissions, administration: "write" },
-      } as GitHubInstallationIdentity),
+      }),
     ).toThrow(/over-privileged/u);
   });
 
@@ -1439,7 +1438,7 @@ describe("closed GitHub publication contract", () => {
         adapter.draftOutcome = {
           ...unsigned,
           digest: hash(unsigned),
-        } as DraftPublicationReadBack;
+        };
       },
       (adapter, proposal) => {
         const staleRepo = repository(adapter.identities.publish, {
@@ -1521,7 +1520,7 @@ describe("closed GitHub publication contract", () => {
         adapter.draftOutcome = {
           ...injected,
           digest: hash(injected),
-        } as DraftPublicationReadBack;
+        };
       }
       return acknowledgement;
     };
@@ -1615,7 +1614,7 @@ describe("closed GitHub publication contract", () => {
     store.values.set(proposal.digest, {
       ...unsigned,
       digest: hash(unsigned),
-    } as GitHubMutationReceipt);
+    });
     await expect(
       publishApprovedDraftPullRequest({
         adapter,
