@@ -1,3 +1,4 @@
+import type { SandboxEnvironment } from "eve/sandbox";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createVerifyAppBehaviorTool } from "../../agent/tools/verify_app_behavior";
@@ -60,12 +61,44 @@ const scenario = {
   readPointer: "/draft/marker",
   writePath: "/api/drafts",
 };
-const getSandbox = vi.fn(() => Promise.resolve({ id: "sandbox-one" }));
-const context = {
+const unexpectedOperation = () => {
+  throw new Error("Unexpected tool context or sandbox operation");
+};
+const getSandbox = vi.fn(() =>
+  Promise.resolve({
+    id: "sandbox-one",
+    readFile: unexpectedOperation,
+    readBinaryFile: unexpectedOperation,
+    readTextFile: unexpectedOperation,
+    writeFile: unexpectedOperation,
+    writeBinaryFile: unexpectedOperation,
+    writeTextFile: unexpectedOperation,
+    run: unexpectedOperation,
+    spawn: unexpectedOperation,
+    removePath: unexpectedOperation,
+    resolvePath: unexpectedOperation,
+    delete: unexpectedOperation,
+    stop: unexpectedOperation,
+  }),
+);
+const context: Parameters<typeof verifyAppBehavior.execute>[1] = {
   abortSignal: new AbortController().signal,
-  getSandbox,
-  session: { id: "session-one" },
-} as unknown as Parameters<typeof verifyAppBehavior.execute>[1];
+  callId: "verify-app-behavior",
+  getSandbox: (environment?: SandboxEnvironment<object | undefined>) => {
+    if (environment !== undefined) {
+      throw new Error("Unexpected sandbox environment");
+    }
+    return getSandbox();
+  },
+  getToken: unexpectedOperation,
+  requireAuth: unexpectedOperation,
+  session: {
+    auth: { current: null, initiator: null },
+    id: "session-one",
+    turn: { id: "verify-app-behavior-turn", sequence: 0 },
+  },
+  toolName: "verify_app_behavior",
+};
 
 describe("verify_app_behavior", () => {
   beforeEach(() => {

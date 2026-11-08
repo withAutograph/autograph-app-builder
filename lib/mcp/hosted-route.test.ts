@@ -1,3 +1,4 @@
+import { drizzle } from "drizzle-orm/postgres-js";
 import { describe, expect, it, vi } from "vitest";
 
 import type { HostedDatabase } from "../db/hosted-postgres";
@@ -60,7 +61,7 @@ describe("hosted route composition", () => {
   });
 
   it("opens no connection during construction and reuses one principal-free runtime", async () => {
-    const openDatabase = vi.fn(() => ({}) as unknown as Database);
+    const openDatabase = vi.fn(() => drizzle.mock<Database["_"]["fullSchema"]>());
     const handler = createDeploymentMcpRequestHandler({
       environment,
       now: () => nowEpochMs,
@@ -104,7 +105,7 @@ describe("hosted route composition", () => {
   });
 
   it("binds every hosted request to the exact configured MCP resource before opening storage", async () => {
-    const openDatabase = vi.fn(() => ({}) as unknown as Database);
+    const openDatabase = vi.fn(() => drizzle.mock<Database["_"]["fullSchema"]>());
     const handler = createDeploymentMcpRequestHandler({
       environment,
       now: () => nowEpochMs,

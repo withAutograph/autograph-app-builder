@@ -17,10 +17,17 @@ export interface RepositoryAccessToolInput {
   selectedInstallationId?: string;
 }
 
+export type RepositoryAccessToolContext = Pick<
+  ToolContext,
+  "callId" | "getToken" | "requireAuth"
+> & {
+  session: Pick<ToolContext["session"], "id">;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function resolveRepositoryAccessForTool(
   input: RepositoryAccessToolInput,
-  ctx: ToolContext,
+  ctx: RepositoryAccessToolContext,
   runtime: RepositoryAccessRuntime,
 ): Promise<
   | { kind: "selection"; access: Awaited<ReturnType<typeof runtime.classify>> }

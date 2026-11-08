@@ -55,7 +55,6 @@ import type { RepositoryAccessReceipt } from "./repository-access-state";
 import { configureVercelSessionGitSource } from "../sandbox/vercel-session-source";
 import type { VercelGitSessionSource } from "../sandbox/vercel-session-source";
 import { materializeBuilderSandboxGitSource } from "../sandbox/builder-sandbox";
-import type { BuilderHandoffIntent } from "../handoff/contracts";
 import {
   preparedHandoffReturnPath,
   withPreparedGitHubSelection,
@@ -178,7 +177,7 @@ export function createRepositoryAccessRuntime(input: {
   >[0]["providerFactory"];
   continuations: ReturnType<typeof createRepositoryAccessContinuationService>;
   protectionBypassSecret?: string;
-  preparedIntent?: BuilderHandoffIntent;
+  preparedIntent?: Parameters<typeof withPreparedGitHubSelection>[1];
   returnTo?: ProviderConnectionReturn["returnTo"];
 }): RepositoryAccessRuntime {
   const classify = async (repositoryInput: {

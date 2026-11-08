@@ -226,7 +226,11 @@ export function validateUiPreview(input: UiPreviewInput): void {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function uiPreviewSourceDigest(input: UiPreviewInput) {
+export function uiPreviewSourceDigest(
+  input: Pick<UiPreviewInput, "appId" | "catalogGaps" | "files" | "routes"> & {
+    manifest: unknown;
+  },
+) {
   return digest({
     appId: input.appId,
     catalogGaps: [...input.catalogGaps].toSorted((left, right) =>

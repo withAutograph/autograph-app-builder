@@ -1,11 +1,11 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
-import type { Browser } from "playwright";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   captureParity,
+  createPairedCaptureRunner,
   runPairedCaptureEvidence,
   unavailableCaptureObservations,
   writePairedCaptureManifest,
@@ -13,7 +13,38 @@ import {
 import type { CaptureAdapter, CapturePage } from "./self-reproduction-captures";
 import { requirements } from "./self-reproduction-parity";
 
+const launchBrowser = vi.hoisted(() => vi.fn());
+vi.mock("playwright", () => ({ chromium: { launch: launchBrowser } }));
+
 describe("paired capture orchestration", () => {
+  it("launches and closes the default browser through the production wrapper", async () => {
+    const root = await mkdtemp(nodePath.join(tmpdir(), "parity-capture-wrapper-"));
+    const close = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const newContext = vi.fn();
+    launchBrowser.mockResolvedValueOnce({ close, newContext });
+    try {
+      const result = await runPairedCaptureEvidence({ adapters: {}, outputRoot: root });
+      expect(launchBrowser).toHaveBeenCalledWith({ headless: true });
+      expect(newContext).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledOnce();
+      expect(result.manifest.rows).toHaveLength(15);
+      expect(result.observations.reference.every((item) => item.disposition === "not-run")).toBe(
+        true,
+      );
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+  it("propagates a browser launch failure from the production wrapper", async () => {
+    const failure = new Error("Browser launch unavailable");
+    await expect(
+      runPairedCaptureEvidence({
+        adapters: {},
+        launch: () => Promise.reject(failure),
+        outputRoot: "/unused",
+      }),
+    ).rejects.toBe(failure);
+  });
   it("captures all desktop states separately, records inert controls, and closes contexts", async () => {
     const root = await mkdtemp(nodePath.join(tmpdir(), "parity-capture-test-"));
     const close = vi.fn(async () => {});
@@ -122,7 +153,7 @@ describe("paired capture orchestration", () => {
           }),
       }),
     );
-    const adapter: CaptureAdapter = {
+    const adapter: CaptureAdapter<CapturePage> = {
       exercise: async (_page, state, capture) => {
         await capture();
         const requirement = requirements.find((row) => row.id === `capture/desktop/${state}`);
@@ -134,9 +165,11 @@ describe("paired capture orchestration", () => {
       prepare: () => Promise.resolve({ ready: true }),
     };
     try {
-      const result = await runPairedCaptureEvidence({
+      const run = createPairedCaptureRunner(() =>
+        Promise.resolve({ close: closeBrowser, newContext }),
+      );
+      const result = await run({
         adapters: { candidate: adapter, reference: adapter },
-        launch: () => Promise.resolve({ close: closeBrowser, newContext } as unknown as Browser),
         outputRoot: root,
       });
       expect(closeBrowser).toHaveBeenCalledOnce();

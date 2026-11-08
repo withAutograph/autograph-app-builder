@@ -14,7 +14,6 @@ import type {
   RepositoryAccessContinuationStore,
 } from "../integrations/repository-access-continuation";
 import { createRepositoryAccessRuntime } from "./deployment-repository-access-runtime";
-import type { BuilderHandoffIntent } from "../handoff/contracts";
 
 const authority = {
   audience: "https://builder.example/mcp",
@@ -285,7 +284,7 @@ describe("deployment repository access authorization", () => {
         requestedName: "app-builder-dogfood",
         resolvedFullName: repository,
       },
-    } as unknown as BuilderHandoffIntent;
+    } satisfies NonNullable<Parameters<typeof createRepositoryAccessRuntime>[0]["preparedIntent"]>;
     const runtime = createRepositoryAccessRuntime({
       authority,
       continuations: runtimeFixture().continuations,

@@ -307,9 +307,13 @@ const waitForPreview = async (input: {
   }
 };
 
+type StoppablePreviewCommand = Pick<Command, "exitCode" | "kill"> & {
+  wait: (...args: Parameters<Command["wait"]>) => Promise<unknown>;
+};
+
 /** A successful signal request is not evidence that its listener has terminated. */
 export const stopWorkingPreviewCommand = async (
-  command: Command,
+  command: StoppablePreviewCommand,
   signal = AbortSignal.timeout(10_000),
 ): Promise<void> => {
   try {

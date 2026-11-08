@@ -35,7 +35,10 @@ function decodeVlq(encodedValue: string, start: number) {
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function originalCssSource(
-  map: CssSourceMap,
+  map: Omit<CssSourceMap, "sources" | "sourceRoot"> & {
+    sources: unknown;
+    sourceRoot?: unknown;
+  },
   generatedLine: number,
   generatedColumn: number,
 ) {
