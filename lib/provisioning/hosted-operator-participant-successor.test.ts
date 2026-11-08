@@ -13,6 +13,7 @@ import {
   HostedOperatorError,
   operatorOwnerContextSchema,
 } from "./hosted-operator-contract";
+import type { OperatorReceipt } from "./hosted-operator-contract";
 import {
   initialNormalActorState,
   normalActorProgramSchema,
@@ -324,12 +325,19 @@ const fixture = async (
     planDigest: operatorPlanDigest(appPlan),
     approvalId: "app-approval",
     fenceGeneration: 1,
-    receipts: appPlan.effects.map((effect) => ({
-      effectId: effect.id,
-      ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
-      observedAt: "2026-10-20T00:00:00.000Z",
-      resourceVersion: "observed",
-    })),
+    receipts: appPlan.effects.map((effect) => {
+      const receipt: Pick<OperatorReceipt, "effectId" | "fenceGeneration"> = {
+        effectId: effect.id,
+      };
+      if (effect.kind === "access") {
+        receipt.fenceGeneration = 1;
+      }
+      return {
+        ...receipt,
+        observedAt: "2026-10-20T00:00:00.000Z",
+        resourceVersion: "observed",
+      };
+    }),
   };
   const nextProgram = normalActorProgramSchema.parse({
     ...program,
@@ -565,12 +573,17 @@ describe("approved additive capture participant state", () => {
         planDigest: operatorPlanDigest(current),
         approvalId: "current-app-approval",
         fenceGeneration: 2,
-        receipts: current.effects.map((effect) => ({
-          effectId: effect.id,
-          observedAt: "2026-10-29T03:01:00.000Z",
-          resourceVersion: "observed",
-          ...(effect.kind === "access" ? { fenceGeneration: 2 } : {}),
-        })),
+        receipts: current.effects.map((effect) => {
+          const receipt: OperatorReceipt = {
+            effectId: effect.id,
+            observedAt: "2026-10-29T03:01:00.000Z",
+            resourceVersion: "observed",
+          };
+          if (effect.kind === "access") {
+            receipt.fenceGeneration = 2;
+          }
+          return receipt;
+        }),
       });
       f.approvals.set("current-app-call", {
         id: "current-app-approval",

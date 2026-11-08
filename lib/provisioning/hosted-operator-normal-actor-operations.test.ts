@@ -530,12 +530,17 @@ describe("normal actor operations", () => {
       delete f.row.record.leaseExpiresAt;
       delete operator.pendingEffectId;
       delete operator.pendingEffectAttempt;
-      operator.receipts = operator.plan.effects.map((effect) => ({
-        effectId: effect.id,
-        observedAt: new Date(now).toISOString(),
-        resourceVersion: "controlled fixture receipt",
-        ...(effect.kind === "access" ? { fenceGeneration: operator.fenceGeneration } : {}),
-      }));
+      operator.receipts = operator.plan.effects.map((effect) => {
+        const receipt: (typeof operator.receipts)[number] = {
+          effectId: effect.id,
+          observedAt: new Date(now).toISOString(),
+          resourceVersion: "controlled fixture receipt",
+        };
+        if (effect.kind === "access") {
+          receipt.fenceGeneration = operator.fenceGeneration;
+        }
+        return receipt;
+      });
       f.row.record.status = operator.plan.stage === "app" ? "prepared" : "participants-prepared";
       f.row.record.step = operator.plan.stage === "app" ? "bound" : "reserved";
     };

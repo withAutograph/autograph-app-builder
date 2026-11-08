@@ -28,6 +28,11 @@ import {
 } from "./native-target-onboarding-service";
 import type { NativeTargetOnboardingServiceDependencies } from "./native-target-onboarding-service";
 
+type NativeApprovalInputPrefix = Pick<
+  Parameters<typeof readPrivateNativeTargetApproval>[0],
+  "owner" | "record" | "callId"
+>;
+
 const authority = {
   issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
@@ -706,10 +711,12 @@ describe("exact native preparation invocation approval", () => {
       const approvalCalls: (string | undefined)[] = [];
       f.dependencies.readApproval = async (owner, record, callId) => {
         approvalCalls.push(callId);
+        const initial: NativeApprovalInputPrefix = { owner, record };
+        if (callId !== undefined) {
+          initial.callId = callId;
+        }
         const result = await readPrivateNativeTargetApproval({
-          owner,
-          record,
-          ...(callId === undefined ? {} : { callId }),
+          ...initial,
           historyOwner: owner.historyOwner,
           assertOwner: async () => {
             await f.authorize();
@@ -790,10 +797,12 @@ describe("retired attempt preparation with immutable initial approval", () => {
         callId,
         _workload,
       ) => {
+        const initial: NativeApprovalInputPrefix = { owner, record };
+        if (callId !== undefined) {
+          initial.callId = callId;
+        }
         const result = await readPrivateNativeTargetApproval({
-          owner,
-          record,
-          ...(callId === undefined ? {} : { callId }),
+          ...initial,
           historyOwner: owner.historyOwner,
           assertOwner: async () => {
             await f.authorize();
@@ -1011,10 +1020,12 @@ describe("side-effect-free approval peek with an incomplete durable tail", () =>
       let complete = false;
       let writes = 0;
       f.dependencies.readApproval = async (owner, record, callId) => {
+        const initial: NativeApprovalInputPrefix = { owner, record };
+        if (callId !== undefined) {
+          initial.callId = callId;
+        }
         const result = await readPrivateNativeTargetApproval({
-          owner,
-          record,
-          ...(callId === undefined ? {} : { callId }),
+          ...initial,
           historyOwner: owner.historyOwner,
           observation: {
             state: saved,

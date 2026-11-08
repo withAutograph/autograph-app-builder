@@ -531,9 +531,17 @@ describe("same-session owned draft repair", () => {
         resolvedTree: "5".repeat(40),
         version: 1,
       });
-      const request = {
+      const sourceBinding: Pick<
+        Parameters<typeof runtime.sealExistingDraftReconciliation>[0],
+        "githubSource" | "priorPublishedProposalDigest"
+      > = {
         githubSource,
-        ...(marker === "retained" ? { priorPublishedProposalDigest: receipt.proposalDigest } : {}),
+      };
+      if (marker === "retained") {
+        sourceBinding.priorPublishedProposalDigest = receipt.proposalDigest;
+      }
+      const request = {
+        ...sourceBinding,
         pullRequestNumber: draft.number,
         review,
         selectedCheckoutHeadSha: draft.headSha,

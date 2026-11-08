@@ -211,17 +211,19 @@ const appendProposalFiles = (
       maxBytes: EVE_NATIVE_RESULT_PAGE_BYTES,
       content,
       offsetBytes,
-      makePayload: (part, next) =>
-        event({
+      makePayload: (part, next) => {
+        const payload: Output = {
           ...output,
           files: [
             ...output.files,
             { path, operation: "upsert", digest: fileDigest, mode, content: part, offsetBytes },
           ],
-          ...(next < Buffer.byteLength(content)
-            ? { continuation: { path, digest: fileDigest, offsetBytes: next } }
-            : {}),
-        }),
+        };
+        if (next < Buffer.byteLength(content)) {
+          payload.continuation = { path, digest: fileDigest, offsetBytes: next };
+        }
+        return event(payload);
+      },
     });
     output.files.push({
       path,

@@ -254,8 +254,12 @@ const fixture = (clock?: () => number) => {
       return structuredClone(row);
     },
   };
+  const initial: Pick<ProtectedHostedOperatorDependencies, "now"> = {};
+  if (clock !== undefined) {
+    initial.now = clock;
+  }
   const deps: ProtectedHostedOperatorDependencies = {
-    ...(clock === undefined ? {} : { now: clock }),
+    ...initial,
     async assertAuthorized() {
       if (!member) {
         throw new HostedOperatorError("authorization_required");

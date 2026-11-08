@@ -3900,9 +3900,15 @@ export function createHostedEveSessionService(input: {
             approvalRequest.data,
           )
         : undefined;
+    const responseMetadata: Partial<Parameters<typeof mutate>[0]> = {};
+    if (resourceApprovalResponse !== undefined) {
+      responseMetadata.resourceApprovalResponse = resourceApprovalResponse;
+    }
+    if (marker !== undefined) {
+      responseMetadata.internalSessionLimitResponse = marker;
+    }
     return mutate({
-      ...(resourceApprovalResponse === undefined ? {} : { resourceApprovalResponse }),
-      ...(marker === undefined ? {} : { internalSessionLimitResponse: marker }),
+      ...responseMetadata,
       async dispatch(operationId) {
         const paged =
           input.transport.observe !== undefined &&

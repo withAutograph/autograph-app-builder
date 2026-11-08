@@ -73,18 +73,30 @@ const composed = async () => {
   let historyUnavailable = false;
   let loseExecuteResponse = false;
   const starts: number[] = [];
-  f.deps.readApproval = async (_ctx, request, callId, observation) =>
-    await readPrivateOperatorApproval({
-      owner: ownerContext,
-      ...(observation === undefined ? {} : { observation }),
-      capture: (state) =>
-        createPrivateContinuityApprovalCapture({
+  f.deps.readApproval = async (_ctx, request, callId, observation) => {
+    const approvalContext: Pick<
+      Parameters<typeof readPrivateOperatorApproval>[0],
+      "owner" | "observation"
+    > = { owner: ownerContext };
+    if (observation !== undefined) {
+      approvalContext.observation = observation;
+    }
+    return await readPrivateOperatorApproval({
+      ...approvalContext,
+      capture: (state) => {
+        const captureInput: Parameters<typeof createPrivateContinuityApprovalCapture>[0] = {
           plan: saved.plan,
           request,
           principal: ownerContext.principal,
-          ...(callId === undefined ? {} : { callId }),
-          ...(state === undefined ? {} : { state }),
-        }),
+        };
+        if (callId !== undefined) {
+          captureInput.callId = callId;
+        }
+        if (state !== undefined) {
+          captureInput.state = state;
+        }
+        return createPrivateContinuityApprovalCapture(captureInput);
+      },
       readHistory: async (startIndex, onEvent) => {
         starts.push(startIndex);
         if (historyUnavailable) {
@@ -104,6 +116,7 @@ const composed = async () => {
         await f.deps.assertOwner(context);
       },
     });
+  };
   const verifyWorkload = async (request: Request) => {
     if (request.headers.get("authorization") !== "Bearer controlled-workload") {
       throw new HostedOperatorError("authorization_required");

@@ -1153,19 +1153,23 @@ describe("independent application source review", () => {
       ({ path, cursor, endLine }: Parameters<ApplicationReviewEvidence["readSource"]>[0]) => {
         const offset = (cursor?.column ?? 1) - 1;
         const end = Math.min(offset + 20_000, line.length);
-        return Promise.resolve({
-          path,
-          digest: "same-long-line",
-          content: line.slice(offset, end),
-          startLine: 1,
-          endLine: 1,
-          startColumn: offset + 1,
-          endColumn: end + 1,
-          totalLines: 1,
-          ...(end < line.length
-            ? { nextCursor: { line: 1, column: end + 1, endLine: cursor?.endLine ?? endLine } }
-            : {}),
-        });
+        const readWindow = (): Awaited<ReturnType<ApplicationReviewEvidence["readSource"]>> => {
+          const page: Awaited<ReturnType<ApplicationReviewEvidence["readSource"]>> = {
+            path,
+            digest: "same-long-line",
+            content: line.slice(offset, end),
+            startLine: 1,
+            endLine: 1,
+            startColumn: offset + 1,
+            endColumn: end + 1,
+            totalLines: 1,
+          };
+          if (end < line.length) {
+            page.nextCursor = { line: 1, column: end + 1, endLine: cursor?.endLine ?? endLine };
+          }
+          return page;
+        };
+        return Promise.resolve(readWindow());
       },
     );
     const first = [
@@ -1227,11 +1231,17 @@ describe("independent application source review", () => {
     });
     const windows: Awaited<ReturnType<ApplicationReviewEvidence["readSource"]>>[] = [];
     const collect = async (cursor?: ApplicationSourceReadCursor): Promise<void> => {
-      const page = await evidence.readSource({
-        path,
-        endLine: 1,
-        ...(cursor === undefined ? {} : { cursor }),
-      });
+      const readRequest = (): Parameters<ApplicationReviewEvidence["readSource"]>[0] => {
+        const request: Parameters<ApplicationReviewEvidence["readSource"]>[0] = {
+          path,
+          endLine: 1,
+        };
+        if (cursor !== undefined) {
+          request.cursor = cursor;
+        }
+        return request;
+      };
+      const page = await evidence.readSource(readRequest());
       expect(Buffer.byteLength(JSON.stringify(page), "utf-8")).toBeLessThanOrEqual(
         APPLICATION_REVIEW_SOURCE_PAGE_BYTES,
       );

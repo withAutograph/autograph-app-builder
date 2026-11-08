@@ -368,6 +368,22 @@ const captureFixture = async () => {
     proof,
     origin: program.origin,
   };
+  const requestBody = (
+    phase: "authorize" | "capture",
+    extra: Record<string, z.infer<ReturnType<typeof z.json>>>,
+  ) => {
+    const payload: typeof body & {
+      phase: "authorize" | "capture";
+      normalCookie?: typeof normalCookie;
+    } = {
+      ...body,
+      phase,
+    };
+    if (phase === "capture") {
+      payload.normalCookie = normalCookie;
+    }
+    return { ...payload, ...extra };
+  };
   const request = (
     phase: "authorize" | "capture",
     extra: Record<string, z.infer<ReturnType<typeof z.json>>> = {},
@@ -375,12 +391,7 @@ const captureFixture = async () => {
     new Request(`https://builder.example.test${NORMAL_ACTOR_CAPTURE_PATH}`, {
       method: "POST",
       headers: { authorization: "Bearer signed.oidc.token", "content-type": "application/json" },
-      body: JSON.stringify({
-        ...body,
-        phase,
-        ...(phase === "capture" ? { normalCookie } : {}),
-        ...extra,
-      }),
+      body: JSON.stringify(requestBody(phase, extra)),
     });
   return {
     value,
