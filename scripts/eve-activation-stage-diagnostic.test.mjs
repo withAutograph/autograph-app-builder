@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { test, vi } from "vitest";
 import { z } from "zod";
 
+const terminalRecoveryActivationFailed = "eve.terminal_recovery_activation_failed";
 const require = createRequire(import.meta.url);
 const sdk = pathToFileURL(`${path.dirname(require.resolve("eve/package.json"))}/dist/src/`).href;
 const { activateTerminalSession } = await import(`${sdk}execution/session/terminal-recovery.js`);
@@ -81,7 +82,7 @@ const captureFailure = async (f, original, expectedStage) => {
   assert.equal(line.startsWith(prefix), true);
   assert.equal(line.includes(canary), false);
   const summary = JSON.parse(line.slice(prefix.length));
-  assert.equal(summary.event, "eve.terminal_recovery_activation_failed");
+  assert.equal(summary.event, terminalRecoveryActivationFailed);
   assert.equal(summary.stage, expectedStage);
   assert.equal(
     Object.keys(summary).every((key) =>
@@ -106,7 +107,7 @@ test("receipt read errors retain identity and log only closed compiled error fac
   assert.deepEqual(await captureFailure(f, failure, "receipt_read"), {
     code: "TRANSPORT",
     errorClass: "WorkflowWorldError",
-    event: "eve.terminal_recovery_activation_failed",
+    event: terminalRecoveryActivationFailed,
     stage: "receipt_read",
     status: 503,
   });
@@ -128,7 +129,7 @@ test("an actual expired hook lookup remains a failure and is never treated as a 
   assert.deepEqual(await captureFailure(f, failure, "hook_lookup"), {
     code: "run-expired",
     errorClass: "RunExpiredError",
-    event: "eve.terminal_recovery_activation_failed",
+    event: terminalRecoveryActivationFailed,
     stage: "hook_lookup",
     status: 410,
   });
@@ -145,7 +146,7 @@ test("metadata decryption errors never expose their message or private context",
   });
   assert.deepEqual(await captureFailure(f, failure, "hook_metadata"), {
     errorClass: "RuntimeDecryptionError",
-    event: "eve.terminal_recovery_activation_failed",
+    event: terminalRecoveryActivationFailed,
     stage: "hook_metadata",
   });
   assert.equal(f.state.resumes, 0);
@@ -198,7 +199,7 @@ test("unknown names, arbitrary codes, invalid status and deep causes cannot leak
   };
   assert.deepEqual(await captureFailure(f, failure, "receipt_read"), {
     errorClass: "other",
-    event: "eve.terminal_recovery_activation_failed",
+    event: terminalRecoveryActivationFailed,
     stage: "receipt_read",
   });
 });

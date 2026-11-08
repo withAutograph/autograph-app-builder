@@ -227,9 +227,9 @@ test("mixed retained call/approval/deferred result is uncertain before any inval
   const before = JSON.stringify(f.payload);
   const reconciled = await reconcileTerminalRecoveryCandidate(f.handle);
   assert.deepEqual(reconciled, {
+    callId,
     kind: "uncertain",
     reason: "uncommitted-action-dispatch",
-    callId,
   });
   assert.equal(JSON.stringify(f.payload), before);
 });
@@ -304,9 +304,9 @@ test("emitted native result alone never becomes a committed result or permission
   });
   const before = JSON.stringify(f.payload);
   assert.deepEqual(await reconcileTerminalRecoveryCandidate(f.handle), {
+    callId,
     kind: "uncertain",
     reason: "uncommitted-action-result",
-    callId,
   });
   assert.equal(JSON.stringify(f.payload), before);
 });

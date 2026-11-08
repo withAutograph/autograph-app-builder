@@ -7,6 +7,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { it } from "vitest";
 
+const parentReviewId = "parent-review";
 const require = createRequire(import.meta.url);
 const sdk = process.env.EVE_PATCH_EDIT_DIR ?? path.dirname(require.resolve("eve/package.json"));
 const { createHistoricalCheckpointVisitor } = await import(
@@ -272,12 +273,12 @@ it("visits an older native handoff parent only after the receipt-bound run has n
   const f = fixture();
   f.steps.set("review", step(f.runId, "review", paired("validated")));
   const parent = "handoff-parent";
-  const older = event(parent, 1, "parent-review");
+  const older = event(parent, 1, parentReviewId);
   const start = event(parent, 2, "parent-handoff", "step_started", "startSessionOwnerStep");
   f.events.push(older, start);
   f.steps.set(
-    "parent-review",
-    step(parent, "parent-review", paired("reviewed", { digest: "native-parent" })),
+    parentReviewId,
+    step(parent, parentReviewId, paired("reviewed", { digest: "native-parent" })),
   );
   f.options.visitPredecessors = async (visit) => {
     await visit({

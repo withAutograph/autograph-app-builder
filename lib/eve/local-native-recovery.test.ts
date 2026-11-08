@@ -79,11 +79,11 @@ const fixture = async () => {
       ...input.recovery,
       ownerRunId: "wrun_recovered",
       provenance: {
+        checkpointVersion: 1,
         kind: "failed-turn-input",
-        sourceStepId: "step_failed_model",
         sourceEventId: "event_failed_model",
         sourceSlot: 0,
-        checkpointVersion: 1,
+        sourceStepId: "step_failed_model",
       },
     });
     await (input.recoveryPhase === "activate"
@@ -181,7 +181,7 @@ describe("local native terminal recovery authority", () => {
       isRecoveredSession: (id) => f.recovery.lineage(id).length > 1,
     });
 
-    const get = () => service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
+    const get = () => service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
     const first = await get();
     expect(first).toMatchObject({ cursor: 3, sessionId: "wrun_original", status: "waiting" });
     expect(f.snapshots).toHaveBeenCalledTimes(2);
@@ -244,13 +244,13 @@ describe("local native terminal recovery authority", () => {
     expect(initial).toMatchObject({ cursor: 2, status: "failed" });
     childVisible = true;
     const current = await service.get({
-      sessionId: "wrun_original",
       cursor: initial.cursor,
       limit: 100,
+      sessionId: "wrun_original",
     });
     expect(current).toMatchObject({ cursor: 3, sessionId: "wrun_original", status: "waiting" });
     expect(current.events).toHaveLength(1);
-    const readback = await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
+    const readback = await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
     expect(readback.events).toHaveLength(3);
   });
   it("catches up a current native snapshot without replacing an older live reader array", async () => {
@@ -300,15 +300,15 @@ describe("local native terminal recovery authority", () => {
     });
     const completed = { ...waiting, meta: { ...waiting.meta, id: "final-wait" } };
     childEvents.push(completed);
-    const caughtUp = await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
+    const caughtUp = await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
     expect(caughtUp.events).toHaveLength(5);
     expect(caughtUp.cursor).toBe(5);
     finish(true);
     await vi.waitFor(async () => {
-      const result = await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
+      const result = await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
       expect(result.events).toHaveLength(5);
     });
-    const tail = await service.get({ sessionId: "wrun_original", cursor: 5, limit: 100 });
+    const tail = await service.get({ cursor: 5, limit: 100, sessionId: "wrun_original" });
     expect(tail.events).toEqual([]);
     expect(tail.cursor).toBe(5);
   });
@@ -395,7 +395,7 @@ describe("local native terminal recovery authority", () => {
       },
       { stateGeneration: f.root, isRecoveredSession: () => true, modelTurnTimeoutMs: 200 },
     );
-    await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
+    await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
     await service.respond({
       sessionId: "wrun_original",
       clientRequestId: "answer-old-once",
@@ -405,7 +405,7 @@ describe("local native terminal recovery authority", () => {
       expect(childEvents.at(-1)?.type).toBe("step.started");
     });
     childEvents.push(resolution("old-input"), question("new-input"));
-    const current = await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
+    const current = await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
     expect(current.inputRequests?.map((entry) => entry.requestId)).toEqual(["new-input"]);
     await delay(250);
     expect(cancel).not.toHaveBeenCalled();
@@ -415,14 +415,14 @@ describe("local native terminal recovery authority", () => {
       responses: [{ requestId: "new-input", response: { kind: "answer", value: "Yes" } }],
     });
     await vi.waitFor(async () => {
-      const result = await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
+      const result = await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
       expect(result.inputRequests ?? []).toEqual([]);
       expect(result.status).toBe("waiting");
     });
-    const settled = await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
+    const settled = await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
     finishOldReader(true);
     await vi.waitFor(async () => {
-      const result = await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
+      const result = await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
       expect(result.inputRequests ?? []).toEqual([]);
       expect(result.cursor).toBe(settled.cursor);
     });
@@ -494,11 +494,11 @@ describe("local native terminal recovery authority", () => {
       message: "Continue",
     });
     await vi.waitFor(async () => {
-      const current = await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
+      const current = await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
       expect(current.status).toBe("waiting");
     });
     recovered = true;
-    const result = await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
+    const result = await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
     expect(result).toMatchObject({ cursor: 3, status: "waiting" });
     expect(result.error).toBeUndefined();
     expect(result.events[0]).toMatchObject({ code: "model_error", type: "error" });
@@ -521,11 +521,11 @@ describe("local native terminal recovery authority", () => {
       stateGeneration: f.root,
       isRecoveredSession: () => true,
     });
-    expect(await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 })).toMatchObject({
+    expect(await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" })).toMatchObject({
       error: { code: "session_recovery_unavailable" },
     });
     f.snapshots.mockImplementation(good);
-    const restored = await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
+    const restored = await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
     expect(restored).toMatchObject({ cursor: 3, status: "waiting" });
     expect(restored.error).toBeUndefined();
     expect(f.post).toHaveBeenCalledTimes(2);
@@ -537,7 +537,7 @@ describe("local native terminal recovery authority", () => {
       stateGeneration: f.root,
       isRecoveredSession: () => true,
     });
-    await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
+    await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
     f.snapshots.mockImplementation(function snapshot(this: ClientSession) {
       const events =
         this.state.sessionId === "wrun_original"
@@ -548,7 +548,7 @@ describe("local native terminal recovery authority", () => {
         session: { sessionId: this.state.sessionId, streamIndex: events.length },
       });
     });
-    const rejected = await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
+    const rejected = await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
     expect(rejected).toMatchObject({
       error: { code: "session_recovery_unavailable" },
       status: "failed",
@@ -717,11 +717,11 @@ describe("local native terminal recovery authority", () => {
           ...body.recovery,
           ownerRunId: "wrun_forged",
           provenance: {
+            checkpointVersion: 1,
             kind: "failed-turn-input",
-            sourceStepId: "step",
             sourceEventId: "event",
             sourceSlot: 0,
-            checkpointVersion: 1,
+            sourceStepId: "step",
           },
         }),
       }),
