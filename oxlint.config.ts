@@ -112,7 +112,6 @@ export default defineConfig({
       // Preserve existing control flow pending focused review.
       files: [
         "agent/tools/artifact_workflow_status.ts",
-        "agent/tools/target_execution_status.ts",
         "app/(product)/local-connections/*/complete/route.ts",
         "app/(product)/local-oauth/*/approve/completion.ts",
         "app/ui/handoff-controls.tsx",
@@ -121,10 +120,8 @@ export default defineConfig({
         "components/auth/sign-up.tsx",
         "evals/design-guidance.eval.ts",
         sharedLintFile7,
-        "lib/agent/approval-receipt.ts",
         "lib/agent/prepare-app-creation.ts",
         "lib/agent/prototype-artifacts.ts",
-        "lib/agent/target-execution.ts",
         "lib/auth/github-app-installation.ts",
         sharedLintFile25,
         "lib/auth/preview-oauth-runtime.ts",

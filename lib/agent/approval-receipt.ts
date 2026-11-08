@@ -507,11 +507,15 @@ const validatedHostedOperatorApprovalPlan = (
   toolName: string,
 ): HostedOperatorPlan | undefined => {
   const parsed = hostedOperatorPlanSchema.safeParse(record.plan);
+  if (!parsed.success) {
+    return;
+  }
+  const matchesPlan =
+    record.planDigest === operatorPlanDigest(parsed.data) &&
+    parsed.data.action === (toolName === "cleanup-app-hosted-runtime" ? "cleanup" : "prepare") &&
+    record.environment === "preview";
   if (
-    !parsed.success ||
-    record.planDigest !== operatorPlanDigest(parsed.data) ||
-    parsed.data.action !== (toolName === "cleanup-app-hosted-runtime" ? "cleanup" : "prepare") ||
-    record.environment !== "preview" ||
+    !matchesPlan ||
     parsed.data.selection.appId !== record.appId ||
     parsed.data.selection.projectId !== record.projectId ||
     parsed.data.selection.branch !== record.branch

@@ -34,11 +34,13 @@ export function plannedProposalForExecution(
   state: AppBuilderWorkflowState,
   expectedProposalDigest: string,
 ): PreparedAppCreation {
-  if (
+  const outsideActiveExecutionPhases =
     state.phase !== "planned" &&
     state.phase !== "apply_failed" &&
     state.phase !== "applied" &&
-    state.phase !== "validation_pending" &&
+    state.phase !== "validation_pending";
+  if (
+    outsideActiveExecutionPhases &&
     state.phase !== "validation_failed" &&
     state.phase !== "validated" &&
     state.phase !== "reviewed"
