@@ -99,6 +99,7 @@ const supportedOperations = [
   "reconcile-approved-existing-draft-pull-request",
   "recover-lost-response-by-idempotency-key",
 ] as const;
+const DRAFT_PUBLICATION_OUTCOME = "publish-reviewed-change-set-as-draft-pull-request";
 const draftPublicationOperation = "publish-draft-pull-request" as const;
 const sourceReadOperation = "resolve-existing-source" as const;
 const draftReceiptKind = "draft-pull-request" as const;
@@ -635,8 +636,8 @@ export function composeGitHubPublicationRuntime(input: {
     const proposal = await proposals.read(proposalDigest);
     const receipt = await receipts.read(proposalDigest);
     if (
-      proposal?.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request" ||
-      receipt?.kind !== "draft-pull-request" ||
+      proposal?.intendedOutcome !== DRAFT_PUBLICATION_OUTCOME ||
+      receipt?.kind !== draftReceiptKind ||
       receipt.status !== "succeeded"
     ) {
       throw new Error("A verified Builder publication is required to read pull request status.");
@@ -1050,10 +1051,7 @@ export function composeGitHubPublicationRuntime(input: {
     },
     async inspectOwnedPublishedDraftRepairSource(request) {
       const proposal = await proposals.read(request.publishedProposalDigest);
-      if (
-        proposal === undefined ||
-        proposal.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request"
-      ) {
+      if (proposal === undefined || proposal.intendedOutcome !== DRAFT_PUBLICATION_OUTCOME) {
         throw new Error("The original published draft proposal is unavailable in this tenant.");
       }
       assertExactDraftPullRequestProposal(proposal);
@@ -1062,7 +1060,7 @@ export function composeGitHubPublicationRuntime(input: {
         throw new Error("The original published draft receipt is unavailable.");
       assertCanonicalGitHubMutationReceipt(prior);
       if (
-        prior.kind !== "draft-pull-request" ||
+        prior.kind !== draftReceiptKind ||
         prior.status !== "succeeded" ||
         !isDeepStrictEqual(
           [
@@ -1263,7 +1261,7 @@ export function composeGitHubPublicationRuntime(input: {
       if (
         proposal === undefined ||
         proposal.digest !== request.expectedProposalDigest ||
-        proposal.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request"
+        proposal.intendedOutcome !== DRAFT_PUBLICATION_OUTCOME
       ) {
         throw new Error("The exact draft-pull-request proposal is unavailable or changed.");
       }
@@ -1362,7 +1360,7 @@ export function composeGitHubPublicationRuntime(input: {
         title: request.title,
       });
       const sealed = await proposals.save(proposal);
-      if (sealed.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request") {
+      if (sealed.intendedOutcome !== DRAFT_PUBLICATION_OUTCOME) {
         throw new Error("The saved draft proposal has the wrong publication outcome.");
       }
       return sealed;

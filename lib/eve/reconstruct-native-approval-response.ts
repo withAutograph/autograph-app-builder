@@ -15,6 +15,9 @@ import {
 } from "./resource-approval-response";
 import type { PrivateInputState } from "./session-limit-input";
 
+const nativeTargetApprovalTool = "prepare-app-native-target";
+const toolApprovalKind = "tool-approval";
+
 /**
  * Reconstruct one unknown response only from fully settled owner-bound native batches.
  * The exact request digest is the final authority; no subsets or response dispatches
@@ -54,7 +57,7 @@ export const reconstructNativeApprovalResponse = (input: {
   }
   const receipts = persisted.flatMap((receipt) => (receipt.success ? [receipt.data] : []));
   const isTarget = (receipt: PrivateResourceApprovalReceipt) => {
-    if (receipt.toolName !== "prepare-app-native-target") {
+    if (receipt.toolName !== nativeTargetApprovalTool) {
       return false;
     }
     return [
@@ -70,13 +73,13 @@ export const reconstructNativeApprovalResponse = (input: {
   // Any still-pending native request without a clearly different target is ambiguous.
   for (const batch of input.state.pending) {
     for (const request of batch.requests) {
-      if (request.kind !== "tool-approval" || request.toolName !== "prepare-app-native-target") {
+      if (request.kind !== toolApprovalKind || request.toolName !== nativeTargetApprovalTool) {
         continue;
       }
       const pending = capture.pendingRequests.filter(
         (entry) => entry.requestId === request.requestId,
       );
-      if (pending.length !== 1 || pending[0]?.toolName !== "prepare-app-native-target") {
+      if (pending.length !== 1 || pending[0]?.toolName !== nativeTargetApprovalTool) {
         return undefined;
       }
       if (
@@ -93,7 +96,7 @@ export const reconstructNativeApprovalResponse = (input: {
   for (const resolved of input.state.resolved) {
     const native = resolved.batch.requests.filter(
       (request) =>
-        request.kind === "tool-approval" && request.toolName === "prepare-app-native-target",
+        request.kind === toolApprovalKind && request.toolName === nativeTargetApprovalTool,
     );
     if (native.length === 0) {
       continue;
@@ -153,7 +156,7 @@ export const reconstructNativeApprovalResponse = (input: {
         isTarget(terminal),
         isDeepStrictEqual(terminal, saved[0]),
         terminal.responderPrincipalId === input.ownerUserId,
-        resolution[0].kind === "tool-approval",
+        resolution[0].kind === toolApprovalKind,
         ["approved", "denied"].includes(resolution[0].outcome),
         terminal.outcome === (resolution[0].outcome === "approved" ? "approved" : "cancelled"),
       ];

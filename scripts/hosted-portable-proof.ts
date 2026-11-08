@@ -10,6 +10,9 @@ import { approvalReceiptSchema } from "../lib/agent/approval-receipt";
 
 export { approvalReceiptSchema } from "../lib/agent/approval-receipt";
 
+const MCP_PROTOCOL_VERSION = "2025-03-26";
+const WWW_AUTHENTICATE_HEADER = "www-authenticate";
+
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const hex64 = z.string().regex(/^[0-9a-f]{64}$/u);
 const repositoryName = z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u);
@@ -314,7 +317,7 @@ export class HostedMcpProofClient {
     const headers = new Headers({
       accept: "application/json, text/event-stream",
       "content-type": "application/json",
-      "mcp-protocol-version": "2025-03-26",
+      "mcp-protocol-version": MCP_PROTOCOL_VERSION,
     });
     if (options.authenticate !== false && this.token !== undefined) {
       headers.set("authorization", `Bearer ${this.token}`);
@@ -354,7 +357,7 @@ export class HostedMcpProofClient {
     const response = await this.post("initialize", {
       capabilities: {},
       clientInfo: { name: "autograph-hosted-proof", version: "1" },
-      protocolVersion: "2025-03-26",
+      protocolVersion: MCP_PROTOCOL_VERSION,
     });
     if (response.status !== 200 || response.payload?.error !== undefined) {
       throw new Error(`MCP initialize failed with HTTP ${response.status}.`);
@@ -449,7 +452,7 @@ export class HostedMcpProofClient {
       {
         capabilities: {},
         clientInfo: { name: "autograph-hosted-proof-negative", version: "1" },
-        protocolVersion: "2025-03-26",
+        protocolVersion: MCP_PROTOCOL_VERSION,
       },
       { authenticate },
     );
@@ -686,9 +689,9 @@ export async function runHostedProof(input: {
   const missing = await noAuth.rawInitialize(false);
   if (
     missing.status !== 401 ||
-    !/^Bearer(?:\s|$)/iu.test(missing.headers.get("www-authenticate") ?? "") ||
+    !/^Bearer(?:\s|$)/iu.test(missing.headers.get(WWW_AUTHENTICATE_HEADER) ?? "") ||
     !missing.headers
-      .get("www-authenticate")
+      .get(WWW_AUTHENTICATE_HEADER)
       ?.includes(`resource_metadata="${metadata.metadataUrl}"`)
   ) {
     throw new Error("Hosted endpoint did not fail closed without OAuth.");
@@ -697,9 +700,9 @@ export async function runHostedProof(input: {
   const invalidResult = await invalid.rawInitialize(true);
   if (
     invalidResult.status !== 401 ||
-    !/^Bearer(?:\s|$)/iu.test(invalidResult.headers.get("www-authenticate") ?? "") ||
+    !/^Bearer(?:\s|$)/iu.test(invalidResult.headers.get(WWW_AUTHENTICATE_HEADER) ?? "") ||
     !invalidResult.headers
-      .get("www-authenticate")
+      .get(WWW_AUTHENTICATE_HEADER)
       ?.includes(`resource_metadata="${metadata.metadataUrl}"`)
   ) {
     throw new Error("Hosted endpoint did not reject an invalid bearer token.");

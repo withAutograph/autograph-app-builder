@@ -134,13 +134,16 @@ type GhStatusRecord = Readonly<{
   tokenSource: "keyring";
 }>;
 
+const malformedAuthenticationStatus = "GitHub authentication status was malformed.";
+const unsafeGitHubStateRoot = "GitHub state root is unsafe.";
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseGhAuthStatus(payload: string, expectedUsername: string): GhStatusRecord {
   let parsed: unknown;
   try {
     parsed = JSON.parse(payload);
   } catch {
-    throw new Error("GitHub authentication status was malformed.");
+    throw new Error(malformedAuthenticationStatus);
   }
   if (
     typeof parsed !== "object" ||
@@ -148,7 +151,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
     Array.isArray(parsed) ||
     Object.keys(parsed).join(",") !== "hosts"
   ) {
-    throw new Error("GitHub authentication status was malformed.");
+    throw new Error(malformedAuthenticationStatus);
   }
   const { hosts } = parsed as { hosts?: unknown };
   if (
@@ -157,7 +160,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
     Array.isArray(hosts) ||
     Object.keys(hosts).join(",") !== githubHost
   ) {
-    throw new Error("GitHub authentication status was malformed.");
+    throw new Error(malformedAuthenticationStatus);
   }
   const records = (hosts as Record<string, unknown>)[githubHost];
   if (!Array.isArray(records) || records.length !== 1) {
@@ -165,7 +168,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
   }
   const [record] = records;
   if (typeof record !== "object" || record === null || Array.isArray(record)) {
-    throw new Error("GitHub authentication status was malformed.");
+    throw new Error(malformedAuthenticationStatus);
   }
   const value = record as Record<string, unknown>;
   if (
@@ -279,7 +282,7 @@ export function assertGithubStateRoot(stateRoot: string): void {
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (rootStat.mode & 0o777) !== 0o700
   ) {
-    throw new Error("GitHub state root is unsafe.");
+    throw new Error(unsafeGitHubStateRoot);
   }
 
   const rootEntries = readdirSync(stateRoot, { withFileTypes: true });
@@ -301,7 +304,7 @@ export function assertGithubStateRoot(stateRoot: string): void {
   const ghStat = lstatSync(ghRoot);
   // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   if (ghStat.uid !== uid || (ghStat.mode & 0o022) !== 0) {
-    throw new Error("GitHub state root is unsafe.");
+    throw new Error(unsafeGitHubStateRoot);
   }
 
   const ghEntries = readdirSync(ghRoot, { withFileTypes: true });
@@ -329,7 +332,7 @@ export function assertGithubStateRoot(stateRoot: string): void {
     deviceStat.size === 0 ||
     deviceStat.size > 256
   ) {
-    throw new Error("GitHub state root is unsafe.");
+    throw new Error(unsafeGitHubStateRoot);
   }
 }
 

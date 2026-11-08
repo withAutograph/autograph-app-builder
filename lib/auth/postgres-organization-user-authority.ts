@@ -11,6 +11,9 @@ import type {
   PreviewOrganizationUserAuthority,
 } from "./preview-user-management";
 
+const accessRevokedErrorCode = "access-revoked";
+const workspaceSetupFailedErrorCode = "workspace-setup-failed";
+
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
@@ -59,7 +62,7 @@ function oneAuthorizedOrganization(
     return undefined;
   }
   if (!new Set(["owner", "admin", "member"]).has(rows[0].role)) {
-    throw new OrganizationProvisioningError("access-revoked");
+    throw new OrganizationProvisioningError(accessRevokedErrorCode);
   }
   return {
     organizationId: rows[0].organization_id,
@@ -136,10 +139,10 @@ export function createPostgresPreviewOrganizationAuthority(
         }>(userResult);
         const [user] = users;
         if (users.length !== 1 || user === undefined) {
-          throw new OrganizationProvisioningError("workspace-setup-failed");
+          throw new OrganizationProvisioningError(workspaceSetupFailedErrorCode);
         }
         if (user.banned === true) {
-          throw new OrganizationProvisioningError("access-revoked");
+          throw new OrganizationProvisioningError(accessRevokedErrorCode);
         }
         const accountsResult = await transaction.execute(sql`
           select "provider_id"
@@ -204,7 +207,7 @@ export function createPostgresPreviewOrganizationAuthority(
         if (invitation !== undefined) {
           const role = invitation.role ?? "member";
           if (!new Set(["owner", "admin", "member"]).has(role)) {
-            throw new OrganizationProvisioningError("access-revoked");
+            throw new OrganizationProvisioningError(accessRevokedErrorCode);
           }
           const acceptedResult = await transaction.execute(sql`
             update "invitation"
@@ -214,7 +217,7 @@ export function createPostgresPreviewOrganizationAuthority(
             returning "organization_id"
           `);
           if (resultRows<{ organization_id: string }>(acceptedResult).length !== 1) {
-            throw new OrganizationProvisioningError("workspace-setup-failed");
+            throw new OrganizationProvisioningError(workspaceSetupFailedErrorCode);
           }
           await transaction.execute(sql`
             insert into "member" (
@@ -232,7 +235,7 @@ export function createPostgresPreviewOrganizationAuthority(
             invited?.organizationId !== invitation.organization_id ||
             invited.workspaceId !== invitation.workspace_id
           ) {
-            throw new OrganizationProvisioningError("workspace-setup-failed");
+            throw new OrganizationProvisioningError(workspaceSetupFailedErrorCode);
           }
           return invited;
         }
@@ -244,7 +247,7 @@ export function createPostgresPreviewOrganizationAuthority(
            limit 2
         `);
         if (resultRows<{ organization_id: string }>(mappingResult).length !== 0) {
-          throw new OrganizationProvisioningError("access-revoked");
+          throw new OrganizationProvisioningError(accessRevokedErrorCode);
         }
         let selfServiceSignupEnabled = false;
         try {
@@ -286,7 +289,7 @@ export function createPostgresPreviewOrganizationAuthority(
           created?.organizationId !== organizationId ||
           created.workspaceId !== workspaceId
         ) {
-          throw new OrganizationProvisioningError("workspace-setup-failed");
+          throw new OrganizationProvisioningError(workspaceSetupFailedErrorCode);
         }
         return created;
       });

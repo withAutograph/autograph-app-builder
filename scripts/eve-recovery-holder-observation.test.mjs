@@ -6,6 +6,9 @@ import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { it } from "vitest";
 
+const TERMINAL_RECOVERY_KIND = "terminal-recovery";
+const HOOK_NOT_FOUND_MESSAGE = "hook-not-found";
+
 const require = createRequire(import.meta.url);
 const sdk = pathToFileURL(`${path.dirname(require.resolve("eve/package.json"))}/dist/src/`).href;
 const { observeRecoveryInboxHolder } = await import(
@@ -57,7 +60,7 @@ const fixture = () => {
     metadata: Promise.resolve({ sessionId: descriptor.logicalSessionId }),
   };
   let entry = {
-    kind: "terminal-recovery",
+    kind: TERMINAL_RECOVERY_KIND,
     descriptor: holderDescriptor,
     checkpoint: {
       serializedContext: { "eve.sessionId": descriptor.logicalSessionId },
@@ -92,11 +95,11 @@ const fixture = () => {
       seen.tokens.push(requestedToken);
       assert.equal(requestedToken, token);
       if (hook === undefined) {
-        throw new Error("hook-not-found");
+        throw new Error(HOOK_NOT_FOUND_MESSAGE);
       }
       return Promise.resolve(hook);
     },
-    isHookNotFound: (error) => error?.message === "hook-not-found",
+    isHookNotFound: (error) => error?.message === HOOK_NOT_FOUND_MESSAGE,
     async readRunEntry(runId) {
       seen.reads.push(runId);
       assert.equal(runId, holderOwnerRunId);
@@ -183,7 +186,7 @@ it("observes a real occupied logical inbox held by a distinct physical owner wit
   const summary = f.summaries[0];
   assert.equal(summary.event, "eve.terminal_recovery_inbox_holder");
   assert.equal(summary.outcome, "observed");
-  assert.equal(summary.entryKind, "terminal-recovery");
+  assert.equal(summary.entryKind, TERMINAL_RECOVERY_KIND);
   assert.equal(summary.nativeStatus, "failed");
   assert.equal(summary.holderIsLogicalOwner, false);
   assert.equal(summary.holderIsSourceOwner, false);
@@ -205,7 +208,7 @@ it("reports a matching committed holder and a missing canonical receipt distinct
   const committed = fixture();
   committed.input.receipt = { ...committed.receipt, ownerRunId: committed.holderOwnerRunId };
   committed.setEntry({
-    kind: "terminal-recovery",
+    kind: TERMINAL_RECOVERY_KIND,
     descriptor: committed.descriptor,
     checkpoint: {
       serializedContext: { "eve.sessionId": committed.descriptor.logicalSessionId },
@@ -299,7 +302,7 @@ it("a missing holder stays read only and cannot emit stale absence after a new c
   changed.deps.getHook = () => {
     lookups += 1;
     if (lookups === 1) {
-      throw new Error("hook-not-found");
+      throw new Error(HOOK_NOT_FOUND_MESSAGE);
     }
     return Promise.resolve({
       runId: changed.holderOwnerRunId,

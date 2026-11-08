@@ -20,6 +20,9 @@ import { inspectDevelopmentSourceGeneration } from "./development-source-generat
 import { processStdoutByteStream } from "./captured-process-output";
 import { z } from "zod";
 
+const gitHashObjectCommand = "hash-object";
+const gitNoFiltersOption = "--no-filters";
+
 const objectId = z.string().regex(/^[a-f0-9]{40}$/u);
 const gitExecutable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
 const fixedGitArgs = [
@@ -152,7 +155,7 @@ export const captureLocalPlanningSource = async (
         const target = readlinkSync(absolute);
         links.push([name, target]);
         const oid = objectId.parse(
-          git(["hash-object", "-w", "--no-filters", "--stdin"], Buffer.from(target)),
+          git([gitHashObjectCommand, "-w", gitNoFiltersOption, "--stdin"], Buffer.from(target)),
         );
         records.push(`120000 ${oid}\t${name}`);
       } else if (info.isFile()) {
@@ -168,9 +171,9 @@ export const captureLocalPlanningSource = async (
     for (let offset = 0; offset < regular.length; offset += 256) {
       const batch = regular.slice(offset, offset + 256);
       const ids = git([
-        "hash-object",
+        gitHashObjectCommand,
         "-w",
-        "--no-filters",
+        gitNoFiltersOption,
         "--",
         ...batch.map((file) => file.absolute),
       ])
@@ -373,7 +376,7 @@ export const captureLocalPlanningSource = async (
           break;
         }
         const oid = objectId.parse(
-          git(["hash-object", "-w", "--no-filters", "--stdin"], readFileSync(absolute)),
+          git([gitHashObjectCommand, "-w", gitNoFiltersOption, "--stdin"], readFileSync(absolute)),
         );
         // oxlint-disable-next-line eslint/no-bitwise -- Preserve the actual retained executable mode.
         const mode = info.mode & 0o100 ? "100755" : "100644";

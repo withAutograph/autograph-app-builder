@@ -78,6 +78,9 @@ import type {
 import { createRepositoryProductionConnectionReader } from "./repository-production-connections";
 import { createRepositoryProductionRuntimeBinding } from "./repository-production-runtime-binding";
 
+const retrySetupAction = "retry-setup";
+const listMembersAction = "list-members";
+
 /** Production composition opens only the ordinary Builder store and explicit repository profile. */
 const defined = <T>(value: T | undefined): T => {
   if (value === undefined) {
@@ -100,7 +103,7 @@ export const assertNoConflictingProductionSetup = (input: {
     return;
   }
   const command = input.command;
-  if (command?.action === "retry-setup" || command?.action === "renew-sign-in") {
+  if (command?.action === retrySetupAction || command?.action === "renew-sign-in") {
     return;
   }
   if (command !== undefined && input.pendingCommandIds.includes(command.clientRequestId)) {
@@ -483,7 +486,7 @@ export const createRepositoryProductionNativeHandler =
               readMembers: async (context) =>
                 z
                   .array(z.object({ id: z.string(), roles: z.array(z.string()) }))
-                  .parse(await authRequest(context, { action: "list-members" }, true)),
+                  .parse(await authRequest(context, { action: listMembersAction }, true)),
               execute: async (context, command) => {
                 await managementFor(() => context.assertCurrent(), command, true).execute(
                   (await current(scope)).owner,
@@ -495,7 +498,7 @@ export const createRepositoryProductionNativeHandler =
               readMembers: async (context) =>
                 z
                   .array(z.object({ id: z.string() }))
-                  .parse(await authRequest(context, { action: "list-members" }, true)),
+                  .parse(await authRequest(context, { action: listMembersAction }, true)),
               execute: async (context, command) => {
                 await managementFor(() => context.assertCurrent(), command, true).execute(
                   (await current(scope)).owner,
@@ -643,7 +646,7 @@ export const createRepositoryProductionNativeHandler =
               row.record.creatorActorId !== undefined
                 ? !z
                     .array(z.object({ id: z.string() }))
-                    .parse(await authRequest(readContext(row), { action: "list-members" }, true))
+                    .parse(await authRequest(readContext(row), { action: listMembersAction }, true))
                     .some((person) => person.id === row.record.creatorActorId)
                 : false;
             return {
@@ -697,7 +700,7 @@ export const createRepositoryProductionNativeHandler =
                 ),
               };
               assertNoConflictingProductionSetup({ ...state, command });
-              if (command?.action !== "retry-setup" && command?.action !== "renew-sign-in") {
+              if (command?.action !== retrySetupAction && command?.action !== "renew-sign-in") {
                 assertNoConflictingCreatorRoleUpdate(state);
               }
             }
@@ -851,7 +854,7 @@ export const createRepositoryProductionNativeHandler =
             const found = await resolve(owner);
             const row = await store.read(found.scope);
             if (
-              command.action === "retry-setup" &&
+              command.action === retrySetupAction &&
               (row?.record.creatorRoleUpdate?.state === "pending" ||
                 row?.record.appAccessUpgrade?.state === "pending")
             ) {

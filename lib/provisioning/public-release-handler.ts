@@ -18,6 +18,8 @@ import type {
   PublicReleaseBindingState,
 } from "./public-release-contract";
 
+const bindProductionRuntimeEffect = "bind-production-runtime";
+
 export interface PublicReleaseInvocation {
   authority: PublicReleaseAuthority;
   sessionId: string;
@@ -197,7 +199,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
         if (!row || row.record.planDigest !== planDigest) {
           throw unavailable();
         }
-        let phase: PublicReleaseEffect | "observe-production" = "bind-production-runtime";
+        let phase: PublicReleaseEffect | "observe-production" = bindProductionRuntimeEffect;
         try {
           for (const effect of plan.effects) {
             phase = effect;
@@ -215,7 +217,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
             };
             const binding = async (key: string) => {
               await authorize(invocation, plan, true);
-              if (effect !== "bind-production-runtime") {
+              if (effect !== bindProductionRuntimeEffect) {
                 throw unavailable();
               }
               const current = await refresh();
@@ -287,7 +289,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
             await authorize(invocation, plan, true);
             if (reconciled === "applied") {
               if (
-                effect === "bind-production-runtime" &&
+                effect === bindProductionRuntimeEffect &&
                 Object.values(row.record.bindings).some((value) => value.state !== "applied")
               ) {
                 throw unavailable();
@@ -311,7 +313,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
             }
             row = await refresh();
             if (
-              effect === "bind-production-runtime" &&
+              effect === bindProductionRuntimeEffect &&
               Object.values(row.record.bindings).some((value) => value.state !== "applied")
             ) {
               throw unavailable();

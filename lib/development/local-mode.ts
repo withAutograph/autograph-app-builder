@@ -20,6 +20,9 @@ import { promisify } from "node:util";
 import nodePath from "node:path";
 import { runSequentially } from "../async-sequential";
 
+const GIT_EXECUTABLE = "/usr/bin/git";
+const ARRUSTED_CHECKOUT_DESCRIPTION = "Arrusted checkout";
+
 const execFileAsync = promisify(execFile);
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 const { dirname, isAbsolute, join, relative, resolve: pathResolve, sep } = nodePath;
@@ -295,7 +298,7 @@ const assertSafeSourceAncestors = async (sourceRoot: string, absolute: string) =
 
 const sourcePaths = async (sourceRoot: string): Promise<string[]> => {
   const { stdout } = await execFileAsync(
-    "/usr/bin/git",
+    GIT_EXECUTABLE,
     [
       "-c",
       "core.hooksPath=/dev/null",
@@ -443,7 +446,7 @@ const fingerprintEntries = (entries: readonly Awaited<ReturnType<typeof sourceEn
 };
 
 export const fingerprintDevelopmentSource = async (sourceRoot: string) => {
-  await canonicalOwnedDirectory(sourceRoot, "Arrusted checkout");
+  await canonicalOwnedDirectory(sourceRoot, ARRUSTED_CHECKOUT_DESCRIPTION);
   return fingerprintEntries(await developmentEntries(sourceRoot));
 };
 
@@ -534,7 +537,7 @@ export const createDevelopmentSnapshot = async (input: {
   sourceRoot: string;
   runRoot: string;
 }): Promise<DevelopmentSnapshot> => {
-  const sourceRoot = await canonicalOwnedDirectory(input.sourceRoot, "Arrusted checkout");
+  const sourceRoot = await canonicalOwnedDirectory(input.sourceRoot, ARRUSTED_CHECKOUT_DESCRIPTION);
   const runRoot = await canonicalOwnedDirectory(input.runRoot, "Development run root");
   const root = join(runRoot, "source");
   await mkdir(root, { mode: 0o700 });
@@ -561,7 +564,7 @@ export const createDevelopmentSnapshot = async (input: {
     // The captured entries identify this planning input. Ordinary checkout
     // edits during copying are picked up by the source watcher in the next
     // cycle; they must not terminate development or discard active sessions.
-    execFileSync("/usr/bin/git", ["init", "-q"], {
+    execFileSync(GIT_EXECUTABLE, ["init", "-q"], {
       cwd: root,
       env: gitEnvironment(),
     });
@@ -569,7 +572,7 @@ export const createDevelopmentSnapshot = async (input: {
     // by the selected source. Stage exactly the captured inventory, including
     // those files, without traversing ignored dependencies or private state.
     execFileSync(
-      "/usr/bin/git",
+      GIT_EXECUTABLE,
       ["--literal-pathspecs", "add", "--force", "--pathspec-from-file=-", "--pathspec-file-nul"],
       {
         cwd: root,
@@ -578,7 +581,7 @@ export const createDevelopmentSnapshot = async (input: {
       },
     );
     execFileSync(
-      "/usr/bin/git",
+      GIT_EXECUTABLE,
       [
         "-c",
         "user.name=Autograph Development Snapshot",
@@ -599,12 +602,12 @@ export const createDevelopmentSnapshot = async (input: {
         },
       },
     );
-    const commit = execFileSync("/usr/bin/git", ["rev-parse", "HEAD"], {
+    const commit = execFileSync(GIT_EXECUTABLE, ["rev-parse", "HEAD"], {
       cwd: root,
       encoding: "utf-8",
       env: gitEnvironment(),
     }).trim();
-    const tree = execFileSync("/usr/bin/git", ["rev-parse", "HEAD^{tree}"], {
+    const tree = execFileSync(GIT_EXECUTABLE, ["rev-parse", "HEAD^{tree}"], {
       cwd: root,
       encoding: "utf-8",
       env: gitEnvironment(),
@@ -684,7 +687,7 @@ export const developmentDependencyKey = async (input: {
   platform: string;
   tools: DevelopmentTools;
 }) => {
-  const sourceRoot = await canonicalOwnedDirectory(input.sourceRoot, "Arrusted checkout");
+  const sourceRoot = await canonicalOwnedDirectory(input.sourceRoot, ARRUSTED_CHECKOUT_DESCRIPTION);
   if (!/^linux\/(?:arm64|amd64)$/u.test(input.platform)) {
     throw new Error("Development dependency platform is unsupported.");
   }

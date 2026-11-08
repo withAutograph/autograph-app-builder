@@ -17,6 +17,9 @@ import {
 } from "./local-source-baseline-store";
 import { safeSourcePath } from "./source-path";
 
+const gitExecutable = "/usr/bin/git";
+const gitExecutablePath = "/usr/bin:/bin";
+
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const sourcePath = z
   .string()
@@ -49,14 +52,14 @@ export const localSourceRecoveryRequestSchema = z.strictObject({
 const hash = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 const cleanGit = (root: string, args: string[], input?: string) =>
   execFileSync(
-    "/usr/bin/git",
+    gitExecutable,
     ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-C", root, ...args],
     {
       input,
       maxBuffer: 32 * 1024 * 1024,
       env: {
         NODE_ENV: "test",
-        PATH: "/usr/bin:/bin",
+        PATH: gitExecutablePath,
         HOME: root,
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_NO_REPLACE_OBJECTS: "1",
@@ -121,10 +124,10 @@ export const recoverLocalSourceBaseline = async (input: {
       .filter(Boolean)
       .map((line) => line.split(/\s/u)[2]),
   ];
-  const producer = spawn("/usr/bin/git", ["-C", originalRoot, "pack-objects", "--stdout"], {
+  const producer = spawn(gitExecutable, ["-C", originalRoot, "pack-objects", "--stdout"], {
     env: {
       NODE_ENV: "test",
-      PATH: "/usr/bin:/bin",
+      PATH: gitExecutablePath,
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_NO_REPLACE_OBJECTS: "1",
       GIT_CONFIG_GLOBAL: "/dev/null",
@@ -132,12 +135,12 @@ export const recoverLocalSourceBaseline = async (input: {
     stdio: ["pipe", "pipe", "pipe"],
   });
   const consumer = spawn(
-    "/usr/bin/git",
+    gitExecutable,
     ["--git-dir", gitRoot, "index-pack", "--stdin", "--strict"],
     {
       env: {
         NODE_ENV: "test",
-        PATH: "/usr/bin:/bin",
+        PATH: gitExecutablePath,
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_NO_REPLACE_OBJECTS: "1",
         GIT_CONFIG_GLOBAL: "/dev/null",
@@ -257,7 +260,7 @@ export const recoverLocalSourceBaseline = async (input: {
   }
   const tree = localBaselineGit(gitRoot, ["write-tree"]).toString().trim();
   const captured = execFileSync(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "--git-dir",
       gitRoot,
@@ -276,7 +279,7 @@ export const recoverLocalSourceBaseline = async (input: {
       input: "Explicit source-only baseline recovery capture\n",
       env: {
         NODE_ENV: "test",
-        PATH: "/usr/bin:/bin",
+        PATH: gitExecutablePath,
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_NO_REPLACE_OBJECTS: "1",
         GIT_CONFIG_GLOBAL: "/dev/null",
@@ -307,10 +310,10 @@ export const recoverLocalSourceBaseline = async (input: {
       files: actual.files,
     },
   };
-  const pack = spawn("/usr/bin/git", ["--git-dir", gitRoot, "pack-objects", "--stdout", "--revs"], {
+  const pack = spawn(gitExecutable, ["--git-dir", gitRoot, "pack-objects", "--stdout", "--revs"], {
     env: {
       NODE_ENV: "test",
-      PATH: "/usr/bin:/bin",
+      PATH: gitExecutablePath,
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_NO_REPLACE_OBJECTS: "1",
       GIT_CONFIG_GLOBAL: "/dev/null",

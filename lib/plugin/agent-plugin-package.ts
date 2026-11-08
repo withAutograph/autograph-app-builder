@@ -8,6 +8,9 @@ import packageManifest from "../../package.json" with { type: "json" };
 import { isReservedPublicReleaseHostname } from "./public-release-endpoint.ts";
 import { runSequentially } from "../async-sequential.ts";
 
+const PLUGIN_MANIFEST_FILENAME = "plugin.json";
+const ALLOWED_TOOLS_FRONTMATTER_FIELD = "allowed-tools";
+
 const SPEC_VERSION = "1.0.0";
 export const AUTOGRAPH_PACKAGE_VERSION = packageManifest.version;
 export const AUTOGRAPH_MCP_SERVER_NAME = "app-builder";
@@ -18,7 +21,7 @@ const SCHEMA_DIGESTS = {
   "mcp.schema.json": "d9904e6befac63b2bca19c32f3bc6a304173f5ed4f50daf8ce05fafc188c50ad",
   "plugin.schema.json": "fd74dfcbccea4a5b8768d9bc87b9da27449213ca5d464ace724ca48ec4bc074b",
 } as const;
-const PORTABLE_ENTRIES = ["plugin.json", "mcp.json", "skills", "LICENSE"];
+const PORTABLE_ENTRIES = [PLUGIN_MANIFEST_FILENAME, "mcp.json", "skills", "LICENSE"];
 const PORTABLE_ENTRY_SET = new Set(PORTABLE_ENTRIES);
 const SKILL_FRONTMATTER_FIELDS = new Set([
   "name",
@@ -26,7 +29,7 @@ const SKILL_FRONTMATTER_FIELDS = new Set([
   "license",
   "compatibility",
   "metadata",
-  "allowed-tools",
+  ALLOWED_TOOLS_FRONTMATTER_FIELD,
 ]);
 const HTTP_FIELD_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/u;
 const HTTP_FIELD_VALUE = /^[\t\u0020-\u007E\u0080-\u00FF]*$/u;
@@ -278,13 +281,13 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
       value: frontmatter.compatibility,
     });
   }
-  if ("allowed-tools" in frontmatter) {
+  if (ALLOWED_TOOLS_FRONTMATTER_FIELD in frontmatter) {
     requireString({
-      field: "allowed-tools",
+      field: ALLOWED_TOOLS_FRONTMATTER_FIELD,
       min: 1,
       pluginRoot,
       skillPath,
-      value: frontmatter["allowed-tools"],
+      value: frontmatter[ALLOWED_TOOLS_FRONTMATTER_FIELD],
     });
   }
   if ("metadata" in frontmatter) {
@@ -363,7 +366,10 @@ export const validateAgentPluginPackage = async ({
   if (packageKind === "generated-artifact") {
     await assertCleanGeneratedArtifact(resolvedPluginRoot);
   }
-  await assertRegularFile(resolvedPluginRoot, path.resolve(resolvedPluginRoot, "plugin.json"));
+  await assertRegularFile(
+    resolvedPluginRoot,
+    path.resolve(resolvedPluginRoot, PLUGIN_MANIFEST_FILENAME),
+  );
   await assertRegularFile(resolvedPluginRoot, path.resolve(resolvedPluginRoot, "mcp.json"));
 
   const schemaRoot = path.resolve(repositoryRoot, "schemas/agent-plugins", SPEC_VERSION);
@@ -378,7 +384,7 @@ export const validateAgentPluginPackage = async ({
     schemaDocuments[name] = JSON.parse(bytes.toString("utf-8")) as JsonObject;
   }
 
-  const plugin = await readJson(path.resolve(resolvedPluginRoot, "plugin.json"));
+  const plugin = await readJson(path.resolve(resolvedPluginRoot, PLUGIN_MANIFEST_FILENAME));
   const mcp = await readJson(path.resolve(resolvedPluginRoot, "mcp.json"));
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   const validatePlugin = ajv.compile<ValidatedPluginManifest>(

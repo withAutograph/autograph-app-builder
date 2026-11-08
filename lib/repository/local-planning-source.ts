@@ -21,6 +21,9 @@ import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { sanitizeValidationDiagnosticText } from "./validation-output-sanitize";
 import { z } from "zod";
 
+const repositoryWorkspacePath = "/workspace/repository";
+const workspacePath = "/workspace";
+
 export { captureLocalPlanningSource } from "./local-planning-source-capture";
 
 const objectId = z.string().regex(/^[a-f0-9]{40}$/u);
@@ -103,8 +106,8 @@ export const reconcileLocalPlanningSource = async (
   await retainSourceGeneration(capture, dependencies);
   input.assertCurrent();
   const presence = await sandbox.run({
-    command: `node -e ${quote(localPlanningGitPresenceProgram)} ${quote(JSON.stringify({ root: "/workspace/repository" }))}`,
-    workingDirectory: "/workspace",
+    command: `node -e ${quote(localPlanningGitPresenceProgram)} ${quote(JSON.stringify({ root: repositoryWorkspacePath }))}`,
+    workingDirectory: workspacePath,
   });
   input.assertCurrent();
   if (presence.exitCode !== 0) {
@@ -131,7 +134,7 @@ export const reconcileLocalPlanningSource = async (
     await sandbox.writeFile({ path: pack, content: baseline.streamPack() });
     input.assertCurrent();
     const initialization = {
-      root: "/workspace/repository",
+      root: repositoryWorkspacePath,
       stateRoot: `/workspace/.app-builder/local-source/${hash(input.sessionId)}`,
       packPath: `/workspace/${pack}`,
       sourceSha: baseline.sourceSha,
@@ -140,7 +143,7 @@ export const reconcileLocalPlanningSource = async (
     };
     const initialized = await sandbox.run({
       command: `node -e ${quote(initializeLocalPlanningGitBaseProgram)} ${quote(JSON.stringify(initialization))}`,
-      workingDirectory: "/workspace",
+      workingDirectory: workspacePath,
     });
     input.assertCurrent();
     if (initialized.exitCode !== 0) {
@@ -157,14 +160,14 @@ export const reconcileLocalPlanningSource = async (
     await sandbox.writeFile({ path: pack, content: current.streamPack() });
     input.assertCurrent();
     const currentIdentity = {
-      root: "/workspace/repository",
+      root: repositoryWorkspacePath,
       packPath: `/workspace/${pack}`,
       sourceSha: current.sourceSha,
       sourceTree: current.sourceTree,
     };
     const imported = await sandbox.run({
       command: `node -e ${quote(importLocalPlanningCurrentCommitProgram)} ${quote(JSON.stringify(currentIdentity))}`,
-      workingDirectory: "/workspace",
+      workingDirectory: workspacePath,
     });
     input.assertCurrent();
     if (imported.exitCode !== 0) {
@@ -192,7 +195,7 @@ export const reconcileLocalPlanningSource = async (
   }
   const imported = await sandbox.run({
     command: commands.join(" && "),
-    workingDirectory: "/workspace/repository",
+    workingDirectory: repositoryWorkspacePath,
   });
   if (imported.exitCode !== 0) {
     throw new Error(
@@ -215,7 +218,7 @@ export const reconcileLocalPlanningSource = async (
           managedOverlayManifestPath: "/workspace/.app-builder/source-files.json",
         }),
     originalSourceSha: objectId.parse(input.originalSourceSha),
-    root: "/workspace/repository",
+    root: repositoryWorkspacePath,
     sessionId: input.sessionId,
     stateRoot: "/workspace/.app-builder/source-reconciliation",
     targetSha: capture.snapshotSha,
@@ -223,7 +226,7 @@ export const reconcileLocalPlanningSource = async (
   input.assertCurrent();
   const reconciled = await sandbox.run({
     command: `node -e ${quote(planningSourceReconciliationProgram)} ${quote(JSON.stringify(request))}`,
-    workingDirectory: "/workspace/repository",
+    workingDirectory: repositoryWorkspacePath,
   });
   if (reconciled.exitCode !== 0) {
     throw new Error(

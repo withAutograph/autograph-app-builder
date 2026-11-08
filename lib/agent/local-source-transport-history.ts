@@ -22,6 +22,9 @@ import {
 import type { SourceReceipt } from "../repository/source-receipt";
 import type { LocalPlanningSourceReceipt } from "./local-planning-source-state";
 
+const ACTION_RESULT_EVENT = "action.result";
+const TOOL_RESULT_KIND = "tool-result";
+
 interface ReconciledTransportProvenance {
   appId: string;
   currentWorkspace: PreparedSandboxWorkspace;
@@ -70,10 +73,10 @@ const matchesFrozenReconciliation = (
       /^[a-f0-9]{40,64}$/u.test(history.sourceSnapshotTree) &&
       events.some(
         (candidate) =>
-          candidate.type === "action.result" &&
+          candidate.type === ACTION_RESULT_EVENT &&
           candidate.data.status === "completed" &&
           candidate.data.error === undefined &&
-          candidate.data.result.kind === "tool-result" &&
+          candidate.data.result.kind === TOOL_RESULT_KIND &&
           candidate.data.result.toolName === "prepare_workspace" &&
           candidate.data.result.isError !== true &&
           candidate.data.result.callId === history.reconciledByCallId &&
@@ -121,8 +124,8 @@ const completedReconciliationIndex = (
     return -1;
   }
   const isAnchorResult = (event: MessageStreamEvent) =>
-    event.type === "action.result" &&
-    event.data.result.kind === "tool-result" &&
+    event.type === ACTION_RESULT_EVENT &&
+    event.data.result.kind === TOOL_RESULT_KIND &&
     event.data.result.callId === anchor.reconciledByCallId;
   const index = events.findIndex(isAnchorResult);
   if (index === -1 || index !== events.findLastIndex(isAnchorResult)) {
@@ -130,10 +133,10 @@ const completedReconciliationIndex = (
   }
   const event = events[index];
   if (
-    event?.type !== "action.result" ||
+    event?.type !== ACTION_RESULT_EVENT ||
     event.data.status !== "completed" ||
     event.data.error !== undefined ||
-    event.data.result.kind !== "tool-result" ||
+    event.data.result.kind !== TOOL_RESULT_KIND ||
     event.data.result.isError === true
   ) {
     return -1;
@@ -158,15 +161,15 @@ export const completedLocalSourceTransport = (
 ): (PreparedSandboxWorkspace & { requiresCurrentManifestReadback?: true }) | undefined => {
   const index = events.findLastIndex(
     (candidate) =>
-      candidate.type === "action.result" &&
+      candidate.type === ACTION_RESULT_EVENT &&
       candidate.data.status === "completed" &&
       candidate.data.error === undefined &&
-      candidate.data.result.kind === "tool-result" &&
+      candidate.data.result.kind === TOOL_RESULT_KIND &&
       candidate.data.result.toolName === "prepare_workspace" &&
       candidate.data.result.isError !== true,
   );
   const event = events[index];
-  if (event?.type !== "action.result") {
+  if (event?.type !== ACTION_RESULT_EVENT) {
     return undefined;
   }
   const receipt = parsePreparedWorkspace(event.data.result.output);
