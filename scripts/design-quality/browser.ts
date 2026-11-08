@@ -430,21 +430,20 @@ export async function measurePage(page: Page) {
         if (a === undefined || b === undefined) {
           continue;
         }
-        if (a.parentElement !== b.parentElement || a.contains(b) || b.contains(a)) {
-          continue;
-        }
-        const x = a.getBoundingClientRect();
-        const y = b.getBoundingClientRect();
-        if (
-          Math.min(x.right, y.right) - Math.max(x.left, y.left) > 4 &&
-          Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top) > 4
-        ) {
-          findings.push({
-            description: `Interactive targets overlap: ${label(a)} / ${label(b)}.`,
-            kind: "possible-overlap",
-            region: rect(a),
-            reviewRequired: true,
-          });
+        if (a.parentElement === b.parentElement && !a.contains(b) && !b.contains(a)) {
+          const x = a.getBoundingClientRect();
+          const y = b.getBoundingClientRect();
+          if (
+            Math.min(x.right, y.right) - Math.max(x.left, y.left) > 4 &&
+            Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top) > 4
+          ) {
+            findings.push({
+              description: `Interactive targets overlap: ${label(a)} / ${label(b)}.`,
+              kind: "possible-overlap",
+              region: rect(a),
+              reviewRequired: true,
+            });
+          }
         }
       }
     }

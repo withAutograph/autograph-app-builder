@@ -1,4 +1,5 @@
 /* oxlint-disable eslint/require-await -- async fixtures implement Sandbox and browser APIs. */
+import { compileFunction } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { sandboxBrowserComparison } from "./self-reproduction-runtime-browser";
@@ -31,8 +32,7 @@ describe("sandbox diagnostic browser captures", () => {
       }),
     };
     const body = script.replaceAll(/^import .*;\n/gmu, "");
-    // oxlint-disable-next-line eslint/no-new-func -- execute the trusted evaluator script against browser fixtures.
-    const execute = new Function(
+    const execute = compileFunction(`return (async () => {${body}})()`, [
       "readFile",
       "writeFile",
       "mkdir",
@@ -40,8 +40,7 @@ describe("sandbox diagnostic browser captures", () => {
       "join",
       "chromium",
       "process",
-      `return (async () => {${body}})()`,
-    ) as (
+    ]) as (
       readFile: () => Promise<string>,
       writeFile: (path: string, content: string) => Promise<number>,
       mkdir: () => Promise<void>,

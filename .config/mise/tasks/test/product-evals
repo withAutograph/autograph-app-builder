@@ -29,4 +29,4 @@ APP_BUILDER_PRODUCT_EVAL_REPORT_DIR="$report_root" \
   "$launcher" "$node_bin" --import tsx scripts/write-product-quality-report.mts
 
 exec "$launcher" "$node_bin" node_modules/playwright/cli.js test \
-  --config playwright.product-quality.config.ts
+  --config playwright-product-quality.config.ts

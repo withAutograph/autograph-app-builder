@@ -264,24 +264,17 @@ export function escapedTailwindClassToken(selector: string | undefined) {
           return;
         }
         index += 1;
-        continue;
-      }
-      if (quote !== undefined) {
+      } else if (quote !== undefined) {
         if (character === quote) {
           quote = undefined;
         }
-        continue;
-      }
-      if (character === '"' || character === "'") {
+      } else if (character === '"' || character === "'") {
         quote = character;
-        continue;
-      }
-      if (character === "]") {
+      } else if (character === "]") {
         closed = true;
         index += 1;
         break;
-      }
-      if (character === "[") {
+      } else if (character === "[") {
         return;
       }
     }

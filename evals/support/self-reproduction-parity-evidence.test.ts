@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { z } from "zod";
 
 import { assessParity, desktopViewports, requirements } from "./self-reproduction-parity";
 import {
   captureReceiptSchema,
   parityEvidenceFromReceipts,
 } from "./self-reproduction-parity-evidence";
+import type { runtimeReceiptSchema } from "./self-reproduction-parity-evidence";
 
 const artifactExists = () => Promise.resolve(true);
 const base = {
@@ -15,7 +17,7 @@ const base = {
 
 const runtimeReceipt = (
   requirementId: string,
-  disposition: "observed" | "missing-functionality" | "infrastructure-unavailable" | "not-run",
+  disposition: z.output<typeof runtimeReceiptSchema>["observation"]["disposition"],
   passed = true,
 ) => {
   const row = requirements.find((item) => item.id === requirementId);
