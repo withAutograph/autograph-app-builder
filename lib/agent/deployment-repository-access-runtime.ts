@@ -649,14 +649,13 @@ export function createRepositoryAccessRuntime(input: {
   };
 }
 
-let runtimeInput:
-  | {
-      database: ReturnType<typeof openHostedPostgresDatabase>;
-      origin: string;
-      credentials: ReturnType<typeof parseGitHubAppHttpProviderCredentials>;
-      providerFetch?: typeof fetch;
-    }
-  | undefined;
+interface RepositoryAccessRuntimeConfiguration {
+  database: ReturnType<typeof openHostedPostgresDatabase>;
+  origin: string;
+  credentials: ReturnType<typeof parseGitHubAppHttpProviderCredentials>;
+  providerFetch?: typeof fetch;
+}
+let runtimeInput: RepositoryAccessRuntimeConfiguration | undefined;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
@@ -667,34 +666,33 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
     const environment = providerEmulationEnvironment(process.env);
     const installation = readGitHubAppInstallationEnvironment(environment);
     const emulation = readProviderEmulation(environment);
-    runtimeInput = {
+    const configured: RepositoryAccessRuntimeConfiguration = {
       credentials: parseGitHubAppHttpProviderCredentials({
         appId: installation.appId,
         privateKey: environment.GITHUB_APP_PRIVATE_KEY,
       }),
       database: openHostedPostgresDatabase(environment.DATABASE_URL ?? ""),
       origin: new URL(installation.issuer).origin,
-      ...(emulation
-        ? {
-            providerFetch: ((resource, init) => {
-              let resourceUrl: string;
-              if (typeof resource === "string") {
-                resourceUrl = resource;
-              } else if (resource instanceof URL) {
-                resourceUrl = resource.href;
-              } else {
-                resourceUrl = resource.url;
-              }
-              const url = new URL(resourceUrl);
-              return providerEmulationFetch(
-                `${emulation.githubOrigin}${url.pathname}${url.search}`,
-                init,
-                emulation,
-              );
-            }) satisfies typeof fetch,
-          }
-        : {}),
     };
+    if (emulation) {
+      configured.providerFetch = (resource, init) => {
+        let resourceUrl: string;
+        if (typeof resource === "string") {
+          resourceUrl = resource;
+        } else if (resource instanceof URL) {
+          resourceUrl = resource.href;
+        } else {
+          resourceUrl = resource.url;
+        }
+        const url = new URL(resourceUrl);
+        return providerEmulationFetch(
+          `${emulation.githubOrigin}${url.pathname}${url.search}`,
+          init,
+          emulation,
+        );
+      };
+    }
+    runtimeInput = configured;
   }
   const input = runtimeInput;
   const membership = createPostgresWorkspaceMembership(input.database);
