@@ -2,7 +2,7 @@
 
 import { Check, ChevronDown, ExternalLink, Globe, Search, X } from "@geist-ui/icons";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SiQuickbooks, SiSage, SiXero } from "react-icons/si";
 import { SectionShell } from "../../components/create-app/choice-card";
 import autographIcon from "../../assets/autograph-icon.png";
@@ -194,28 +194,41 @@ export function ConnectionDrawer({
   );
   const [description, setDescription] = useState(() => connectionDescription(flow.name));
   const accountLabel = flow.name === "Slack" ? "Slack Workspace" : "Account";
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
+    const dialog = dialogRef.current;
+    if (!dialog) {
+      return;
+    }
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", handleKeyDown);
+    dialog.showModal();
     return () => {
-      document.body.style.overflow = "";
-      window.removeEventListener("keydown", handleKeyDown);
+      dialog.close();
+      document.body.style.overflow = previousOverflow;
     };
-  }, [onClose]);
+  }, [showSuccess]);
 
   if (showSuccess) {
     return (
-      <div
+      <dialog
+        ref={dialogRef}
         className={styles.connectionSuccess}
-        role="dialog"
-        aria-modal="true"
         aria-label="Connection successful"
+        onCancel={(event) => {
+          event.preventDefault();
+          onClose();
+        }}
+        style={{
+          border: 0,
+          height: "100%",
+          margin: 0,
+          maxHeight: "none",
+          maxWidth: "none",
+          padding: 0,
+          width: "100%",
+        }}
       >
         <div>
           <h2>Connection successful</h2>
@@ -233,19 +246,35 @@ export function ConnectionDrawer({
             Return
           </button>
         </div>
-      </div>
+      </dialog>
     );
   }
 
   return (
-    <div className={styles.drawerBackdrop} onMouseDown={onClose}>
-      <div
-        className={styles.connectionDrawer}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="connection-drawer-title"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
+    <dialog
+      ref={dialogRef}
+      className={styles.drawerBackdrop}
+      aria-labelledby="connection-drawer-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+      style={{
+        border: 0,
+        height: "100%",
+        margin: 0,
+        maxHeight: "none",
+        maxWidth: "none",
+        padding: 0,
+        width: "100%",
+      }}
+    >
+      <div className={styles.connectionDrawer}>
         <header>
           <h2 id="connection-drawer-title">Add Connection</h2>
           <button type="button" onClick={onClose} aria-label="Close">
@@ -373,6 +402,6 @@ export function ConnectionDrawer({
           by this prototype.
         </p>
       </div>
-    </div>
+    </dialog>
   );
 }

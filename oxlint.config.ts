@@ -565,10 +565,6 @@ export default defineConfig({
       rules: { "react-doctor/nextjs-no-client-side-redirect": "off" },
     },
     {
-      files: [sharedLintFile5],
-      rules: { "react-doctor/prefer-html-dialog": "off" },
-    },
-    {
       files: [nodeLocalPublicationPath],
       rules: { "react-doctor/js-index-maps": "off" },
     },
@@ -624,14 +620,6 @@ export default defineConfig({
     {
       files: [handoffControlsPath],
       rules: { "react-doctor/no-fetch-in-effect": "off" },
-    },
-    {
-      files: [handoffProgressPath],
-      rules: { "react-doctor/no-derived-state": "off" },
-    },
-    {
-      files: [handoffProgressPath],
-      rules: { "react-doctor/no-derived-state-effect": "off" },
     },
     {
       files: [draftAutosavePath],
