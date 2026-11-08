@@ -193,7 +193,10 @@ export default defineTool({
                 "revision preparation",
               );
               selectedPaths = await initialDraftCandidatePaths(
-                pathInput,
+                {
+                  ...pathInput,
+                  reviewedPaths: [...pathInput.reviewedPaths, ...(prior.appChangedPaths ?? [])],
+                },
                 undefined,
                 ownedMergedPublication,
               );

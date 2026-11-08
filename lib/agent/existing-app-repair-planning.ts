@@ -26,6 +26,8 @@ import { resolveDraftReviewedWorkflow } from "./draft-reviewed-lineage";
 import { resolveGitHubPrDeliverySubject } from "./github-pr-delivery-subject";
 import { currentDraftCandidateSource } from "./published-draft-repair";
 
+const iterationOperation = "iterate-existing-app";
+
 // oxlint-disable-next-line sonarjs/max-union-size -- These are the exact settled private workflow phases, not a new phase model.
 type Settled = Extract<
   AppBuilderWorkflowState,
@@ -224,6 +226,25 @@ export const priorResumedBuildDraftProposal = (
   return base?.phase === "reviewed" ? base.githubDraftProposal?.proposal : undefined;
 };
 
+const sameOwnedAppRepairSource = (
+  { sessionId: owner, approvedBase: base }: RepairHistoryEntry,
+  state: Extract<AppBuilderWorkflowState, { phase: "validated" | "reviewed" }>,
+  sessionId: string,
+) =>
+  [
+    owner === sessionId,
+    base.appSpec.appId === state.appSpec.appId,
+    base.appSpec.digest === state.appSpec.digest,
+    base.sourceReceipt.digest === state.sourceReceipt.digest,
+    base.githubSource?.digest === state.githubSource?.digest,
+    base.workspace.workspaceId === state.workspace.workspaceId,
+    base.workspace.workspacePath === state.workspace.workspacePath,
+    base.workspace.workspaceDigest === state.workspace.workspaceDigest,
+    base.workspace.sourceSha === state.workspace.sourceSha,
+    base.workspace.sourceTree === state.workspace.sourceTree,
+    base.applyReceipt.applyRoot === state.applyReceipt.applyRoot,
+  ].every(Boolean);
+
 /** Lookup context for a new revision; only the provider can prove the prior PR merged. */
 export const priorOwnedAppDraftPublication = (
   state: Extract<AppBuilderWorkflowState, { phase: "validated" | "reviewed" }>,
@@ -233,31 +254,28 @@ export const priorOwnedAppDraftPublication = (
   if (
     state.sourceReceipt.sourceKind !== "fresh-template" ||
     !("operation" in state.proposal.target) ||
-    state.proposal.target.operation !== "iterate-existing-app"
+    state.proposal.target.operation !== iterationOperation
   ) {
     return;
   }
-  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Each retained record must pass independent owner and publication lineage checks before exposing lookup context.
-  for (const { sessionId: owner, approvedBase: base } of existingAppRepairHistory
+  const history = existingAppRepairHistory
     .get()
-    .toReversed()) {
-    if (
-      ![
-        owner === sessionId,
-        base.appSpec.appId === state.appSpec.appId,
-        base.appSpec.digest === state.appSpec.digest,
-        base.sourceReceipt.digest === state.sourceReceipt.digest,
-        base.githubSource?.digest === state.githubSource?.digest,
-        base.workspace.workspaceId === state.workspace.workspaceId,
-        base.workspace.workspacePath === state.workspace.workspacePath,
-        base.workspace.workspaceDigest === state.workspace.workspaceDigest,
-        base.workspace.sourceSha === state.workspace.sourceSha,
-        base.workspace.sourceTree === state.workspace.sourceTree,
-        base.applyReceipt.applyRoot === state.applyReceipt.applyRoot,
-      ].every(Boolean)
-    ) {
-      continue;
-    }
+    .filter((record) => sameOwnedAppRepairSource(record, state, sessionId));
+  // Retain paths from actual completed private iterations, never the original
+  // whole-app creation snapshot. Only fresh current bytes enter the new review.
+  const appChangedPaths = [
+    ...new Set(
+      history.flatMap(({ approvedBase: base }) =>
+        "operation" in base.proposal.target && base.proposal.target.operation === iterationOperation
+          ? (base.applyReceipt.changes ?? []).flatMap(({ path }) =>
+              path.startsWith(`apps/${state.appSpec.appId}/`) ? [path] : [],
+            )
+          : [],
+      ),
+    ),
+  ].toSorted();
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Each retained record must pass independent publication lineage checks before exposing lookup context.
+  for (const { approvedBase: base } of history.toReversed()) {
     const reviewed = resolveDraftReviewedWorkflow(base, candidate);
     const delivery = resolveGitHubPrDeliverySubject(base, candidate);
     if (reviewed === undefined || delivery === undefined) {
@@ -297,6 +315,7 @@ export const priorOwnedAppDraftPublication = (
       proposal,
       installationId: delivery.installationId,
       reviewed,
+      ...(appChangedPaths.length === 0 ? {} : { appChangedPaths }),
       ...(delivery.reconciliation === undefined ? {} : { reconciliation: delivery.reconciliation }),
     };
   }
@@ -368,7 +387,7 @@ const inspectUnapprovedPlan = (
 ) => {
   if (
     !("operation" in current.proposal.target) ||
-    current.proposal.target.operation !== "iterate-existing-app" ||
+    current.proposal.target.operation !== iterationOperation ||
     !("iteration" in current.proposal.target) ||
     current.proposal.plannedByCallId.length === 0
   ) {

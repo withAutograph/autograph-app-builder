@@ -442,3 +442,46 @@ it.each(["app", "source", "review", "installation", "publication"] as const)(
     });
   },
 );
+
+it("retains total unpublished app changes across config and Auth private iterations", () => {
+  within(() => {
+    const f = fixture();
+    const [initial] = existingAppRepairHistory.get();
+    if (initial === undefined) {
+      throw new Error("Missing fixture history");
+    }
+    const config = structuredClone(f.prior);
+    Reflect.set(config.proposal.target, "operation", "iterate-existing-app");
+    config.proposal.digest = digest("8");
+    config.applyReceipt.changes = [
+      { path: "apps/orchard/next.config.ts", kind: "modified" },
+      { path: "apps/orchard/src/new.ts", kind: "added" },
+      { path: "apps/orchard/src/retired.ts", kind: "deleted" },
+      { path: "apps/orchard/src/reverted.ts", kind: "modified" },
+      { path: "apps/another-app/page.tsx", kind: "modified" },
+      { path: "packages/platform/index.ts", kind: "modified" },
+    ];
+    f.prior.applyReceipt.changes = [{ path: "apps/orchard/unchanged-initial.ts", kind: "added" }];
+    const foreign = structuredClone(config);
+    foreign.sourceReceipt.digest = digest("9");
+    foreign.applyReceipt.changes = [{ path: "apps/orchard/foreign-source.ts", kind: "modified" }];
+    existingAppRepairHistory.update(() => [
+      { ...initial, approvedBase: foreign },
+      initial,
+      {
+        ...initial,
+        proposalDigest: f.current.proposal.digest,
+        previousWorkflow: config,
+        approvedBase: config,
+      },
+    ]);
+    expect(priorOwnedAppDraftPublication(f.current, sessionId)).toMatchObject({
+      appChangedPaths: [
+        "apps/orchard/next.config.ts",
+        "apps/orchard/src/new.ts",
+        "apps/orchard/src/retired.ts",
+        "apps/orchard/src/reverted.ts",
+      ],
+    });
+  });
+});

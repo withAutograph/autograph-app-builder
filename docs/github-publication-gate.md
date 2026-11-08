@@ -379,6 +379,12 @@ owned publication and actual merged-head proof; open or uncertain PRs continue
 through their existing update or reconciliation workflow.
 This proof authorizes review of the current app-owned changes, without reading
 the original starter manifest or republishing the app's unchanged files.
+Its candidate paths also retain app-owned changes from earlier completed private
+iterations of the same session, app and source workspace. Thus a later repair
+cannot drop an unpublished configuration change, addition or deletion from a
+prior repair. The original whole-app creation and other apps or platform paths
+are excluded. Current destination preimages and the current private bytes decide
+the new diff; unchanged or reverted paths add no publication change.
 
 A sealed-only proposal with no publication journal remains an initial
 publication and retains full-app completeness. An optional legacy publication

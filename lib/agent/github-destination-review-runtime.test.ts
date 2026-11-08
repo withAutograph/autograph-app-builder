@@ -211,7 +211,9 @@ const fixture = () => {
     .mockImplementation(
       async (operation: GitHubOperation) => await Promise.resolve(installation(operation)),
     );
-  const inspectDestinationFiles = vi.fn().mockResolvedValue(destination.preTree);
+  const inspectDestinationFiles = vi
+    .fn<NonNullable<GitHubPublicationAdapter["inspectDestinationFiles"]>>()
+    .mockResolvedValue(destination.preTree);
   const inspectDraftPublication = vi.fn<GitHubPublicationAdapter["inspectDraftPublication"]>();
   const compareAndSet = vi
     .fn<GitHubPublicationReceiptStore["compareAndSet"]>()
@@ -389,6 +391,52 @@ const ownedRevisionTool = async (published = true, marker = true) => {
 };
 
 describe("same-session post-merge destination review", () => {
+  it("reviews total unpublished app changes across config and Auth private iterations", async () => {
+    const f = await ownedRevisionTool();
+    const priorPaths = [
+      "apps/example/next.config.ts",
+      "apps/example/src/new.ts",
+      "apps/example/src/retired.ts",
+      "apps/example/src/reverted.ts",
+    ] as const;
+    Object.assign(toolPorts.prior ?? {}, { appChangedPaths: priorPaths });
+    const preTree = [
+      { path, digest: before, mode: "644" },
+      { path: priorPaths[0], digest: before, mode: "644" },
+      { path: priorPaths[2], digest: before, mode: "644" },
+      { path: priorPaths[3], digest: before, mode: "644" },
+    ];
+    toolPorts.observed = {
+      treeDigest: normalized.postTreeDigest,
+      files: [
+        { path, digest: after, mode: "644" },
+        { path: priorPaths[0], digest: after, mode: "644" },
+        { path: priorPaths[1], digest: after, mode: "644" },
+        { path: priorPaths[3], digest: before, mode: "644" },
+        { path: "apps/another-app/page.tsx", digest: after, mode: "644" },
+        { path: "packages/platform/index.ts", digest: after, mode: "644" },
+      ],
+    };
+    f.inspectDestinationFiles.mockImplementation(({ paths }) =>
+      Promise.resolve(preTree.filter((file) => paths.includes(file.path))),
+    );
+    await prepareDraftReview.execute({}, f.context);
+    const binding = toolPorts.state?.githubDestinationReview;
+    if (binding === undefined) {
+      throw new Error("Missing refreshed review");
+    }
+    expect(binding.candidatePaths).toEqual(expect.arrayContaining([path, ...priorPaths]));
+    const actual = deriveDestinationChanges(binding, toolPorts.observed);
+    expect(actual.map((change) => [change.path, change.kind])).toEqual([
+      ["apps/example/next.config.ts", "modified"],
+      [path, "modified"],
+      ["apps/example/src/new.ts", "added"],
+      ["apps/example/src/retired.ts", "deleted"],
+    ]);
+    expect(f.readTextFile).not.toHaveBeenCalled();
+    expect(f.unexpected).not.toHaveBeenCalled();
+  });
+
   it.each([true, false])(
     "starts a new PR after the approved published reconciliation merged (marker %s)",
     async (marker) => {
