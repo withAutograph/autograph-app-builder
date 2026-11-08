@@ -194,22 +194,22 @@ const workerFor = (
     format: plan.format,
   };
 };
-export const tenantExportStatus = (record: TenantExportJournalRecord): TenantExportStatus =>
-  tenantExportStatusSchema.parse({
+export const tenantExportStatus = (record: TenantExportJournalRecord): TenantExportStatus => {
+  const status: z.input<typeof tenantExportStatusSchema> = {
     exportId: record.plan.exportId,
     planRef: record.plan.planRef,
     state: record.state,
-    ...(record.completion === undefined
-      ? {}
-      : {
-          counts: {
-            fileCount: record.completion.fileCount,
-            rowCount: record.completion.rowCount,
-            byteLength: record.completion.byteLength,
-          },
-          download: { indexPath: `/api/hosted-operator/exports/${record.plan.exportId}` },
-        }),
-  });
+  };
+  if (record.completion !== undefined) {
+    status.counts = {
+      fileCount: record.completion.fileCount,
+      rowCount: record.completion.rowCount,
+      byteLength: record.completion.byteLength,
+    };
+    status.download = { indexPath: `/api/hosted-operator/exports/${record.plan.exportId}` };
+  }
+  return tenantExportStatusSchema.parse(status);
+};
 export const createHostedTenantExportOperations = (deps: HostedTenantExportDependencies) => {
   const now = deps.now ?? (() => new Date());
   const read = async (context: HostedOperatorContext, exportId: string) => {

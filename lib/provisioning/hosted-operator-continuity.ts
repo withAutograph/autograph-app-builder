@@ -138,37 +138,37 @@ const intentIdFor = (context: HostedOperatorContext, key: string) => {
     .digest("hex");
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
 };
+const approvalStage = async <T>(
+  recoveryStage: NonNullable<HostedOperatorError["recoveryStage"]>,
+  run: () => Promise<T>,
+): Promise<T> => {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw error;
+    }
+    let code: HostedOperatorError["code"] = "operator_unavailable";
+    let progress: boolean | undefined;
+    let stage = recoveryStage;
+    if (error instanceof HostedOperatorError) {
+      ({ code } = error);
+      stage = error.recoveryStage ?? stage;
+      progress = error.recoveryProgressAdvanced;
+    } else if (error instanceof HostedSessionReadTimeoutError) {
+      progress = error.progressPersisted;
+    } else if (recoveryStage === "native_history") {
+      code = "reconciliation_required";
+    }
+    throw new HostedOperatorError(code, {
+      cause: error,
+      recoveryStage: stage,
+      recoveryProgressAdvanced: progress,
+    });
+  }
+};
 export const createHostedContinuityOperations = (deps: HostedContinuityDependencies) => {
   const now = deps.now ?? (() => new Date());
-  const approvalStage = async <T>(
-    recoveryStage: NonNullable<HostedOperatorError["recoveryStage"]>,
-    run: () => Promise<T>,
-  ): Promise<T> => {
-    try {
-      return await run();
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        throw error;
-      }
-      let code: HostedOperatorError["code"] = "operator_unavailable";
-      let progress: boolean | undefined;
-      let stage = recoveryStage;
-      if (error instanceof HostedOperatorError) {
-        ({ code } = error);
-        stage = error.recoveryStage ?? stage;
-        progress = error.recoveryProgressAdvanced;
-      } else if (error instanceof HostedSessionReadTimeoutError) {
-        progress = error.progressPersisted;
-      } else if (recoveryStage === "native_history") {
-        code = "reconciliation_required";
-      }
-      throw new HostedOperatorError(code, {
-        cause: error,
-        recoveryStage: stage,
-        recoveryProgressAdvanced: progress,
-      });
-    }
-  };
   const read = async (
     context: HostedOperatorContext,
     intentId: string,

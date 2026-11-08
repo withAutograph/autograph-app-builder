@@ -383,19 +383,18 @@ export const createRepositoryProductionManagement = (
           ) {
             continue;
           }
-          visible.push({
+          const projected: AppAccessSnapshot["invitations"][number] = {
             id: item.id,
             email: item.email,
             roles: item.roles,
             status: Date.parse(item.expiresAt) <= Date.now() ? "expired" : "pending",
             expiresAt: item.expiresAt,
-            ...(item.deliveryStatus === undefined
-              ? {}
-              : {
-                  deliveryStatus:
-                    item.deliveryStatus === "sending" ? "unknown" : item.deliveryStatus,
-                }),
-          });
+          };
+          if (item.deliveryStatus !== undefined) {
+            projected.deliveryStatus =
+              item.deliveryStatus === "sending" ? "unknown" : item.deliveryStatus;
+          }
+          visible.push(projected);
         }
         // Pages bound a response, never the number of people an app can have.
         const offset = cursor === undefined ? 0 : Number(cursor);

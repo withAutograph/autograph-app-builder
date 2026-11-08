@@ -326,7 +326,7 @@ const recoveryContext = (input: DraftReviewedLineageRecoveryInput): RecoveryCont
   ) {
     return undefined;
   }
-  return { payload, selected, context };
+  return { context, payload, selected };
 };
 
 const hasCurrentReview = (context: RecoveryContext): boolean =>

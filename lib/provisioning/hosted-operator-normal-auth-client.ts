@@ -279,8 +279,8 @@ const rejectedResponse = async (
     // Error bodies are untrusted and stay private, including malformed or oversized responses.
   }
   const details: NonNullable<ConstructorParameters<typeof NormalAuthClientError>[1]> = {
-    operation,
     httpStatus: response.status,
+    operation,
   };
   if (authCode) details.authCode = authCode;
   return new NormalAuthClientError("auth_rejected", details);
@@ -324,7 +324,7 @@ export const createHostedOperatorNormalAuthClient = (options: {
   } catch {
     throw new NormalAuthClientError("invalid_origin");
   }
-  const jar = new CookieJar(undefined, { prefixSecurity: "strict", allowSpecialUseDomain: false });
+  const jar = new CookieJar(undefined, { allowSpecialUseDomain: false, prefixSecurity: "strict" });
   try {
     for (const saved of options.storageState?.cookies ?? []) {
       const cookie = new Cookie({
@@ -441,15 +441,15 @@ export const createHostedOperatorNormalAuthClient = (options: {
       assertDeadline();
       if (retryAfterMs === 0) {
         throw new NormalAuthClientError("auth_rejected", {
-          operation,
           httpStatus: 429,
+          operation,
           retryAfterMs,
         });
       }
       if (retryAfterMs >= deadline - now()) {
         throw new NormalAuthClientError("deadline_exceeded", {
-          operation,
           httpStatus: 429,
+          operation,
           retryAfterMs,
         });
       }
@@ -457,8 +457,8 @@ export const createHostedOperatorNormalAuthClient = (options: {
         await (options.wait ?? waitForRetry)(retryAfterMs, signal);
       } catch {
         throw new NormalAuthClientError("deadline_exceeded", {
-          operation,
           httpStatus: 429,
+          operation,
           retryAfterMs,
         });
       }
@@ -485,8 +485,8 @@ export const createHostedOperatorNormalAuthClient = (options: {
       } catch {
         assertDeadline();
         throw new NormalAuthClientError("invalid_response", {
-          operation,
           httpStatus: response.status,
+          operation,
         });
       }
     }
