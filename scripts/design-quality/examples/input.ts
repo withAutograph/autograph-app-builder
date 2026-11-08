@@ -4,6 +4,8 @@ import path from "node:path";
 import type { UiPreviewInput } from "../../../lib/agent/ui-preview";
 import { validateUiPreview } from "../../../lib/agent/ui-preview";
 
+const compositionPackage = "@autograph/compositions";
+
 export type DesignQualityExampleId = "spend-import-review" | "compensation-planning";
 
 interface ExampleConfig {
@@ -80,7 +82,7 @@ const exampleManifests: Record<
     productionComponents: ["Button", "Card", "PageHeader", "StatusPill", "Typography"].map(
       (name) => ({ name, source: "@autograph/components" as const }),
     ),
-    productionCompositions: [{ name: "SchemaFormComposition", source: "@autograph/compositions" }],
+    productionCompositions: [{ name: "SchemaFormComposition", source: compositionPackage }],
   },
   "spend-import-review": {
     assumptions: [
@@ -128,8 +130,8 @@ const exampleManifests: Record<
       "Typography",
     ].map((name) => ({ name, source: "@autograph/components" as const })),
     productionCompositions: [
-      { name: "DataTableComposition", source: "@autograph/compositions" },
-      { name: "RecordDetailPanel", source: "@autograph/compositions" },
+      { name: "DataTableComposition", source: compositionPackage },
+      { name: "RecordDetailPanel", source: compositionPackage },
     ],
   },
 };

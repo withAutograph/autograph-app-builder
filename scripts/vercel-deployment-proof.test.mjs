@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "vitest";
 
+const deploymentStatusesEndpoint = "repos/example/builder/deployments/1/statuses";
+
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf-8");
 const block = workflow
   .split("      - name: Require exact Vercel Git deployment\n")[1]
@@ -125,8 +127,7 @@ test("same exact-source record can become successful after a duplicate cancellat
     contract: "canonical-public-contract",
   });
   assert.equal(
-    observed.calls.filter((args) => args.includes("repos/example/builder/deployments/1/statuses"))
-      .length > 1,
+    observed.calls.filter((args) => args.includes(deploymentStatusesEndpoint)).length > 1,
     true,
   );
   assert.equal(
@@ -151,8 +152,7 @@ test("historical success beneath current inactive or error is never accepted", (
   assert.equal(observed.proof, "");
   assert.equal(observed.probes.length, 0);
   assert.equal(
-    observed.calls.filter((args) => args.includes("repos/example/builder/deployments/1/statuses"))
-      .length > 1,
+    observed.calls.filter((args) => args.includes(deploymentStatusesEndpoint)).length > 1,
     true,
   );
 });
@@ -176,8 +176,7 @@ test("pending deployment can become successful on a subsequent observation", () 
   });
   assert.equal(observed.result.status, 0, observed.result.stderr);
   assert.equal(
-    observed.calls.filter((args) => args.includes("repos/example/builder/deployments/1/statuses"))
-      .length > 1,
+    observed.calls.filter((args) => args.includes(deploymentStatusesEndpoint)).length > 1,
     true,
   );
   assert.equal(JSON.parse(observed.proof).sha, sha);

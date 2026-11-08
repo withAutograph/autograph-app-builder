@@ -2,6 +2,8 @@ import { cp, lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promise
 import path from "node:path";
 import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
 
+const pluginDirectoryName = "app-builder";
+
 const argument = (name: string) => {
   const index = process.argv.indexOf(name);
   if (index === -1) {
@@ -31,7 +33,7 @@ await mkdir(requestedDestination, { mode: 0o700, recursive: true });
 const destination = await realpath(requestedDestination);
 await validateAgentPluginPackage({
   packageKind: "generated-artifact",
-  pluginRoot: path.join(source, "app-builder"),
+  pluginRoot: path.join(source, pluginDirectoryName),
   release: true,
   repositoryRoot: path.resolve("."),
 });
@@ -45,7 +47,7 @@ try {
   }
 }
 await mkdir(clientRoot, { mode: 0o700 });
-await cp(path.join(source, "app-builder"), path.join(clientRoot, "app-builder"), {
+await cp(path.join(source, pluginDirectoryName), path.join(clientRoot, pluginDirectoryName), {
   recursive: true,
 });
 const harness = JSON.parse(
