@@ -196,7 +196,7 @@ export async function provisionVercelProject(input: {
 
   const baseName = `apps-${input.appId}`;
   const linkedRepository = input.github.status === "succeeded" ? input.github.fullName : undefined;
-  if (input.reconcilePriorWrite) {
+  if (input.reconcilePriorWrite ?? false) {
     try {
       let uncertainWrite = false;
       for (const candidate of input.persistedCandidates) {

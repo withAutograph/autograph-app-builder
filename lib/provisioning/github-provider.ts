@@ -307,7 +307,7 @@ export async function provisionGitHubRepository(input: {
         authority: input.authority,
         providerUserId: input.installation.accountId,
       });
-      if (!credential?.active) {
+      if (!(credential?.active ?? false)) {
         throw new Error(CREDENTIAL_UNAVAILABLE);
       }
       const expires = credential.tokens.accessTokenExpiresAt
@@ -615,7 +615,7 @@ export async function provisionGitHubRepository(input: {
     };
   }
 
-  if (input.reconcilePriorWrite) {
+  if (input.reconcilePriorWrite ?? false) {
     try {
       let uncertainWrite = false;
       for (const candidate of input.persistedCandidates) {

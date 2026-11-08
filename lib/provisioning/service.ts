@@ -252,7 +252,7 @@ export async function executeBuilderProvisioning(input: {
         authority: input.authority,
         installationId: vercelInstallationId,
       });
-      if (credential?.binding.active) {
+      if (credential?.binding.active ?? false) {
         result = await provisionVercelProject({
           appId: current.record.response.appId,
           deploymentAccess: current.record.request.deploymentAccess,
