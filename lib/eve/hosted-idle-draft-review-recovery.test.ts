@@ -474,7 +474,7 @@ it("the public idle recovery path restores verified original review and latest c
   expect(retried.sessionId).toBe(child.sessionId);
   expect(f.native.starts).toHaveLength(1);
   f.idle();
-  await f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 100 });
+  await f.service.get({ cursor: 0, limit: 100, sessionId: child.sessionId });
   const continuation = eveSendInputSchema.parse({
     clientRequestId: "continue-recovered-original-draft",
     message: "Continue the same draft",
@@ -508,7 +508,7 @@ it("the public recovery restores a fresh-template owned publication and selects 
   expect(retried.sessionId).toBe(child.sessionId);
   expect(f.native.starts).toHaveLength(1);
   f.idle();
-  await f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 100 });
+  await f.service.get({ cursor: 0, limit: 100, sessionId: child.sessionId });
   const continuation = eveSendInputSchema.parse({
     clientRequestId: "continue-fresh-owned-draft",
     message: "Continue the same draft",
@@ -520,7 +520,7 @@ it("the public recovery restores a fresh-template owned publication and selects 
 });
 
 it("restores the owned fresh review across a previously committed idle recovery", async () => {
-  const f = await fixture({ fresh: true, priorOwnerReview: true, paginateAncestor: true });
+  const f = await fixture({ fresh: true, paginateAncestor: true, priorOwnerReview: true });
   const prior = await f.store.getPrivateOperation(principal, "original-recovery");
   expect(prior).toMatchObject({
     nativeRecoveryReceipt: {
@@ -547,7 +547,7 @@ it("restores the owned fresh review across a previously committed idle recovery"
   expect(await publicCall(f.service, "autograph_start", f.request)).toEqual(child);
   expect(f.native.starts).toHaveLength(1);
   f.idle();
-  await f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 100 });
+  await f.service.get({ cursor: 0, limit: 100, sessionId: child.sessionId });
   const continuation = eveSendInputSchema.parse({
     clientRequestId: "continue-prior-owned-draft",
     message: "Continue the same draft",
@@ -559,7 +559,7 @@ it("restores the owned fresh review across a previously committed idle recovery"
 });
 
 it("ignores a conflicting predecessor review after the committed native cutoff", async () => {
-  const f = await fixture({ fresh: true, priorOwnerReview: true, afterCutoffReview: true });
+  const f = await fixture({ afterCutoffReview: true, fresh: true, priorOwnerReview: true });
   const predecessor = await f.native.world.events.list({ runId: "physical-ancestor" });
   expect(predecessor.data).toHaveLength(3);
   await publicCall(f.service, "autograph_start", f.request);
@@ -581,11 +581,11 @@ it.each(["missing-review", "superseding-review", "malformed-review", "unknown-ph
       malformedBeforeCutoff = "unknown-phase";
     }
     const f = await fixture({
-      fresh: true,
-      priorOwnerReview: true,
-      omitPriorReview: kind === "missing-review",
       beforeCutoffReview: kind === "superseding-review",
+      fresh: true,
       malformedBeforeCutoff,
+      omitPriorReview: kind === "missing-review",
+      priorOwnerReview: true,
     });
     let visited = false;
     const visit = f.ports.visitRecoveryPredecessors.bind(f.ports);
@@ -614,7 +614,7 @@ it.each([
   "authority-mismatch",
   "parent-cancelled",
 ] as const)("refuses ancestor history with %s without a new native owner", async (priorFault) => {
-  const f = await fixture({ fresh: true, priorOwnerReview: true, priorFault });
+  const f = await fixture({ fresh: true, priorFault, priorOwnerReview: true });
   let visited = false;
   const visit = f.ports.visitRecoveryPredecessors.bind(f.ports);
   f.ports.visitRecoveryPredecessors = async (call, visitWindow) => {
@@ -627,13 +627,13 @@ it.each([
 });
 
 it("refuses a committed predecessor cutoff that cannot be verified in native history", async () => {
-  const f = await fixture({ fresh: true, priorOwnerReview: true, missingCutoff: true });
+  const f = await fixture({ fresh: true, missingCutoff: true, priorOwnerReview: true });
   await expect(f.service.start(f.request)).rejects.toThrow();
   expect(f.native.starts).toHaveLength(0);
 });
 
 it("refuses when owner membership is revoked during a predecessor page read", async () => {
-  const f = await fixture({ fresh: true, priorOwnerReview: true, paginateAncestor: true });
+  const f = await fixture({ fresh: true, paginateAncestor: true, priorOwnerReview: true });
   const list = f.native.world.events.list.bind(f.native.world.events);
   let ancestorPages = 0;
   f.native.world.events.list = async (request) => {

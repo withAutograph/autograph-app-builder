@@ -179,11 +179,11 @@ const fixture = async function fixture(change = () => {}) {
     }),
   );
   const world = {
-    runs: { get: async () => run },
     events: {
-      list: async () => ({ data: events.map(metadata), hasMore: false }),
       get: async (_runId, id) => events.find((current) => current.eventId === id),
+      list: async () => ({ data: events.map(metadata), hasMore: false }),
     },
+    runs: { get: async () => run },
     steps: {
       get: async (_runId, id, options) =>
         options.resolveData === "none" ? { ...steps.get(id), input: undefined } : steps.get(id),
@@ -205,13 +205,13 @@ const fixture = async function fixture(change = () => {}) {
     },
   });
   const input = {
-    binding,
     authorizeOwner: async (value) => {
       assert.deepEqual(value, binding);
       if (!authorized) {
         throw new Error("owner revoked");
       }
     },
+    binding,
   };
   return {
     ...f,
@@ -408,14 +408,14 @@ test("the exact empty native stream exposes boot failure without adding events",
   const response = await createSessionStreamResponse(
     new Request("https://builder.test/stream?includeTailIndex=true&tail=true"),
     {
-      id: ownerRunId,
-      getStreamTailIndex: async () => -1,
       getEventStream: async () =>
         new ReadableStream({
           start(controller) {
             controller.close();
           },
         }),
+      getStreamTailIndex: async () => -1,
+      id: ownerRunId,
     },
     async (id, tail) => {
       assert.equal(id, ownerRunId);
@@ -445,20 +445,29 @@ test("same recovery request adopts once, preserves original authority, and activ
   const ports = {
     authorize: async () => {},
     authorizeActivation: async () => {},
-    readReceipt: async () => receipt,
     commitReceipt: async ({ recoveryBinding }) => {
       receipt ??= recoveryBinding;
       return receipt;
     },
+    readReceipt: async () => receipt,
   };
   const dependencies = {
     collect: f.collect,
-    reconcile: reconcileTerminalRecoveryCandidate,
+    getHook: async () => {
+      if (hook === undefined) {
+        throw new Error("missing");
+      }
+      return hook;
+    },
+    isHookNotFound: (error) => error.message === "missing",
+    now: Date.now,
     readCandidate: readTerminalRecoveryCandidate,
     readEntry: async () => f.entry,
-    now: Date.now,
-    wait: async () => {
-      throw new Error("unexpected readiness wait");
+    reconcile: reconcileTerminalRecoveryCandidate,
+    resumeHook: async (_token, input) => {
+      assert.equal(input.ownerRunId, receipt.ownerRunId);
+      activations += 1;
+      hook = undefined;
     },
     start: async (input) => {
       starts += 1;
@@ -470,17 +479,8 @@ test("same recovery request adopts once, preserves original authority, and activ
         }),
       };
     },
-    getHook: async () => {
-      if (hook === undefined) {
-        throw new Error("missing");
-      }
-      return hook;
-    },
-    isHookNotFound: (error) => error.message === "missing",
-    resumeHook: async (_token, input) => {
-      assert.equal(input.ownerRunId, receipt.ownerRunId);
-      activations += 1;
-      hook = undefined;
+    wait: async () => {
+      throw new Error("unexpected readiness wait");
     },
   };
   const { commitReceipt } = ports;

@@ -653,8 +653,8 @@ describe("canonical SEND delivery acknowledgement", () => {
           observationComplete: true,
         },
         observedBinding: {
-          adapterSessionId: durable.adapterSessionId,
           adapterGeneration: durable.adapterGeneration,
+          adapterSessionId: durable.adapterSessionId,
           cancellationRevision: 0,
         },
         result,
@@ -1327,21 +1327,21 @@ describe("canonical SEND delivery acknowledgement", () => {
     };
     expect(
       provesNativeDelivery(marker, {
+        turns: [{ deliveryIds: ["ack"], turnId: "ours" }],
         version: 1,
-        turns: [{ turnId: "ours", deliveryIds: ["ack"] }],
       }),
     ).toBe(false);
     expect(
       provesNativeDelivery(marker, {
-        version: 1,
         turns: [
           {
-            turnId: "ours",
-            deliveryIds: ["ack"],
             boundary: "turn.completed",
             boundaryDeliveryIds: ["ack"],
+            deliveryIds: ["ack"],
+            turnId: "ours",
           },
         ],
+        version: 1,
       }),
     ).toBe(true);
   });

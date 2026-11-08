@@ -192,7 +192,6 @@ describe("framework upgrade planning and apply", () => {
     const sandbox = sandboxFixture({
       readBinaryFile: async () => null,
       readTextFile: async () => null,
-      writeTextFile: async () => {},
       removePath: async () => {},
       run: async ({ command }: { command: string }) => ({
         exitCode: fixtureCommandExit(command, existing),
@@ -210,6 +209,7 @@ describe("framework upgrade planning and apply", () => {
           : "",
         stderr: "",
       }),
+      writeTextFile: async () => {},
     });
     const input = {
       sandbox,
@@ -246,7 +246,6 @@ describe("framework upgrade planning and apply", () => {
     const sandbox = sandboxFixture({
       readBinaryFile: async () => null,
       readTextFile: async () => null,
-      writeTextFile: async () => {},
       removePath: async () => {},
       run: async ({ command }: { command: string }) => ({
         exitCode: fixtureCommandExit(command, true),
@@ -264,6 +263,7 @@ describe("framework upgrade planning and apply", () => {
             })
           : "",
       }),
+      writeTextFile: async () => {},
     });
     const sourceReceipt = {
       adapter: "arrusted-development-v0" as const,
@@ -382,7 +382,6 @@ describe("framework upgrade planning and apply", () => {
     const calls: string[] = [];
     let fail = true;
     const sandbox = sandboxFixture({
-      setNetworkPolicy: async () => {},
       run: async ({ command }: { command: string }) => {
         calls.push(command);
         if (command.includes("repository:upgrade-framework") && fail) {
@@ -390,6 +389,7 @@ describe("framework upgrade planning and apply", () => {
         }
         return { exitCode: 0, stdout: "{}", stderr: "" };
       },
+      setNetworkPolicy: async () => {},
     });
     const apply = () =>
       sandboxApplyCommandExecutor()({
@@ -414,11 +414,11 @@ describe("framework upgrade planning and apply", () => {
     p.iteration.changes = [];
     const calls: string[] = [];
     const sandbox = sandboxFixture({
-      setNetworkPolicy: async () => {},
       run: async ({ command }: { command: string }) => {
         calls.push(command);
         return { exitCode: 0, stdout: "{}", stderr: "" };
       },
+      setNetworkPolicy: async () => {},
     });
     await sandboxApplyCommandExecutor()({
       sandbox,

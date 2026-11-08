@@ -45,8 +45,9 @@ const coordinates = { sequence: 7, stepIndex: 2, turnId: "private-turn" };
 const state = (session) => ({ snapshot: { session } });
 const setup = () => {
   let before = appendPendingInputBatch({
-    session: { sessionId: "logical", history: [], state: {} },
+    event: coordinates,
     requests: [request],
+    responseAuthRequiredRequestIds: [request.requestId],
     responseMessages: [
       {
         role: "assistant",
@@ -60,16 +61,15 @@ const setup = () => {
         ],
       },
     ],
-    event: coordinates,
-    responseAuthRequiredRequestIds: [request.requestId],
+    session: { sessionId: "logical", history: [], state: {} },
     toolReplayIdentities: { [request.requestId]: secret },
   });
   before = setPendingCoordinationBatch({
-    session: before,
-    responseMessages: [],
-    tasks: [{ callId: call.toolCallId, toolName: call.toolName }],
-    runtimeActions: [],
     event: coordinates,
+    responseMessages: [],
+    runtimeActions: [],
+    session: before,
+    tasks: [{ callId: call.toolCallId, toolName: call.toolName }],
   });
   const after = {
     ...before,

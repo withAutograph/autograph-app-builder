@@ -1151,7 +1151,7 @@ it("preserves execution failures and redacts arbitrary error properties", async 
         throw error;
       },
       sink,
-      { stage: "readback", mode: "inspect", commandExit: "zero" },
+      { commandExit: "zero", mode: "inspect", stage: "readback" },
     ),
   ).rejects.toBe(error);
   expect(sink.mock.calls[0]?.[0].executionFailure).toMatchObject({
@@ -1183,14 +1183,14 @@ it.each([
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const priorCode: unknown = Object.getOwnPropertyDescriptor(error, "code")?.value;
     reportOperatorExecutionFailure("private-session", "final_runtime_readiness", error, sink, {
-      stage: "final_runtime_readiness",
       mode: "inspect",
+      stage: "final_runtime_readiness",
     });
     const expectedFailure = (): NonNullable<HostedOperatorConsentMetadata["executionFailure"]> => {
       const failure: NonNullable<HostedOperatorConsentMetadata["executionFailure"]> = {
-        stage: "final_runtime_readiness",
-        mode: "inspect",
         errorClass,
+        mode: "inspect",
+        stage: "final_runtime_readiness",
       };
       if (code !== undefined) {
         failure.code = code;
@@ -1229,8 +1229,8 @@ it("retains only a closed runtime readiness stage in execution diagnostics", () 
     new Error(secret),
     validSink,
     {
-      stage: "final_runtime_readiness",
       runtimeReadinessStage: "runtime_credential",
+      stage: "final_runtime_readiness",
     },
   );
   expect(validSink.mock.calls[0]?.[0].executionFailure).toMatchObject({
@@ -1331,8 +1331,8 @@ it.each([
       HostedOperatorConsentMetadata["preparationFailure"]
     > => {
       const failure: NonNullable<HostedOperatorConsentMetadata["preparationFailure"]> = {
-        stage,
         errorClass,
+        stage,
       };
       if (code !== undefined) {
         failure.code = code;
