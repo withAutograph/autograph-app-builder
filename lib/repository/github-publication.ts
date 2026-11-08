@@ -34,6 +34,14 @@ import type {
 export const GITHUB_PUBLICATION_VERSION = 2 as const;
 export const REPOSITORY_RELEASE_GATE = "REPOSITORY_RELEASE_ENABLED" as const;
 
+const RESOLVE_EXISTING_SOURCE = "resolve-existing-source";
+const CREATE_FRESH_REPOSITORY = "create-fresh-repository";
+const PUBLISH_DRAFT_PULL_REQUEST = "publish-draft-pull-request";
+const FRESH_REPOSITORY_KIND = "fresh-repository";
+const DRAFT_PULL_REQUEST_KIND = "draft-pull-request";
+const PROVIDER_REJECTED = "provider-rejected";
+const REVIEWED_PATH_CHANGED = "reviewed-path-changed";
+
 type Digest = string;
 type ObjectId = string;
 export type GitHubRepositorySelection = "all" | "selected";
@@ -1088,9 +1096,9 @@ export function createGitHubInstallationIdentity(
   input: Omit<GitHubInstallationIdentity, "version" | "permissions" | "digest">,
 ): GitHubInstallationIdentity {
   if (
-    (input.operation !== "resolve-existing-source" &&
-      input.operation !== "create-fresh-repository" &&
-      input.operation !== "publish-draft-pull-request") ||
+    (input.operation !== RESOLVE_EXISTING_SOURCE &&
+      input.operation !== CREATE_FRESH_REPOSITORY &&
+      input.operation !== PUBLISH_DRAFT_PULL_REQUEST) ||
     !isDecimal(input.installationId) ||
     !isDecimal(input.accountId) ||
     !safeName(input.accountLogin) ||
@@ -1215,10 +1223,10 @@ export async function resolveImmutableExistingSource(input: {
   ) {
     throw new Error("The immutable source request is invalid.");
   }
-  const installation = await input.adapter.inspectInstallation("resolve-existing-source");
+  const installation = await input.adapter.inspectInstallation(RESOLVE_EXISTING_SOURCE);
   assertExactInstallationIdentity(installation);
   if (
-    installation.operation !== "resolve-existing-source" ||
+    installation.operation !== RESOLVE_EXISTING_SOURCE ||
     installation.installationId !== input.expectedInstallationId ||
     !installation.selectedRepositoryIds.includes(input.repositoryId)
   ) {
@@ -1276,7 +1284,7 @@ export async function resolveImmutableExistingSourceWithTargetProof(input: {
     input.authority,
   );
   if (
-    proof.operation !== "resolve-existing-source" ||
+    proof.operation !== RESOLVE_EXISTING_SOURCE ||
     proof.installationId !== input.expectedInstallationId ||
     proof.repositoryId !== input.repositoryId
   ) {
@@ -1375,7 +1383,7 @@ export function createFreshRepositoryProposal(input: {
   assertExactInstallationIdentity(input.installation);
   assertReviewedBinding(input.source, input.review);
   if (
-    input.installation.operation !== "create-fresh-repository" ||
+    input.installation.operation !== CREATE_FRESH_REPOSITORY ||
     input.source.sourceKind !== "fresh-template" ||
     input.destinationOwner !== input.installation.accountLogin ||
     !safeName(input.destinationName)
@@ -1500,7 +1508,7 @@ export function createDraftPullRequestProposal(input: {
   assertCanonicalReview(input.review);
   const approvedPaths = canonicalPaths(input.review.approvedPaths);
   if (
-    input.installation.operation !== "publish-draft-pull-request" ||
+    input.installation.operation !== PUBLISH_DRAFT_PULL_REQUEST ||
     !input.installation.selectedRepositoryIds.includes(input.repository.repositoryId) ||
     input.repository.installationIdentityDigest !== input.installation.digest ||
     !safeTitle(input.title)
@@ -1741,7 +1749,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     extra = [];
   } else if (value.status === "failed") {
     extra = ["failureCode", "providerCode", "recoveryRequired"];
-  } else if (value.kind === "fresh-repository") {
+  } else if (value.kind === FRESH_REPOSITORY_KIND) {
     extra = [
       "installationIdentityDigest",
       "repository",
@@ -1783,13 +1791,13 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     !isDigest(value.idempotencyKey) ||
     typeof value.approvedByCallId !== "string" ||
     value.approvedByCallId.length === 0 ||
-    (value.kind !== "fresh-repository" && value.kind !== "draft-pull-request")
+    (value.kind !== FRESH_REPOSITORY_KIND && value.kind !== DRAFT_PULL_REQUEST_KIND)
   ) {
     throw new Error("GitHub mutation receipt bindings are invalid.");
   }
   if (value.status === "failed") {
     if (
-      (value.failureCode !== "provider-rejected" && value.failureCode !== "postcondition-failed") ||
+      (value.failureCode !== PROVIDER_REJECTED && value.failureCode !== "postcondition-failed") ||
       !/^[a-z][a-z0-9-]{0,63}$/u.test(value.providerCode) ||
       value.recoveryRequired !== true
     ) {
@@ -1799,13 +1807,13 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     if (
       !isDigest(value.providerReadBackDigest) ||
       !isDigest(value.installationIdentityDigest) ||
-      (value.kind === "fresh-repository"
+      (value.kind === FRESH_REPOSITORY_KIND
         ? value.releaseGateAbsent !== true
         : value.releaseGateUnchanged !== true)
     ) {
       throw new Error("GitHub success receipt read-back binding is invalid.");
     }
-    if (value.kind === "fresh-repository") {
+    if (value.kind === FRESH_REPOSITORY_KIND) {
       assertExactRepositoryObservation(value.repository);
       if (
         value.installationIdentityDigest !== value.repository.installationIdentityDigest ||
@@ -1972,7 +1980,7 @@ export async function reconcilePendingDraftPullRequest(input: {
   assertExactDraftPullRequestProposal(input.proposal);
   assertCanonicalGitHubMutationReceipt(input.pending);
   if (
-    input.pending.kind !== "draft-pull-request" ||
+    input.pending.kind !== DRAFT_PULL_REQUEST_KIND ||
     input.pending.proposalDigest !== input.proposal.digest ||
     input.pending.idempotencyKey !== input.proposal.idempotencyKey
   ) {
@@ -1999,7 +2007,7 @@ function rejectionReceipt(
   pending: GitHubMutationPendingReceipt,
   code: string,
 ): GitHubMutationFailureReceipt {
-  const safeCode = /^[a-z][a-z0-9-]{0,63}$/u.test(code) ? code : "provider-rejected";
+  const safeCode = /^[a-z][a-z0-9-]{0,63}$/u.test(code) ? code : PROVIDER_REJECTED;
   return receipt({
     approvedByCallId: pending.approvedByCallId,
     failureCode: "provider-rejected" as const,
@@ -2020,10 +2028,10 @@ async function reclaimRejectedDraftPending(
   approvedByCallId: string,
 ): Promise<GitHubMutationPendingReceipt> {
   if (
-    failed.kind !== "draft-pull-request" ||
-    failed.failureCode !== "provider-rejected" ||
+    failed.kind !== DRAFT_PULL_REQUEST_KIND ||
+    failed.failureCode !== PROVIDER_REJECTED ||
     (failed.providerCode !== "invalid-publication-material" &&
-      failed.providerCode !== "reviewed-path-changed") ||
+      failed.providerCode !== REVIEWED_PATH_CHANGED) ||
     approvedByCallId === failed.approvedByCallId
   ) {
     throw new Error("The rejected draft publication requires a new approved recovery call.");
@@ -2055,7 +2063,7 @@ const publicationRejectionMessage = (
     }
     return `GitHub could not complete ${acknowledgement.operation} for ${acknowledgement.path} (${acknowledgement.bytes} bytes)${providerStatus}. Check the repository's current GitHub limits and retry after correcting the file or provider issue; then validate and approve the updated publication.`;
   }
-  if (acknowledgement.code === "reviewed-path-changed" && "path" in acknowledgement) {
+  if (acknowledgement.code === REVIEWED_PATH_CHANGED && "path" in acknowledgement) {
     return `Reviewed content changed at ${acknowledgement.path}. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.`;
   }
   return `GitHub rejected draft pull-request publication with ${acknowledgement.code}; sanitized receipt recorded.`;
@@ -2072,9 +2080,9 @@ export async function createApprovedFreshRepository(input: {
 }): Promise<FreshRepositorySuccessReceipt> {
   assertExactFreshRepositoryProposal(input.proposal);
   reviewForProposal(input.proposal, input.review);
-  const prior = await readJournal(input.store, input.proposal, "fresh-repository");
+  const prior = await readJournal(input.store, input.proposal, FRESH_REPOSITORY_KIND);
   if (prior?.status === "succeeded") {
-    if (prior.kind !== "fresh-repository") {
+    if (prior.kind !== FRESH_REPOSITORY_KIND) {
       throw new Error("Unreachable receipt kind.");
     }
     return prior;
@@ -2110,14 +2118,14 @@ export async function createApprovedFreshRepository(input: {
     await storeTerminal(input.store, pending, success);
     return success;
   }
-  const installation = await input.adapter.inspectInstallation("create-fresh-repository");
+  const installation = await input.adapter.inspectInstallation(CREATE_FRESH_REPOSITORY);
   assertExactInstallationIdentity(installation);
   const destination = await input.adapter.inspectDestination({
     name: input.proposal.destinationName,
     owner: input.proposal.destinationOwner,
   });
   if (
-    installation.operation !== "create-fresh-repository" ||
+    installation.operation !== CREATE_FRESH_REPOSITORY ||
     installation.digest !== input.proposal.installationIdentityDigest ||
     destination !== "absent"
   ) {
@@ -2137,7 +2145,7 @@ export async function createApprovedFreshRepository(input: {
     throw new GitHubOutcomeUnknownError();
   }
   if (acknowledgement.status === "rejected") {
-    const failure = rejectionReceipt("fresh-repository", pending, acknowledgement.code);
+    const failure = rejectionReceipt(FRESH_REPOSITORY_KIND, pending, acknowledgement.code);
     await storeTerminal(input.store, pending, failure);
     throw new Error("GitHub rejected repository creation; sanitized receipt recorded.");
   }
@@ -2179,18 +2187,18 @@ export async function publishApprovedDraftPullRequest(input: {
 }): Promise<DraftPullRequestSuccessReceipt> {
   assertExactDraftPullRequestProposal(input.proposal);
   reviewForProposal(input.proposal, input.review);
-  const prior = await readJournal(input.store, input.proposal, "draft-pull-request");
+  const prior = await readJournal(input.store, input.proposal, DRAFT_PULL_REQUEST_KIND);
   if (prior?.status === "succeeded") {
-    if (prior.kind !== "draft-pull-request") {
+    if (prior.kind !== DRAFT_PULL_REQUEST_KIND) {
       throw new Error("Unreachable receipt kind.");
     }
     return prior;
   }
   if (
     prior?.status === "failed" &&
-    (prior.failureCode !== "provider-rejected" ||
+    (prior.failureCode !== PROVIDER_REJECTED ||
       (prior.providerCode !== "invalid-publication-material" &&
-        prior.providerCode !== "reviewed-path-changed"))
+        prior.providerCode !== REVIEWED_PATH_CHANGED))
   ) {
     throw new Error(
       `The failed GitHub mutation (${prior.providerCode}) requires explicit recovery. Inspect its provider result before another publication attempt.`,
@@ -2250,10 +2258,10 @@ export async function publishApprovedDraftPullRequest(input: {
   if (observed.branch.status === "present") {
     throw new Error("A branch collision exists without the approved draft pull request.");
   }
-  const installation = await input.adapter.inspectInstallation("publish-draft-pull-request");
+  const installation = await input.adapter.inspectInstallation(PUBLISH_DRAFT_PULL_REQUEST);
   assertExactInstallationIdentity(installation);
   if (
-    installation.operation !== "publish-draft-pull-request" ||
+    installation.operation !== PUBLISH_DRAFT_PULL_REQUEST ||
     installation.digest !== input.proposal.installationIdentityDigest ||
     !installation.selectedRepositoryIds.includes(input.proposal.repositoryId)
   ) {
@@ -2271,7 +2279,7 @@ export async function publishApprovedDraftPullRequest(input: {
     throw new GitHubOutcomeUnknownError();
   }
   if (acknowledgement.status === "rejected") {
-    const failure = rejectionReceipt("draft-pull-request", pending, acknowledgement.code);
+    const failure = rejectionReceipt(DRAFT_PULL_REQUEST_KIND, pending, acknowledgement.code);
     await storeTerminal(input.store, pending, failure);
     throw new Error(publicationRejectionMessage(acknowledgement));
   }

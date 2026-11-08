@@ -30,6 +30,14 @@ import { runSequentially } from "../async-sequential";
 export { inspectDevelopmentSourceGeneration } from "./development-source-generation";
 export type { PreparedSourceFile } from "./development-source-generation";
 
+const microfrontendsConfigFile = "microfrontends.json";
+const invalidWorkspaceRecordMessage = "The prepared workspace record is invalid.";
+const sandboxRepositoryPath = "/workspace/repository";
+const invalidWorkspaceManifestMessage = "The prepared workspace manifest is invalid.";
+const sandboxWorkspacePath = "/workspace";
+const appBuilderDirectory = ".app-builder";
+const prepareIntentFile = ".app-builder/prepare-intent.json";
+
 export const SUPPORTED_TEMPLATE_ADAPTER = "arrusted-development-v0";
 
 export const SUPPORTED_REPOSITORY_CONTRACT = {
@@ -45,11 +53,11 @@ export const SUPPORTED_REPOSITORY_CONTRACT = {
     ".config/mise/scripts/repository/app-identity.ts",
     ".config/mise/scripts/repository/app-validation.ts",
     ".config/mise/scripts/repository/repository-preflight.ts",
-    "microfrontends.json",
+    microfrontendsConfigFile,
     "package.json",
   ],
   runtime: "nextjs",
-  topologyOwner: "microfrontends.json",
+  topologyOwner: microfrontendsConfigFile,
   validationCommands: [
     "mise run --no-deps --skip-tools app:check <app-id>",
     "mise run --no-deps --skip-tools app:test <app-id> <shard>",
@@ -657,7 +665,7 @@ export const inspectSupportedTemplateSnapshot = function inspectSupportedTemplat
       requiredPaths: planningCompatibility.observed.requiredPaths,
       runtime: planningCompatibility.observed.runtime,
       scaffoldCommand: expectedCommands.scaffold,
-      topologyOwner: "microfrontends.json",
+      topologyOwner: microfrontendsConfigFile,
       validationCommands: expectedCommands.validation,
     },
     sourceSha: input.sourceSha,
@@ -913,13 +921,13 @@ export const parsePreparedWorkspace = function parsePreparedWorkspace(
       "eligibilityDigest",
     ])
   ) {
-    throw new Error("The prepared workspace record is invalid.");
+    throw new Error(invalidWorkspaceRecordMessage);
   }
   const record = input as Partial<PreparedSandboxWorkspace>;
   if (
     typeof record.workspaceId !== "string" ||
     record.workspaceId === "" ||
-    record.workspacePath !== "/workspace/repository" ||
+    record.workspacePath !== sandboxRepositoryPath ||
     typeof record.sourcePath !== "string" ||
     !nodePath.isAbsolute(record.sourcePath) ||
     typeof record.sourceSha !== "string" ||
@@ -932,7 +940,7 @@ export const parsePreparedWorkspace = function parsePreparedWorkspace(
     typeof record.eligibilityDigest !== "string" ||
     !/^[0-9a-f]{64}$/u.test(record.eligibilityDigest)
   ) {
-    throw new Error("The prepared workspace record is invalid.");
+    throw new Error(invalidWorkspaceRecordMessage);
   }
   return record as PreparedSandboxWorkspace;
 };
@@ -941,7 +949,7 @@ const parsePreparedSourceFiles = function parsePreparedSourceFiles(
   input: unknown,
 ): PreparedSourceFile[] {
   if (!Array.isArray(input) || input.length === 0) {
-    throw new Error("The prepared workspace manifest is invalid.");
+    throw new Error(invalidWorkspaceManifestMessage);
   }
   const paths = new Set<string>();
   return input.map((candidate) => {
@@ -951,7 +959,7 @@ const parsePreparedSourceFiles = function parsePreparedSourceFiles(
       Array.isArray(candidate) ||
       !exactKeys(candidate as Record<string, unknown>, ["mode", "objectId", "path", "sha256"])
     ) {
-      throw new Error("The prepared workspace manifest is invalid.");
+      throw new Error(invalidWorkspaceManifestMessage);
     }
     const file = candidate as Partial<PreparedSourceFile>;
     if (
@@ -964,7 +972,7 @@ const parsePreparedSourceFiles = function parsePreparedSourceFiles(
       typeof file.sha256 !== "string" ||
       !/^[0-9a-f]{64}$/u.test(file.sha256)
     ) {
-      throw new Error("The prepared workspace manifest is invalid.");
+      throw new Error(invalidWorkspaceManifestMessage);
     }
     paths.add(file.path);
     return file as PreparedSourceFile;
@@ -982,7 +990,7 @@ export const readPreparedSandboxWorkspaceRecord = async function readPreparedSan
   try {
     return parsePreparedWorkspace(JSON.parse(content) as unknown);
   } catch (error) {
-    throw new Error("The prepared workspace record is invalid.", {
+    throw new Error(invalidWorkspaceRecordMessage, {
       cause: error,
     });
   }
@@ -1007,7 +1015,7 @@ export const readPreparedSandboxSourceManifest = async function readPreparedSand
   try {
     files = parsePreparedSourceFiles(JSON.parse(manifestContent) as unknown);
   } catch (error) {
-    throw new Error("The prepared workspace manifest is invalid.", {
+    throw new Error(invalidWorkspaceManifestMessage, {
       cause: error,
     });
   }
@@ -1053,7 +1061,7 @@ const verifyPreparedSandboxFiles = async (
   }
   const verification = await sandbox.run({
     command: `sha256sum -c ${checksumsPath} >/dev/null 2>&1`,
-    workingDirectory: "/workspace",
+    workingDirectory: sandboxWorkspacePath,
   });
   if (verification.exitCode !== 0) {
     throw new Error("A prepared workspace file drifted or is missing.");
@@ -1083,10 +1091,10 @@ const developmentWorkspaceInspectionProgram = [
 ].join("");
 
 const developmentWorkspaceInspectionReceipt = {
-  realRepository: "/workspace/repository",
-  realWorkspace: "/workspace",
-  repositoryInput: "/workspace/repository",
-  workspaceRoot: "/workspace",
+  realRepository: sandboxRepositoryPath,
+  realWorkspace: sandboxWorkspacePath,
+  repositoryInput: sandboxRepositoryPath,
+  workspaceRoot: sandboxWorkspacePath,
 } as const;
 
 const verifySandboxWorkspaceBoundary = async function verifySandboxWorkspaceBoundary(
@@ -1096,7 +1104,7 @@ const verifySandboxWorkspaceBoundary = async function verifySandboxWorkspaceBoun
 ): Promise<void> {
   if (
     record.workspaceId !== getBuilderSandboxId(sandbox) ||
-    record.workspacePath !== "/workspace/repository"
+    record.workspacePath !== sandboxRepositoryPath
   ) {
     throw new Error(`The prepared ${kind} workspace does not belong to this session.`);
   }
@@ -1275,7 +1283,7 @@ export const recordPreparedSandboxWorkspace = async function recordPreparedSandb
     sourceSha: input.sourceSha,
     sourceTree: input.sourceTree,
     workspaceDigest: input.workspaceDigest,
-    workspacePath: "/workspace/repository",
+    workspacePath: sandboxRepositoryPath,
   };
   const existing = await readPreparedSandboxWorkspaceRecord(input.sandbox);
   if (existing !== undefined && existing.workspaceId !== getBuilderSandboxId(input.sandbox)) {
@@ -1286,7 +1294,7 @@ export const recordPreparedSandboxWorkspace = async function recordPreparedSandb
     // session-owned checkout. Refresh the diagnostic metadata below.
   }
 
-  await ensureSandboxDirectories(input.sandbox, [".app-builder"]);
+  await ensureSandboxDirectories(input.sandbox, [appBuilderDirectory]);
   await input.sandbox.writeTextFile({
     content: `${JSON.stringify(
       {
@@ -1299,7 +1307,7 @@ export const recordPreparedSandboxWorkspace = async function recordPreparedSandb
       null,
       2,
     )}\n`,
-    path: ".app-builder/prepare-intent.json",
+    path: prepareIntentFile,
   });
   const record: PreparedSandboxWorkspace = {
     workspaceId: getBuilderSandboxId(input.sandbox),
@@ -1412,10 +1420,10 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
     sourceSha: expectedSha,
     sourceTree,
   };
-  await ensureSandboxDirectories(sandbox, [".app-builder"]);
+  await ensureSandboxDirectories(sandbox, [appBuilderDirectory]);
   await sandbox.writeTextFile({
     content: `${JSON.stringify(intent, null, 2)}\n`,
-    path: ".app-builder/prepare-intent.json",
+    path: prepareIntentFile,
   });
   await sandbox.removePath({
     force: true,
@@ -1483,7 +1491,7 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
     try {
       const extraction = await sandbox.run({
         command: `mkdir -p repository && tar --extract --gzip --file ${sandboxSourceArchivePath} --directory repository --no-same-owner --no-same-permissions`,
-        workingDirectory: "/workspace",
+        workingDirectory: sandboxWorkspacePath,
       });
       if (extraction.exitCode !== 0) {
         throw new Error("The reviewed source archive could not be materialized.");
@@ -1508,7 +1516,7 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
     sourceTree,
     workspaceDigest: sha256(JSON.stringify(sourceFiles)),
     workspaceId: getBuilderSandboxId(sandbox),
-    workspacePath: "/workspace/repository",
+    workspacePath: sandboxRepositoryPath,
   };
   // Only a newly transferred source has its current bytes verified here.
   // Later planning reads retain this baseline while allowing ordinary edits.
@@ -1589,7 +1597,7 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
   // state that are intentionally outside the source transport.
   const fullTransfer = !previousManifestValid;
 
-  await ensureSandboxDirectories(sandbox, [".app-builder"]);
+  await ensureSandboxDirectories(sandbox, [appBuilderDirectory]);
   await sandbox.writeTextFile({
     content: `${JSON.stringify(
       {
@@ -1603,14 +1611,14 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
       null,
       2,
     )}\n`,
-    path: ".app-builder/prepare-intent.json",
+    path: prepareIntentFile,
   });
   if (fullTransfer) {
     await developmentWorkingTreeArchive(sandbox, sourcePath, names);
     try {
       const extraction = await sandbox.run({
         command: `mkdir -p repository && tar --extract --gzip --file ${sandboxSourceArchivePath} --directory repository --no-same-owner --no-same-permissions`,
-        workingDirectory: "/workspace",
+        workingDirectory: sandboxWorkspacePath,
       });
       if (extraction.exitCode !== 0) {
         throw new Error("The development source could not be materialized.");
@@ -1642,7 +1650,7 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
       try {
         const extraction = await sandbox.run({
           command: `tar --extract --gzip --file ${sandboxSourceArchivePath} --directory repository --no-same-owner --no-same-permissions`,
-          workingDirectory: "/workspace",
+          workingDirectory: sandboxWorkspacePath,
         });
         if (extraction.exitCode !== 0) {
           throw new Error("The development source could not be materialized.");
@@ -1671,7 +1679,7 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
       command: `node -e ${JSON.stringify(
         `const fs=require("node:fs");const path=require("node:path");const root=path.resolve("/workspace/repository");const entries=JSON.parse(fs.readFileSync("/workspace/${modeListPath}","utf-8"));if(!Array.isArray(entries))throw new Error("invalid mode list");for(const entry of entries){if(!entry||typeof entry.path!=="string"||!entry.path.startsWith("repository/")||entry.path.includes("\\0")||(entry.mode!=="100644"&&entry.mode!=="100755"))throw new Error("invalid source mode");const target=path.resolve("/workspace",entry.path);if(target!==root&&!target.startsWith(root+path.sep))throw new Error("source path escapes repository");const info=fs.lstatSync(target);if(!info.isFile()||info.isSymbolicLink())throw new Error("source path is not a regular file");fs.chmodSync(target,entry.mode==="100755"?0o755:0o644);}`,
       )}`,
-      workingDirectory: "/workspace",
+      workingDirectory: sandboxWorkspacePath,
     });
     if (chmod.exitCode !== 0) {
       throw new Error("The development source permissions could not be prepared.");
@@ -1693,7 +1701,7 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
     sourceTree: generation,
     workspaceDigest,
     workspaceId: getBuilderSandboxId(sandbox),
-    workspacePath: "/workspace/repository",
+    workspacePath: sandboxRepositoryPath,
   };
   // Independently prove the bytes that actually reached the Sandbox before a
   // workspace receipt freezes their digest; source can move during transport.

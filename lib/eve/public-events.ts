@@ -30,6 +30,24 @@ import {
   githubRepositoryAccessViewModel,
 } from "../integrations/store-in-view-model";
 
+const preparingAppDataModelLabel = "Preparing the app's data model";
+const prepareHostedRuntimeTool = "prepare-app-hosted-runtime";
+const prepareAppProductionTool = "prepare-app-production";
+const actionsRequestedEvent = "actions.requested";
+const actionResultEvent = "action.result";
+const toolResultKind = "tool-result";
+const turnCancelledEvent = "turn.cancelled";
+const sessionFailedEvent = "session.failed";
+const toolApprovalKind = "tool-approval";
+const assistantMessageEvent = "assistant.message";
+const stepStartedEvent = "step.started";
+const publicErrorEvent = "error.public";
+const inputRequestedEvent = "input.requested";
+const inputResolvedEvent = "input.resolved";
+const approvalSettledEvent = "approval.settled";
+const authorizationRequiredEvent = "authorization.required";
+const authorizationCompletedEvent = "authorization.completed";
+
 export interface InternalEveEvent {
   type: string;
   index: number;
@@ -70,12 +88,12 @@ const authorizationRequestId = (data: unknown): string | undefined => {
 const progressStates = new Set(["started", "completed", "failed"]);
 const visibleOperations = new Map([
   ["apply_app_creation", "Building the app in its private workspace"],
-  ["compile-app-schema-release", "Preparing the app's data model"],
+  ["compile-app-schema-release", preparingAppDataModelLabel],
   ["install-app-integrations", "Installing the app's requested integrations"],
   ["prepare-app-local-preview", "Preparing the app's local preview dependencies"],
-  ["prepare-app-hosted-runtime", "Setting up your app’s data"],
+  [prepareHostedRuntimeTool, "Setting up your app’s data"],
   ["plan-app-production", "Preparing your app’s setup"],
-  ["prepare-app-production", "Setting up your app’s data and access"],
+  [prepareAppProductionTool, "Setting up your app’s data and access"],
   ["get-app-production", "Checking your app’s setup"],
   ["cleanup-app-hosted-runtime", "Removing the app's Preview resources"],
   ["export-app-hosted-data", "Exporting approved app data privately"],
@@ -90,7 +108,7 @@ const visibleOperations = new Map([
 const visibleOperationLabels = new Set([
   ...visibleOperations.values(),
   "Preparing the app's dependencies",
-  "Preparing the app's data model",
+  preparingAppDataModelLabel,
   "Checking the app's data model",
   "Running app tests",
   "Checking the app's workflow",
@@ -105,14 +123,14 @@ const draftValidationCommandLabel = (value: unknown): string | undefined => {
     return "Preparing the app's dependencies";
   }
   if (/^mise run (?:--no-deps )?app:compile [a-z][a-z0-9-]*$/u.test(value)) {
-    return "Preparing the app's data model";
+    return preparingAppDataModelLabel;
   }
   if (
     /^mise run (?:--no-deps )?--skip-tools schema:release -- compile --app [a-z][a-z0-9-]*$/u.test(
       value,
     )
   ) {
-    return "Preparing the app's data model";
+    return preparingAppDataModelLabel;
   }
   if (/^mise run (?:--no-deps )?--skip-tools app:check [a-z][a-z0-9-]*$/u.test(value)) {
     return "Checking the app's data model";
@@ -390,7 +408,7 @@ export const createInstalledPrototypeReferenceReducer = (input: {
       if (!event.success) {
         return;
       }
-      if (event.data.type === "actions.requested") {
+      if (event.data.type === actionsRequestedEvent) {
         const actions = z
           .object({ actions: z.array(z.unknown()) })
           .loose()
@@ -434,7 +452,7 @@ export const createInstalledPrototypeReferenceReducer = (input: {
         }
         return;
       }
-      if (event.data.type !== "action.result") {
+      if (event.data.type !== actionResultEvent) {
         return;
       }
       const resultEvent = z
@@ -443,7 +461,7 @@ export const createInstalledPrototypeReferenceReducer = (input: {
             .object({
               callId: z.string(),
               isError: z.boolean().optional(),
-              kind: z.literal("tool-result"),
+              kind: z.literal(toolResultKind),
               output: z.unknown(),
               toolName: z.enum(["record_prototype_artifact", "record_ui_preview"]),
             })
@@ -639,7 +657,7 @@ export const createInstalledPrototypeProjector = (
   let latest: PublicPrototype | undefined = state?.latest;
 
   const observe = (event: MessageStreamEvent): void => {
-    if (event.type === "actions.requested") {
+    if (event.type === actionsRequestedEvent) {
       for (const action of event.data.actions) {
         if (action.kind !== "tool-call") {
           continue;
@@ -676,9 +694,9 @@ export const createInstalledPrototypeProjector = (
     }
 
     if (
-      event.type !== "action.result" ||
+      event.type !== actionResultEvent ||
       event.data.status !== "completed" ||
-      event.data.result.kind !== "tool-result" ||
+      event.data.result.kind !== toolResultKind ||
       event.data.result.isError === true
     ) {
       return;
@@ -1055,9 +1073,9 @@ export const latestInstalledUiPreview = (
   let latest: PublicUiPreview | undefined;
   for (const event of events) {
     if (
-      event.type !== "action.result" ||
+      event.type !== actionResultEvent ||
       event.data.status !== "completed" ||
-      event.data.result.kind !== "tool-result" ||
+      event.data.result.kind !== toolResultKind ||
       event.data.result.isError === true ||
       event.data.result.toolName !== "record_ui_preview"
     ) {
@@ -1098,14 +1116,14 @@ export const latestInstalledWorkingPreview = (
   let latest: PublicWorkingPreview | null | undefined;
   for (const event of events) {
     if (
-      event.type === "turn.cancelled" ||
+      event.type === turnCancelledEvent ||
       event.type === "turn.failed" ||
-      event.type === "session.failed"
+      event.type === sessionFailedEvent
     ) {
       latest = null;
       continue;
     }
-    if (event.type === "actions.requested") {
+    if (event.type === actionsRequestedEvent) {
       if (
         event.data.actions.some(
           (action) => action.kind === "tool-call" && action.toolName === "start_app_preview",
@@ -1116,8 +1134,8 @@ export const latestInstalledWorkingPreview = (
       continue;
     }
     if (
-      event.type !== "action.result" ||
-      event.data.result.kind !== "tool-result" ||
+      event.type !== actionResultEvent ||
+      event.data.result.kind !== toolResultKind ||
       event.data.result.toolName !== "start_app_preview"
     ) {
       continue;
@@ -1190,18 +1208,18 @@ const inputRequest = (request: {
   } as const;
   const toolName = request.action?.toolName;
   if (
-    request.kind === "tool-approval" &&
+    request.kind === toolApprovalKind &&
     toolName !== undefined &&
     silentInternalApprovalTools.has(toolName)
   ) {
     return undefined;
   }
   const title =
-    request.kind === "tool-approval" && toolName !== undefined && toolName in approvalTitles
+    request.kind === toolApprovalKind && toolName !== undefined && toolName in approvalTitles
       ? approvalTitles[toolName as keyof typeof approvalTitles]
       : request.prompt;
   let description: string | undefined;
-  if (request.kind === "tool-approval" && toolName === "prepare-app-production") {
+  if (request.kind === toolApprovalKind && toolName === prepareAppProductionTool) {
     const setup = z
       .object({
         scope: z.object({ appId: z.string(), repositoryFullName: z.string() }),
@@ -1215,7 +1233,7 @@ const inputRequest = (request: {
       const { scope, intent } = setup.data;
       description = `Set up ${scope.appId} in ${scope.repositoryFullName}. ${intent.storage.kind === "postgres" ? "Builder prepares the app’s database and keeps it for future updates. " : "This app does not need a database. "}Connect your app account once to receive access. Other people get access only when invited.`;
     }
-  } else if (request.kind === "tool-approval" && toolName === "apply_app_creation") {
+  } else if (request.kind === toolApprovalKind && toolName === "apply_app_creation") {
     // Use the standard card copy when the optional summary does not fit the card.
     description =
       z
@@ -1230,14 +1248,14 @@ const inputRequest = (request: {
       description = `${description} ${privateComputeApprovalDescription}`;
     }
   } else if (
-    request.kind === "tool-approval" &&
+    request.kind === toolApprovalKind &&
     toolName !== undefined &&
     toolName in approvalTitles
   ) {
     description = publicApprovalDescription(request.action?.input, toolName);
   }
   if (
-    request.kind === "tool-approval" &&
+    request.kind === toolApprovalKind &&
     toolName !== undefined &&
     toolName in approvalTitles &&
     toolName !== "apply_app_creation" &&
@@ -1247,7 +1265,7 @@ const inputRequest = (request: {
   }
   return {
     allowFreeform: request.allowFreeform ?? false,
-    kind: request.kind === "tool-approval" ? "approval" : "question",
+    kind: request.kind === toolApprovalKind ? "approval" : "question",
     requestId: request.requestId,
     ...(description === undefined ? {} : { description }),
     ...(request.options === undefined
@@ -1291,7 +1309,7 @@ const productionIdentityEvents = (
   index: number,
   turnId: string,
 ): InternalEveEvent[] => {
-  const isPrepare = result.toolName === "prepare-app-production";
+  const isPrepare = result.toolName === prepareAppProductionTool;
   if (!isPrepare && result.toolName !== "get-app-production") {
     return [];
   }
@@ -1340,7 +1358,7 @@ const productionIdentityEvents = (
       index,
       text,
       turnId: `${turnId}:identity-invitation:${result.callId}`,
-      type: "assistant.message",
+      type: assistantMessageEvent,
     },
     { index, type: "auth_identity_invitation", identityInvitation: invitation.data },
   ];
@@ -1361,15 +1379,15 @@ export const projectInstalledEveEvent = (
               index,
               text: event.data.message,
               turnId: event.data.turnId,
-              type: "assistant.message",
+              type: assistantMessageEvent,
             },
           ];
     }
-    case "step.started":
+    case stepStartedEvent:
     case "step.completed":
     case "step.failed": {
       let state: "completed" | "failed" | "started";
-      if (event.type === "step.started") {
+      if (event.type === stepStartedEvent) {
         state = "started";
       } else if (event.type === "step.completed") {
         state = "completed";
@@ -1387,12 +1405,12 @@ export const projectInstalledEveEvent = (
         const failure = publicBuilderFailure(event.data, operation);
         return [
           progress,
-          { code: failure.code, index, message: failure.message, type: "error.public" },
+          { code: failure.code, index, message: failure.message, type: publicErrorEvent },
         ];
       }
       return [progress];
     }
-    case "actions.requested": {
+    case actionsRequestedEvent: {
       return event.data.actions.flatMap((action) => {
         if (action.kind !== "tool-call") {
           return [];
@@ -1404,8 +1422,8 @@ export const projectInstalledEveEvent = (
     case "action.partial": {
       const { result, turnId, sequence } = event.data;
       if (
-        result.kind !== "tool-result" ||
-        result.toolName !== "prepare-app-hosted-runtime" ||
+        result.kind !== toolResultKind ||
+        result.toolName !== prepareHostedRuntimeTool ||
         result.isError === true
       ) {
         return [];
@@ -1425,15 +1443,15 @@ export const projectInstalledEveEvent = (
           text,
           // Keep a yielded invitation distinct from the later model reply, stable on replay.
           turnId: `${turnId}:identity-invitation:${result.callId}:${sequence}`,
-          type: "assistant.message",
+          type: assistantMessageEvent,
         },
         ...(invitation.success
           ? [{ index, type: "auth_identity_invitation", identityInvitation: invitation.data }]
           : []),
       ];
     }
-    case "action.result": {
-      if (event.data.result?.kind !== "tool-result") {
+    case actionResultEvent: {
+      if (event.data.result?.kind !== toolResultKind) {
         return [];
       }
       const label = draftValidationLabel(
@@ -1443,8 +1461,7 @@ export const projectInstalledEveEvent = (
       );
       const returnedStatus = recordStringField(event.data.result.output, "status");
       const commandFailed =
-        (event.data.result.toolName === "prepare-app-hosted-runtime" &&
-          returnedStatus === "blocked") ||
+        (event.data.result.toolName === prepareHostedRuntimeTool && returnedStatus === "blocked") ||
         (event.data.result.toolName === "validate_github_draft_pr_reconciliation" &&
           (returnedStatus === "needs_repair" || returnedStatus === "needs_resolution")) ||
         (event.data.result.toolName === "install-app-integrations" && returnedStatus === "failed");
@@ -1464,7 +1481,7 @@ export const projectInstalledEveEvent = (
                 type: "progress",
               },
             ];
-      return event.data.result.toolName === "prepare-app-hosted-runtime"
+      return event.data.result.toolName === prepareHostedRuntimeTool
         ? [
             ...progress,
             { index, type: "auth_identity_invitation_resolved", callId: event.data.result.callId },
@@ -1476,7 +1493,7 @@ export const projectInstalledEveEvent = (
               : []),
           ];
     }
-    case "input.requested": {
+    case inputRequestedEvent: {
       const projectedRequests = event.data.requests.map(inputRequest);
       return projectedRequests.some((request) => request === undefined)
         ? [
@@ -1484,37 +1501,37 @@ export const projectInstalledEveEvent = (
               code: "confirmation_unavailable",
               index,
               message: unavailableConfirmationMessage,
-              type: "error.public",
+              type: publicErrorEvent,
             },
             { index, status: "failed", type: "status" },
           ]
         : projectedRequests.map((request, requestIndex) => {
-            const projected: InternalEveEvent = { index, request, type: "input.requested" };
+            const projected: InternalEveEvent = { index, request, type: inputRequestedEvent };
             if (isFrameworkSessionLimitInput(event.data.requests[requestIndex])) {
               projected.frameworkSessionLimit = true;
             }
             return projected;
           });
     }
-    case "input.resolved": {
+    case inputResolvedEvent: {
       return [
         {
           index,
           requestIds: event.data.resolutions.map(({ requestId }) => requestId),
-          type: "input.resolved",
+          type: inputResolvedEvent,
         },
       ];
     }
-    case "approval.settled": {
+    case approvalSettledEvent: {
       return [
         {
           index,
           requestIds: [event.data.requestId],
-          type: "input.resolved",
+          type: inputResolvedEvent,
         },
       ];
     }
-    case "authorization.required": {
+    case authorizationRequiredEvent: {
       const requestId = authorizationRequestId(event.data);
       if (requestId === undefined) {
         return [];
@@ -1567,11 +1584,11 @@ export const projectInstalledEveEvent = (
                 }),
             allowFreeform: false,
           },
-          type: "input.requested",
+          type: inputRequestedEvent,
         },
       ];
     }
-    case "authorization.completed": {
+    case authorizationCompletedEvent: {
       const requestId = authorizationRequestId(event.data);
       const outcome = z
         .enum(["authorized", "declined", "failed", "timed-out"])
@@ -1583,11 +1600,11 @@ export const projectInstalledEveEvent = (
               index,
               requestIds: [requestId],
               resolutionKind: "authorization",
-              type: "input.resolved",
+              type: inputResolvedEvent,
             },
           ];
     }
-    case "turn.cancelled": {
+    case turnCancelledEvent: {
       return [{ index, status: "cancelled", type: "status" }];
     }
     case "session.waiting": {
@@ -1598,16 +1615,16 @@ export const projectInstalledEveEvent = (
     }
     case "turn.failed": {
       const failure = publicBuilderFailure(event.data, operation);
-      return [{ code: failure.code, index, message: failure.message, type: "error.public" }];
+      return [{ code: failure.code, index, message: failure.message, type: publicErrorEvent }];
     }
-    case "session.failed": {
+    case sessionFailedEvent: {
       const failure = publicBuilderFailure(event.data, operation);
       return [
         {
           code: failure.code,
           index,
           message: failure.message,
-          type: "error.public",
+          type: publicErrorEvent,
         },
         { index, status: "failed", type: "status" },
       ];
@@ -1623,7 +1640,7 @@ export const outstandingInstalledEveRequests = (
 ): PublicInputRequest[] => {
   const outstanding = new Map<string, PublicInputRequest>();
   for (const event of events) {
-    if (event.type === "authorization.required" || event.type === "authorization.completed") {
+    if (event.type === authorizationRequiredEvent || event.type === authorizationCompletedEvent) {
       for (const projected of projectInstalledEveEvent(event, 0)) {
         if (projected.request !== undefined) {
           outstanding.set(projected.request.requestId, projected.request);
@@ -1635,7 +1652,7 @@ export const outstandingInstalledEveRequests = (
         }
       }
     }
-    if (event.type === "input.requested") {
+    if (event.type === inputRequestedEvent) {
       const projected = event.data.requests.map(inputRequest);
       if (projected.some((request) => request === undefined)) {
         return [];
@@ -1647,12 +1664,12 @@ export const outstandingInstalledEveRequests = (
         }
       }
     }
-    if (event.type === "input.resolved") {
+    if (event.type === inputResolvedEvent) {
       for (const resolution of event.data.resolutions) {
         outstanding.delete(resolution.requestId);
       }
     }
-    if (event.type === "approval.settled") {
+    if (event.type === approvalSettledEvent) {
       outstanding.delete(event.data.requestId);
     }
   }
@@ -1664,10 +1681,10 @@ export const outstandingInternalEveRequests = (
 ): PublicInputRequest[] => {
   const outstanding = new Map<string, PublicInputRequest>();
   for (const event of events) {
-    if (event.type === "input.requested" && event.request !== undefined) {
+    if (event.type === inputRequestedEvent && event.request !== undefined) {
       outstanding.set(event.request.requestId, event.request);
     }
-    if (event.type === "input.resolved") {
+    if (event.type === inputResolvedEvent) {
       for (const requestId of event.requestIds ?? []) {
         if (
           event.resolutionKind !== "authorization" ||
@@ -1687,7 +1704,7 @@ export const deriveInstalledEveStatus = (
   const outstanding = new Map<string, PublicInputRequest["kind"]>();
   let boundary: EveSessionStatus = "working";
   for (const event of events) {
-    if (event.type === "input.requested") {
+    if (event.type === inputRequestedEvent) {
       const projected = event.data.requests.map(inputRequest);
       if (projected.some((request) => request === undefined)) {
         return "failed";
@@ -1698,15 +1715,15 @@ export const deriveInstalledEveStatus = (
         }
       }
     }
-    if (event.type === "input.resolved") {
+    if (event.type === inputResolvedEvent) {
       for (const resolution of event.data.resolutions) {
         outstanding.delete(resolution.requestId);
       }
     }
-    if (event.type === "approval.settled") {
+    if (event.type === approvalSettledEvent) {
       outstanding.delete(event.data.requestId);
     }
-    if (event.type === "authorization.required" || event.type === "authorization.completed") {
+    if (event.type === authorizationRequiredEvent || event.type === authorizationCompletedEvent) {
       for (const projected of projectInstalledEveEvent(event, 0)) {
         if (projected.request !== undefined) {
           outstanding.set(projected.request.requestId, projected.request.kind);
@@ -1718,7 +1735,7 @@ export const deriveInstalledEveStatus = (
         }
       }
     }
-    if (event.type === "turn.cancelled") {
+    if (event.type === turnCancelledEvent) {
       boundary = "cancelled";
     }
     if (event.type === "session.waiting") {
@@ -1727,10 +1744,10 @@ export const deriveInstalledEveStatus = (
     if (event.type === "session.completed") {
       boundary = "completed";
     }
-    if (event.type === "session.failed") {
+    if (event.type === sessionFailedEvent) {
       boundary = "failed";
     }
-    if (event.type === "step.started") {
+    if (event.type === stepStartedEvent) {
       boundary = "working";
     }
   }
@@ -1760,7 +1777,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
         ? { ...resolved.data, index: event.index, type: "auth_identity_invitation_resolved" }
         : null;
     }
-    case "assistant.message": {
+    case assistantMessageEvent: {
       return event.turnId && event.text !== undefined
         ? {
             index: event.index,
@@ -1781,7 +1798,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
           }
         : null;
     }
-    case "input.requested": {
+    case inputRequestedEvent: {
       return event.request && event.frameworkSessionLimit !== true
         ? { index: event.index, request: event.request, type: "input_required" }
         : null;
@@ -1789,7 +1806,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
     case "status": {
       return event.status ? { index: event.index, status: event.status, type: "status" } : null;
     }
-    case "error.public": {
+    case publicErrorEvent: {
       return event.code && event.message
         ? {
             code: event.code,
@@ -1811,7 +1828,7 @@ export const projectInstalledEveEvents = (
   let operation: string | undefined;
   return events
     .flatMap((event) => {
-      if (event.type === "actions.requested") {
+      if (event.type === actionsRequestedEvent) {
         const requested = event.data.actions.filter((action) => action.kind === "tool-call");
         operation = requested.at(-1)?.toolName ?? operation;
       }
