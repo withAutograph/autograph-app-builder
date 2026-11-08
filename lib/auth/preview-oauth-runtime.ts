@@ -354,23 +354,19 @@ const previewOAuthRuntimeConfigSchema = z
   .superRefine((config, context) => {
     const issuer = new URL(config.issuer);
     const resource = new URL(config.resource);
-    if (
-      issuer.pathname !== "/api/auth" ||
-      issuer.search ||
-      issuer.hash ||
-      issuer.username ||
-      issuer.password
-    ) {
+    const invalidIssuerLocation =
+      issuer.pathname !== "/api/auth" || issuer.search !== "" || issuer.hash !== "";
+    if (invalidIssuerLocation || issuer.username || issuer.password) {
       context.addIssue({
         code: "custom",
         message: "Preview OAuth issuer must be the exact /api/auth URL.",
         path: ["issuer"],
       });
     }
+    const invalidResourceLocation =
+      resource.pathname !== "/mcp" || resource.search !== "" || resource.hash !== "";
     if (
-      resource.pathname !== "/mcp" ||
-      resource.search ||
-      resource.hash ||
+      invalidResourceLocation ||
       resource.username ||
       resource.password ||
       resource.origin !== issuer.origin

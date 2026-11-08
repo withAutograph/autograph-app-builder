@@ -270,14 +270,13 @@ export function mappedSharedCssRule(input: {
   if (file === undefined) {
     return;
   }
-  const declarations = sharedCssRules.filter(
-    (candidate) =>
+  const declarations = sharedCssRules.filter((candidate) => {
+    const sourceMatches =
       candidate.source.path === file.path &&
       candidate.source.line === mapped.line &&
-      candidate.source.column === mapped.column &&
-      candidate.property === property &&
-      candidate.value === value,
-  );
+      candidate.source.column === mapped.column;
+    return sourceMatches && candidate.property === property && candidate.value === value;
+  });
   return declarations.length === 1 ? declarations[0] : undefined;
 }
 
@@ -869,14 +868,17 @@ export async function measureStyles(
         );
         const mappedGenerated = Boolean(
           mappedFile &&
-          generatedCssRules.filter(
-            (candidate) =>
+          generatedCssRules.filter((candidate) => {
+            const sourceMatches =
               candidate.source.path === mappedFile.path &&
               candidate.source.line === mapped?.line &&
-              candidate.source.column === mapped?.column &&
+              candidate.source.column === mapped?.column;
+            return (
+              sourceMatches &&
               candidate.property === property &&
-              candidate.value === declaration?.value,
-          ).length === 1,
+              candidate.value === declaration?.value
+            );
+          }).length === 1,
         );
         const mappedShared =
           uniqueDeclarationEntries.length === 1
@@ -914,9 +916,9 @@ export async function measureStyles(
         if (generated && classification === UNMATCHED_LITERAL) {
           classification = GENERATED_OVERRIDE;
         }
+        const sharedSource = !generated && (arrustedSharedSource(path) || Boolean(mappedShared));
         if (
-          !generated &&
-          (arrustedSharedSource(path) || Boolean(mappedShared)) &&
+          sharedSource &&
           classification !== SEMANTIC_TOKEN_REFERENCE &&
           classification !== MATCHING_LITERAL &&
           classification !== "structural"

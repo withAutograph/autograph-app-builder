@@ -464,14 +464,18 @@ const finiteLiteralEvidence = (
     const declaration = symbol?.valueDeclaration;
     const declarations = symbol?.declarations;
     const list = declaration?.parent;
+    if (!symbol || seen.has(symbol) || declarations?.length !== 1) {
+      return undefined;
+    }
     if (
-      !symbol ||
-      seen.has(symbol) ||
-      declarations?.length !== 1 ||
       !declaration ||
       !ts.isVariableDeclaration(declaration) ||
       !declaration.initializer ||
-      declaration.getSourceFile() !== expression.getSourceFile() ||
+      declaration.getSourceFile() !== expression.getSourceFile()
+    ) {
+      return undefined;
+    }
+    if (
       !list ||
       !ts.isVariableDeclarationList(list) ||
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.

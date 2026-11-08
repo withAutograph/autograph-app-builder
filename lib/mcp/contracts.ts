@@ -24,9 +24,9 @@ export const publicAuthorizationUrlSchema = z
   .max(2048)
   .superRefine((value, context) => {
     const url = new URL(value);
+    const hasCredentials = url.username || url.password;
     if (
-      url.username ||
-      url.password ||
+      hasCredentials ||
       (url.protocol !== "https:" && !(url.protocol === "http:" && isLoopbackHostname(url.hostname)))
     ) {
       context.addIssue({
@@ -132,13 +132,12 @@ export const publicPrototypePreviewUrlSchema = z
   .max(1024)
   .superRefine((value, context) => {
     const url = new URL(value);
+    const hasExtras = url.username || url.password || url.search || url.hash;
+    const invalidProtocol = () =>
+      url.protocol !== "https:" && !(url.protocol === "http:" && isLoopbackHostname(url.hostname));
     if (
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash ||
-      (url.protocol !== "https:" &&
-        !(url.protocol === "http:" && isLoopbackHostname(url.hostname))) ||
+      hasExtras ||
+      invalidProtocol() ||
       !/^\/preview\/[A-Za-z0-9][A-Za-z0-9._:@-]{0,199}\/[a-f0-9]{64}$/u.test(url.pathname)
     ) {
       context.addIssue({

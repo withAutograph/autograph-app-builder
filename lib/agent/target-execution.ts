@@ -57,8 +57,9 @@ export function plannedProposalForExecution(
 export function assertProposalExecutionBindings(state: ProposalWorkflowState): void {
   assertExactDependencyPreparationReceipt(state.dependencyReceipt);
   const target = targetProposalSchema.safeParse(state.proposal.target);
+  const bindingError = "The planned proposal no longer matches its durable execution bindings.";
   if (!target.success) {
-    throw new Error("The planned proposal no longer matches its durable execution bindings.");
+    throw new Error(bindingError);
   }
   if (target.data.blockers.length !== 0) {
     throw new Error("The planned proposal still contains blockers and cannot be applied.");
@@ -90,11 +91,15 @@ export function assertProposalExecutionBindings(state: ProposalWorkflowState): v
   if (
     JSON.stringify(actual) !== JSON.stringify(expected) ||
     state.proposal.identityDigest !== state.identityReceipt.digest ||
-    target.data.contract.appId !== state.appSpec.appId ||
+    target.data.contract.appId !== state.appSpec.appId
+  ) {
+    throw new Error(bindingError);
+  }
+  if (
     target.data.contract.appSpec.path !== state.appSpec.artifactPath ||
     target.data.contract.appSpec.sha256 !== state.appSpec.digest
   ) {
-    throw new Error("The planned proposal no longer matches its durable execution bindings.");
+    throw new Error(bindingError);
   }
 }
 
@@ -129,10 +134,11 @@ export function resolveTargetExecutionEnvironment(input: {
     fixture: input.fixture,
     localImageConfigured: localImage !== undefined,
   });
-  const cacheInspectable =
-    input.checkoutImageDigest === undefined &&
-    backend.blockers.length === 0 &&
-    (input.fixture || localImage !== undefined || isHostedVercelSandboxBackend(backend.kind));
+  let cacheInspectable = input.checkoutImageDigest === undefined && backend.blockers.length === 0;
+  if (cacheInspectable) {
+    cacheInspectable =
+      input.fixture || localImage !== undefined || isHostedVercelSandboxBackend(backend.kind);
+  }
   const execution =
     cacheInspectable && input.cache !== undefined
       ? targetExecutionBinding(input.cache, input.environment)

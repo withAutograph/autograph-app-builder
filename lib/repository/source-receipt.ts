@@ -246,37 +246,51 @@ const sourceReceiptDigest = (receipt: UnsignedSourceReceiptEvidence): string => 
   );
 };
 
-const validProvenance = (value: unknown): value is ClonedTemplateProvenance =>
-  isRecord(value) &&
-  hasExactKeys(value, ["method", "readinessDigest", "ref", "repository"]) &&
-  value.repository === ARRUSTED_TEMPLATE_REPOSITORY &&
-  value.ref === ARRUSTED_TEMPLATE_REF &&
-  value.method === "git-clone-v1" &&
-  isDigest(value.readinessDigest);
+const validProvenance = (value: unknown): value is ClonedTemplateProvenance => {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (
+    !hasExactKeys(value, ["method", "readinessDigest", "ref", "repository"]) ||
+    value.repository !== ARRUSTED_TEMPLATE_REPOSITORY ||
+    value.ref !== ARRUSTED_TEMPLATE_REF
+  ) {
+    return false;
+  }
+  return value.method === "git-clone-v1" && isDigest(value.readinessDigest);
+};
 
 export const parseSourceReceiptEvidence = (value: unknown): SourceReceiptEvidence => {
   if (!isRecord(value)) {
     throw new Error("Source receipt evidence is invalid or has an unsupported schema.");
   }
   const { version } = value;
-  if (
+  const invalidKnownVersion =
     (version === LEGACY_SOURCE_RECEIPT_VERSION &&
       !hasExactKeys(value, legacySourceReceiptEvidenceKeys)) ||
-    (version === SOURCE_RECEIPT_VERSION && !hasExactKeys(value, clonedSourceReceiptEvidenceKeys)) ||
+    (version === SOURCE_RECEIPT_VERSION && !hasExactKeys(value, clonedSourceReceiptEvidenceKeys));
+  if (
+    invalidKnownVersion ||
     (version !== LEGACY_SOURCE_RECEIPT_VERSION && version !== SOURCE_RECEIPT_VERSION)
   ) {
     throw new Error("Source receipt evidence is invalid or has an unsupported schema.");
   }
-  if (
-    (value.sourceKind !== "existing-repository" && value.sourceKind !== freshTemplateSourceKind) ||
-    (version === SOURCE_RECEIPT_VERSION && value.sourceKind !== freshTemplateSourceKind) ||
-    !isGitObjectId(value.sourceSha) ||
-    !isGitObjectId(value.sourceTree) ||
+  const invalidKind =
+    value.sourceKind !== "existing-repository" && value.sourceKind !== freshTemplateSourceKind;
+  const invalidSourceVersion =
+    invalidKind ||
+    (version === SOURCE_RECEIPT_VERSION && value.sourceKind !== freshTemplateSourceKind);
+  const invalidIdentity =
+    invalidSourceVersion || !isGitObjectId(value.sourceSha) || !isGitObjectId(value.sourceTree);
+  const invalidBinding =
+    invalidIdentity ||
     value.adapter !== SUPPORTED_TEMPLATE_ADAPTER ||
     !isDigest(value.eligibilityDigest) ||
-    !isDigest(value.contractDigest) ||
-    value.releaseEnabled !== false ||
-    !isDigest(value.digest) ||
+    !isDigest(value.contractDigest);
+  const invalidEvidence =
+    invalidBinding || value.releaseEnabled !== false || !isDigest(value.digest);
+  if (
+    invalidEvidence ||
     (version === SOURCE_RECEIPT_VERSION && !validProvenance(value.provenance))
   ) {
     throw new Error("Source receipt evidence is invalid.");
