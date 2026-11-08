@@ -3,27 +3,27 @@ import { createAppAccessAction } from "./action";
 import type { AppAccessSnapshot } from "./contracts";
 
 const snapshot: AppAccessSnapshot = {
-  sessionId: "saved-session",
   appId: "app-one",
   appName: "App one",
-  organizationName: "Team",
   canManage: true,
-  roles: [],
-  members: [],
-  invitations: [],
   creator: { status: "ready" },
+  invitations: [],
+  members: [],
+  organizationName: "Team",
+  roles: [],
+  sessionId: "saved-session",
 };
 const input = {
-  sessionId: snapshot.sessionId,
   command: {
     action: "invite" as const,
     clientRequestId: "ed9928f1-bf1f-4d96-8280-d58c471d12ba",
     email: "guest@example.com",
     roles: [],
   },
+  sessionId: snapshot.sessionId,
 };
 const incoming = () =>
-  new Headers({ origin: "https://builder.example", cookie: "session=owner-cookie" });
+  new Headers({ cookie: "session=owner-cookie", origin: "https://builder.example" });
 
 describe("app access Server Action boundary", () => {
   it("passes the authenticated request to the existing owner-resolving service and retains request identity", async () => {
@@ -32,7 +32,7 @@ describe("app access Server Action boundary", () => {
       requests.push(request);
       return Promise.resolve(Response.json(snapshot));
     });
-    const action = createAppAccessAction({ origin: "https://builder.example", handle });
+    const action = createAppAccessAction({ handle, origin: "https://builder.example" });
     expect(await action(input, incoming())).toEqual({ snapshot, status: "ready" });
     expect(await action(input, incoming())).toEqual({ snapshot, status: "ready" });
     expect(handle).toHaveBeenCalledWith(expect.any(Request), snapshot.sessionId);
@@ -43,7 +43,7 @@ describe("app access Server Action boundary", () => {
 
   it("rejects injected authority and foreign origins before dispatch", async () => {
     const handle = vi.fn(() => Promise.resolve(Response.json(snapshot)));
-    const action = createAppAccessAction({ origin: "https://builder.example", handle });
+    const action = createAppAccessAction({ handle, origin: "https://builder.example" });
     const forged = { ...input, ownerUserId: "other-owner" };
     expect(await action(forged, incoming())).toMatchObject({ status: "error", uncertain: false });
     expect(await action(input, new Headers({ origin: "https://other.example" }))).toMatchObject({
@@ -55,9 +55,9 @@ describe("app access Server Action boundary", () => {
 
   it("returns safe uncertainty without retrying an unacknowledged write", async () => {
     const handle = vi.fn(() => Promise.reject(new Error("secret provider detail")));
-    const action = createAppAccessAction({ origin: "https://builder.example", handle });
+    const action = createAppAccessAction({ handle, origin: "https://builder.example" });
     const result = await action(input, incoming());
-    expect(result).toMatchObject({ status: "error", code: "app_access_unknown", uncertain: true });
+    expect(result).toMatchObject({ code: "app_access_unknown", status: "error", uncertain: true });
     expect(JSON.stringify(result)).not.toContain("secret provider detail");
     expect(handle).toHaveBeenCalledTimes(1);
   });
@@ -74,15 +74,15 @@ describe("app access Server Action boundary", () => {
           { status: 409 },
         ),
       );
-    const action = createAppAccessAction({ origin: "https://builder.example", handle });
+    const action = createAppAccessAction({ handle, origin: "https://builder.example" });
     expect(await action(input, incoming())).toMatchObject({ status: "error", uncertain: false });
     expect(await action(input, incoming())).toMatchObject({ status: "error", uncertain: true });
   });
 
   it("does not present a different saved session as successful", async () => {
     const action = createAppAccessAction({
-      origin: "https://builder.example",
       handle: () => Promise.resolve(Response.json({ ...snapshot, sessionId: "other-session" })),
+      origin: "https://builder.example",
     });
     expect(await action(input, incoming())).toMatchObject({ status: "error", uncertain: true });
   });

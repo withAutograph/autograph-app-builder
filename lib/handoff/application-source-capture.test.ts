@@ -20,7 +20,7 @@ const fixture = () => {
   const readBinaryFile = vi.fn(async ({ path }: { path: string }) =>
     path.endsWith("image.bin") ? binary : Buffer.from("ok"),
   );
-  const run = vi.fn(async () => ({ exitCode: 0, stdout: JSON.stringify(rows), stderr: "" }));
+  const run = vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(rows) }));
   return {
     sandbox: { readBinaryFile, run },
     signal: new AbortController().signal,
@@ -114,7 +114,7 @@ it("prunes actual Playwright reports and browser auth while retaining nested cod
             ],
             { encoding: "utf-8" },
           );
-          return { exitCode: 0, stdout, stderr: "" };
+          return { exitCode: 0, stderr: "", stdout };
         },
       },
     });
