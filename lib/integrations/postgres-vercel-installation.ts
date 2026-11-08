@@ -51,7 +51,7 @@ export async function readActiveVercelInstallationToken(input: {
     )
     .limit(1);
   const [row] = rows;
-  if (!row) {
+  if (row === undefined) {
     return;
   }
   let token: string;
@@ -134,7 +134,7 @@ export function createPostgresVercelAuthorizationStateStore(
           returnTo: vercelInstallationAuthorizationStates.returnTo,
         });
       const [row] = rows;
-      if (!row || rows.length !== 1) {
+      if (row === undefined || rows.length !== 1) {
         return;
       }
       const returnState: Parameters<typeof parseProviderConnectionReturn>[0] = {
@@ -177,7 +177,7 @@ export function createPostgresVercelAuthorizationStateStore(
           ),
         )
         .limit(1);
-      if (!rows[0]) {
+      if (rows[0] === undefined) {
         return;
       }
       const returnState: Parameters<typeof parseProviderConnectionReturn>[0] = {

@@ -138,9 +138,11 @@ function collectStyleExpression(expression: ts.Expression, destination: string[]
       continue;
     }
     const value = property.initializer;
-    if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) {
-      collectCssLiterals(value.text, destination);
-    } else if (ts.isNumericLiteral(value)) {
+    if (
+      ts.isStringLiteral(value) ||
+      ts.isNoSubstitutionTemplateLiteral(value) ||
+      ts.isNumericLiteral(value)
+    ) {
       collectCssLiterals(value.text, destination);
     }
   }

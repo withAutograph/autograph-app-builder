@@ -140,7 +140,7 @@ const semanticCandidateAdapter = (
         };
       }
       const response = await page.goto(entryUrl);
-      if (!response?.ok()) {
+      if (response?.ok() !== true) {
         return {
           disposition: infrastructureUnavailable,
           ready: false,
@@ -445,10 +445,12 @@ const referenceAdapter = (
             assertions: [
               assertion(
                 "revision-advanced",
-                Boolean(row && row.revision > initialDraftRevision && row.appName === fixedName),
-                row
-                  ? `PostgreSQL revision ${row.revision} contains the fixed app name.`
-                  : "No active durable draft row was found.",
+                row !== undefined &&
+                  row.revision > initialDraftRevision &&
+                  row.appName === fixedName,
+                row === undefined
+                  ? "No active durable draft row was found."
+                  : `PostgreSQL revision ${row.revision} contains the fixed app name.`,
               ),
             ],
             reason: "Evaluator read the durable draft row directly from PostgreSQL.",

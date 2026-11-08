@@ -106,7 +106,7 @@ export function createPostgresRepositoryAccessContinuationStore(
           ),
         )
         .returning(columns);
-      return rows[0] ? record(rows[0]) : undefined;
+      return rows[0] === undefined ? undefined : record(rows[0]);
     },
 
     async consume(value) {
@@ -133,7 +133,7 @@ export function createPostgresRepositoryAccessContinuationStore(
           ),
         )
         .returning(columns);
-      return rows[0] ? record(rows[0]) : undefined;
+      return rows[0] === undefined ? undefined : record(rows[0]);
     },
 
     async create(value) {
@@ -166,7 +166,7 @@ export function createPostgresRepositoryAccessContinuationStore(
           ),
         )
         .limit(1);
-      return rows[0] ? record(rows[0]) : undefined;
+      return rows[0] === undefined ? undefined : record(rows[0]);
     },
 
     async listAuthorizedForSession(value) {
