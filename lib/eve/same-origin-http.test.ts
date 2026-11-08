@@ -723,7 +723,7 @@ describe("same-origin canonical Eve transport", () => {
 
   it("forwards the prepared reference on start and every mutating continuation without putting it in messages", async () => {
     const sourceHandoffId = "123e4567-e89b-42d3-a456-426614174001";
-    const bodies: Record<string, unknown>[] = [];
+    const bodies: unknown[] = [];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
       if (String(url).includes("/stream?")) {
@@ -758,7 +758,8 @@ describe("same-origin canonical Eve transport", () => {
       sourceHandoffId,
     });
     expect(bodies).toHaveLength(3);
-    for (const body of bodies) {
+    for (const value of bodies) {
+      const body = z.record(z.string(), z.unknown()).parse(value);
       expect(body).toMatchObject({
         forwardedPrincipal: {
           current: {

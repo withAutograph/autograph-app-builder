@@ -381,8 +381,6 @@ export default defineConfig({
         "evals/self-reproduction/workflow-adapter.ts",
         "evals/support/self-reproduction-supplementary.ts",
         "lib/auth/real-oauth-test-harness.ts",
-        "lib/eve/same-origin-http.test.ts",
-        "lib/integrations/postgres-vercel-installation.test.ts",
         "lib/mcp/handoff-provider-test-harness.ts",
         "lib/release/promotion.ts",
         "lib/repository/reviewed-receipt-contract.test.ts",
