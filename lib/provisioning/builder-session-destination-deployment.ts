@@ -168,10 +168,10 @@ export const openBuilderSessionDestination = async (
           database,
           installationId: input.installationId,
         });
+      const { scope, expected } = target;
       return {
-        scope: target.scope,
-        expected: target.expected,
         assertCurrent,
+        expected,
         readOrigins: async () => {
           await assertCurrent();
           const access = await readOwnerVercelProjectAccess({
@@ -200,6 +200,7 @@ export const openBuilderSessionDestination = async (
               }),
           });
         },
+        scope,
       };
     },
   });

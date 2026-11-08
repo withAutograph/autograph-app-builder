@@ -131,12 +131,15 @@ export default defineTool({
       );
       const recoveries = [];
       for (const completion of completions) {
+        const adapterSessionId = ctx.session.id;
+        const callbackExecution = hostedOperatorCallbackExecution(ctx.session);
+        const sessionAuth = ctx.session.auth;
         // oxlint-disable-next-line eslint/no-await-in-loop -- Revalidate owner and accepted selection before exposing each retained context.
         await assertReconciliationCompletionOwnerForSession({
+          adapterSessionId,
+          callbackExecution,
           completion,
-          adapterSessionId: ctx.session.id,
-          callbackExecution: hostedOperatorCallbackExecution(ctx.session),
-          sessionAuth: ctx.session.auth,
+          sessionAuth,
         });
         const current = appBuilderWorkflowState.get();
         if (

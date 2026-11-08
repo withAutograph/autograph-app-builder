@@ -67,6 +67,9 @@ const workerFor = (record: TenantExportJournalRecord): TenantExportWorkerInput =
 };
 const responseBody = (iterator: AsyncIterator<Uint8Array>) =>
   new ReadableStream<Uint8Array>({
+    async cancel() {
+      await iterator.return?.();
+    },
     async pull(controller) {
       try {
         const next = await iterator.next();
@@ -79,9 +82,6 @@ const responseBody = (iterator: AsyncIterator<Uint8Array>) =>
         controller.error(operatorArtifactUnavailable());
         await iterator.return?.();
       }
-    },
-    async cancel() {
-      await iterator.return?.();
     },
   });
 
@@ -244,11 +244,11 @@ export const createTenantExportDownloadDeploymentHandler = (
         return {
           authenticate,
           readCompletion: createTenantExportCompletionLookup({
-            database,
             assertOwner: assertAuthority,
+            database,
           }),
           assertCurrentOwner,
-          store: createPostgresOperatorArtifactReader({ database, assertCurrentOwner }),
+          store: createPostgresOperatorArtifactReader({ assertCurrentOwner, database }),
         };
       };
     }
