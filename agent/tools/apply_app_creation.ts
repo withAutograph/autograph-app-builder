@@ -247,8 +247,15 @@ export default defineTool({
         repair =
           " No safe command diagnostic was captured; inspect the named command in the isolated checkout before changing app files.";
       }
+      const { exitCode } = result.receipt.command;
+      const failureKind = result.receipt.commandFailureKind ?? "unknown";
+      const missingDependency =
+        result.receipt.missingDependency === undefined
+          ? ""
+          : ` while resolving ${result.receipt.missingDependency}`;
+      const diagnosticDetail = diagnostics === "" ? "" : ` Diagnostic:\n${diagnostics}`;
       throw new Error(
-        `Builder failed to run ${command} (exit ${result.receipt.command.exitCode}, ${result.receipt.commandFailureKind ?? "unknown"})${result.receipt.missingDependency === undefined ? "" : ` while resolving ${result.receipt.missingDependency}`}.${diagnostics === "" ? "" : ` Diagnostic:\n${diagnostics}`}${repair}`,
+        `Builder failed to run ${command} (exit ${exitCode}, ${failureKind})${missingDependency}.${diagnosticDetail}${repair}`,
       );
     }
     updateExactWorkflow({

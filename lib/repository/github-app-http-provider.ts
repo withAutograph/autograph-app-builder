@@ -393,6 +393,8 @@ const reconciliationMatchesDraft = (
 
 // Keep provider helpers scoped to the provider factory's contract.
 // oxlint-disable-next-line unicorn/consistent-function-scoping
+const pullHead = (owner: string, branch: string) => encodeURIComponent(`${owner}:${branch}`);
+
 export const createGitHubAppHttpProvider = (input: {
   config: GitHubAppHttpProviderConfig;
   fetch?: Fetch;
@@ -1600,7 +1602,7 @@ export const createGitHubAppHttpProvider = (input: {
       const pulls = await github({
         authorization: accessToken,
         expected: [200],
-        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/pulls?state=open&head=${encodeURIComponent(`${proposal.owner}:${proposal.branchName}`)}&base=${encodeURIComponent(proposal.baseBranch)}&per_page=2`,
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/pulls?state=open&head=${pullHead(proposal.owner, proposal.branchName)}&base=${encodeURIComponent(proposal.baseBranch)}&per_page=2`,
       });
       if (!Array.isArray(pulls.body)) {
         throw new TypeError(invalidResponseMessage);

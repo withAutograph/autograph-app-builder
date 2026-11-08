@@ -66,6 +66,7 @@ const linuxX8664 = "linux/x86_64";
 const microfrontendsPackage = "@vercel/microfrontends";
 const builderExecutionScope = "builder-execution";
 const developmentExecutionScope = "development-execution";
+const developmentDependencyCachePrefix = `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/`;
 const liveTemplateExecutionScope = "live-template-execution";
 const sandboxWorkspaceRoot = "/workspace";
 const liveTemplatePlatformSchema = z.union([z.literal(linuxArm64), z.literal(linuxX8664)]);
@@ -658,7 +659,7 @@ export const materializeExecutionDependencyView =
       path: layoutPath,
     });
     const result = await input.sandbox.run({
-      command: `node - '/workspace/${layoutPath}' '/workspace/${input.overlayRoot}' '/workspace/${viewRoot}' '/workspace' '${input.layout.kind === "cache" && input.layout.roots.some((root) => root.cachePath.startsWith(`${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/`)) ? "1" : "0"}' <<'NODE'\n${executionDependencyViewScript}\nNODE`,
+      command: `node - '/workspace/${layoutPath}' '/workspace/${input.overlayRoot}' '/workspace/${viewRoot}' '/workspace' '${input.layout.kind === "cache" && input.layout.roots.some((root) => root.cachePath.startsWith(developmentDependencyCachePrefix)) ? "1" : "0"}' <<'NODE'\n${executionDependencyViewScript}\nNODE`,
       workingDirectory: sandboxWorkspaceRoot,
     });
     if (result.exitCode !== 0) {
@@ -1568,8 +1569,13 @@ export const materializeOfflineDependencies = async function materializeOfflineD
     const requiredExecutionClosure = REQUIRED_EXECUTION_PACKAGES.map(
       (path) => `test -e ${absoluteNodeModules}/${path}`,
     ).join(" && ");
+    const developmentPathCheck = developmentExecution
+      ? `test "$(realpath ${DEVELOPMENT_DEPENDENCY_CACHE_ROOT})" = "${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}" && test "$(realpath ${absoluteNodeModules})" = "${absoluteNodeModules}" && `
+      : "";
+    const forbiddenPermissions = developmentExecution ? "022" : "222";
+    const permissionCheck = `if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /${forbiddenPermissions} -print -quit | grep -q .; then exit 1; fi && `;
     const extraction = await input.sandbox.run({
-      command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && ${developmentExecution ? `test "$(realpath ${DEVELOPMENT_DEPENDENCY_CACHE_ROOT})" = "${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}" && test "$(realpath ${absoluteNodeModules})" = "${absoluteNodeModules}" && ` : ""}${requiredExecutionClosure} && test -x ${absoluteNodeModules}/.bin/next && test -x ${absoluteNodeModules}/.bin/turbo && test -x ${absoluteNodeModules}/.bin/vp && bun ${absoluteNodeModules}/.bin/next --version >/dev/null && bun ${absoluteNodeModules}/.bin/turbo --version >/dev/null && bun ${absoluteNodeModules}/.bin/vp --version >/dev/null && ${developmentExecution ? `if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /022 -print -quit | grep -q .; then exit 1; fi && ` : `if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && `}test ! -e /workspace/repository/node_modules && test ! -L /workspace/repository/node_modules`,
+      command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && ${developmentPathCheck}${requiredExecutionClosure} && test -x ${absoluteNodeModules}/.bin/next && test -x ${absoluteNodeModules}/.bin/turbo && test -x ${absoluteNodeModules}/.bin/vp && bun ${absoluteNodeModules}/.bin/next --version >/dev/null && bun ${absoluteNodeModules}/.bin/turbo --version >/dev/null && bun ${absoluteNodeModules}/.bin/vp --version >/dev/null && ${permissionCheck}test ! -e /workspace/repository/node_modules && test ! -L /workspace/repository/node_modules`,
       workingDirectory: sandboxWorkspaceRoot,
     });
     if (extraction.exitCode !== 0) {

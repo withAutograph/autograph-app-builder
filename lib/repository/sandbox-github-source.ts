@@ -435,8 +435,10 @@ const inspectSelectedCheckout = (
     (expected.sourceSha !== undefined && sourceSha !== expected.sourceSha) ||
     (expected.sourceTree !== undefined && sourceTree !== expected.sourceTree);
   if (parseRemote(remote) !== parseRemote(expected.repository) || hasUnexpectedRevision()) {
+    const expectedRepository = parseRemote(expected.repository);
+    const expectedRevision = expected.sourceSha === undefined ? "" : ` at ${expected.sourceSha}`;
     throw new Error(
-      `The sandbox checkout does not match the selected GitHub source. Expected ${parseRemote(expected.repository)}${expected.sourceSha === undefined ? "" : ` at ${expected.sourceSha}`}; observed ${parseRemote(remote)} at ${sourceSha}. Select the intended repository or start a new Builder session for this checkout.`,
+      `The sandbox checkout does not match the selected GitHub source. Expected ${expectedRepository}${expectedRevision}; observed ${parseRemote(remote)} at ${sourceSha}. Select the intended repository or start a new Builder session for this checkout.`,
     );
   }
   return { sourceSha, sourceTree };
@@ -460,9 +462,9 @@ const findProviderCheckout = async (
       inspectSelectedCheckout(result.stdout, expected);
       return candidate;
     }
-    failures.push(
-      `${candidate}: ${sandboxFailureDetail(result.stderr || result.stdout) || `exit ${result.exitCode} with no diagnostic output`}`,
-    );
+    const detail = sandboxFailureDetail(result.stderr || result.stdout);
+    const failure = detail || `exit ${result.exitCode} with no diagnostic output`;
+    failures.push(`${candidate}: ${failure}`);
   }
   if (materialize !== undefined) {
     await materialize();

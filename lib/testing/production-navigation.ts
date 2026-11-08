@@ -13,13 +13,13 @@ const credential = z
   .max(512)
   .regex(/^[^\0\r\n]+$/u);
 const environmentSchema = z.object({
-  APP_BUILDER_PRODUCTION_NAVIGATION_ORIGIN: z.string().url(),
+  APP_BUILDER_PRODUCTION_NAVIGATION_ORIGIN: z.url(),
   BETTER_AUTH_SECRET: secret,
-  BETTER_AUTH_URL: z.string().url(),
-  DATABASE_URL: z.string().url().max(8192),
+  BETTER_AUTH_URL: z.url(),
+  DATABASE_URL: z.url().max(8192),
   GITHUB_CLIENT_ID: credential,
   GITHUB_CLIENT_SECRET: credential,
-  MCP_RESOURCE_URL: z.string().url(),
+  MCP_RESOURCE_URL: z.url(),
   NODE_ENV: z.literal("production"),
   VERCEL_AUTH_CLIENT_ID: credential,
   VERCEL_AUTH_CLIENT_SECRET: credential,

@@ -915,7 +915,8 @@ describe("native externally managed policy recovery integration", () => {
           if (loseAlias) {
             throw new Error("synthetic lost alias acknowledgement");
           }
-          aliasTarget = url.pathname.split("/")[3];
+          const { 3: deploymentId } = url.pathname.split("/");
+          aliasTarget = deploymentId;
           return Response.json({});
         }
         return new Response(null, { status: 404 });

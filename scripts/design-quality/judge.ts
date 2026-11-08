@@ -149,7 +149,7 @@ export async function judgeDesign(
         model: gateway(builderValidationModelId),
         output: Output.object({ schema: judgmentSchema }),
         providerOptions: { gateway: { only: ["openai"] } },
-        system: rubric,
+        instructions: rubric,
       });
       ({ output, usage } = result);
     }

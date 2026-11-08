@@ -709,7 +709,7 @@ describe("approved managed app continuity service", () => {
     if (started === undefined) {
       throw new Error("Runtime did not start");
     }
-    const caps = started[2];
+    const { 2: caps } = started;
     for (const bearer of Object.values(caps)) {
       expect(JSON.stringify(result)).not.toContain(bearer);
       expect(JSON.stringify(f.read())).not.toContain(bearer);

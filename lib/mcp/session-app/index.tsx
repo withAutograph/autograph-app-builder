@@ -34,9 +34,9 @@ function publishResult(result?: EveSessionResult) {
   }
 }
 
-app.ontoolresult = ({ structuredContent }) => {
+app.addEventListener("toolresult", ({ structuredContent }) => {
   publishResult(structuredContent as EveSessionResult | undefined);
-};
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function SessionAppContainer() {

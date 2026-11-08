@@ -7,9 +7,9 @@ import { z } from "zod";
 import type { BrowserContext } from "playwright/test";
 
 const fixtureSchema = z.object({
-  databaseUrl: z.string().url(),
+  databaseUrl: z.url(),
   flagsSecret: z.string().min(32),
-  origin: z.string().url(),
+  origin: z.url(),
   secret: z.string().min(32),
 });
 

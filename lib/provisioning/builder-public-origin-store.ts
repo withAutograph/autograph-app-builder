@@ -123,7 +123,7 @@ export const createBuilderPublicOriginStore = (
           .where(predicate(authority, key.requestId))
           .limit(1)
           .for("update");
-        const row = rows[0];
+        const [row] = rows;
         const current = parse(row, scope, key.digest);
         await input.assertCurrent();
         if (current === publicOrigin) {

@@ -518,11 +518,16 @@ const prepareResponse = (options: SessionOptions, session: EveSessionResult): bo
   }
   const { responses } = options;
   const requested = new Set(requests.map((request) => request.requestId));
+  let answered: Set<string> | undefined;
   if (
     responses.length !== requests.length ||
-    responses.some(
-      (item) => !requested.has(item.requestId) || state.answered.includes(item.requestId),
-    )
+    responses.some((item) => {
+      if (!requested.has(item.requestId)) {
+        return true;
+      }
+      answered ??= new Set(state.answered);
+      return answered.has(item.requestId);
+    })
   ) {
     state.outcome = "input_required";
     save();

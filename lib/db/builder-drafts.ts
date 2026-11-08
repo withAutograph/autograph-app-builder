@@ -202,9 +202,8 @@ export function createBuilderDraftStore(database: Database): BuilderDraftStore {
   ) => {
     const authority = hostedTenantAuthoritySchema.parse(authorityInput);
     return database.transaction(async (transaction) => {
-      await transaction.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`builder-draft:${JSON.stringify(authority)}`}, 0))`,
-      );
+      const lockKey = `builder-draft:${JSON.stringify(authority)}`;
+      await transaction.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
       return run(createUnlockedBuilderDraftStore(transaction));
     });
   };

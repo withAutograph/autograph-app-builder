@@ -49,6 +49,7 @@ const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 const repositoryPath = z.string().regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._/@:-]+$/u);
 const shellArgument = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+const repositoryPathArgument = (path: string) => shellArgument(`/workspace/repository/${path}`);
 // Project only identity fields consumed here; producer metadata grants no authority.
 export const targetIdentitySchema = z.object({
   appId,
@@ -212,7 +213,7 @@ const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
       }
       if (sha256(JSON.stringify(proposal.iteration.changes)) !== proposal.iteration.digest) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: "The iteration digest does not bind its changes.",
           path: ["iteration", "digest"],
         });
@@ -618,7 +619,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
           ? undefined
           : // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
             await input.sandbox.run({
-              command: `stat -c %a -- ${shellArgument(`/workspace/repository/${requested.path}`)}`,
+              command: `stat -c %a -- ${repositoryPathArgument(requested.path)}`,
             });
       const mode =
         observedMode?.exitCode === 0 && /^[0-7]{3,4}$/u.test(observedMode.stdout.trim())
