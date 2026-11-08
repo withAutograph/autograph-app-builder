@@ -292,7 +292,7 @@ describe("local Eve acceptance", () => {
     expect(snapshot).not.toHaveBeenCalled();
     expect(attach).toHaveBeenCalledWith(started.sessionId, { streamIndex: 1 });
 
-    tailReady.resolve(undefined as undefined);
+    tailReady.resolve(undefined);
     await vi.waitFor(async () => {
       await expect(
         service.get({ cursor: 0, limit: 100, sessionId: started.sessionId }),
@@ -657,7 +657,7 @@ describe("local Eve acceptance", () => {
       streamIndex: 1,
     });
     expect(session.snapshot).toHaveBeenCalledTimes(1);
-    oldResponseOpen.resolve(undefined as undefined);
+    oldResponseOpen.resolve(undefined);
   });
 
   it("keeps a verified prototype on cursor-at-tail and accepted follow-ups", async () => {
@@ -1047,7 +1047,7 @@ describe("local Eve acceptance", () => {
     const response = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => {
-        cancelled.resolve(undefined as undefined);
+        cancelled.resolve(undefined);
         return { status: "accepted" };
       }),
       async *[Symbol.asyncIterator]() {

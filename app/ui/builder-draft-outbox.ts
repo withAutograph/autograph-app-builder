@@ -67,7 +67,7 @@ function transactionResult(transaction: IDBTransaction): Promise<undefined> {
   transaction.addEventListener(
     "complete",
     () => {
-      resolve(undefined as undefined);
+      resolve(undefined);
     },
     { once: true },
   );

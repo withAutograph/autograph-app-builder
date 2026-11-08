@@ -49,7 +49,7 @@ export function HandoffProvisioningProgress({
         return { status: "error" };
       }
     },
-    undefined as undefined,
+    undefined,
   );
 
   useEffect(() => {

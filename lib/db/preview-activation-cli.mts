@@ -229,7 +229,7 @@ function createStore(sql: Sql): PreviewActivationStore {
         membership: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
           activeWorkspaceForUser() {
-            return Promise.resolve(undefined as undefined);
+            return Promise.resolve(undefined);
           },
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
           async isActiveMember() {

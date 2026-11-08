@@ -38,7 +38,9 @@ test.beforeAll(async () => {
     response.end(vendorOnboardingPrototype);
   });
   const { promise, resolve } = Promise.withResolvers<undefined>();
-  prototypeServer.listen(0, "127.0.0.1", () => resolve(undefined as undefined));
+  prototypeServer.listen(0, "127.0.0.1", () => {
+    resolve(undefined);
+  });
   await promise;
   const address = prototypeServer.address() as AddressInfo;
   prototypeUrl = `http://127.0.0.1:${address.port}/prototype/vendor-onboarding`;

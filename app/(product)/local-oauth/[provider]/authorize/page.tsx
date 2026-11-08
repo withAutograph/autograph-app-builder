@@ -31,27 +31,29 @@ function scalarValues(values: Record<string, string | string[] | undefined>) {
 async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
   await connection();
   let parsed;
-  let emulation: ProviderEmulation;
+  let emulation: ProviderEmulation | undefined;
   try {
     const [{ provider }, query] = await Promise.all([params, searchParams]);
     const configured = readProviderEmulation(process.env);
-    if (!configured) {
-      notFound();
+    if (configured) {
+      emulation = configured;
+      const appOrigin = emulation.canonicalOrigin;
+      parsed = parseLocalOAuthAuthorization({
+        appOrigin,
+        emulation,
+        githubClientId: emulation.githubClientId,
+        provider,
+        values: scalarValues(query),
+        vercelClientId: emulation.vercelClientId,
+      });
     }
-    emulation = configured;
-    const appOrigin = emulation.canonicalOrigin;
-    parsed = parseLocalOAuthAuthorization({
-      appOrigin,
-      emulation,
-      githubClientId: emulation.githubClientId,
-      provider,
-      values: scalarValues(query),
-      vercelClientId: emulation.vercelClientId,
-    });
   } catch {
     notFound();
   }
 
+  if (emulation === undefined || parsed === undefined) {
+    notFound();
+  }
   const details = localOAuthProviderDetails(parsed.provider);
   // The signed relay intentionally includes a request-time expiry. Keep that
   // nondeterministic value behind this route-local Suspense boundary so the

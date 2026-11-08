@@ -257,7 +257,7 @@ const portIsOurLock = async function portIsOurLock(
   let data = "";
   socket.setEncoding("utf-8");
   socket.setTimeout(100);
-  socket.on("data", (chunk) => (data += chunk));
+  socket.on("data", (chunk) => (data += String(chunk)));
   socket.once("timeout", () => socket.destroy());
   try {
     await once(socket, "close");

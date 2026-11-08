@@ -40,14 +40,15 @@ function connectionDescription(name: string) {
   return connectionDescriptions[name] ?? `Connect ${name} tools and data to your app`;
 }
 
+const connectionIcons = {
+  quickbooks: SiQuickbooks,
+  "sage-intacct": SiSage,
+  xero: SiXero,
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
-  const icons = {
-    quickbooks: SiQuickbooks,
-    "sage-intacct": SiSage,
-    xero: SiXero,
-  };
-  const Icon = kind ? icons[kind as keyof typeof icons] : undefined;
+  const Icon = kind ? connectionIcons[kind as keyof typeof connectionIcons] : undefined;
   const hasBrandAsset = kind === "ramp" || kind === "netsuite";
   return (
     <span className={styles.connectionIcon} data-kind={kind} data-name={name} aria-hidden="true">

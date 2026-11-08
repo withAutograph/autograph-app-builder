@@ -385,24 +385,21 @@ const resolveChunkContinuation = (
 ): ChunkContinuation => {
   if (
     prior?.transfer === undefined &&
-    prior?.lastChunkReceipt?.expectedDigest === input.expectedDigest
+    prior?.lastChunkReceipt?.expectedDigest === input.expectedDigest &&
+    prior.lastChunkReceipt.lastChunkIndex === input.chunkIndex &&
+    prior.lastChunkReceipt.lastChunkDigest === chunkDigest &&
+    prior.lastChunkReceipt.lastCallId === input.callId
   ) {
-    if (
-      prior.lastChunkReceipt.lastChunkIndex === input.chunkIndex &&
-      prior.lastChunkReceipt.lastChunkDigest === chunkDigest &&
-      prior.lastChunkReceipt.lastCallId === input.callId
-    ) {
-      return {
-        kind: "retry",
-        result: {
-          artifact: prior,
-          artifacts: input.artifacts,
-          complete: true,
-          nextChunkIndex: input.chunkIndex + 1,
-          reused: true,
-        },
-      };
-    }
+    return {
+      kind: "retry",
+      result: {
+        artifact: prior,
+        artifacts: input.artifacts,
+        complete: true,
+        nextChunkIndex: input.chunkIndex + 1,
+        reused: true,
+      },
+    };
   }
   const restart =
     prior?.transfer !== undefined &&

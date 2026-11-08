@@ -38,6 +38,8 @@ export interface AuthenticatedBuilderProps {
   loadActiveBuilderDraftAction?: () => Promise<BuilderDraftPageData | undefined>;
 }
 
+const noProviderNotices: ProviderConnectionNotice[] = [];
+
 /** Client-only form, draft, and continuation coordination below the server shell. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BuilderContinuation({
@@ -47,7 +49,7 @@ export function BuilderContinuation({
   comingSoonEnabled = false,
   provisioningEnabled = false,
   integrations,
-  providerNotices = [],
+  providerNotices = noProviderNotices,
   providerResumeKey,
   initialDurableDraft,
   durableDraftId,

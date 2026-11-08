@@ -11,7 +11,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useSignInContinuation } from "@/lib/auth/use-sign-in-continuation";
 
 export interface FreshSessionPromptProps {
-  onFresh: () => unknown | Promise<unknown>;
+  onFresh: () => unknown;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

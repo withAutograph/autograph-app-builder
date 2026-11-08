@@ -235,14 +235,14 @@ describe("continueBuilderHandoff", () => {
   });
 
   it("rejects missing tenant authority before reading a draft", async () => {
-    vi.mocked(getAuthenticatedBuilderDraftContext).mockResolvedValueOnce(undefined as undefined);
+    vi.mocked(getAuthenticatedBuilderDraftContext).mockResolvedValueOnce(undefined);
     expect(await continueBuilderHandoff(undefined, input)).toEqual({ status: "error" });
     expect(drafts.read).not.toHaveBeenCalled();
     expect(calls).toEqual([]);
   });
 
   it("rejects an inaccessible draft before provider work", async () => {
-    drafts.read.mockResolvedValueOnce(undefined as undefined);
+    drafts.read.mockResolvedValueOnce(undefined);
     expect(await continueBuilderHandoff(undefined, input)).toEqual({ status: "error" });
     expect(calls).toEqual([]);
   });

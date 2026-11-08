@@ -985,7 +985,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("does not apply an older remote revision after a newer revision settles", async () => {
     const delayedRead = Promise.withResolvers<undefined>();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const read = vi.fn(async () => undefined as undefined);
+    const read = vi.fn(async () => undefined);
     vi.spyOn(draftOutbox, "createBuilderDraftOutbox").mockReturnValue({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       clear: async () => {},
@@ -1042,7 +1042,7 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => {
-      delayedRead.resolve(undefined as undefined);
+      delayedRead.resolve(undefined);
     });
     expect(requireElement(view.querySelector<HTMLInputElement>("#app-name")).value).toBe(
       "Revision 3",

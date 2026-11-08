@@ -2843,7 +2843,7 @@ export function createHostedEveSessionService(input: {
     const { store } = input;
     const { observeSession } = store;
     let observation: ReturnType<NonNullable<HostedEveStore["observeSession"]>> | undefined;
-    if (observeSession != null) {
+    if (observeSession !== null && observeSession !== undefined) {
       const observationDetails: Pick<
         Parameters<NonNullable<HostedEveStore["observeSession"]>>[0],
         "checkpoint"
@@ -4232,7 +4232,7 @@ export function createHostedEveSessionService(input: {
           const { transport } = input;
           const { cancelAccepted } = transport;
           let cancellation: Promise<void> | undefined;
-          if (cancelAccepted != null) {
+          if (cancelAccepted !== null && cancelAccepted !== undefined) {
             const cancelIdentity: Pick<
               Parameters<NonNullable<HostedEveTransport["cancelAccepted"]>>[0],
               "adapterSessionId"

@@ -276,7 +276,7 @@ export function useBuilderController({
         };
       }
     },
-    undefined as undefined,
+    undefined,
   );
   const serverSaveWaiters = useRef(
     new Map<

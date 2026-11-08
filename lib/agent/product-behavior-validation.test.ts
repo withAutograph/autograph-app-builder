@@ -31,27 +31,30 @@ interface CapturedValidationLog {
   reference?: ValidationLogReference;
 }
 
-const mocks = vi.hoisted(() => ({
-  attempt: vi.fn(),
-  logStore: {
-    getChunk: vi.fn(),
-    getReference: vi.fn(),
+const mocks = vi.hoisted(() => {
+  const current: Record<string, unknown> = {};
+  return {
+    attempt: vi.fn(),
+    logStore: {
+      getChunk: vi.fn(),
+      getReference: vi.fn(),
+      publish: vi.fn(),
+      putChunk: vi.fn(),
+      removeStaged: vi.fn(),
+    },
+    browser: vi.fn(),
+    clear: vi.fn(),
+    describe: vi.fn(),
+    execute: vi.fn(),
+    canReadHostSource: vi.fn(() => false),
+    hostSource: vi.fn(),
+    prepare: vi.fn(),
     publish: vi.fn(),
-    putChunk: vi.fn(),
-    removeStaged: vi.fn(),
-  },
-  browser: vi.fn(),
-  clear: vi.fn(),
-  describe: vi.fn(),
-  execute: vi.fn(),
-  canReadHostSource: vi.fn(() => false),
-  hostSource: vi.fn(),
-  prepare: vi.fn(),
-  publish: vi.fn(),
-  review: vi.fn(),
-  runtime: vi.fn(),
-  state: { current: {} as Record<string, unknown>, update: vi.fn() },
-}));
+    review: vi.fn(),
+    runtime: vi.fn(),
+    state: { current, update: vi.fn() },
+  };
+});
 
 vi.mock(import("../repository/development-source"), async (importOriginal) => ({
   ...(await importOriginal()),

@@ -309,7 +309,7 @@ function localRuntimeState(generation: string): LocalEveRuntimeState {
     existing.responseObservers ??= new Map();
     return existing;
   }
-  return (localRuntimeGlobal[localEveRuntimeStateKey] = {
+  const state: LocalEveRuntimeState = {
     activeResponses: new Map(),
     responsePumps: new Map(),
     responseObservers: new Map(),
@@ -327,7 +327,9 @@ function localRuntimeState(generation: string): LocalEveRuntimeState {
     tailControllers: new Map(),
     tailPumps: new Map(),
     unavailableSessions: new Set(),
-  });
+  };
+  localRuntimeGlobal[localEveRuntimeStateKey] = state;
+  return state;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

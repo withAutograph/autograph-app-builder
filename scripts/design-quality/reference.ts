@@ -547,9 +547,11 @@ const finiteLiteralEvidence = (
         return undefined;
       }
       let name: string | undefined;
-      if (ts.isIdentifier(property.name)) {
-        name = property.name.text;
-      } else if (ts.isStringLiteral(property.name) || ts.isNumericLiteral(property.name)) {
+      if (
+        ts.isIdentifier(property.name) ||
+        ts.isStringLiteral(property.name) ||
+        ts.isNumericLiteral(property.name)
+      ) {
         name = property.name.text;
       }
       if (name === undefined || name === "") {
