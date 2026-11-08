@@ -732,7 +732,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       };
     }
     const result = applications.at(-1);
-    if (result?.isError) {
+    if (result?.isError ?? false) {
       if (stale) {
         return "The product plan changed, so I stopped before preparing the app.";
       }
@@ -760,7 +760,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     );
     const requiredMatches = message.includes("retry recording") ? 2 : 1;
     const failedRecordings = results.filter(({ isError }) => isError).length;
-    if (latest?.isError && (!message.includes("retry recording") || failedRecordings >= 2)) {
+    if (
+      (latest?.isError ?? false) &&
+      (!message.includes("retry recording") || failedRecordings >= 2)
+    ) {
       return "Prototype artifact recording was canceled; durable state was not changed.";
     }
     if (matching.length >= requiredMatches) {
@@ -846,7 +849,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     }
     const result = validations.at(-1);
     if (
-      result?.isError ||
+      (result?.isError ?? false) ||
       status.phase === "validation_failed" ||
       status.phase === "validation_pending"
     ) {
@@ -932,7 +935,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       };
     }
     const result = accepted.at(-1);
-    if (result?.isError) {
+    if (result?.isError ?? false) {
       return stale
         ? "The app changed before review could finish, so I stopped safely."
         : "I couldn't safely prepare the completed app changes for review.";
@@ -1008,7 +1011,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       };
     }
     const publication = publications.at(-1);
-    if (publication?.isError) {
+    if (publication?.isError ?? false) {
       return "Fresh repository publication was canceled, stale, or recovery-required; no other publication tool was used.";
     }
     return "The exact approved fresh-template result was atomically published as one parentless SHA-1 local repository with no remotes and release disabled.";
@@ -1063,7 +1066,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       };
     }
     const recovery = recoveries.at(-1);
-    if (recovery?.isError) {
+    if (recovery?.isError ?? false) {
       return "Fresh repository recovery was canceled or rejected; the exact recovery-required receipt remains authoritative.";
     }
     return "The separately approved exact fresh-repository recovery completed without using another publication or mutation tool.";
@@ -1175,7 +1178,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           ],
         };
       }
-      return latestMutation?.isError
+      return (latestMutation?.isError ?? false)
         ? "Branch-worktree recovery was canceled or rejected; its exact durable receipt was preserved."
         : "The separately approved recovery completed the exact durable branch-worktree intent without a commit, push, remote publication, provider, deployment, or release action.";
     }
@@ -1210,7 +1213,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         ],
       };
     }
-    if (latestMutation?.isError) {
+    if (latestMutation?.isError ?? false) {
       return stale
         ? staleBranchWorktreeMessage
         : "Branch-worktree publication was canceled or rejected; the reviewed receipt was preserved.";
@@ -1418,7 +1421,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       };
     }
     const result = recoveryResult ?? publicationResults.at(-1);
-    if (result?.isError) {
+    if (result?.isError ?? false) {
       return stale
         ? "Stale local publication was rejected without changing the destination checkout."
         : "Local publication was canceled or rejected; the reviewed receipt was preserved.";
@@ -1581,7 +1584,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         ],
       };
     }
-    return attempts.at(-1)?.isError
+    return (attempts.at(-1)?.isError ?? false)
       ? "AppSpec mutation was denied by the terminal publication workflow."
       : "AppSpec mutation unexpectedly succeeded.";
   }
@@ -1642,7 +1645,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         return "A verified prepared workspace is required before AppSpec acceptance.";
       }
       let existingAppChanges: { content: string; path: string }[] | undefined;
-      if (appId === "vendor" && lastUserMessage?.startsWith(vendorTaxIterationRequest)) {
+      if (appId === "vendor" && (lastUserMessage?.startsWith(vendorTaxIterationRequest) ?? false)) {
         const inspections = toolResults.filter(({ name }) => name === "inspect_existing_app");
         const latestInspection = inspections.at(-1)?.output as
           | {
@@ -1759,7 +1762,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         ],
       };
     }
-    if (acquisitionResult?.isError) {
+    if (acquisitionResult?.isError ?? false) {
       const sourceStatus = toolResults.find(({ name }) => name === "source_status");
       if (sourceStatus === undefined) {
         return {

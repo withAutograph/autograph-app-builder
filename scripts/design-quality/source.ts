@@ -247,7 +247,8 @@ function exportedEntries(source: ts.SourceFile): ts.Node[] {
     );
     if (
       ts.isFunctionDeclaration(statement) &&
-      (exported || statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword))
+      (exported ||
+        statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword) === true)
     ) {
       entries.push(statement);
     }
@@ -267,7 +268,7 @@ function publicImport(
   tag: ts.JsxTagNameExpression,
 ) {
   const root = jsxRootIdentifier(tag);
-  return root ? imported.get(root) : undefined;
+  return root !== undefined && root !== null && root !== "" ? imported.get(root) : undefined;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -588,7 +589,7 @@ export function analyzeSource({
         const tag = node.tagName;
         const root = jsxRootIdentifier(tag);
         const item = publicImport(imported, tag);
-        if (root) {
+        if (root !== undefined && root !== null && root !== "") {
           usedInJsx.add(root);
         }
         for (const attribute of node.attributes.properties) {
@@ -609,7 +610,7 @@ export function analyzeSource({
           }
           const name = attribute.name.getText(source);
           const text = jsxAttributeText(attribute);
-          if (name === "className" && text) {
+          if (name === "className" && text !== undefined && text !== null && text !== "") {
             for (const bracketed of text.matchAll(/\[(?<content>[^\]]+)\]/gu)) {
               const prefix = text.slice(0, bracketed.index).split(/\s/u).at(-1) ?? "";
               if (/(?:^|:)(?:(?:min-|max-)?[wh]|grid-cols|grid-rows)-$/u.test(prefix)) {
@@ -624,7 +625,7 @@ export function analyzeSource({
                 const usesSemanticToken = Object.hasOwn(tokens, ref) && isSemanticToken(ref);
                 let verdict: Observation["verdict"] = "unassessed";
                 let summary = `className references ${ref}, whose semantic status cannot be established.`;
-                if (overridesColorTreatment) {
+                if (overridesColorTreatment === true) {
                   verdict = "nonconforming";
                   summary = `Generated class overrides ${item.name}'s color treatment; prefer supported variants.`;
                 } else if (usesSemanticToken) {
@@ -703,7 +704,7 @@ export function analyzeSource({
                 const usesSemanticToken = Object.hasOwn(tokens, ref) && isSemanticToken(ref);
                 let verdict: Observation["verdict"] = "unassessed";
                 let summary = `style references ${ref}, whose semantic status cannot be established.`;
-                if (overridesColorTreatment) {
+                if (overridesColorTreatment === true) {
                   verdict = "nonconforming";
                   summary = `Public ${item.name} receives a generated color treatment override.`;
                 } else if (usesSemanticToken) {
@@ -798,7 +799,7 @@ export function analyzeSource({
                     verdict = "nonconforming";
                     summary = `${item.name}.${name} uses ${JSON.stringify(value)}, outside the public variants.`;
                   }
-                } else if (acceptedPrimitives?.includes(kind)) {
+                } else if (acceptedPrimitives?.includes(kind) === true) {
                   verdict = "conforming";
                   summary = `${item.name}.${name} accepts static ${kind} values.`;
                 } else {

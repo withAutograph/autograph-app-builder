@@ -76,7 +76,7 @@ const exportTargets = (value: unknown): string[] => {
   if (typeof value === "string") {
     return [value];
   }
-  if (!value || typeof value !== "object") {
+  if (value === null || typeof value !== "object") {
     return [];
   }
   return Object.values(value as Record<string, unknown>).flatMap(exportTargets);
@@ -215,7 +215,7 @@ const propsForExport = (
   const type = checker.getTypeOfSymbolAtLocation(symbol, location);
   const [signature] = checker.getSignaturesOfType(type, ts.SignatureKind.Call);
   const parameter = signature?.getParameters()[0];
-  if (!parameter) {
+  if (parameter === undefined) {
     return {};
   }
   const propsType = checker.getTypeOfSymbolAtLocation(parameter, location);
@@ -492,7 +492,7 @@ const finiteLiteralEvidence = (
     const actual = checker.getTypeAtLocation(expression);
     return expected.types.some(
       (member) =>
-        finiteLiteralEvidence(expression, member, checker, depth + 1, seen) &&
+        finiteLiteralEvidence(expression, member, checker, depth + 1, seen) === true &&
         checker.isTypeAssignableTo(actual, member),
     )
       ? true
@@ -542,7 +542,7 @@ const finiteLiteralEvidence = (
       } else if (ts.isStringLiteral(property.name) || ts.isNumericLiteral(property.name)) {
         name = property.name.text;
       }
-      if (!name) {
+      if (name === undefined || name === "") {
         return undefined;
       }
       const symbol = checker.getPropertyOfType(expected, name);
@@ -598,7 +598,7 @@ const jsxAttributeExpectedType = (
   const parameter = checker
     .getSignaturesOfType(component, ts.SignatureKind.Call)[0]
     ?.getParameters()[0];
-  if (!parameter) {
+  if (parameter === undefined) {
     return undefined;
   }
   const props = checker.getTypeOfSymbolAtLocation(parameter, opening);

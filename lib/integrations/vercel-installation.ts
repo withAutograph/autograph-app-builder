@@ -51,7 +51,9 @@ const tokenKeyringSchema = z
     tokenKeyVersion: tokenKeyVersionSchema,
   })
   .superRefine((config, context) => {
-    if (config.previousTokenKeys?.some((entry) => entry.version === config.tokenKeyVersion)) {
+    if (
+      config.previousTokenKeys?.some((entry) => entry.version === config.tokenKeyVersion) === true
+    ) {
       context.addIssue({
         code: "custom",
         message: "The active token key version cannot also be a previous key.",
@@ -72,7 +74,9 @@ const configSchema = z
     tokenKeyVersion: tokenKeyVersionSchema,
   })
   .superRefine((config, context) => {
-    if (config.previousTokenKeys?.some((entry) => entry.version === config.tokenKeyVersion)) {
+    if (
+      config.previousTokenKeys?.some((entry) => entry.version === config.tokenKeyVersion) === true
+    ) {
       context.addIssue({
         code: "custom",
         message: "The active token key version cannot also be a previous key.",
@@ -473,7 +477,7 @@ export function createVercelInstallationAuthorization(input: {
         Authorization: `Bearer ${token}`,
       };
       let binding: Omit<VercelInstallationBinding, "active" | "updatedAt">;
-      if (teamId) {
+      if (teamId !== undefined && teamId !== "") {
         const response = await request(
           `${input.emulation?.vercelOrigin ?? "https://api.vercel.com"}/v2/teams/${encodeURIComponent(teamId)}`,
           {
