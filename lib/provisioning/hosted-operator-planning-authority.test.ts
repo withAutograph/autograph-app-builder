@@ -190,14 +190,14 @@ describe("prepared Preview release planning", () => {
       appDatabase: {
         database: "app",
         migratorRole: "app_owner",
-        runtimeRole: "app_runtime",
         resourceId: "app-resource",
+        runtimeRole: "app_runtime",
       },
       authDatabase: {
         database: "auth",
         migratorRole: "auth_owner",
-        runtimeRole: "auth_runtime",
         resourceId: "auth-resource",
+        runtimeRole: "auth_runtime",
       },
       cost: { class: "shared-recovery-group", description: "Approved Preview", owner: "owner" },
       delivery: {
@@ -207,11 +207,11 @@ describe("prepared Preview release planning", () => {
         repoId: published.publishedSource.repositoryId,
       },
       effects: [
-        { id: "resources", kind: "resources", description: "Observe owned resources" },
-        { id: "install", kind: "install", description: "Observe prepared release" },
-        { id: "access", kind: "access", description: "Observe approved access" },
-        { id: "bindings", kind: "bindings", description: "Observe owned bindings" },
-        { id: "delivery", kind: "delivery", description: "Observe approved publication" },
+        { description: "Observe owned resources", id: "resources", kind: "resources" },
+        { description: "Observe prepared release", id: "install", kind: "install" },
+        { description: "Observe approved access", id: "access", kind: "access" },
+        { description: "Observe owned bindings", id: "bindings", kind: "bindings" },
+        { description: "Observe approved publication", id: "delivery", kind: "delivery" },
       ],
       installer: { reference: "worker", sha256: "6".repeat(64) },
       neon: {

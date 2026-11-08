@@ -156,11 +156,11 @@ const fixture = () => {
     },
     cost: { class: "shared-recovery-group", description: "Original approved Auth", owner: "owner" },
     effects: [
-      { id: "auth-resources", kind: "resources", resourceId: "auth-resource", description: "Auth" },
-      { id: "app-resources", kind: "resources", resourceId: "app-resource", description: "App" },
-      { id: "auth-schema", kind: "install", description: "Auth schema" },
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
+      { description: "Auth", id: "auth-resources", kind: "resources", resourceId: "auth-resource" },
+      { description: "App", id: "app-resources", kind: "resources", resourceId: "app-resource" },
+      { description: "Auth schema", id: "auth-schema", kind: "install" },
+      { description: "Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
     ],
     installer: { reference: "historical-app-worker", sha256: "f".repeat(64) },
     release: {
@@ -325,7 +325,7 @@ const completedParticipants = () => {
     ...f.plan,
     stage: "auth-participants",
     normalActorProgram: program,
-    effects: [{ id: "normal-accounts", kind: "normal-accounts", description: "Captured accounts" }],
+    effects: [{ description: "Captured accounts", id: "normal-accounts", kind: "normal-accounts" }],
   });
   f.record.accountPreparation = {
     program,

@@ -2724,19 +2724,19 @@ describe("idle installer source successor planning", () => {
       normalActorPreparation: preparation,
       effects: [
         {
+          description: "Observe Auth",
           id: "auth-resources",
           kind: "resources",
-          description: "Observe Auth",
         },
         {
+          description: "Observe app",
           id: "app-resources",
           kind: "resources",
-          description: "Observe app",
         },
         {
+          description: "Observe Auth schema",
           id: "auth-schema",
           kind: "install",
-          description: "Observe Auth schema",
         },
         ...plan.effects.slice(1),
       ],
@@ -3596,11 +3596,11 @@ describe("canonical runtime proof through the production verifier and handler", 
         },
         effects: [
           ...plan.effects,
-          { id: "delivery", kind: "delivery", description: "Observe app delivery" },
+          { description: "Observe app delivery", id: "delivery", kind: "delivery" },
           {
+            description: "Observe Gateway delivery",
             id: "gateway-delivery",
             kind: "gateway-delivery",
-            description: "Observe Gateway delivery",
           },
         ],
         release: { ...plan.release, sha256: createHash("sha256").update(manifest).digest("hex") },

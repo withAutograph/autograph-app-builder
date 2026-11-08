@@ -205,15 +205,15 @@ describe("dedicated-session protected resource lease", () => {
     hostedOperatorPlanSchema.parse({
       ...plan,
       publicGateway: {
-        projectId: "shared-gateway",
         branch: "gateway",
         origin: "https://apps.example.test",
+        projectId: "shared-gateway",
       },
       gatewayDelivery: {
-        projectId: "shared-gateway",
         branch: "gateway",
-        repoId: "shared-repo",
         gitSha: "d".repeat(40),
+        projectId: "shared-gateway",
+        repoId: "shared-repo",
       },
       deploymentBoundary: {
         authority,
@@ -223,11 +223,11 @@ describe("dedicated-session protected resource lease", () => {
           branch: plan.selection.branch,
           environment: "preview",
         },
-        gateway: { projectId: "shared-gateway", branch: "gateway", environment: "preview" },
+        gateway: { branch: "gateway", environment: "preview", projectId: "shared-gateway" },
         operator: {
-          projectId: "operator",
           deploymentId: "operator-deployment",
           environment: "preview",
+          projectId: "operator",
         },
         verification: {
           gatewayOrigin: "https://gateway.example.test",
@@ -238,9 +238,9 @@ describe("dedicated-session protected resource lease", () => {
       effects: [
         ...plan.effects,
         {
+          description: "Deliver the shared Gateway",
           id: "gateway-delivery",
           kind: "gateway-delivery",
-          description: "Deliver the shared Gateway",
         },
       ],
     });
@@ -252,15 +252,15 @@ describe("dedicated-session protected resource lease", () => {
         mode: "externally-managed-trusted-sources",
         teamId: context.target.scopeId,
         appPreview: {
+          from: "preview",
           sourceProjectId: "shared-gateway",
           targetProjectId: legacy.selection.projectId,
-          from: "preview",
           to: "preview",
         },
         gatewayPreview: {
+          from: "preview",
           sourceProjectId: legacy.selection.projectId,
           targetProjectId: "shared-gateway",
-          from: "preview",
           to: "preview",
         },
         observedAt: "2026-10-19T12:00:00Z",
