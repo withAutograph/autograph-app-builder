@@ -16,14 +16,14 @@ const workspaceSetupFailedErrorCode = "workspace-setup-failed";
 type Database = ReturnType<typeof openHostedPostgresDatabase>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-interface OrganizationRow {
+interface OrganizationRow extends Record<string, unknown> {
   organization_id: string;
   workspace_id: string;
   role: string;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function resultRows<T>(input: unknown): readonly T[] {
+function resultRows<T>(input: readonly T[] | { rows: readonly T[] }): readonly T[] {
   if (Array.isArray(input)) {
     return input as T[];
   }
@@ -39,7 +39,7 @@ async function activeOrganizations(
   authority: { issuer: string; audience: string },
   userId: string,
 ) {
-  const result = await database.execute(sql`
+  const result = await database.execute<OrganizationRow>(sql`
     select "member"."organization_id", "organization"."workspace_id", "member"."role"
       from "member"
       join "organization"
@@ -50,7 +50,7 @@ async function activeOrganizations(
      order by "member"."organization_id"
      limit 2
   `);
-  return resultRows<OrganizationRow>(result);
+  return resultRows(result);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -124,18 +124,18 @@ export function createPostgresPreviewOrganizationAuthority(
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async ensureOrganizationForVerifiedUser({ userId }) {
       return await database.transaction(async (transaction) => {
-        const userResult = await transaction.execute(sql`
+        const userResult = await transaction.execute<{
+          name: string;
+          email: string;
+          email_verified: boolean;
+          banned: boolean | null;
+        }>(sql`
           select "name", "email", "email_verified", "banned"
             from "user"
            where "id" = ${userId}
            for update
         `);
-        const users = resultRows<{
-          name: string;
-          email: string;
-          email_verified: boolean;
-          banned: boolean | null;
-        }>(userResult);
+        const users = resultRows(userResult);
         const [user] = users;
         if (users.length !== 1 || user === undefined) {
           throw new OrganizationProvisioningError(workspaceSetupFailedErrorCode);
@@ -143,7 +143,7 @@ export function createPostgresPreviewOrganizationAuthority(
         if (user.banned === true) {
           throw new OrganizationProvisioningError(accessRevokedErrorCode);
         }
-        const accountsResult = await transaction.execute(sql`
+        const accountsResult = await transaction.execute<{ provider_id: string }>(sql`
           select "provider_id"
             from "account"
            where "user_id" = ${userId}
@@ -152,18 +152,18 @@ export function createPostgresPreviewOrganizationAuthority(
            limit 2
         `);
         const providerIdentity =
-          resultRows<{ provider_id: string }>(accountsResult).length > 0 &&
+          resultRows(accountsResult).length > 0 &&
           user.email_verified === true &&
           user.email.trim().toLowerCase() === user.email;
         let passkeyIdentity = false;
         if (!providerIdentity) {
-          const passkeysResult = await transaction.execute(sql`
+          const passkeysResult = await transaction.execute<{ id: string }>(sql`
             select "id"
               from "passkey"
              where "user_id" = ${userId}
              limit 1
           `);
-          passkeyIdentity = resultRows<{ id: string }>(passkeysResult).length === 1;
+          passkeyIdentity = resultRows(passkeysResult).length === 1;
         }
         if (!providerIdentity && !passkeyIdentity) {
           throw new OrganizationProvisioningError("verified-identity-required");
@@ -178,7 +178,12 @@ export function createPostgresPreviewOrganizationAuthority(
           return existing;
         }
 
-        const invitationResult = await transaction.execute(sql`
+        const invitationResult = await transaction.execute<{
+          id: string;
+          organization_id: string;
+          role: string | null;
+          workspace_id: string;
+        }>(sql`
           select "invitation"."id", "invitation"."organization_id",
                  "invitation"."role", "organization"."workspace_id"
             from "invitation"
@@ -193,12 +198,7 @@ export function createPostgresPreviewOrganizationAuthority(
            limit 2
            for update of "invitation"
         `);
-        const invitations = resultRows<{
-          id: string;
-          organization_id: string;
-          role: string | null;
-          workspace_id: string;
-        }>(invitationResult);
+        const invitations = resultRows(invitationResult);
         if (invitations.length > 1) {
           throw new OrganizationProvisioningError("workspace-ambiguous");
         }
@@ -208,14 +208,14 @@ export function createPostgresPreviewOrganizationAuthority(
           if (!new Set(["owner", "admin", "member"]).has(role)) {
             throw new OrganizationProvisioningError(accessRevokedErrorCode);
           }
-          const acceptedResult = await transaction.execute(sql`
+          const acceptedResult = await transaction.execute<{ organization_id: string }>(sql`
             update "invitation"
                set "status" = 'accepted'
              where "id" = ${invitation.id}
                and "status" = 'pending'
             returning "organization_id"
           `);
-          if (resultRows<{ organization_id: string }>(acceptedResult).length !== 1) {
+          if (resultRows(acceptedResult).length !== 1) {
             throw new OrganizationProvisioningError(workspaceSetupFailedErrorCode);
           }
           await transaction.execute(sql`
@@ -239,13 +239,13 @@ export function createPostgresPreviewOrganizationAuthority(
           return invited;
         }
 
-        const mappingResult = await transaction.execute(sql`
+        const mappingResult = await transaction.execute<{ organization_id: string }>(sql`
           select "organization_id"
             from "personal_workspace"
            where "user_id" = ${userId}
            limit 2
         `);
-        if (resultRows<{ organization_id: string }>(mappingResult).length !== 0) {
+        if (resultRows(mappingResult).length !== 0) {
           throw new OrganizationProvisioningError(accessRevokedErrorCode);
         }
         let selfServiceSignupEnabled = false;

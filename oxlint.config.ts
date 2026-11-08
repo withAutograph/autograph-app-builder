@@ -625,7 +625,7 @@ export default defineConfig({
     },
     {
       // Preserve existing runtime contracts pending focused migration.
-      files: [sharedLintFile27, sharedLintFile8],
+      files: [sharedLintFile27],
       rules: { "typescript/switch-exhaustiveness-check": "off" },
     },
     {
@@ -641,14 +641,6 @@ export default defineConfig({
         sharedLintFile13,
       ],
       rules: { "typescript/restrict-template-expressions": "off" },
-    },
-    {
-      // Existing findings awaiting behavior-preserving contract changes.
-      files: [
-        "lib/auth/postgres-organization-user-authority.ts",
-        "lib/repository/local-publication.ts",
-      ],
-      rules: { "typescript/no-unnecessary-type-parameters": "off" },
     },
     {
       // Existing findings awaiting behavior-preserving contract changes.

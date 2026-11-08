@@ -529,6 +529,38 @@ function consumeResponse(
         settleResponseBoundary();
         return;
       }
+      case "action.input.appended":
+      case "action.partial":
+      case "action.result":
+      case "approval.candidate":
+      case "approval.settled":
+      case "authorization.completed":
+      case "authorization.required":
+      case "compaction.completed":
+      case "compaction.requested":
+      case "context.cleared":
+      case "input.resolved":
+      case "message.appended":
+      case "message.completed":
+      case "message.received":
+      case "reasoning.appended":
+      case "reasoning.completed":
+      case "result.completed":
+      case "session.started":
+      case "step.completed":
+      case "step.failed":
+      case "subagent.called":
+      case "subagent.completed":
+      case "subagent.event":
+      case "subagent.started":
+      case "turn.completed":
+      case "turn.failed":
+      case "turn.started": {
+        if (modelTurnActive) {
+          armModelTurnTimer();
+        }
+        return;
+      }
       default: {
         if (modelTurnActive) {
           armModelTurnTimer();
