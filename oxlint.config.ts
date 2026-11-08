@@ -11,6 +11,8 @@ const githubProviderPath = "lib/provisioning/github-provider.ts";
 const handoffProgressPath = "app/ui/handoff-provisioning-progress.tsx";
 const productionCreatorTestPath = "lib/provisioning/repository-production-creator.test.ts";
 
+const baselinePath1 = "app/ui/handoff-controls.tsx";
+
 export default defineConfig({
   extends: [core, next, jsPlugins, nextJsPlugins, antiSlop],
   ignorePatterns: core.ignorePatterns,
@@ -19,6 +21,57 @@ export default defineConfig({
     typeAware: true,
   },
   overrides: [
+    {
+      // Preserve ordering in existing sequential operations.
+      files: [
+        "e2e/support/harness.ts",
+        "lib/agent/github-pr-delivery-lineage.test.ts",
+        "lib/provisioning/hosted-operator-ready-replacement-native.ts",
+        productionCreatorTestPath,
+      ],
+      rules: { "eslint/no-await-in-loop": "off" },
+    },
+    {
+      files: ["app/ui/use-builder-controller.ts"],
+      rules: { "react-doctor/no-pass-data-to-parent": "off" },
+    },
+    {
+      files: [baselinePath1, "components/auth/sign-up.tsx"],
+      rules: { "react-doctor/no-giant-component": "off" },
+    },
+    {
+      files: [baselinePath1, "app/ui/handoff-provisioning-progress.tsx"],
+      rules: { "react-doctor/effect-needs-cleanup": "off" },
+    },
+    {
+      files: [
+        "app/(product)/auth/setting-up/page.tsx",
+        "app/ui/builder-continuation.tsx",
+        baselinePath1,
+      ],
+      rules: { "react-doctor/nextjs-no-client-side-redirect": "off" },
+    },
+    {
+      files: ["app/ui/builder-connections.tsx", "app/ui/search-combobox.tsx"],
+      rules: { "react-doctor/prefer-html-dialog": "off" },
+    },
+    {
+      files: ["lib/repository/node-local-publication.ts"],
+      rules: { "react-doctor/js-index-maps": "off" },
+    },
+    {
+      files: [
+        "evals/support/self-reproduction-reference-lifecycle.ts",
+        "evals/support/self-reproduction-reference-runtime.ts",
+        "lib/agent/github-pr-delivery-step.ts",
+        "lib/repository/node-fresh-bootstrap.ts",
+      ],
+      rules: { "react-doctor/async-parallel": "off" },
+    },
+    {
+      files: [baselinePath1],
+      rules: { "react-doctor/no-chain-state-updates": "off" },
+    },
     {
       // Git object identity requires the existing SHA-1 format.
       files: [
@@ -64,7 +117,7 @@ export default defineConfig({
       rules: { "react-doctor/js-hoist-intl": "off" },
     },
     {
-      files: ["app/ui/handoff-controls.tsx"],
+      files: [baselinePath1],
       rules: { "react-doctor/no-fetch-in-effect": "off" },
     },
     {
@@ -201,7 +254,7 @@ export default defineConfig({
         "app/actions/builder.test.ts",
         "app/ui/app-builder.test.tsx",
         "app/ui/builder-draft-outbox.ts",
-        "app/ui/handoff-controls.tsx",
+        baselinePath1,
         handoffProgressPath,
         "app/ui/use-builder-controller.ts",
         "components/auth/passkey/add-passkey-dialog.tsx",
@@ -346,18 +399,9 @@ export default defineConfig({
     "anti-slop/no-unknown-returns": "off",
     "anti-slop/no-unsafe-dictionary-type": "off",
     "anti-slop/require-safety-comment-for-type-assertion": "off",
-    "eslint/no-await-in-loop": "off",
     "github/filenames-match-regex": "off",
     "github/no-then": "off",
     "react-doctor/async-await-in-loop": "off",
-    "react-doctor/async-parallel": "off",
-    "react-doctor/effect-needs-cleanup": "off",
-    "react-doctor/js-index-maps": "off",
-    "react-doctor/nextjs-no-client-side-redirect": "off",
-    "react-doctor/no-chain-state-updates": "off",
-    "react-doctor/no-giant-component": "off",
-    "react-doctor/no-pass-data-to-parent": "off",
-    "react-doctor/prefer-html-dialog": "off",
     "react-doctor/server-sequential-independent-await": "off",
     "sonarjs/cognitive-complexity": "off",
     "sonarjs/expression-complexity": "off",
