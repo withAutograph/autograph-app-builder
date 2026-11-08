@@ -361,15 +361,11 @@ describe("hosted operator owner context", () => {
       parentSessionId: source.sessionId,
       sessionId: "public-child",
       nativeRecoveryBinding: {
-        version: 1,
-        operationId: "op_recovery",
-        sourcePublicSessionId: source.sessionId,
-        sourceOwnerRunId: source.adapterSessionId,
-        sourceAdapterGeneration: source.adapterGeneration,
         logicalSessionId: source.adapterSessionId,
+        operationId: "op_recovery",
         originalAuthoritySessionId: source.sessionId,
-        parentCancellationRevision: 0,
         ownerRunId: "adapter-child",
+        parentCancellationRevision: 0,
         provenance: {
           checkpointVersion: 1,
           kind: "failed-turn-input",
@@ -377,6 +373,10 @@ describe("hosted operator owner context", () => {
           sourceSlot: 1,
           sourceStepId: "step_1",
         },
+        sourceAdapterGeneration: source.adapterGeneration,
+        sourceOwnerRunId: source.adapterSessionId,
+        sourcePublicSessionId: source.sessionId,
+        version: 1,
       },
     });
     const sessions = {
@@ -805,18 +805,18 @@ describe("approval history for recovered public grant authority", () => {
       status: "waiting",
       resumability: "live",
       nativeRecoveryBinding: {
-        version: 1,
         operationId: "recovery-operation",
-        sourcePublicSessionId: source.sessionId,
-        sourceOwnerRunId: source.adapterSessionId,
         sourceAdapterGeneration: source.adapterGeneration,
+        sourceOwnerRunId: source.adapterSessionId,
+        sourcePublicSessionId: source.sessionId,
+        version: 1,
         ...(source.sourceHandoffId === undefined
           ? {}
           : { sourceHandoffId: source.sourceHandoffId }),
         logicalSessionId: source.adapterSessionId,
         originalAuthoritySessionId: source.sessionId,
-        parentCancellationRevision: 0,
         ownerRunId: "recovered-adapter",
+        parentCancellationRevision: 0,
         provenance: {
           checkpointVersion: 1,
           kind: "failed-turn-input",
@@ -856,8 +856,8 @@ describe("approval history for recovered public grant authority", () => {
     async (kind) => {
       const f = recovered(kind);
       const request = {
-        principal,
         adapterSessionId: f.child.adapterSessionId,
+        principal,
         sessionId: f.source.sessionId,
       };
       expect(f.child.sessionId === request.sessionId).toBe(false);
@@ -916,9 +916,9 @@ describe("approval history for recovered public grant authority", () => {
       );
       const observer = createHostedOperatorApprovalObserver({
         builderOrigin: "https://builder.example",
+        fetchImplementation,
         verifyReadAuthority: f.verifyReadAuthority,
         workloadIdentity: { token: () => Promise.resolve("controlled-workload") },
-        fetchImplementation,
       });
       const seen: string[] = [];
       const observed = await observer.privateHistoryForContext({
