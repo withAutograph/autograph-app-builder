@@ -53,6 +53,7 @@ import {
 } from "./repository-access-state";
 import type { RepositoryAccessReceipt } from "./repository-access-state";
 import { configureVercelSessionGitSource } from "../sandbox/vercel-session-source";
+import type { VercelGitSessionSource } from "../sandbox/vercel-session-source";
 import { materializeBuilderSandboxGitSource } from "../sandbox/builder-sandbox";
 import type { BuilderHandoffIntent } from "../handoff/contracts";
 import {
@@ -504,11 +505,16 @@ export function createRepositoryAccessRuntime(input: {
         value.revision?.branch,
         githubSource.resolvedSha,
       );
-      const sandboxSource = {
+      type MutableGitSessionSource = {
+        -readonly [Key in keyof VercelGitSessionSource]: VercelGitSessionSource[Key];
+      };
+      const sandboxSource: MutableGitSessionSource = {
         token: credential.token,
         url: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
-        ...(cloneRevision === undefined ? {} : { revision: cloneRevision }),
       };
+      if (cloneRevision !== undefined) {
+        sandboxSource.revision = cloneRevision;
+      }
       configureVercelSessionGitSource({
         sessionId: value.sessionId,
         source: sandboxSource,
@@ -604,15 +610,14 @@ export function createRepositoryAccessRuntime(input: {
       });
       let resumed = 0;
       for (const candidate of candidates) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        const access = await classify({
+        const accessRequest: Parameters<typeof classify>[0] = {
           repository: candidate.record.repository.fullName,
-          ...(candidate.record.selectedInstallationId
-            ? {
-                selectedInstallationId: candidate.record.selectedInstallationId,
-              }
-            : {}),
-        });
+        };
+        if (candidate.record.selectedInstallationId) {
+          accessRequest.selectedInstallationId = candidate.record.selectedInstallationId;
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        const access = await classify(accessRequest);
         if (access.status !== "ready") {
           continue;
         }
@@ -731,8 +736,14 @@ export async function resumeAuthorizedRepositoryAccessForSession(input: {
   fetchImplementation?: typeof fetch;
 }) {
   const runtime = await repositoryAccessRuntimeForSession(input.sessionAuth);
-  return runtime.resumeAuthorizedForSession({
-    sessionId: input.sessionId,
-    ...(input.fetchImplementation ? { fetchImplementation: input.fetchImplementation } : {}),
-  });
+  const resumeInput = (): Parameters<typeof runtime.resumeAuthorizedForSession>[0] => {
+    const request: Parameters<typeof runtime.resumeAuthorizedForSession>[0] = {
+      sessionId: input.sessionId,
+    };
+    if (input.fetchImplementation) {
+      request.fetchImplementation = input.fetchImplementation;
+    }
+    return request;
+  };
+  return runtime.resumeAuthorizedForSession(resumeInput());
 }

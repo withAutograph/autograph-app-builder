@@ -416,21 +416,31 @@ const verifyState = (input: {
       ...diagnostic,
     });
   }
+  const connectionReturn = (): ProviderConnectionReturn => {
+    const result: ProviderConnectionReturn = { returnTo: parsed.returnTo };
+    if (parsed.resumeKey !== undefined) {
+      result.resumeKey = parsed.resumeKey;
+    }
+    return result;
+  };
   return {
     authorityDigest: parsed.authorityDigest,
     installationId: parsed.installationId,
     nonce: parsed.nonce,
     phase: parsed.phase,
-    returnState: {
-      returnTo: parsed.returnTo,
-      ...(parsed.resumeKey === undefined ? {} : { resumeKey: parsed.resumeKey }),
-    },
+    returnState: connectionReturn(),
     setupAction: parsed.setupAction,
     stateDigest: sha256(input.state),
     targetAccountLogin: parsed.targetAccountLogin,
     via: parsed.via,
   };
 };
+
+interface GitHubAuthorizationCallbackFields {
+  code: string;
+  installationId?: string;
+  setupAction?: "install" | "update";
+}
 
 const callbackInput = (url: string) => {
   const query = new URL(url).searchParams;
@@ -475,17 +485,12 @@ const callbackInput = (url: string) => {
     if (code.length === 0) {
       throw new GitHubCallbackParseError("code-format");
     }
-    return {
-      code,
-      ...(query.has("installation_id")
-        ? {
-            installationId: decimalSchema.parse(query.get("installation_id")),
-            setupAction: z.enum(["install", "update"]).parse(query.get("setup_action")),
-          }
-        : {}),
-      kind: "authorize" as const,
-      state,
-    };
+    const fields: GitHubAuthorizationCallbackFields = { code };
+    if (query.has("installation_id")) {
+      fields.installationId = decimalSchema.parse(query.get("installation_id"));
+      fields.setupAction = z.enum(["install", "update"]).parse(query.get("setup_action"));
+    }
+    return { ...fields, kind: "authorize" as const, state };
   }
   if (
     query.getAll("state").length !== 1 ||
@@ -517,23 +522,36 @@ const githubCallbackDiagnostic = (url: string): GitHubCallbackDiagnostic => {
   const code = query.get("code");
   const error = query.get("error");
   const unknownKeys = [...new Set([...query.keys()].filter((key) => !known.has(key)))];
-  return {
-    ...(code === null ? {} : { codeLength: code.length }),
+  const codeLength: Pick<GitHubCallbackDiagnostic, "codeLength"> = {};
+  if (code !== null) {
+    codeLength.codeLength = code.length;
+  }
+  const codeDetails: Pick<GitHubCallbackDiagnostic, "codeLength" | "codePresent" | "error"> = {
+    ...codeLength,
     codePresent: code !== null,
-    ...(["access_denied", "temporarily_unavailable", "server_error"].includes(error ?? "")
-      ? { error: error as GitHubOAuthCallbackError }
-      : {}),
+  };
+  if (["access_denied", "temporarily_unavailable", "server_error"].includes(error ?? "")) {
+    codeDetails.error = error as GitHubOAuthCallbackError;
+  }
+  const queryDetails: Pick<
+    GitHubCallbackDiagnostic,
+    "codeLength" | "codePresent" | "error" | "keyCounts" | "queryKeys" | "stateLength"
+  > = {
+    ...codeDetails,
     keyCounts: Object.fromEntries([...known].map((key) => [key, query.getAll(key).length])),
     queryKeys: [...new Set([...query.keys()].filter((key) => known.has(key)))].toSorted(),
-    ...(state === null ? {} : { stateLength: state.length }),
-    statePresent: state !== null,
-    ...(unknownKeys.length === 0
-      ? {}
-      : {
-          unknownKeyDigests: unknownKeys.slice(0, 3).map(sha256),
-        }),
-    unknownKeyCount: unknownKeys.length,
   };
+  if (state !== null) {
+    queryDetails.stateLength = state.length;
+  }
+  const details: Omit<GitHubCallbackDiagnostic, "unknownKeyCount"> = {
+    ...queryDetails,
+    statePresent: state !== null,
+  };
+  if (unknownKeys.length !== 0) {
+    details.unknownKeyDigests = unknownKeys.slice(0, 3).map(sha256);
+  }
+  return { ...details, unknownKeyCount: unknownKeys.length };
 };
 
 const oauthErrorCategoryFromException = (error: unknown) => {

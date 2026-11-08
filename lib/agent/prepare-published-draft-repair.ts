@@ -587,7 +587,7 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
     },
     prepare: async () => {
       assertCurrentOrigin(state, previous);
-      return await prepareDraftReconciliation({
+      const candidateInput: DraftReconciliationInput = {
         sandbox,
         repository: repair.source.repository,
         appId: repair.appId,
@@ -596,10 +596,15 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
         headBranch: source.draft.headBranch,
         headSha: source.draft.headSha,
         ownedPublication: { proposal: owned.proposal, publication: owned.publication },
-        ...(input.recovery === undefined && input.restoreInitialAppSource !== true
-          ? {}
-          : { forceFreshCandidate: true }),
-        ...(unpublished === undefined ? {} : { unpublished }),
+      };
+      if (!(input.recovery === undefined && input.restoreInitialAppSource !== true)) {
+        candidateInput.forceFreshCandidate = true;
+      }
+      if (unpublished !== undefined) {
+        candidateInput.unpublished = unpublished;
+      }
+      return await prepareDraftReconciliation({
+        ...candidateInput,
         ...previousInput,
       });
     },

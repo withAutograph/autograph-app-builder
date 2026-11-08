@@ -567,18 +567,18 @@ describe("managed runtime execution through supported SDK ports", () => {
     await f.start();
     const recovered = f.read();
     expect(recovered).toMatchObject({
-      requestId: original.requestId,
-      attemptId: original.attemptId,
-      fence: original.fence,
       approval: original.approval,
-      workerAsset: { disposed: true, installed: true },
+      attemptId: original.attemptId,
+      current: { providerSessionId: "resumed-physical-session", state: "ready" },
+      fence: original.fence,
       locator: {
         ...original.locator,
-        providerSessionId: "resumed-physical-session",
-        dispatchAttempted: true,
         commandId: "runtime-command",
+        dispatchAttempted: true,
+        providerSessionId: "resumed-physical-session",
       },
-      current: { providerSessionId: "resumed-physical-session", state: "ready" },
+      requestId: original.requestId,
+      workerAsset: { disposed: true, installed: true },
     });
     expect(f.deps.installWorkerAsset).toHaveBeenCalledTimes(2);
     expect(f.readSourceCreates()).toBe(1);
@@ -688,10 +688,10 @@ describe("managed runtime execution through supported SDK ports", () => {
     expect(result.state).toBe("settled");
     expect(result.outcome?.exitCode).toBe(0);
     expect(f.read()).toMatchObject({
-      attemptId: retained.attemptId,
-      fence: retained.fence,
       approval: retained.approval,
+      attemptId: retained.attemptId,
       current: { providerSessionId: "resumed-physical-session", state: "revoked" },
+      fence: retained.fence,
     });
     expect(f.read().pendingStage).toBeUndefined();
     expect(

@@ -2605,17 +2605,22 @@ export function createHostedEveSessionService(input: {
       let settled: HostedOperationRecord;
       settlementPhase = "settlement";
       if (dispatchedPagedSession === undefined) {
-        settled = await input.store.settleSucceeded({
+        const store = input.store;
+        const settleSucceeded = store.settleSucceeded;
+        const settlement: Parameters<HostedEveStore["settleSucceeded"]>[0] = {
           nowEpochMs: now(),
           operationId,
           principal,
           requestDigest,
           result: dispatchedResult,
-          ...(dispatched.sendDeliveryResolution === undefined
-            ? {}
-            : { sendDeliveryResolution: dispatched.sendDeliveryResolution }),
-          ...(dispatchedSession === undefined ? {} : { session: dispatchedSession }),
-        });
+        };
+        if (dispatched.sendDeliveryResolution !== undefined) {
+          settlement.sendDeliveryResolution = dispatched.sendDeliveryResolution;
+        }
+        if (dispatchedSession !== undefined) {
+          settlement.session = dispatchedSession;
+        }
+        settled = await settleSucceeded.call(store, settlement);
       } else {
         if (input.store.settleSucceededPaged === undefined) {
           throw new HostedSubmissionUnknownError();

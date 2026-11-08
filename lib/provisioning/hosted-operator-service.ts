@@ -882,17 +882,21 @@ const handlePlanOperation = async (
           return renewal;
         }
       }
-      return await deps.plan({
+      const plan = deps.plan;
+      const planInput: Parameters<ProtectedHostedOperatorDependencies["plan"]>[0] = {
         ...context,
         action: input.operation,
-        ...(input.releaseIntent === undefined ? {} : { releaseIntent: input.releaseIntent }),
-        ...(input.normalActorProgram === undefined
-          ? {}
-          : { normalActorProgram: input.normalActorProgram }),
-        ...(input.authSignupPolicy === undefined
-          ? {}
-          : { authSignupPolicy: input.authSignupPolicy }),
-      });
+      };
+      if (input.releaseIntent !== undefined) {
+        planInput.releaseIntent = input.releaseIntent;
+      }
+      if (input.normalActorProgram !== undefined) {
+        planInput.normalActorProgram = input.normalActorProgram;
+      }
+      if (input.authSignupPolicy !== undefined) {
+        planInput.authSignupPolicy = input.authSignupPolicy;
+      }
+      return await plan.call(deps, planInput);
     },
   );
   const cleanupPrior = input.operation === "cleanup" ? await deps.store.read(context) : undefined;
@@ -2391,30 +2395,26 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             ) {
               throw new HostedOperatorError("operation_in_progress");
             }
-            const claimedRecord = {
-              ...record,
-              // A new approved attempt verifies under its live lease. Completed
-              // resource reads remain idle-only until this attempt settles.
-              ...(plan.action === "prepare" && record.status === "prepared"
-                ? { status: "pending" as const }
-                : {}),
-              approvedByCallId: input.callId,
-              leaseExpiresAt: new Date(now() + 60_000).toISOString(),
-              leaseId,
-              ...(executionObservationRequested
-                ? {
-                    executionObservation: {
-                      state: "running" as const,
-                      attemptRef: leaseId,
-                      operationRef,
-                      planDigest,
-                      callId: input.callId,
-                      approvalId: approval.approvalId,
-                    },
-                  }
-                : {}),
-              operator: { ...record.operator, approvalId: approval.approvalId },
-            };
+            const claimedRecord: HostedRuntimeJournalRecord = { ...record };
+            // A new approved attempt verifies under its live lease. Completed
+            // resource reads remain idle-only until this attempt settles.
+            if (plan.action === "prepare" && record.status === "prepared") {
+              claimedRecord.status = "pending";
+            }
+            claimedRecord.approvedByCallId = input.callId;
+            claimedRecord.leaseExpiresAt = new Date(now() + 60_000).toISOString();
+            claimedRecord.leaseId = leaseId;
+            if (executionObservationRequested) {
+              claimedRecord.executionObservation = {
+                state: "running",
+                attemptRef: leaseId,
+                operationRef,
+                planDigest,
+                callId: input.callId,
+                approvalId: approval.approvalId,
+              };
+            }
+            claimedRecord.operator = { ...record.operator, approvalId: approval.approvalId };
             if (!executionObservationRequested) {
               delete claimedRecord.executionObservation;
             }

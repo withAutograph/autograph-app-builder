@@ -1729,8 +1729,11 @@ export const composeHostedOperatorDependencies = (
     });
     const inventory = await observe(
       "provider_inventory",
-      async () =>
-        await readHostedOperatorProviderInventory({
+      async () => {
+        const inventoryInput: Pick<
+          Parameters<typeof readHostedOperatorProviderInventory>[0],
+          "assertCurrentOwner" | "configuration" | "context" | "phase" | "resolveGatewayByPublicOrigin"
+        > = {
           assertCurrentOwner: async () => {
             await controlPlane.assertPlanningAuthorized(context);
           },
@@ -1745,13 +1748,17 @@ export const composeHostedOperatorDependencies = (
           },
           context,
           phase: "bootstrap-planning",
-          ...(configuration.composition === singleProjectServicesComposition
-            ? {}
-            : { resolveGatewayByPublicOrigin: true as const }),
+        };
+        if (configuration.composition !== singleProjectServicesComposition) {
+          inventoryInput.resolveGatewayByPublicOrigin = true;
+        }
+        return await readHostedOperatorProviderInventory({
+          ...inventoryInput,
           resolveOperatorByConfiguredOrigin: true,
           readVercelCredential: async ({ authority, installationId }) =>
             await controlPlane.readCredential(authority, installationId),
-        }),
+        });
+      },
     );
     const native = configuration.nativeNeon.scope;
     const activeAuth = await observe(
@@ -1822,8 +1829,11 @@ export const composeHostedOperatorDependencies = (
     } else if (existingMigrationUrl !== undefined || authSchema === undefined) {
       const proposed = await observe(
         "auth_schema_proposal",
-        async () =>
-          await proposal({
+        async () => {
+          const proposalInput: Pick<
+            Parameters<typeof proposal>[0],
+            "assertCurrentOwner" | "directMigrationUrl"
+          > = {
             assertCurrentOwner: async () => {
               await controlPlane.assertPlanningAuthorized(context);
               if (bindingPlan !== undefined) {
@@ -1837,9 +1847,12 @@ export const composeHostedOperatorDependencies = (
                 }
               }
             },
-            ...(existingMigrationUrl === undefined
-              ? {}
-              : { directMigrationUrl: existingMigrationUrl }),
+          };
+          if (existingMigrationUrl !== undefined) {
+            proposalInput.directMigrationUrl = existingMigrationUrl;
+          }
+          return await proposal({
+            ...proposalInput,
             resource: {
               database: configuration.authDatabase.database,
               environment: "preview",
@@ -1851,7 +1864,8 @@ export const composeHostedOperatorDependencies = (
               schema: "public",
               version: 1,
             },
-          }),
+          });
+        },
       );
       const artifactRef = await observe(
         "auth_schema_publish",

@@ -56,6 +56,31 @@ interface AppSpecSummary {
   uiRevision?: string;
 }
 
+type WorkflowState = ReturnType<typeof appBuilderWorkflowState.get>;
+type PhaseState<P extends WorkflowState["phase"]> = Extract<WorkflowState, { phase: P }>;
+
+interface WorkflowPhaseSummaries {
+  appSpec?: AppSpecSummary;
+  dependencies?: Pick<PhaseState<"dependencies_prepared">["dependencyReceipt"], "digest">;
+  identity?: Pick<PhaseState<"identity_resolved">["identityReceipt"], "digest">;
+  proposal?: Pick<PhaseState<"planned">["proposal"], "digest">;
+  apply?:
+    | (Pick<PhaseState<"apply_failed">["applyFailure"], "digest" | "reason" | "status"> & {
+        recoveryRequired: boolean;
+      })
+    | Pick<PhaseState<"applied">["applyReceipt"], "changedContentDigest" | "digest" | "status">;
+  validation?:
+    | (Pick<PhaseState<"validation_pending">["validationAttempt"], "digest" | "status"> & {
+        recoveryRequired: boolean;
+      })
+    | (Pick<
+        PhaseState<"validation_failed">["validationFailure"],
+        "digest" | "reason" | "status"
+      > & { recoveryRequired: boolean })
+    | Pick<PhaseState<"validated">["validationReceipt"], "digest" | "status">;
+  review?: Pick<PhaseState<"reviewed">["reviewReceipt"], "changeSetDigest" | "digest">;
+}
+
 interface WorkflowStatusPreview {
   artifacts: ReturnType<typeof prototypeArtifactReceipt>[];
   uiPreview?: Pick<
@@ -205,7 +230,7 @@ export default defineTool({
         sourceDigest: state.uiPreview.sourceDigest,
       };
     }
-    return {
+    const result = {
       ...preview,
       ...acceptedUIReference(state),
       phase: state.phase,
@@ -217,7 +242,10 @@ export default defineTool({
         sourceTree: state.workspace.sourceTree,
         workspaceDigest: state.workspace.workspaceDigest,
       },
-      ...(state.phase === "app_spec_accepted" ||
+    };
+    const summaries: WorkflowPhaseSummaries = {};
+    if (
+      state.phase === "app_spec_accepted" ||
       state.phase === "dependencies_prepared" ||
       state.phase === "identity_resolved" ||
       state.phase === "planned" ||
@@ -227,11 +255,11 @@ export default defineTool({
       state.phase === "validation_failed" ||
       state.phase === "validated" ||
       isReviewedPhase(state)
-        ? {
-            appSpec: appSpecSummary(state.appSpec),
-          }
-        : {}),
-      ...(state.phase === "dependencies_prepared" ||
+    ) {
+      summaries.appSpec = appSpecSummary(state.appSpec);
+    }
+    if (
+      state.phase === "dependencies_prepared" ||
       state.phase === "identity_resolved" ||
       state.phase === "planned" ||
       state.phase === "apply_failed" ||
@@ -240,9 +268,11 @@ export default defineTool({
       state.phase === "validation_failed" ||
       state.phase === "validated" ||
       isReviewedPhase(state)
-        ? { dependencies: { digest: state.dependencyReceipt.digest } }
-        : {}),
-      ...(state.phase === "identity_resolved" ||
+    ) {
+      summaries.dependencies = { digest: state.dependencyReceipt.digest };
+    }
+    if (
+      state.phase === "identity_resolved" ||
       state.phase === "planned" ||
       state.phase === "apply_failed" ||
       state.phase === "applied" ||
@@ -250,80 +280,69 @@ export default defineTool({
       state.phase === "validation_failed" ||
       state.phase === "validated" ||
       isReviewedPhase(state)
-        ? { identity: { digest: state.identityReceipt.digest } }
-        : {}),
-      ...(state.phase === "planned" ||
+    ) {
+      summaries.identity = { digest: state.identityReceipt.digest };
+    }
+    if (
+      state.phase === "planned" ||
       state.phase === "apply_failed" ||
       state.phase === "applied" ||
       state.phase === "validation_pending" ||
       state.phase === "validation_failed" ||
       state.phase === "validated" ||
       isReviewedPhase(state)
-        ? { proposal: { digest: state.proposal.digest } }
-        : {}),
-      ...(state.phase === "apply_failed"
-        ? {
-            apply: {
-              digest: state.applyFailure.digest,
-              reason: state.applyFailure.reason,
-              recoveryRequired: true,
-              status: state.applyFailure.status,
-            },
-          }
-        : {}),
-      ...(state.phase === "applied" ||
+    ) {
+      summaries.proposal = { digest: state.proposal.digest };
+    }
+    if (state.phase === "apply_failed") {
+      summaries.apply = {
+        digest: state.applyFailure.digest,
+        reason: state.applyFailure.reason,
+        recoveryRequired: true,
+        status: state.applyFailure.status,
+      };
+    }
+    if (
+      state.phase === "applied" ||
       state.phase === "validation_pending" ||
       state.phase === "validation_failed" ||
       state.phase === "validated" ||
       isReviewedPhase(state)
-        ? {
-            apply: {
-              changedContentDigest: state.applyReceipt.changedContentDigest,
-              digest: state.applyReceipt.digest,
-              status: state.applyReceipt.status,
-            },
-          }
-        : {}),
-      ...(state.phase === "validation_pending"
-        ? {
-            validation: {
-              digest: state.validationAttempt.digest,
-              recoveryRequired: true,
-              status: state.validationAttempt.status,
-            },
-          }
-        : {}),
-      ...(state.phase === "validation_failed"
-        ? {
-            validation: {
-              digest: state.validationFailure.digest,
-              reason: state.validationFailure.reason,
-              recoveryRequired: true,
-              status: state.validationFailure.status,
-            },
-          }
-        : {}),
-      ...(state.phase === "validated" || isReviewedPhase(state)
-        ? {
-            validation: {
-              digest: state.validationReceipt.digest,
-              status: state.validationReceipt.status,
-            },
-          }
-        : {}),
-      ...(isReviewedPhase(state)
-        ? {
-            review: {
-              changeSetDigest: state.reviewReceipt.changeSetDigest,
-              digest: state.reviewReceipt.digest,
-            },
-          }
-        : {}),
-      ...githubDraftPublication,
-      ...publication,
-      ...branchPublication,
-      ...freshBootstrap,
-    };
+    ) {
+      summaries.apply = {
+        changedContentDigest: state.applyReceipt.changedContentDigest,
+        digest: state.applyReceipt.digest,
+        status: state.applyReceipt.status,
+      };
+    }
+    if (state.phase === "validation_pending") {
+      summaries.validation = {
+        digest: state.validationAttempt.digest,
+        recoveryRequired: true,
+        status: state.validationAttempt.status,
+      };
+    }
+    if (state.phase === "validation_failed") {
+      summaries.validation = {
+        digest: state.validationFailure.digest,
+        reason: state.validationFailure.reason,
+        recoveryRequired: true,
+        status: state.validationFailure.status,
+      };
+    }
+    if (state.phase === "validated" || isReviewedPhase(state)) {
+      summaries.validation = {
+        digest: state.validationReceipt.digest,
+        status: state.validationReceipt.status,
+      };
+    }
+    if (isReviewedPhase(state)) {
+      summaries.review = {
+        changeSetDigest: state.reviewReceipt.changeSetDigest,
+        digest: state.reviewReceipt.digest,
+      };
+    }
+    return { ...result, ...summaries, ...githubDraftPublication, ...publication, ...branchPublication, ...freshBootstrap };
   },
   inputSchema: z.object({}),
 });
