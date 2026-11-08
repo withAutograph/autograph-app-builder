@@ -307,7 +307,7 @@ const prepareNormalActorStage = async (input: StageInput) => {
         (entry) => entry.actorKey === actor.actorKey && entry.organizationId !== organizationId,
       ) ?? false;
     if (!another) {
-      return { storageState: baseStorage, expectedSessionId: session.realmSessionId };
+      return { expectedSessionId: session.realmSessionId, storageState: baseStorage };
     }
     await assertCurrent();
     const captured = await input.ports.readOrganizationSession(actor.actorKey, organizationId);

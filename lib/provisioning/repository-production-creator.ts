@@ -202,16 +202,15 @@ export const createRepositoryProductionCreator = (
         continue;
       }
       const frame = frameFor(candidate);
-      if (frame?.realmDigest !== realm) {
-        continue;
-      }
-      const invitation = await read(candidate, frame);
-      if (invitation?.status === "accepted" && isVerified(invitation, frame)) {
-        return linkedCreatorSchema.parse({
-          sourceInvitationId: invitation.id,
-          sourceScopeDigest: invitation.scopeDigest,
-          actorId: invitation.verifiedActorId,
-        });
+      if (frame?.realmDigest === realm) {
+        const invitation = await read(candidate, frame);
+        if (invitation?.status === "accepted" && isVerified(invitation, frame)) {
+          return linkedCreatorSchema.parse({
+            sourceInvitationId: invitation.id,
+            sourceScopeDigest: invitation.scopeDigest,
+            actorId: invitation.verifiedActorId,
+          });
+        }
       }
     }
     // oxlint-disable-next-line unicorn/no-useless-undefined -- No verified identity exists for this exact owner and Auth realm.

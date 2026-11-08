@@ -38,7 +38,7 @@ const command = async (cwd: string, executable: string, args: string[]) => {
       execFile(
         executable,
         args,
-        { cwd, env: environment, maxBuffer: 4 * 1024 * 1024, encoding: "utf-8" },
+        { cwd, encoding: "utf-8", env: environment, maxBuffer: 4 * 1024 * 1024 },
         (error: Error | null, stdout: string) => {
           if (error === null) {
             resolve(stdout.trim());
@@ -73,15 +73,16 @@ await mkdir(path.join(output, "bin"), { mode: 0o700 });
 await mkdir(path.join(output, "intermediate"), { mode: 0o700 });
 const binary = (family: string) => path.join(output, "bin", `${family}-linux-x64`);
 const repositoryScript = (name: string) => `.config/mise/scripts/repository/${name}.mjs`;
+const workerTarget = "bun-linux-x64";
 await command(arrusted, bun, [
   repositoryScript("build-protected-generated-app-worker"),
   binary("genericInstaller"),
-  "bun-linux-x64",
+  workerTarget,
 ]);
 await command(arrusted, bun, [
   repositoryScript("build-protected-auth-proposal"),
   binary("authProposal"),
-  "bun-linux-x64",
+  workerTarget,
 ]);
 for (const [family, script, emitted] of [
   ["auth", "build-protected-auth-worker", "protected-installer-worker.js"],
@@ -103,7 +104,7 @@ await command(builder, bun, [
   "scripts/build-managed-runtime-worker.mjs",
   arrusted,
   binary("managedRuntime"),
-  "bun-linux-x64",
+  workerTarget,
 ]);
 type CatalogWorkers = z.infer<typeof operatorWorkerCatalogReceiptSchema>["workers"];
 const entries = {
@@ -162,7 +163,7 @@ const receipt = operatorWorkerCatalogReceiptSchema.parse({
   version: 1,
   kind: "operator-worker-catalog-v1",
   sources,
-  compiler: { name: "bun", version: "1.3.14", target: "bun-linux-x64" },
+  compiler: { name: "bun", version: "1.3.14", target: workerTarget },
   workers,
 });
 const bytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);

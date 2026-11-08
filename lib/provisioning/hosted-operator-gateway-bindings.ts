@@ -802,7 +802,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
           sources.projects?.[rule.projectId] !== undefined &&
           sources.projects[rule.projectId].customAllow === undefined,
       );
-      return { sources, missing, requiresReconciliation };
+      return { missing, requiresReconciliation, sources };
     };
     const bindTrustedSources = async () => {
       const observed = await observeTrustedSources();
@@ -1449,6 +1449,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
     return {
       acknowledgedValues,
       approvedCanonical,
+      bindTrustedSources,
       branch,
       checkpoint,
       comment,
@@ -1458,7 +1459,6 @@ export const createHostedOperatorGatewayBindings = (deps: {
       inspectIteration,
       inspectOwnership,
       observeTrustedSources,
-      bindTrustedSources,
       prepareWrite,
       projectId,
       readSelectedValue,
