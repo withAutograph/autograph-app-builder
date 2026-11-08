@@ -21,8 +21,8 @@ import { resumeDevelopmentCycle } from "./resume-cycle";
 import { parseDevelopmentArguments } from "./local-mode";
 
 const installFixtureDependencies = async (repositoryRoot: string, revision: string) => {
-  await mkdir(path.join(repositoryRoot, "node_modules/.pnpm"), { recursive: true, mode: 0o700 });
-  await mkdir(path.join(repositoryRoot, "node_modules/eve"), { recursive: true, mode: 0o700 });
+  await mkdir(path.join(repositoryRoot, "node_modules/.pnpm"), { mode: 0o700, recursive: true });
+  await mkdir(path.join(repositoryRoot, "node_modules/eve"), { mode: 0o700, recursive: true });
   const lock = `lockfileVersion: '9.0'\nrevision: ${revision}\n`;
   await writeFile(path.join(repositoryRoot, "pnpm-lock.yaml"), lock);
   await writeFile(path.join(repositoryRoot, "node_modules/.pnpm/lock.yaml"), lock);
@@ -54,8 +54,8 @@ const fixture = async () => {
   const supervisorRoot = await mkdtemp(path.join(runsRoot, "supervisor-"));
   const cycle = await createDevelopmentCycle({ repositoryRoot, supervisorRoot });
   await mkdir(path.join(cycle.application.root, ".eve/.workflow-data"), {
-    recursive: true,
     mode: 0o700,
+    recursive: true,
   });
   await writeFile(
     path.join(cycle.application.root, ".eve/.workflow-data/session.json"),
@@ -96,7 +96,7 @@ it("resumes one stopped local cycle with current code and unchanged saved state,
       ),
     ).toBe(' {"session":"original","state":"waiting"}\n');
   } finally {
-    await rm(f.root, { recursive: true, force: true });
+    await rm(f.root, { force: true, recursive: true });
   }
 });
 it("refuses a running instance and a different state root without modifying its source or saved sessions", async () => {
@@ -127,7 +127,7 @@ it("refuses a running instance and a different state root without modifying its 
     const closed = once(f.server, "close");
     f.server.close();
     await closed;
-    await rm(f.root, { recursive: true, force: true });
+    await rm(f.root, { force: true, recursive: true });
   }
 });
 it("requires explicit local recovery paths instead of selecting another instance automatically", () => {
@@ -189,7 +189,7 @@ it("resumes the same real cycle from a second checkout and loads that checkout's
     const after = await stat(stateFile);
     expect(after.ino).toBe(before.ino);
   } finally {
-    await rm(f.root, { recursive: true, force: true });
+    await rm(f.root, { force: true, recursive: true });
   }
 });
 it("reports an actionable stale selected install before replacing source, dependencies or native state", async () => {
@@ -220,7 +220,7 @@ it("reports an actionable stale selected install before replacing source, depend
       ),
     ).toContain('"session":"original"');
   } finally {
-    await rm(f.root, { recursive: true, force: true });
+    await rm(f.root, { force: true, recursive: true });
   }
 });
 it("preserves an intentionally selected owner-bound dependency cache while rebinding the cycle", async () => {
@@ -241,7 +241,7 @@ it("preserves an intentionally selected owner-bound dependency cache while rebin
     expect(resumed.dependencyBinding.modulesRoot).toBe(cache);
     expect(await realpath(path.join(resumed.application.root, "node_modules"))).toBe(cache);
   } finally {
-    await rm(f.root, { recursive: true, force: true });
+    await rm(f.root, { force: true, recursive: true });
   }
 });
 it("rejects stale per-package Eve resolution outside the selected installed tree before modifying the cycle", async () => {
@@ -268,7 +268,7 @@ it("rejects stale per-package Eve resolution outside the selected installed tree
       ),
     ).toContain('"session":"original"');
   } finally {
-    await rm(f.root, { recursive: true, force: true });
+    await rm(f.root, { force: true, recursive: true });
   }
 });
 
@@ -304,6 +304,6 @@ it("rejects a non-link retained dependency directory before replacing authored o
     const after = await stat(stateFile);
     expect(after.ino).toBe(before.ino);
   } finally {
-    await rm(f.root, { recursive: true, force: true });
+    await rm(f.root, { force: true, recursive: true });
   }
 });

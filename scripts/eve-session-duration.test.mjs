@@ -172,7 +172,7 @@ test("embedded Eve service routes only session creation to its real 1800-second 
     }
   } finally {
     await nitro?.close();
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { force: true, recursive: true });
   }
 }, 30_000);
 
