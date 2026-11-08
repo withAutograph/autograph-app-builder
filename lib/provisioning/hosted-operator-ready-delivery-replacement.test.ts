@@ -280,7 +280,9 @@ const recoveryFixture = () => {
   };
   const secondPlan = createRetentionRenewalPlan(firstRecord, now)!;
   expect(secondPlan).toBeDefined();
-  const current: HostedRuntimeJournalRecord = {
+  const current: HostedRuntimeJournalRecord & {
+    operator: NonNullable<HostedRuntimeJournalRecord["operator"]>;
+  } = {
     ...base.record,
     approvedByCallId: "approval-call-current",
     operator: {
@@ -316,7 +318,7 @@ describe("native externally managed policy recovery integration", () => {
     expect(description).toContain("Prepare a protected Preview for");
     expect(
       publicApprovalDescription(
-        { ...input, planDigest: f.current.operator!.planDigest },
+        { ...input, planDigest: f.current.operator.planDigest },
         "prepare-app-hosted-runtime",
       ),
     ).toBeUndefined();
@@ -527,7 +529,7 @@ describe("native externally managed policy recovery integration", () => {
     });
     expect(f.proposed.appTrustedSources).toBeUndefined();
     expect(f.proposed.gatewayBindings?.trustedSources).toBeUndefined();
-    expect(operatorPlanDigest(f.proposed)).not.toBe(f.current.operator!.planDigest);
+    expect(operatorPlanDigest(f.proposed)).not.toBe(f.current.operator.planDigest);
     expect(f.current).toEqual(original);
   });
   it.each(["approved-attempt", "unapproved-proposal"] as const)(
@@ -535,15 +537,15 @@ describe("native externally managed policy recovery integration", () => {
     async (state) => {
       const f = recoveryFixture();
       const record = structuredClone(f.current);
-      record.operator!.plan = f.proposed;
-      record.operator!.planDigest = operatorPlanDigest(f.proposed);
-      record.operator!.retainedReadyDeliveryOperations = [
-        { approvedByCallId: f.current.approvedByCallId, operator: f.current.operator! },
+      record.operator.plan = f.proposed;
+      record.operator.planDigest = operatorPlanDigest(f.proposed);
+      record.operator.retainedReadyDeliveryOperations = [
+        { approvedByCallId: f.current.approvedByCallId, operator: f.current.operator },
       ];
-      record.operator!.retainedRenewalOperations = [];
+      record.operator.retainedRenewalOperations = [];
       if (state === "unapproved-proposal") {
         record.approvedByCallId = "operator:unapproved-plan";
-        delete record.operator!.approvalId;
+        delete record.operator.approvalId;
       }
       const readGatewayAlias = vi.fn(async () => "ready-gateway");
       const result = await readNativePreviewRecoveryPlan({
@@ -570,7 +572,7 @@ describe("native externally managed policy recovery integration", () => {
     (state) => {
       const f = recoveryFixture();
       const record = structuredClone(f.current);
-      const operator = record.operator!;
+      const { operator } = record;
       operator.plan =
         state === "legacy"
           ? withExternallyManagedHostProtection(f.proposed, undefined)
