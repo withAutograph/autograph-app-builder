@@ -1284,7 +1284,10 @@ describe("closed GitHub publication contract", () => {
         store,
       }).catch((error: unknown) => error);
       expect(failure).toBeInstanceOf(Error);
-      expect((failure as Error).message).toMatch(fixture.message);
+      if (!(failure instanceof Error)) {
+        throw new Error("Expected publication failure to be an Error.");
+      }
+      expect(failure.message).toMatch(fixture.message);
       expect(JSON.stringify(failure)).not.toContain("raw-content-source-secret");
       expect(adapter.draftCalls).toBe(0);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow

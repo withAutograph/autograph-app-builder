@@ -2,6 +2,7 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 
 import { decodeJwt, decodeProtectedHeader } from "jose";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import {
   createGitHubAppPublicationAdapter,
@@ -254,7 +255,9 @@ function providerFetch(input?: {
       });
     }
     if (url.endsWith("/app/installations/456/access_tokens")) {
-      const requested = (body as { permissions: Record<string, string> }).permissions;
+      const requested = z
+        .object({ permissions: z.record(z.string(), z.string()) })
+        .parse(body).permissions;
       const permissions = { ...requested };
       if (input?.extraPermission ?? false) {
         permissions.issues = "write";
@@ -388,7 +391,8 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       if (url.endsWith("/access_tokens")) {
         return json(
           {
-            permissions: (body as { permissions: Record<string, string> }).permissions,
+            permissions: z.object({ permissions: z.record(z.string(), z.string()) }).parse(body)
+              .permissions,
             token: "ghs_source_only_destination_token",
           },
           201,
@@ -1358,7 +1362,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
       calls.push({ body, method, url });
       if (url.endsWith("/app/installations/456/access_tokens")) {
-        const tokenRequest = body as { permissions: Record<string, string> };
+        const tokenRequest = z
+          .object({ permissions: z.record(z.string(), z.string()) })
+          .parse(body);
         return json(
           {
             permissions: tokenRequest.permissions,
@@ -1704,7 +1710,7 @@ describe("existing draft update provider", () => {
       if (url.endsWith("/app/installations/456/access_tokens")) {
         return json(
           {
-            permissions: (body as { permissions: unknown }).permissions,
+            permissions: z.object({ permissions: z.unknown() }).parse(body).permissions,
             token: "ghs_operation_scoped_installation_token",
           },
           201,
@@ -1787,10 +1793,9 @@ describe("existing draft update provider", () => {
       requestId: "REQUEST_1",
       status: "accepted",
     });
-    const graphql = calls.find(({ url }) => url.endsWith("/graphql"))?.body as {
-      query: string;
-      variables: Record<string, string>;
-    };
+    const graphql = z
+      .object({ query: z.string(), variables: z.record(z.string(), z.string()) })
+      .parse(calls.find(({ url }) => url.endsWith("/graphql"))?.body);
     expect(graphql.query).toContain("updateRefs");
     expect(graphql.variables).toEqual({
       afterOid: newCommit,
@@ -1882,7 +1887,7 @@ describe("existing draft reconciliation provider", () => {
       if (url.endsWith("/app/installations/456/access_tokens"))
         return json(
           {
-            permissions: (body as { permissions: unknown }).permissions,
+            permissions: z.object({ permissions: z.unknown() }).parse(body).permissions,
             token: "ghs_operation_scoped_installation_token",
           },
           201,
@@ -1958,10 +1963,9 @@ describe("existing draft reconciliation provider", () => {
     });
     const mergeBody = calls.find(({ url }) => url.endsWith("/git/commits"))?.body;
     expect(mergeBody).toMatchObject({ parents: [head, base], tree: resolvedTree });
-    const graphql = calls.find(({ url }) => url.endsWith("/graphql"))?.body as {
-      query: string;
-      variables: Record<string, string>;
-    };
+    const graphql = z
+      .object({ query: z.string(), variables: z.record(z.string(), z.string()) })
+      .parse(calls.find(({ url }) => url.endsWith("/graphql"))?.body);
     expect(graphql.query).toContain("force: false");
     expect(graphql.variables).toMatchObject({
       afterOid: mergeCommit,

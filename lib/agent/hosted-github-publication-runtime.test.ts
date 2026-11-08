@@ -7,6 +7,7 @@ import type {
   GitHubPublicationReceiptStore,
 } from "../repository/github-publication";
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
+import { builderHandoffIntentSchema } from "../handoff/contracts";
 import type { BuilderHandoffIntent } from "../handoff/contracts";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
 import { createGitHubTargetSourceResolutionAdapter } from "../repository/github-app-adapter";
@@ -175,11 +176,15 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     const readPreparedHandoff = vi.fn(
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async () =>
-        ({
+        builderHandoffIntentSchema.parse({
+          appId: "supplier-spend",
+          appName: "Supplier Spend",
+          brief: "Continue this app",
+          connections: [],
+          modelId: "openai/gpt-6-luna",
           providers: { githubInstallationId: "789" },
-        }) as BuilderHandoffIntent & {
-          providers: { githubInstallationId: string };
-        },
+          repository: { private: true, requestedName: "supplier-spend" },
+        }),
     );
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const providerFactory = vi.fn(async () => adapter);
@@ -224,11 +229,15 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
           ...injected.dependencies,
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           readPreparedHandoff: async () =>
-            ({
+            builderHandoffIntentSchema.parse({
+              appId: "supplier-spend",
+              appName: "Supplier Spend",
+              brief: "Continue this app",
+              connections: [],
+              modelId: "openai/gpt-6-luna",
               providers: { githubInstallationId: "789" },
-            }) as BuilderHandoffIntent & {
-              providers: { githubInstallationId: string };
-            },
+              repository: { private: true, requestedName: "supplier-spend" },
+            }),
         },
         enabled: true,
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
