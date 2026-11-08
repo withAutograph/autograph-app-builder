@@ -71,7 +71,7 @@ it("retains failed scratch installation without attempting a product mutation", 
   const receipt = await runCandidateCapabilityProbe({
     abortSignal: new AbortController().signal,
     model: activeBuilderModelId,
-    session: { readBinaryFile: vi.fn(), readTextFile: vi.fn(), run, writeTextFile } as never,
+    session: { readBinaryFile: vi.fn(), readTextFile: vi.fn(), run, writeTextFile },
   });
   expect(writeTextFile).toHaveBeenCalledWith(
     expect.objectContaining({ path: ".scratch/self-reproduction-capabilities/package.json" }),
@@ -97,7 +97,7 @@ it("runs the standalone probe only after scratch tooling setup", async () => {
         writes.push(path);
         return Promise.resolve();
       },
-    } as never,
+    },
   });
   expect(writes[0]).toBe(".scratch/self-reproduction-capabilities/package.json");
   expect(

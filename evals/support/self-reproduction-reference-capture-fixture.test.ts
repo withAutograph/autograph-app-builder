@@ -14,7 +14,7 @@ vi.mock("../../e2e/support/harness", () => ({
   currentSession: () => Promise.resolve({ user: { id: "synthetic-owner" } }),
   databaseUrl: "postgresql://synthetic",
   finishOAuth: fixture.authenticate,
-  waitForBuilderReady: () => Promise.resolve(),
+  waitForBuilderReady: vi.fn<() => Promise<void>>().mockResolvedValue(),
 }));
 vi.mock("postgres", () => ({ default: () => Object.assign(fixture.query, { end: fixture.end }) }));
 const page = {

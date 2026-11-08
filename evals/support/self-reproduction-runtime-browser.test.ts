@@ -1,5 +1,6 @@
 /* oxlint-disable eslint/require-await -- async fixtures implement Sandbox and browser APIs. */
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { sandboxBrowserComparison } from "./self-reproduction-runtime-browser";
 import { desktopViewports } from "./self-reproduction-parity";
 
@@ -51,16 +52,16 @@ describe("sandbox diagnostic browser captures", () => {
       { argv: ["node", "runner", "input", "output"] },
     );
     const outputText = writes.at(-1);
-    if (!outputText) {
+    if (outputText === undefined || outputText === "") {
       throw new Error("Expected browser comparison output.");
     }
-    const output = JSON.parse(outputText);
+    const output = z
+      .object({
+        outcomes: z.array(z.object({ documentation: z.object({ returned: z.boolean() }) })),
+      })
+      .parse(JSON.parse(outputText));
     expect(output.outcomes).toHaveLength(desktopViewports.length);
-    expect(
-      output.outcomes.every(
-        (row: { documentation: { returned: boolean } }) => row.documentation.returned,
-      ),
-    ).toBe(true);
+    expect(output.outcomes.every((row) => row.documentation.returned)).toBe(true);
     expect(page.screenshot).toHaveBeenCalledTimes(artifactPaths.length);
     expect(artifactPaths.every((path) => /\/(?:root|documentation)\.png$/u.test(path))).toBe(true);
   });
