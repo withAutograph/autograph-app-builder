@@ -97,14 +97,14 @@ const deliveredSnapshot = (deliveryId = "fixture-delivery"): HostedEngineSnapsho
 
 const transport = function transport(overrides: Partial<HostedEveTransport> = {}) {
   const base: HostedEveTransport = {
-    cancel: vi.fn(() => Promise.resolve(snapshot)),
-    get: vi.fn(() => Promise.resolve(snapshot)),
-    respond: vi.fn(() => Promise.resolve(snapshot)),
+    cancel: vi.fn(async () => snapshot),
+    get: vi.fn(async () => snapshot),
+    respond: vi.fn(async () => snapshot),
     send: vi.fn<HostedEveTransport["send"]>(async (input) => {
       await input.onAccepted?.("fixture-delivery");
       return deliveredSnapshot();
     }),
-    start: vi.fn(() => Promise.resolve({ adapterSessionId: "eve_1", snapshot })),
+    start: vi.fn(async () => ({ adapterSessionId: "eve_1", snapshot })),
   };
   return { ...base, ...overrides };
 };

@@ -1,6 +1,11 @@
 /* oxlint-disable eslint/no-await-in-loop -- assessment rows retain deterministic requirement order while checking artifacts. */
 import { z } from "zod";
 
+const instantNavigation = "instant-navigation";
+const missingFunctionality = "missing-functionality";
+const infrastructureUnavailable = "infrastructure-unavailable";
+const instantPlaywrightMethod = "@next/playwright/instant";
+
 export const parityVersion = "self-reproduction-parity/v1" as const;
 export const sides = ["reference", "candidate"] as const;
 export const desktopViewports = [
@@ -124,7 +129,7 @@ export const frameworkMatrix = [
   },
   {
     assertions: ["instant-direct-load", "instant-client-navigation", "resolved-content-visible"],
-    id: "instant-navigation",
+    id: instantNavigation,
   },
   {
     assertions: ["back-forward-preserves-draft", "shared-layout-state-preserved", "focus-restored"],
@@ -178,17 +183,12 @@ export const observationSchema = z
   .strictObject({
     artifacts: z.array(artifactPath),
     assertions: z.array(assertionSchema),
-    disposition: z.enum([
-      "observed",
-      "missing-functionality",
-      "infrastructure-unavailable",
-      "not-run",
-    ]),
+    disposition: z.enum(["observed", missingFunctionality, infrastructureUnavailable, "not-run"]),
     method: z.enum([
       "browser",
       "source-review",
       "source-and-browser",
-      "@next/playwright/instant",
+      instantPlaywrightMethod,
       "none",
     ]),
     reason: z.string().min(1),
@@ -202,7 +202,7 @@ export const observationSchema = z
 export const sideEvidenceSchema = z
   .strictObject({
     observations: z.array(observationSchema),
-    output: z.enum(["available", "missing", "infrastructure-unavailable"]),
+    output: z.enum(["available", "missing", infrastructureUnavailable]),
     reason: z.string().min(1),
     sourceRevision: z.string().min(1),
   })
@@ -230,7 +230,7 @@ export const parityReasonCodes = [
   "excluded-from-scope",
   "output-missing",
   "output-infrastructure-unavailable",
-  "missing-functionality",
+  missingFunctionality,
   "assertion-failed",
   "observation-infrastructure-unavailable",
   "observation-not-run",
@@ -287,13 +287,13 @@ export async function assessParity(
         reasonCode =
           bundle.output === "missing" ? "output-missing" : "output-infrastructure-unavailable";
         ({ reason } = bundle);
-      } else if (observation?.disposition === "missing-functionality") {
+      } else if (observation?.disposition === missingFunctionality) {
         status = "failed";
-        reasonCode = "missing-functionality";
+        reasonCode = missingFunctionality;
       } else if (observation?.assertions.some((assertion) => !assertion.passed)) {
         status = "failed";
         reasonCode = "assertion-failed";
-      } else if (observation?.disposition === "infrastructure-unavailable") {
+      } else if (observation?.disposition === infrastructureUnavailable) {
         status = "blocked";
         reasonCode = "observation-infrastructure-unavailable";
       } else if (observation?.disposition === "not-run") {
@@ -310,12 +310,11 @@ export async function assessParity(
         const behavioral =
           requirement.kind === "framework"
             ? observation.method === "source-and-browser" ||
-              (requirement.id === "instant-navigation" &&
-                observation.method === "@next/playwright/instant")
+              (requirement.id === instantNavigation &&
+                observation.method === instantPlaywrightMethod)
             : observation.method === "browser";
         const instant =
-          requirement.id !== "instant-navigation" ||
-          observation.method === "@next/playwright/instant";
+          requirement.id !== instantNavigation || observation.method === instantPlaywrightMethod;
         if (complete && retained && screenshot && behavioral && instant) {
           status = "passed";
           reasonCode = "observed-complete";

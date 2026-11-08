@@ -258,7 +258,7 @@ describe("approval history binding and cancellation", () => {
           save,
         },
         capture: (state) => createPrivateTenantExportApprovalCapture({ ...options, state }),
-        assertOwner: () => Promise.resolve(),
+        assertOwner: async () => {},
         readHistory: history,
       });
       expect(receipt?.approvalId ?? null).toBe(proved ? "human-request" : null);
@@ -276,7 +276,7 @@ describe("approval history binding and cancellation", () => {
       owner,
       capture: (state?: Parameters<typeof createPrivateTenantExportApprovalCapture>[0]["state"]) =>
         createPrivateTenantExportApprovalCapture({ ...options, state }),
-      assertOwner: () => Promise.resolve(),
+      assertOwner: async () => {},
     };
     await expect(
       readPrivateOperatorApproval({
@@ -321,7 +321,7 @@ describe("approval history binding and cancellation", () => {
       owner,
       capture: (state?: Parameters<typeof createPrivateTenantExportApprovalCapture>[0]["state"]) =>
         createPrivateTenantExportApprovalCapture({ ...options, state }),
-      assertOwner: () => Promise.resolve(),
+      assertOwner: async () => {},
     };
     await readPrivateOperatorApproval({
       ...shared,
@@ -393,7 +393,7 @@ describe("approval history binding and cancellation", () => {
       };
       const shared = {
         owner,
-        assertOwner: () => Promise.resolve(),
+        assertOwner: async () => {},
         capture: (
           state?: Parameters<typeof createPrivateTenantExportApprovalCapture>[0]["state"],
         ) =>
@@ -489,7 +489,7 @@ describe("approval history binding and cancellation", () => {
       owner,
       capture: (state?: Parameters<typeof createPrivateTenantExportApprovalCapture>[0]["state"]) =>
         createPrivateTenantExportApprovalCapture({ ...options, state }),
-      assertOwner: () => Promise.resolve(),
+      assertOwner: async () => {},
     };
     await expect(
       readPrivateOperatorApproval({

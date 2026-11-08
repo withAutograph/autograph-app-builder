@@ -929,7 +929,7 @@ it("relays the actual native diagnostic response through postMutation on the sta
   f.dependencies.inspectSource = () => Promise.reject(new TypeError("private-canary-step-error"));
   const adapter = createSameOriginEveTransport({
     config: { baseUrl: "https://builder.example.test" },
-    workloadIdentity: { token: () => Promise.resolve("synthetic-token") },
+    workloadIdentity: { token: async () => "synthetic-token" },
     fetchImplementation: () =>
       runtime.handleTerminalRecoveryRequest(
         {
@@ -1259,8 +1259,10 @@ describe("owned running-lineage execution transfer", () => {
   });
   it("refuses an inbox owned outside the reconstructed verified lineage", async () => {
     const f = twoOwners();
-    f.dependencies.readLogicalInboxOwner = () =>
-      Promise.resolve({ runId: "unverified-owner", logicalSessionId: "logical" });
+    f.dependencies.readLogicalInboxOwner = async () => ({
+      runId: "unverified-owner",
+      logicalSessionId: "logical",
+    });
     expect(await f.run()).toMatchObject({
       kind: "uncertain",
       reason: "source-physical-owner-changed",
@@ -1273,7 +1275,7 @@ describe("owned running-lineage execution transfer", () => {
 it("uses server-default bulk pagination and exhausts all step pages", async () => {
   const pages: unknown[] = [];
   const world = {
-    runs: { get: () => Promise.resolve({ runId: "old-native", status: "running" }) },
+    runs: { get: async () => ({ runId: "old-native", status: "running" }) },
     steps: {
       list: (input: { pagination?: { cursor?: string; limit?: number } }) => {
         pages.push(input);
@@ -1370,7 +1372,7 @@ it("retains the canonical unknown operation and source fence after a partial nat
   const statuses: number[] = [];
   const nativeTransport = createSameOriginEveTransport({
     config: { baseUrl: "https://builder.example.test" },
-    workloadIdentity: { token: () => Promise.resolve("synthetic-token") },
+    workloadIdentity: { token: async () => "synthetic-token" },
     fetchImplementation: async (_url, init) => {
       const payload = z
         .record(z.string(), z.unknown())
@@ -1392,7 +1394,7 @@ it("retains the canonical unknown operation and source fence after a partial nat
             snapshot: { events: [], status: "input_required" },
           })
         : nativeTransport.start(input),
-    get: () => Promise.resolve({ events: [], status: "input_required" }),
+    get: async () => ({ events: [], status: "input_required" }),
     send: vi.fn(),
     respond: vi.fn(),
     cancel: vi.fn(),
@@ -1481,7 +1483,7 @@ it("GET-only opaque preflight relays complete owned-lineage facts without stoppi
     });
   const adapter = createSameOriginEveTransport({
     config: { baseUrl: "https://builder.example.test" },
-    workloadIdentity: { token: () => Promise.resolve("synthetic-token") },
+    workloadIdentity: { token: async () => "synthetic-token" },
     fetchImplementation: () =>
       runtime.handleTerminalRecoveryRequest(
         {
@@ -1598,8 +1600,10 @@ it("refuses another operation's ready hook before stopping any owner", async () 
 });
 it("does not accept a caller-supplied parked owner without its exact native ready hook", async () => {
   const f = fixture();
-  f.dependencies.readLogicalInboxOwner = () =>
-    Promise.resolve({ runId: "forged-ready", logicalSessionId: "logical" });
+  f.dependencies.readLogicalInboxOwner = async () => ({
+    runId: "forged-ready",
+    logicalSessionId: "logical",
+  });
   const forged: TerminalRecoveryBinding = {
     ...descriptor,
     ownerRunId: "forged-ready",
