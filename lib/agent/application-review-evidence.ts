@@ -390,7 +390,13 @@ export const createApplicationReviewEvidence = (input: {
         );
       }
       const end = requirementPageEnd(text, cursor);
-      return { text: text.slice(cursor, end), ...(end < text.length ? { nextCursor: end } : {}) };
+      const page: Awaited<ReturnType<ApplicationReviewEvidence["readRequirements"]>> = {
+        text: text.slice(cursor, end),
+      };
+      if (end < text.length) {
+        page.nextCursor = end;
+      }
+      return page;
     },
     async readSource({ path, startLine = 1, endLine, cursor }) {
       const text = await loadSource(path);
@@ -419,7 +425,7 @@ export const createApplicationReviewEvidence = (input: {
         const endOffset = startOffset + content.length;
         const last = content.length === 0 ? position : sourcePosition(starts, endOffset - 1);
         const next = sourcePosition(starts, endOffset);
-        return {
+        const payload: Awaited<ReturnType<ApplicationReviewEvidence["readSource"]>> = {
           path,
           digest: fileByPath.get(path)?.digest ?? "",
           content,
@@ -430,15 +436,15 @@ export const createApplicationReviewEvidence = (input: {
           endLine: last.line,
           endColumn: content.length === 0 ? position.column : last.column + 1,
           totalLines: starts.length,
-          ...(endOffset < rangeEnd
-            ? {
-                nextCursor: {
-                  ...next,
-                  ...(requestedEnd === undefined ? {} : { endLine: requestedEnd }),
-                },
-              }
-            : {}),
         };
+        if (endOffset < rangeEnd) {
+          const nextCursor: SourceCursor = { ...next };
+          if (requestedEnd !== undefined) {
+            nextCursor.endLine = requestedEnd;
+          }
+          payload.nextCursor = nextCursor;
+        }
+        return payload;
       };
       const result =
         startOffset === windowEnd
