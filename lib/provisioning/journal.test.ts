@@ -107,12 +107,12 @@ describe("builder provisioning journal", () => {
       readVercelCredential: async () => ({
         binding: {
           active: true,
-          installationId: "icfg_202",
-          scopeType: "team",
-          scopeId: "team_1",
-          slug: "owner",
           displayName: "Owner",
+          installationId: "icfg_202",
           plan: "pro",
+          scopeId: "team_1",
+          scopeType: "team",
+          slug: "owner",
           updatedAt: new Date(),
         },
         token: secret,
@@ -128,8 +128,8 @@ describe("builder provisioning journal", () => {
               token: secret,
             },
             {
-              status: 403,
               headers: { "x-vercel-id": "iad1::denied_123" },
+              status: 403,
             },
           );
         }
@@ -197,12 +197,12 @@ describe("builder provisioning journal", () => {
       readVercelCredential: async () => ({
         binding: {
           active: true,
-          installationId: "icfg_202",
-          scopeType: "team",
-          scopeId: "team_1",
-          slug: "owner",
           displayName: "Owner",
+          installationId: "icfg_202",
           plan: "pro",
+          scopeId: "team_1",
+          scopeType: "team",
+          slug: "owner",
           updatedAt: new Date(),
         },
         token: secret,
@@ -216,8 +216,8 @@ describe("builder provisioning journal", () => {
               token: secret,
             },
             {
-              status: 403,
               headers: { "x-vercel-id": "iad1::denied_123" },
+              status: 403,
             },
           );
         }
@@ -228,10 +228,10 @@ describe("builder provisioning journal", () => {
     };
     const result = await executeBuilderProvisioning({
       authority,
-      request: selected,
       // SAFETY: The fixture provides the real in-memory journal and only terminal token/fetch ports used by this Vercel-only request; GitHub effects are unreachable.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Deliberately bounded terminal-port fixture; runtime schemas and journal replay checks remain real.
       dependencies: dependencies as never,
+      request: selected,
     });
     expect(result.vercel).toMatchObject({
       code: "provider_permission_denied",
@@ -244,10 +244,10 @@ describe("builder provisioning journal", () => {
     });
     const retry = await executeBuilderProvisioning({
       authority,
-      request: selected,
       // SAFETY: The fixture provides the real in-memory journal and only terminal token/fetch ports used by this Vercel-only request; GitHub effects are unreachable.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Deliberately bounded terminal-port fixture; runtime schemas and journal replay checks remain real.
       dependencies: dependencies as never,
+      request: selected,
     });
     expect(retry.vercel).toMatchObject({ code: "reconciliation_uncertain", status: "failed" });
     const projection = await readBuilderProvisioning({
