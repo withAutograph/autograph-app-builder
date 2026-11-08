@@ -18,6 +18,7 @@ import nodePath from "node:path";
 import { promisify } from "node:util";
 
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
 
@@ -72,6 +73,18 @@ const createSandbox = <T extends Partial<SandboxSession>>(overrides: T): Sandbox
 
 const { join } = nodePath;
 const executeFile = promisify(execFile);
+
+const closureObservationSchema = z.looseObject({
+  nodeModulesDigest: z.string(),
+  workspaceLinks: z.array(
+    z.looseObject({ path: z.string(), sourcePath: z.string(), target: z.string() }),
+  ),
+  workspaceNodeModules: z.array(
+    z.looseObject({ digest: z.string(), nodeModulesPath: z.string(), path: z.string() }),
+  ),
+});
+const isClosureObservation = (value: unknown): value is z.infer<typeof closureObservationSchema> =>
+  closureObservationSchema.safeParse(value).success;
 
 const archiveDigest = "a".repeat(64);
 const hostedArchiveDigest = "d1febde038cc4f84394293e80bf076c944809a3e6cb6485accf67f4af2c4b1ce";
@@ -382,9 +395,8 @@ describe("offline dependency cache", () => {
     const fixture = liveTemplateCacheFixture();
     fixture.setBootstrapStderr("installer progress\n".repeat(20_000));
 
-    await expect(
-      bootstrapLiveTemplateDependencies({ sandbox: fixture.sandbox }),
-    ).resolves.toMatchObject({ contentDigest: expect.any(String) });
+    const result = await bootstrapLiveTemplateDependencies({ sandbox: fixture.sandbox });
+    expect(result.contentDigest).toEqual(expect.any(String));
   });
 
   it("invalidates the live cache key only for declared dependency and runtime inputs", () => {
@@ -446,19 +458,10 @@ describe("offline dependency cache", () => {
         "linux/x86_64",
         fixture.manifestPath,
       ]);
-      const observation = JSON.parse(inspected.stdout) as {
-        nodeModulesDigest: string;
-        workspaceNodeModules: {
-          path: string;
-          nodeModulesPath: string;
-          digest: string;
-        }[];
-        workspaceLinks: {
-          path: string;
-          target: string;
-          sourcePath: string;
-        }[];
-      };
+      const observation: unknown = JSON.parse(inspected.stdout);
+      if (!isClosureObservation(observation)) {
+        throw new Error("Dependency closure inspection returned malformed output.");
+      }
       expect(observation.workspaceNodeModules).toEqual([
         expect.objectContaining({
           nodeModulesPath: fixture.appModules,

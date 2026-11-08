@@ -716,7 +716,9 @@ describe("image lifecycle", () => {
     expect(() => parseGhAuthStatus(valid.replace('"https"', '"ssh"'), "withAutograph")).toThrow(
       "did not match",
     );
-    const extraRecord = JSON.parse(valid);
+    const extraRecord = z
+      .looseObject({ hosts: z.looseObject({ "github.com": z.array(z.looseObject({})) }) })
+      .parse(JSON.parse(valid));
     extraRecord.hosts["github.com"][0].extra = true;
     expect(() => parseGhAuthStatus(JSON.stringify(extraRecord), "withAutograph")).toThrow(
       "did not match",
@@ -1493,7 +1495,7 @@ wait
       { stdio: ["ignore", "pipe", "inherit"] },
     );
     const output = await Promise.race([
-      once(child.stdout, "data").then(([chunk]) => chunk.toString()),
+      once(child.stdout, "data").then(([chunk]) => z.instanceof(Buffer).parse(chunk).toString()),
       delay(3000).then(() => {
         throw new Error("Timed out waiting for lifecycle crash fixture.");
       }),

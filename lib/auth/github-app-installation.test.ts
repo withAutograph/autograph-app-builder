@@ -747,10 +747,10 @@ describe("public GitHub App installation authorization", () => {
       callback: { queryKeys: ["code", "state"], statePresent: true },
       stage: "callback-state-validation",
       stateValidation: {
-        stateDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
         substage: "state-signature",
       },
     });
+    expect(diagnostic?.stateValidation?.stateDigest).toMatch(/^[a-f0-9]{64}$/u);
     expect(JSON.stringify(diagnostic)).not.toContain(authorizeState);
     expect(JSON.stringify(diagnostic)).not.toContain("one-time-code");
     expect(request).not.toHaveBeenCalled();
@@ -772,13 +772,14 @@ describe("public GitHub App installation authorization", () => {
       failure = error;
     }
 
-    expect(githubInstallationAuthorizationDiagnostic(failure)).toMatchObject({
+    const diagnostic = githubInstallationAuthorizationDiagnostic(failure);
+    expect(diagnostic).toMatchObject({
       stage: "callback-state-validation",
       stateValidation: {
-        stateDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
         substage: "state-authority-digest",
       },
     });
+    expect(diagnostic?.stateValidation?.stateDigest).toMatch(/^[a-f0-9]{64}$/u);
     expect(request).not.toHaveBeenCalled();
     expect(bind).not.toHaveBeenCalled();
   });

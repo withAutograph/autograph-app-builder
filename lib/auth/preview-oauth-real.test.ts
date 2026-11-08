@@ -65,9 +65,9 @@ describe("real Better Auth Preview OAuth handler", () => {
       });
       expect(first.tokens).toMatchObject({
         expires_in: 300,
-        refresh_token: expect.any(String),
         token_type: "Bearer",
       });
+      expect(first.tokens.refresh_token).toEqual(expect.any(String));
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const repeated = await grantRealOAuth(harness, browser, client, previewOAuthScopes.join(" "));
       expect(repeated.consentRequired).toBe(false);
@@ -295,9 +295,9 @@ describe("real Better Auth Preview OAuth handler", () => {
     expect(verified.payload).toMatchObject({
       aud: resource,
       iss: issuer,
-      sub: expect.any(String),
       workspace_id: "workspace_1",
     });
+    expect(verified.payload.sub).toEqual(expect.any(String));
     expect(Number.isInteger(verified.payload.nbf)).toBe(true);
     expect(Number.isInteger(verified.payload.iat)).toBe(true);
     expect(Number.isInteger(verified.payload.exp)).toBe(true);
@@ -383,12 +383,12 @@ describe("real Better Auth Preview OAuth handler", () => {
     expect(token.status).toBe(200);
     const tokenBody = tokenResponseSchema.parse(await token.json());
     expect(tokenBody).toMatchObject({
-      access_token: expect.any(String),
       expires_in: 300,
-      refresh_token: expect.any(String),
       scope: requestedScope,
       token_type: "Bearer",
     });
+    expect(tokenBody.access_token).toEqual(expect.any(String));
+    expect(tokenBody.refresh_token).toEqual(expect.any(String));
     expect(tokenBody).not.toHaveProperty("accessToken");
     expect(tokenBody).not.toHaveProperty("expiresIn");
     expect(tokenBody).not.toHaveProperty("tokenType");

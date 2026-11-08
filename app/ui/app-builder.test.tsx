@@ -14,6 +14,7 @@ import * as draftOutbox from "./builder-draft-outbox";
 import * as draftAutosave from "./use-builder-draft-autosave";
 import styles from "./app-builder.module.css";
 import type { BuilderDraftPageData } from "../../lib/builder-drafts/contracts";
+import type { continueBuilderHandoff } from "../actions/builder";
 
 const navigation = vi.hoisted(() => ({
   push: vi.fn(),
@@ -21,7 +22,7 @@ const navigation = vi.hoisted(() => ({
   replace: vi.fn(),
 }));
 const builderActions = vi.hoisted(() => ({
-  continueBuilderHandoff: vi.fn(),
+  continueBuilderHandoff: vi.fn<typeof continueBuilderHandoff>(),
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   loadActiveBuilderDraft: vi.fn(() =>
     Promise.resolve<BuilderDraftPageData | undefined>(globalThis.undefined),
@@ -36,12 +37,9 @@ const builderActions = vi.hoisted(() => ({
 
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 async function defaultContinuation(
-  _previous: unknown,
-  input: {
-    requestId: string;
-    provisioningEnabled: boolean;
-  },
-) {
+  _previous: Parameters<typeof continueBuilderHandoff>[0],
+  input: Parameters<typeof continueBuilderHandoff>[1],
+): ReturnType<typeof continueBuilderHandoff> {
   return {
     handoff: {
       expiresAt: "2026-09-08T12:00:00.000Z",
