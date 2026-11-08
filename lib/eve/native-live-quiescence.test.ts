@@ -931,7 +931,9 @@ it("relays the actual native diagnostic response through postMutation on the sta
   f.dependencies.inspectSource = () => Promise.reject(new TypeError("private-canary-step-error"));
   const adapter = createSameOriginEveTransport({
     config: { baseUrl: "https://builder.example.test" },
-    workloadIdentity: { token: async () => "synthetic-token" },
+    workloadIdentity: {
+      token: vi.fn<() => Promise<string>>().mockResolvedValue("synthetic-token"),
+    },
     fetchImplementation: () =>
       runtime.handleTerminalRecoveryRequest(
         {
@@ -1376,7 +1378,9 @@ it("retains the canonical unknown operation and source fence after a partial nat
   const statuses: number[] = [];
   const nativeTransport = createSameOriginEveTransport({
     config: { baseUrl: "https://builder.example.test" },
-    workloadIdentity: { token: async () => "synthetic-token" },
+    workloadIdentity: {
+      token: vi.fn<() => Promise<string>>().mockResolvedValue("synthetic-token"),
+    },
     fetchImplementation: async (_url, init) => {
       const payload = z
         .record(z.string(), z.unknown())
@@ -1493,7 +1497,9 @@ it("GET-only opaque preflight relays complete owned-lineage facts without stoppi
     });
   const adapter = createSameOriginEveTransport({
     config: { baseUrl: "https://builder.example.test" },
-    workloadIdentity: { token: async () => "synthetic-token" },
+    workloadIdentity: {
+      token: vi.fn<() => Promise<string>>().mockResolvedValue("synthetic-token"),
+    },
     fetchImplementation: () =>
       runtime.handleTerminalRecoveryRequest(
         {

@@ -597,7 +597,7 @@ describe("native externally managed policy recovery integration", () => {
         record.approvedByCallId = "operator:unapproved-plan";
         delete record.operator.approvalId;
       }
-      const readGatewayAlias = vi.fn(async () => "ready-gateway");
+      const readGatewayAlias = vi.fn<() => Promise<string>>().mockResolvedValue("ready-gateway");
       const result = await readNativePreviewRecoveryPlan({
         record,
         policy: externalPolicy,

@@ -24,7 +24,6 @@ export default defineConfig({
     {
       // These callbacks must reject on synchronous failures while returning promises.
       files: [
-        "lib/agent/hosted-runtime-execution-wait.test.ts",
         "lib/agent/local-source-transport-history.test.ts",
         "lib/agent/product-behavior-validation.test.ts",
         "lib/eve/hosted-service.test.ts",

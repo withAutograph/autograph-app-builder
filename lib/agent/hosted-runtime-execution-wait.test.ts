@@ -172,7 +172,7 @@ const fixture = () => {
     endpoint: "https://operator.example",
     ownerContext,
     sessionId: selection.sessionId,
-    token: async () => "synthetic-private",
+    token: vi.fn<() => Promise<string>>().mockResolvedValue("synthetic-private"),
     fetch: (_url, init) => {
       const body = operatorRequestSchema.parse(JSON.parse(z.string().parse(init?.body)));
       calls.push(body.action);

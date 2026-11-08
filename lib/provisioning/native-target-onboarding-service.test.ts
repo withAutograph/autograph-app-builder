@@ -324,10 +324,9 @@ describe("protected native target onboarding service", () => {
 
   it("does not inspect provider authorization during new planning or approval-history reads", async () => {
     const f = fixture();
-    const inspect = vi.fn(async () => ({
-      status: "unavailable" as const,
-      failure: "request_failed" as const,
-    }));
+    const inspect = vi
+      .fn<NonNullable<NativeTargetOnboardingServiceDependencies["inspectProviderAuthorization"]>>()
+      .mockResolvedValue({ status: "unavailable", failure: "request_failed" });
     f.dependencies.inspectProviderAuthorization = inspect;
     const planned = await f.planOnce();
     await f.send({

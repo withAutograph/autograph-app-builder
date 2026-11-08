@@ -97,9 +97,9 @@ const deliveredSnapshot = (deliveryId = "fixture-delivery"): HostedEngineSnapsho
 
 const transport = function transport(overrides: Partial<HostedEveTransport> = {}) {
   const base: HostedEveTransport = {
-    cancel: vi.fn(async () => snapshot),
-    get: vi.fn(async () => snapshot),
-    respond: vi.fn(async () => snapshot),
+    cancel: vi.fn<HostedEveTransport["cancel"]>().mockResolvedValue(snapshot),
+    get: vi.fn<HostedEveTransport["get"]>().mockResolvedValue(snapshot),
+    respond: vi.fn<HostedEveTransport["respond"]>().mockResolvedValue(snapshot),
     send: vi.fn<HostedEveTransport["send"]>(async (input) => {
       await input.onAccepted?.("fixture-delivery");
       return deliveredSnapshot();
