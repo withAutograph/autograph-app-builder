@@ -10,22 +10,22 @@ import {
 const worker = {
   executablePath: "/trusted/install",
   id: "trusted-installer",
-  sha256: "a".repeat(64),
   operationScope: "generated-app-release-install-v1" as const,
+  sha256: "a".repeat(64),
   subcommand: "protected-generated-app-install" as const,
 };
 const resource = (name: string) => ({
   database: name,
   migratorRole: `${name}_owner`,
-  runtimeRole: `${name}_runtime`,
   resourceId: `${name}-resource`,
+  runtimeRole: `${name}_runtime`,
 });
 const workload = {
   audience: "https://vercel.com/team",
+  environment: "preview" as const,
   issuer: "https://oidc.vercel.com/team",
   ownerId: "team",
   projectId: "builder",
-  environment: "preview" as const,
   subject: "builder-workload",
 };
 const configuration = (): HostedOperatorSourceConfiguration => ({
@@ -69,9 +69,9 @@ const configuration = (): HostedOperatorSourceConfiguration => ({
       },
       operator: {
         audience: workload.audience,
+        environment: workload.environment,
         issuer: workload.issuer,
         ownerId: workload.ownerId,
-        environment: workload.environment,
         projectId: "operator",
       },
     },
@@ -86,21 +86,21 @@ const configuration = (): HostedOperatorSourceConfiguration => ({
   },
   sandbox: {
     accessWorker: worker,
-    authWorker: worker,
     authProposal: { executablePath: "/trusted/propose", id: "proposal", sha256: "c".repeat(64) },
-    resourcesWorker: worker,
+    authWorker: worker,
     image: "trusted-image",
     projectId: "operator",
+    resourcesWorker: worker,
     teamId: "team",
     workers: { sibling: worker },
   },
   workloadPolicy: { ...workload },
 });
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 const selectedConfig = () => {
   const result = configuration();
@@ -114,7 +114,7 @@ const selectedConfig = () => {
 const fixture = () => {
   const base = configuration();
   const selected = selectedConfig();
-  const profile = { id: "isolated", authority, appId: "new-app", configuration: selected };
+  const profile = { appId: "new-app", authority, configuration: selected, id: "isolated" };
   return { base, profile, selected };
 };
 const resolve = (
@@ -123,11 +123,11 @@ const resolve = (
 ) => {
   const { base } = fixture();
   return resolveNativeTargetResourceProfile({
-    base,
-    authority,
     appId: "new-app",
-    resourceProfileId: "isolated",
+    authority,
+    base,
     environment: { PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES: JSON.stringify(profile) },
+    resourceProfileId: "isolated",
     ...overrides,
   });
 };
@@ -142,7 +142,7 @@ describe("native target deployment resource profile", () => {
   it("preserves the legacy base when no profile is selected", () => {
     const { base } = fixture();
     expect(
-      resolveNativeTargetResourceProfile({ base, authority, appId: "other-app", environment: {} }),
+      resolveNativeTargetResourceProfile({ appId: "other-app", authority, base, environment: {} }),
     ).toBe(base);
   });
   it("rejects mismatched owners, apps, selectors and duplicate profiles", () => {
@@ -158,21 +158,21 @@ describe("native target deployment resource profile", () => {
     const { base } = fixture();
     expect(() =>
       resolveNativeTargetResourceProfile({
-        base,
-        authority,
         appId: "new-app",
-        resourceProfileId: "isolated",
+        authority,
+        base,
         environment: {},
+        resourceProfileId: "isolated",
       }),
     ).toThrow();
     expect(() => resolve([{ id: "isolated" }])).toThrow();
     expect(() =>
       resolveNativeTargetResourceProfile({
-        base,
-        authority,
         appId: "new-app",
-        resourceProfileId: "isolated",
+        authority,
+        base,
         environment: { PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES: "{" },
+        resourceProfileId: "isolated",
       }),
     ).toThrow();
   });
