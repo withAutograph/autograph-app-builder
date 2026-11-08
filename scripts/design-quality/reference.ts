@@ -573,10 +573,12 @@ const finiteLiteralEvidence = (
     }
     return true;
   }
-  if (
+  const isTextOrNumericLiteral =
     ts.isStringLiteral(expression) ||
     ts.isNoSubstitutionTemplateLiteral(expression) ||
-    ts.isNumericLiteral(expression) ||
+    ts.isNumericLiteral(expression);
+  if (
+    isTextOrNumericLiteral ||
     expression.kind === ts.SyntaxKind.TrueKeyword ||
     expression.kind === ts.SyntaxKind.FalseKeyword
   ) {

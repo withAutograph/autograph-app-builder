@@ -422,16 +422,27 @@ export type PublicationWorkflowPhase = Extract<
 
 export const isPublicationWorkflowPhase = (
   state: AppBuilderWorkflowState,
-): state is PublicationWorkflowPhase =>
-  state.phase === "publication_pending" ||
-  state.phase === "publication_failed" ||
-  state.phase === "published_local" ||
-  state.phase === "branch_publication_pending" ||
-  state.phase === "branch_publication_failed" ||
-  state.phase === "published_branch_worktree" ||
-  state.phase === "fresh_bootstrap_pending" ||
-  state.phase === "fresh_bootstrap_failed" ||
-  state.phase === "published_fresh_bootstrap";
+): state is PublicationWorkflowPhase => {
+  if (
+    state.phase === "publication_pending" ||
+    state.phase === "publication_failed" ||
+    state.phase === "published_local"
+  ) {
+    return true;
+  }
+  if (
+    state.phase === "branch_publication_pending" ||
+    state.phase === "branch_publication_failed" ||
+    state.phase === "published_branch_worktree"
+  ) {
+    return true;
+  }
+  return (
+    state.phase === "fresh_bootstrap_pending" ||
+    state.phase === "fresh_bootstrap_failed" ||
+    state.phase === "published_fresh_bootstrap"
+  );
+};
 
 /**
  * The workflow aggregate is the sole mutation authority. Every operation that

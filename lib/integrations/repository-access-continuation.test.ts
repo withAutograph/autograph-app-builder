@@ -27,14 +27,19 @@ function memoryStore(): RepositoryAccessContinuationStore & {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async authorize(input) {
-      const record = records.find(
-        (candidate) =>
-          candidate.continuationDigest === input.continuationDigest &&
-          sameAuthority(candidate.authority, input.authority) &&
+      const record = records.find((candidate) => {
+        if (
+          candidate.continuationDigest !== input.continuationDigest ||
+          !sameAuthority(candidate.authority, input.authority)
+        ) {
+          return false;
+        }
+        return (
           candidate.authorizedAt === undefined &&
           candidate.consumedAt === undefined &&
-          candidate.expiresAt > input.now,
-      );
+          candidate.expiresAt > input.now
+        );
+      });
       if (!record) {
         return;
       }
@@ -43,18 +48,24 @@ function memoryStore(): RepositoryAccessContinuationStore & {
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async consume(input) {
-      const record = records.find(
-        (candidate) =>
-          candidate.continuationDigest === input.continuationDigest &&
-          sameAuthority(candidate.authority, input.authority) &&
-          candidate.sessionId === input.sessionId &&
-          candidate.requestId === input.requestId &&
-          candidate.repository.fullName === input.repository.fullName &&
-          candidate.selectedInstallationId === input.selectedInstallationId &&
-          candidate.authorizedAt !== undefined &&
-          candidate.consumedAt === undefined &&
-          candidate.expiresAt > input.now,
-      );
+      const record = records.find((candidate) => {
+        if (
+          candidate.continuationDigest !== input.continuationDigest ||
+          !sameAuthority(candidate.authority, input.authority) ||
+          candidate.sessionId !== input.sessionId ||
+          candidate.requestId !== input.requestId
+        ) {
+          return false;
+        }
+        if (
+          candidate.repository.fullName !== input.repository.fullName ||
+          candidate.selectedInstallationId !== input.selectedInstallationId ||
+          candidate.authorizedAt === undefined
+        ) {
+          return false;
+        }
+        return candidate.consumedAt === undefined && candidate.expiresAt > input.now;
+      });
       if (!record) {
         return;
       }
@@ -77,14 +88,19 @@ function memoryStore(): RepositoryAccessContinuationStore & {
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async listAuthorizedForSession(input) {
-      return records.filter(
-        (candidate) =>
-          sameAuthority(candidate.authority, input.authority) &&
-          candidate.sessionId === input.sessionId &&
+      return records.filter((candidate) => {
+        if (
+          !sameAuthority(candidate.authority, input.authority) ||
+          candidate.sessionId !== input.sessionId
+        ) {
+          return false;
+        }
+        return (
           candidate.authorizedAt !== undefined &&
           candidate.consumedAt === undefined &&
-          candidate.expiresAt > input.now,
-      );
+          candidate.expiresAt > input.now
+        );
+      });
     },
     records,
   };

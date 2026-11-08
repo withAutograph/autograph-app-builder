@@ -595,26 +595,22 @@ const normalizedUserTokens = (authentication: unknown, now: number) => {
         : undefined;
     const expiring =
       expiresAt !== undefined || refreshToken !== undefined || refreshTokenExpiresAt !== undefined;
-    if (
-      expiring &&
-      (expiresAt === undefined ||
-        refreshToken === undefined ||
-        refreshTokenExpiresAt === undefined ||
-        refreshToken.length < 20 ||
-        refreshToken.length > 512 ||
-        /[\0\r\n]/u.test(refreshToken) ||
-        !Number.isFinite(Date.parse(expiresAt)) ||
-        !Number.isFinite(Date.parse(refreshTokenExpiresAt)) ||
-        Date.parse(expiresAt) <= now ||
-        Date.parse(refreshTokenExpiresAt) <= now)
-    ) {
-      throw new Error(invalidToken);
-    }
     if (expiring) {
       if (
         expiresAt === undefined ||
         refreshToken === undefined ||
         refreshTokenExpiresAt === undefined
+      ) {
+        throw new Error(invalidToken);
+      }
+      if (refreshToken.length < 20 || refreshToken.length > 512 || /[\0\r\n]/u.test(refreshToken)) {
+        throw new Error(invalidToken);
+      }
+      if (
+        !Number.isFinite(Date.parse(expiresAt)) ||
+        !Number.isFinite(Date.parse(refreshTokenExpiresAt)) ||
+        Date.parse(expiresAt) <= now ||
+        Date.parse(refreshTokenExpiresAt) <= now
       ) {
         throw new Error(invalidToken);
       }

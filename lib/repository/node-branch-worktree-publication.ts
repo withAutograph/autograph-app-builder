@@ -460,11 +460,13 @@ const publicationRoot = (): string => {
     const state = lstatSync(resolved);
     const canonical = realpathSync(resolved);
     const currentUid = process.geteuid?.();
-    if (
+    const invalidLocation =
       currentUid === undefined ||
       !state.isDirectory() ||
       state.isSymbolicLink() ||
-      canonical !== resolved ||
+      canonical !== resolved;
+    if (
+      invalidLocation ||
       state.uid !== currentUid ||
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (state.mode & 0o777) !== 0o700
@@ -593,10 +595,10 @@ const assertOwnedPublicationFileHandle = async (
   handle: Awaited<ReturnType<typeof open>>,
 ): Promise<void> => {
   const [state, rootState] = await Promise.all([handle.stat(), lstat(publicationRoot())]);
+  const invalidFileIdentity =
+    !state.isFile() || state.uid !== rootState.uid || state.dev !== rootState.dev;
   if (
-    !state.isFile() ||
-    state.uid !== rootState.uid ||
-    state.dev !== rootState.dev ||
+    invalidFileIdentity ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (state.mode & 0o777) !== 0o600 ||
     state.nlink !== 1
@@ -1573,14 +1575,12 @@ export const deriveBranchWorktreePublicationProposal = async (input: {
     "--git-common-dir",
   ]);
   const commonGitDirectory = await realpath(commonGitDirectoryValue.trim());
-  if (
+  const overlapsSource =
     within(root, source.canonicalPath) ||
     within(source.canonicalPath, root) ||
     within(root, source.gitDirectoryPath) ||
-    within(source.gitDirectoryPath, root) ||
-    within(root, commonGitDirectory) ||
-    within(commonGitDirectory, root)
-  ) {
+    within(source.gitDirectoryPath, root);
+  if (overlapsSource || within(root, commonGitDirectory) || within(commonGitDirectory, root)) {
     throw new Error(
       "The builder-owned publication root overlaps the source checkout or Git directories.",
     );
@@ -1880,10 +1880,12 @@ const verifyWorktreeIdentity = async (proposal: BranchWorktreePublicationProposa
     "rev-parse",
     `refs/heads/${proposal.branchName}`,
   ]);
-  if (
+  const changedHead =
     snapshot.headSha !== proposal.baseSha ||
     snapshot.headTree !== proposal.sourceTree ||
-    snapshot.headReference !== `refs/heads/${proposal.branchName}` ||
+    snapshot.headReference !== `refs/heads/${proposal.branchName}`;
+  if (
+    changedHead ||
     snapshot.remoteDigest !== proposal.sourceRemoteDigest ||
     snapshot.contractDigest !== proposal.contractDigest ||
     sourceBranchSha.trim() !== proposal.baseSha
@@ -2149,11 +2151,13 @@ export const verifyBranchWorktreePublication = async (input: {
   });
   await assertPostimages(proposal);
   const snapshot = await verifyWorktreeIdentity(proposal);
-  if (
+  const changedRootOrGitDirectory =
     snapshot.rootIdentity.device !== input.receipt.worktreeRootIdentity.device ||
     snapshot.rootIdentity.inode !== input.receipt.worktreeRootIdentity.inode ||
     snapshot.gitDirectoryPath !== input.receipt.worktreeGitDirectoryPath ||
-    snapshot.gitDirectoryIdentity.device !== input.receipt.worktreeGitDirectoryIdentity.device ||
+    snapshot.gitDirectoryIdentity.device !== input.receipt.worktreeGitDirectoryIdentity.device;
+  if (
+    changedRootOrGitDirectory ||
     snapshot.gitDirectoryIdentity.inode !== input.receipt.worktreeGitDirectoryIdentity.inode ||
     snapshot.indexFileDigest !== input.receipt.worktreeIndexFileDigest ||
     snapshot.statusDigest !== input.receipt.worktreeStatusDigest

@@ -213,35 +213,44 @@ test("uses only a one-value gap shorthand as longhand diagnostic evidence", asyn
   });
   for (const property of ["row-gap", "column-gap"]) {
     expect(
-      styles.observations.some(
-        (item) =>
-          item.property === property &&
-          item.declarations.length === 1 &&
-          item.declarations[0] === "var(--space-1)" &&
+      styles.observations.some((item) => {
+        if (
+          item.property !== property ||
+          item.declarations.length !== 1 ||
+          item.declarations[0] !== "var(--space-1)"
+        ) {
+          return false;
+        }
+        return (
           item.classification === "semantic-token-reference" &&
           item.provenance === "unknown" &&
-          item.verdict === "unassessed",
-      ),
+          item.verdict === "unassessed"
+        );
+      }),
     ).toBe(true);
     expect(
-      styles.observations.some(
-        (item) =>
-          item.property === property &&
-          item.declarations.includes("var(--space-1)") &&
-          item.declarations.includes("var(--space-2)") &&
-          item.classification === "unknown" &&
-          item.verdict === "unassessed",
-      ),
+      styles.observations.some((item) => {
+        if (
+          item.property !== property ||
+          !item.declarations.includes("var(--space-1)") ||
+          !item.declarations.includes("var(--space-2)")
+        ) {
+          return false;
+        }
+        return item.classification === "unknown" && item.verdict === "unassessed";
+      }),
     ).toBe(true);
     expect(
-      styles.observations.some(
-        (item) =>
-          item.property === property &&
-          item.declarations.length === 1 &&
-          item.declarations[0] === "" &&
-          item.classification === "unknown" &&
-          item.verdict === "unassessed",
-      ),
+      styles.observations.some((item) => {
+        if (
+          item.property !== property ||
+          item.declarations.length !== 1 ||
+          item.declarations[0] !== ""
+        ) {
+          return false;
+        }
+        return item.classification === "unknown" && item.verdict === "unassessed";
+      }),
     ).toBe(true);
   }
 });
@@ -273,14 +282,19 @@ test("reports a unique escaped utility token as a shared reviewer candidate", as
     sharedTokens,
   );
   expect(
-    styles.observations.some(
-      (item) =>
-        item.property === "box-shadow" &&
-        item.provenance === "unknown" &&
-        item.verdict === "unassessed" &&
+    styles.observations.some((item) => {
+      if (
+        item.property !== "box-shadow" ||
+        item.provenance !== "unknown" ||
+        item.verdict !== "unassessed"
+      ) {
+        return false;
+      }
+      return (
         item.originCandidate?.provenance === "shared" &&
-        item.originCandidate.source.path === "packages/design-systems/RecordList.tsx",
-    ),
+        item.originCandidate.source.path === "packages/design-systems/RecordList.tsx"
+      );
+    }),
   ).toBe(true);
   expect(styles.limitations).toContain(
     "No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.",

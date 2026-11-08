@@ -138,17 +138,16 @@ export function readPasskeyOnboardingConfig(
   const localAuthEmulation = environment.APP_BUILDER_LOCAL_AUTH_EMULATION === "1";
   const localPort = environment.APP_BUILDER_LOCAL_PORT ?? "3001";
   const isHttps = origin.startsWith("https://");
-  if (
-    (!origin.startsWith("http://") && !isHttps) ||
-    (isHttps &&
-      (!/^\d{2,5}$/u.test(localPort) ||
-        origin !== `https://localhost:${localPort}` ||
-        !localProviderEmulation ||
-        !localAuthEmulation))
-  ) {
-    throw new Error(
-      "HTTPS loopback passkey onboarding requires explicit local provider and authentication emulation gates.",
-    );
+  const invalidLoopbackOrigin =
+    "HTTPS loopback passkey onboarding requires explicit local provider and authentication emulation gates.";
+  if (!origin.startsWith("http://") && !isHttps) {
+    throw new Error(invalidLoopbackOrigin);
+  }
+  if (isHttps && (!/^\d{2,5}$/u.test(localPort) || origin !== `https://localhost:${localPort}`)) {
+    throw new Error(invalidLoopbackOrigin);
+  }
+  if (isHttps && (!localProviderEmulation || !localAuthEmulation)) {
+    throw new Error(invalidLoopbackOrigin);
   }
   return {
     deploymentId: "local",

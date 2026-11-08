@@ -92,13 +92,9 @@ const sameOriginConfigSchema = z
   })
   .transform((config, context) => {
     const baseUrl = new URL(config.baseUrl);
-    if (
-      baseUrl.username ||
-      baseUrl.password ||
-      baseUrl.search ||
-      baseUrl.hash ||
-      (baseUrl.pathname !== "/" && baseUrl.pathname !== "")
-    ) {
+    const hasCredentialsOrQuery =
+      baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash;
+    if (hasCredentialsOrQuery || (baseUrl.pathname !== "/" && baseUrl.pathname !== "")) {
       context.addIssue({
         code: "custom",
         message: "The canonical Eve API must use a credential-free HTTPS origin.",
