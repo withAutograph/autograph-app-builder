@@ -124,9 +124,9 @@ const makeRecord = () => {
   });
 };
 const capabilities = {
+  lifecycle: "controlled-lifecycle",
   suiteSelector: "controlled-selector",
   transport: "controlled-transport",
-  lifecycle: "controlled-lifecycle",
 };
 const changedAuthority: { label: string; change: (record: ContinuityRecord) => void }[] = [
   {

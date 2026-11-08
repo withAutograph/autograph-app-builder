@@ -20,7 +20,7 @@ import { privateApplyDenialEvents } from "../eve/private-apply-denial.test-fixtu
 import { observePrivateApplyDenials } from "../eve/private-apply-denial-evidence";
 
 const observe = (values: ReturnType<typeof privateApplyDenialEvents>) =>
-  observePrivateApplyDenials({ sessionId: "owned", calls: ["denied-call"], events: values });
+  observePrivateApplyDenials({ calls: ["denied-call"], events: values, sessionId: "owned" });
 
 const scope = {
   appId: "app",
@@ -140,15 +140,15 @@ it.each(["ignored", "invalid"] as const)(
     const actual = resolveApprovalOutcome(
       status === "ignored"
         ? undefined
-        : { requestId: "denied-request", optionId: "not-a-valid-approval" },
+        : { optionId: "not-a-valid-approval", requestId: "denied-request" },
     );
     expect(actual.approved).toBe(false);
     expect(actual.status).toBe(status);
     expect(
       observePrivateApplyDenials({
-        sessionId: "owned",
         calls: ["denied-call"],
         events: privateApplyDenialEvents("denied-call", "denied-request", status),
+        sessionId: "owned",
       }),
     ).toMatchObject([{ outcome: `${status}-not-run` }]);
     await contextStorage.run(new ContextContainer(), async () => {

@@ -3,7 +3,7 @@ import { withBuilderDestinationGuidance } from "./builder-destination-guidance";
 
 it("offers the existing session's ordinary destination page without granting an effect", () => {
   const result = withBuilderDestinationGuidance(
-    { status: "blocked", code: "builder_destination_required" },
+    { code: "builder_destination_required", status: "blocked" },
     "saved/session?fragment#",
   );
   expect(result).toMatchObject({
@@ -16,7 +16,7 @@ it("offers the existing session's ordinary destination page without granting an 
 
 it("keeps the selected destination when only runtime configuration is missing", () => {
   const result = withBuilderDestinationGuidance(
-    { status: "blocked", code: "builder_destination_configuration_required" },
+    { code: "builder_destination_configuration_required", status: "blocked" },
     "saved-session",
   );
   expect(result).not.toHaveProperty("destinationPath");
@@ -25,16 +25,16 @@ it("keeps the selected destination when only runtime configuration is missing", 
 
 it.each([
   { status: "planned" },
-  { status: "pending", code: "builder_destination_required" },
-  { status: "blocked", code: "authorization_required" },
-  { status: "blocked", code: "reconciliation_required" },
+  { code: "builder_destination_required", status: "pending" },
+  { code: "authorization_required", status: "blocked" },
+  { code: "reconciliation_required", status: "blocked" },
 ])("retains other outcomes without destination guidance (%j)", (result) => {
   expect(withBuilderDestinationGuidance(result, "saved-session")).toBe(result);
 });
 
 it("keeps domain ambiguity as a supported selection prerequisite without authorizing release", () => {
   const result = withBuilderDestinationGuidance(
-    { status: "blocked", code: "builder_public_domain_selection_required" },
+    { code: "builder_public_domain_selection_required", status: "blocked" },
     "saved-session",
   );
   expect(result).toHaveProperty(
