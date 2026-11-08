@@ -167,9 +167,10 @@ const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
       applicationSourceImport: applicationSourceImportPlanningSchema.optional(),
     })
     .superRefine((proposal, context) => {
+      const noChangesOrUpgrade =
+        proposal.iteration.changes.length === 0 && proposal.frameworkUpgrade === undefined;
       if (
-        proposal.iteration.changes.length === 0 &&
-        proposal.frameworkUpgrade === undefined &&
+        noChangesOrUpgrade &&
         proposal.sourceReconciliation === undefined &&
         proposal.privateCompute === undefined &&
         proposal.applicationSourceImport === undefined
@@ -540,12 +541,15 @@ export const executeTargetIdentityAndPlanning = async (input: {
     input.localSourceReconciliation === undefined
       ? undefined
       : localSourceReconciliationSchema.parse(input.localSourceReconciliation);
-  if (
+  const unauthorizedLocalSource =
     sourceReconciliation !== undefined &&
     (!canAutoSelectDevelopmentSource(input.environment) ||
-      sourceReconciliation.appId !== input.appId ||
-      sourceReconciliation.appSpecDigest !== input.appSpecDigest ||
-      sourceReconciliation.sourceReceiptDigest !== input.sourceReceipt?.digest)
+      sourceReconciliation.appId !== input.appId);
+  if (
+    unauthorizedLocalSource ||
+    (sourceReconciliation !== undefined &&
+      (sourceReconciliation.appSpecDigest !== input.appSpecDigest ||
+        sourceReconciliation.sourceReceiptDigest !== input.sourceReceipt?.digest))
   ) {
     throw new Error("Local source reconciliation does not belong to this planning input.");
   }
@@ -579,10 +583,10 @@ export const executeTargetIdentityAndPlanning = async (input: {
           await (input.resolveFrameworkVersions ?? resolveLatestFrameworkVersions)(),
         )
       : undefined;
+  const noRequestedChangesOrUpgrade =
+    existingApplication && input.existingAppChanges === undefined && frameworkUpgrade === undefined;
   if (
-    existingApplication &&
-    input.existingAppChanges === undefined &&
-    frameworkUpgrade === undefined &&
+    noRequestedChangesOrUpgrade &&
     sourceReconciliation === undefined &&
     privateCompute === undefined &&
     applicationSourceImport === undefined
@@ -636,9 +640,9 @@ export const executeTargetIdentityAndPlanning = async (input: {
       }
       changes.push({ ...content, path: requested.path });
     }
+    const noChangesOrUpgrade = changes.length === 0 && frameworkUpgrade === undefined;
     if (
-      changes.length === 0 &&
-      frameworkUpgrade === undefined &&
+      noChangesOrUpgrade &&
       sourceReconciliation === undefined &&
       privateCompute === undefined &&
       applicationSourceImport === undefined

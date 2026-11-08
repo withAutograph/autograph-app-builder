@@ -20,26 +20,17 @@ const previewOAuthConfigSchema = z
         path: ["issuer"],
       });
     }
-    if (
-      issuer.username ||
-      issuer.password ||
-      issuer.search ||
-      issuer.hash ||
-      issuer.pathname !== "/api/auth"
-    ) {
+    const issuerHasExtras = issuer.username || issuer.password || issuer.search || issuer.hash;
+    if (issuerHasExtras || issuer.pathname !== "/api/auth") {
       context.addIssue({
         code: "custom",
         message: "Preview OAuth issuer must be the exact /api/auth URL.",
         path: ["issuer"],
       });
     }
-    if (
-      resource.username ||
-      resource.password ||
-      resource.search ||
-      resource.hash ||
-      resource.pathname !== "/mcp"
-    ) {
+    const resourceHasExtras =
+      resource.username || resource.password || resource.search || resource.hash;
+    if (resourceHasExtras || resource.pathname !== "/mcp") {
       context.addIssue({
         code: "custom",
         message: "Preview OAuth resource must be the exact /mcp URL.",
@@ -113,12 +104,14 @@ export function buildPreviewMcpOAuthOptions(input: {
     clientRegistrationRequirePKCE: true,
     consentPage: "/auth/consent",
     customAccessTokenClaims: async ({ user, referenceId, resources }) => {
+      const inactiveMessage = "Preview OAuth membership is not active.";
+      if (user === null || user === undefined || referenceId === undefined) {
+        throw new Error(inactiveMessage);
+      }
+      if (resources?.length !== 1 || resources[0] !== config.resource) {
+        throw new Error(inactiveMessage);
+      }
       if (
-        user === null ||
-        user === undefined ||
-        referenceId === undefined ||
-        resources?.length !== 1 ||
-        resources[0] !== config.resource ||
         !(await input.membership.isActiveMember({
           audience: config.resource,
           issuer: config.issuer,
@@ -126,7 +119,7 @@ export function buildPreviewMcpOAuthOptions(input: {
           workspaceId: referenceId,
         }))
       ) {
-        throw new Error("Preview OAuth membership is not active.");
+        throw new Error(inactiveMessage);
       }
       return {
         nbf: Math.floor(now() / 1000),

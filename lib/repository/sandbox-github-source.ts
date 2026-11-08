@@ -81,11 +81,13 @@ const parseRemote = function parseRemote(input: string) {
   const match = /^\/(?<owner>[A-Za-z0-9_.-]{1,100})\/(?<repo>[A-Za-z0-9_.-]{1,100})\.git$/u.exec(
     remote.pathname,
   );
-  if (
+  const invalidOrigin =
     remote.origin !== "https://github.com" ||
     remote.username !== "" ||
     remote.password !== "" ||
-    remote.search !== "" ||
+    remote.search !== "";
+  if (
+    invalidOrigin ||
     remote.hash !== "" ||
     match === null ||
     !REPOSITORY.test(match[1] ?? "") ||
@@ -420,22 +422,17 @@ const inspectSelectedCheckout = (
   expected: { repository: string; sourceSha?: string; sourceTree?: string },
 ) => {
   const [sourceSha, sourceTree, remote] = stdout.trim().split(/\s+/u);
-  if (
-    sourceSha === undefined ||
-    sourceTree === undefined ||
-    remote === undefined ||
-    !SHA.test(sourceSha) ||
-    !SHA.test(sourceTree)
-  ) {
+  const missingCheckoutIdentity =
+    sourceSha === undefined || sourceTree === undefined || remote === undefined;
+  if (missingCheckoutIdentity || !SHA.test(sourceSha) || !SHA.test(sourceTree)) {
     throw new Error(
       "The selected GitHub checkout inspection did not return a commit and tree revision. Check that the provider created a complete Git checkout, then retry this session.",
     );
   }
-  if (
-    parseRemote(remote) !== parseRemote(expected.repository) ||
+  const hasUnexpectedRevision = () =>
     (expected.sourceSha !== undefined && sourceSha !== expected.sourceSha) ||
-    (expected.sourceTree !== undefined && sourceTree !== expected.sourceTree)
-  ) {
+    (expected.sourceTree !== undefined && sourceTree !== expected.sourceTree);
+  if (parseRemote(remote) !== parseRemote(expected.repository) || hasUnexpectedRevision()) {
     throw new Error(
       `The sandbox checkout does not match the selected GitHub source. Expected ${parseRemote(expected.repository)}${expected.sourceSha === undefined ? "" : ` at ${expected.sourceSha}`}; observed ${parseRemote(remote)} at ${sourceSha}. Select the intended repository or start a new Builder session for this checkout.`,
     );
@@ -664,20 +661,27 @@ const reinspectGitHubSourceWorkspace = async function reinspectGitHubSourceWorks
     snapshot?: unknown;
   };
   const snapshot = parseCanonicalTemplateSnapshot(inspection.snapshot);
-  if (
+  const checkoutMismatch =
     inspection.remote !== parseRemote(input.remote) ||
     inspection.resolvedRef !== input.expectedSha ||
     inspection.detached !== true ||
-    inspection.hasGitmodules !== false ||
+    inspection.hasGitmodules !== false;
+  const hasUnsafeGitState = () =>
     !Array.isArray(inspection.gitlinks) ||
     inspection.gitlinks.length !== 0 ||
     inspection.manifestMatches !== true ||
-    inspection.checksumsMatch !== true ||
+    inspection.checksumsMatch !== true;
+  const hasDifferentSourceIdentity = () =>
     inspection.workspaceDigest !== prepared.workspace.workspaceDigest ||
     snapshot.sourceSha !== input.expectedSha ||
-    snapshot.sourceTree !== input.expectedTree ||
-    snapshot.dirtyPaths.length !== 0 ||
-    JSON.stringify(snapshot) !== JSON.stringify(storedSnapshot)
+    snapshot.sourceTree !== input.expectedTree;
+  const hasSnapshotDrift = () =>
+    snapshot.dirtyPaths.length !== 0 || JSON.stringify(snapshot) !== JSON.stringify(storedSnapshot);
+  if (
+    checkoutMismatch ||
+    hasUnsafeGitState() ||
+    hasDifferentSourceIdentity() ||
+    hasSnapshotDrift()
   ) {
     throw new Error("The GitHub source workspace drifted.");
   }

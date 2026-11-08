@@ -32,9 +32,9 @@ async function readPrivateRequest(path: string): Promise<unknown> {
     throw new Error("Activation request path must be canonical and unsymlinked.");
   }
   const metadata = await stat(path);
+  const invalidFileOwner = !metadata.isFile() || metadata.uid !== process.getuid?.();
   if (
-    !metadata.isFile() ||
-    metadata.uid !== process.getuid?.() ||
+    invalidFileOwner ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (metadata.mode & 0o077) !== 0 ||
     metadata.size === 0 ||
@@ -307,11 +307,13 @@ function createStore(sql: Sql): PreviewActivationStore {
           accountRowsAffected = 1;
         } else {
           const [account] = accounts;
-          if (
+          const invalidAccountIdentity =
             accounts.length !== 1 ||
             account?.id !== accountId ||
             account.issuer !== "local:oauth:github" ||
-            account.account_id !== input.githubAccountId ||
+            account.account_id !== input.githubAccountId;
+          if (
+            invalidAccountIdentity ||
             account.provider_id !== "github" ||
             account.user_id !== input.userId ||
             account.password !== null
@@ -344,13 +346,9 @@ if (argv[0] === "plan") {
   const request = previewActivationPlanRequestSchema.parse(await readPrivateRequest(argv[2]));
   process.stdout.write(`${JSON.stringify(planPreviewActivation(request))}\n`);
 } else if (argv[0] === "apply") {
-  if (
-    argv.length !== 7 ||
-    argv[1] !== "--expected-action" ||
-    argv[3] !== "--database-url-fd" ||
-    argv[4] !== "0" ||
-    argv[5] !== "--request-file"
-  ) {
+  const invalidApplyOptions =
+    argv.length !== 7 || argv[1] !== "--expected-action" || argv[3] !== "--database-url-fd";
+  if (invalidApplyOptions || argv[4] !== "0" || argv[5] !== "--request-file") {
     throw new Error("Preview activation apply arguments were invalid.");
   }
   const request = previewActivationApplyRequestSchema.parse(await readPrivateRequest(argv[6]));
