@@ -319,6 +319,7 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       const plan = hostedContinuityPlanSchema.parse({
         ...selected,
         intentId,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(predecessor === undefined ? {} : { predecessorIntentId: predecessor.requestId }),
         planRef: `_protected-operator/continuity-plans/${intentId}`,
       });

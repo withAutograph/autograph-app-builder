@@ -34,6 +34,7 @@ export async function completeAuthorization(
       redirect_uri: parsed.authorization.redirect_uri,
       scope: parsed.authorization.scope,
       state: parsed.authorization.state,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(parsed.authorization.code_challenge && parsed.authorization.code_challenge_method
         ? {
             code_challenge: parsed.authorization.code_challenge,

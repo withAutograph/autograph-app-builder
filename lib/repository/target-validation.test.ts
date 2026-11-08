@@ -1077,6 +1077,7 @@ cat "$log"
 rm -f "$log"
 exit "$status"`,
         env: {
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(alreadyCompiled ? { APP_RUNTIME_ALREADY_COMPILED: "1" } : {}),
           APP_RUNTIME_STATE_DIR: path.posix.dirname(
             localRuntimeEnvironmentPath("/workspace/repository", "example"),

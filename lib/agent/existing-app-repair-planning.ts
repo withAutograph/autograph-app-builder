@@ -316,7 +316,9 @@ export const priorOwnedAppDraftPublication = (
       proposal,
       installationId: delivery.installationId,
       reviewed,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(appChangedPaths.length === 0 ? {} : { appChangedPaths }),
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(delivery.reconciliation === undefined ? {} : { reconciliation: delivery.reconciliation }),
     };
   }

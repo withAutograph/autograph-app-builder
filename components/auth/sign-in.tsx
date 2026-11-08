@@ -131,6 +131,7 @@ export function SignIn({
     signInEmail({
       email,
       password,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(emailAndPassword?.rememberMe === true ? { rememberMe } : {}),
       fetchOptions,
     });

@@ -120,6 +120,7 @@ vi.mock("@/lib/provisioning/deployment", () => ({
     };
     return Response.json({
       appId: "server-action-app",
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(requestInput.deploymentAccess === undefined
         ? {}
         : { deploymentAccess: requestInput.deploymentAccess }),

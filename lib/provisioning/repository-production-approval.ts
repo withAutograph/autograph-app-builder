@@ -18,6 +18,7 @@ export const repositoryProductionApprovalDigest = (
   repositoryProductionDigest({
     scope,
     creatorRoles: [...new Set(intent.creatorRoles)].toSorted(),
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(intent.creatorEmail === undefined
       ? {}
       : { creatorEmail: intent.creatorEmail.toLowerCase() }),

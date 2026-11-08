@@ -711,9 +711,11 @@ describe("closed GitHub publication contract", () => {
         kind: change.kind,
         path: change.path,
         ...Object.fromEntries(Object.entries(change).toReversed()),
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(change.before === undefined
           ? {}
           : { before: Object.fromEntries(Object.entries(change.before).toReversed()) }),
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(change.after === undefined
           ? {}
           : { after: Object.fromEntries(Object.entries(change.after).toReversed()) }),

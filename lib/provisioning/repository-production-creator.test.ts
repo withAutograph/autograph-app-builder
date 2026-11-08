@@ -50,6 +50,7 @@ const harness = (
     revision: 0,
     record: initialRepositoryProductionRecord(targetScope, {
       creatorRoles: ["editor"],
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(options.creatorEmail === undefined ? {} : { creatorEmail: options.creatorEmail }),
       sessionId: "original-session",
       sourceSha: "a".repeat(40),

@@ -1189,6 +1189,7 @@ export const createHostedOperatorControlPlane = async (input: {
         throw new HostedOperatorError("resource_mismatch");
       }
       const link = operatorRealmIdentityLinkSchema.parse({
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(publicRealm === undefined ? {} : { publicRelease: publicRealm.binding }),
         audience: linkInput.audience,
         authResourceId: linkInput.authResourceId,
@@ -1257,6 +1258,7 @@ export const createHostedOperatorControlPlane = async (input: {
         organizationId: linkInput.organizationId,
         ownerSessionId: linkInput.context.target.sessionId,
         purpose: "realm-identity-link-nonce-v1",
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(linkInput.browserSession === undefined
           ? {}
           : { browserSession: linkInput.browserSession }),
@@ -3062,6 +3064,7 @@ export const createHostedOperatorControlPlane = async (input: {
         );
         const resource = preparation.accountPlan.authDatabase;
         return {
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(bootstrap === undefined || assertBootstrapCurrent === undefined
             ? {}
             : { bootstrap, assertBootstrapCurrent }),

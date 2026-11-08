@@ -110,6 +110,7 @@ export const createHostedOperatorAuthProposal =
             JSON.stringify({
               catalogAppIds: configuration.catalogAppIds,
               resource,
+              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
               ...(input.directMigrationUrl === undefined
                 ? {}
                 : { directMigrationUrlFile: credentialPath }),

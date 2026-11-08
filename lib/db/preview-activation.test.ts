@@ -78,7 +78,9 @@ const activationDatabase = async () => {
       return Promise.resolve(
         query.all(...bindings).map((row) => ({
           ...row,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...("email_verified" in row ? { email_verified: row.email_verified === 1 } : {}),
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...("active" in row ? { active: row.active === 1 } : {}),
         })),
       );

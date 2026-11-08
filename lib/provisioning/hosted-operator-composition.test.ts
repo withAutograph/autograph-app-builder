@@ -3205,6 +3205,7 @@ describe("existing populated Auth workflow planning", () => {
             organizationId: null,
             nonceSha256: "a".repeat(64),
             expiresAt: "2027-01-01T00:00:00Z",
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(identityState === "consumed"
               ? {
                   consumedAt: "2026-10-15T12:00:00Z",

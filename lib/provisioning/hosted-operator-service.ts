@@ -3044,6 +3044,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 fenceGeneration,
                 gatewayDeliveryCandidates: requireOperator(record).gatewayDeliveryCandidates,
                 gatewayDeliveryProvenance,
+                // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
                 ...(retainedAppDelivery === undefined
                   ? {}
                   : {
@@ -3054,7 +3055,9 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                         planDigest: retainedAppDelivery.planDigest,
                       },
                     }),
+                // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
                 ...(renewalDeliveryProvenance.length === 0 ? {} : { renewalDeliveryProvenance }),
+                // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
                 ...(renewalBindingProvenance === undefined ? {} : { renewalBindingProvenance }),
                 gatewayEnvironmentRows: requireOperator(record).gatewayEnvironment,
                 managedEnvironment:

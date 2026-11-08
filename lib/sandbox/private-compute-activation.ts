@@ -79,6 +79,7 @@ export const activatePrivateComputeProfile = async <T extends PrivateComputeNati
       sessionId: input.sessionId,
       profileId: profile.id,
       phase,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(phase === "ready" ? { completedByCallId: input.callId } : {}),
     });
     previous = await ports.readActivation();

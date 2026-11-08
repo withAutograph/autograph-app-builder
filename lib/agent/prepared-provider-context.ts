@@ -536,6 +536,7 @@ export function createPreparedAppContextReader(input: {
         github: github
           ? {
               status: github.status,
+              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
               ...(github.status === "ready"
                 ? {
                     scope: {
@@ -545,12 +546,14 @@ export function createPreparedAppContextReader(input: {
                     },
                   }
                 : {}),
+              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
               ...(github.status === AUTHORIZATION_REQUIRED
                 ? {
                     action: "reconnect" as const,
                     reconnectUrl: reconnectUrl("github"),
                   }
                 : {}),
+              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
               ...(github.status === PROVIDER_UNAVAILABLE
                 ? { action: "retry" as const, retryable: true }
                 : {}),
@@ -577,6 +580,7 @@ export function createPreparedAppContextReader(input: {
       repository: {
         private: intent.repository.private,
         requestedName: intent.repository.requestedName,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(repository ? { fullName: repository } : {}),
       },
       resources: {

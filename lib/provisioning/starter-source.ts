@@ -103,6 +103,7 @@ function restrictedGit(args: string[], askpass?: { credentialFile: string; askpa
       ],
       {
         env: {
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(askpass === undefined
             ? {}
             : {

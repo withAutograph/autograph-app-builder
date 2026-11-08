@@ -201,6 +201,7 @@ async function exchangeLocalEmulatedOAuthCode(input: {
         client_id: input.clientId,
         client_secret: input.clientSecret,
         code: input.code,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(input.codeVerifier ? { code_verifier: input.codeVerifier } : {}),
         redirect_uri: input.redirectURI,
       }),

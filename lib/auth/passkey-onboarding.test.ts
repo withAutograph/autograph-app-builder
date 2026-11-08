@@ -125,6 +125,7 @@ async function requestRegistrationVerification(
     {
       body: JSON.stringify({
         response: {},
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(createSession ? { createSession } : {}),
       }),
       headers: requestHeaders,

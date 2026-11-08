@@ -3110,6 +3110,7 @@ describe("Realm delegation at operator effect boundaries", () => {
           nonceSha256: "a".repeat(64),
           organizationId: null,
           ownerSessionId: ownerContext.sessionId,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(expired
             ? {}
             : { consumedAt: expiresAt, proofRef: "private-proof", proofSha256: "f".repeat(64) }),
@@ -3725,6 +3726,7 @@ describe("attached direct-session standard destination", () => {
             name: "apps-vendor-onboarding",
             framework: "services",
             rootDirectory: ".",
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(revision ? { link: { repoId: 200, type: "github" } } : {}),
           }),
         ),

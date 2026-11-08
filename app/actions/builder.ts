@@ -198,9 +198,11 @@ function provisioningInput(
     deploymentAccess: "public-app",
     operation,
     providers: {
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(input.form.githubInstallationId === undefined
         ? {}
         : { githubInstallationId: input.form.githubInstallationId }),
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(input.form.vercelInstallationId === undefined
         ? {}
         : { vercelInstallationId: input.form.vercelInstallationId }),
@@ -265,10 +267,12 @@ async function createContinuationHandoff(
     creationRequestId: input.creationRequestId,
     destination: input.form.buildDestination === "cursor" ? "cursor" : "codex",
     version: 1,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(provisioning.requestDigest === "0".repeat(64)
       ? {}
       : { provisioningRequestId: provisioning.requestId }),
     appName: input.form.appName,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(input.form.sourceCandidate === undefined
       ? {}
       : { sourceCandidate: input.form.sourceCandidate }),
@@ -409,6 +413,7 @@ export async function continueHandoffProvisioning(
       }
       await provisionBuilderProvider({
         appName: data.intent.appName,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(data.intent.provisioning?.deploymentAccess === undefined
           ? {}
           : { deploymentAccess: data.intent.provisioning.deploymentAccess }),

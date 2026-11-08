@@ -435,6 +435,7 @@ export const createOperatorArtifactPublication = (
         }
         return {
           artifactRef: expected.artifactRef,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(envelope.description === undefined ? {} : { description: envelope.description }),
           // SAFETY: Exactly every member has been decoded and checked above.
           // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- All closed worker release members have been checked.

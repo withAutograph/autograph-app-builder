@@ -85,6 +85,7 @@ const fixture = (configurationId?: string) => {
         row = {
           id: "env-id",
           ...parsed,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(configurationId === undefined ? {} : { configurationId }),
         };
       } else {
@@ -92,6 +93,7 @@ const fixture = (configurationId?: string) => {
         boundary = {
           id: "boundary-id",
           ...parsed,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(configurationId === undefined ? {} : { configurationId }),
         };
         if (loseBoundaryResponse) {
@@ -359,6 +361,7 @@ describe("Production runtime credential binding", () => {
         type: "encrypted",
         value: runtimeUrl,
         decrypted: true,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(target === undefined ? {} : { target }),
       });
       expect((await f.service.reconcile(f.context, runtimeUrl)).state).toBe("applied");

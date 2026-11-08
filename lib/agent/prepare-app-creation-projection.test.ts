@@ -125,6 +125,7 @@ const fixture = (phase: "planned" | "identity_resolved", compute = profile()) =>
     dependencyReceipt: { digest: "dependency" },
     identityReceipt: { digest: "identity" },
     preparedByCallId: "prepared",
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(phase === "planned"
       ? { proposal: { digest: "frozen-proposal", target: { privateCompute: compute } } }
       : {}),
@@ -260,7 +261,9 @@ const prepareRecoveryFixture = async (
   const base = {
     ...applied,
     phase,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(phase === "validation_failed" ? { validationFailure: { reason: "command-failed" } } : {}),
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(phase === "reviewed"
       ? {
           validationReceipt: {},

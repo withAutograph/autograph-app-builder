@@ -48,6 +48,7 @@ export const readPublicReleaseIntegrationRemoval = async (input: {
     await ports.readPreflight({
       invocation: input.invocation,
       sourceCapability: input.sourceCapability,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(input.expected === undefined ? {} : { expected: input.expected }),
       assertCurrent: input.assertCurrent,
     }),

@@ -851,6 +851,7 @@ async function spoolObservedSession(input: {
     const observation = await input.transport({
       adapterSessionId: input.adapterSessionId,
       allowPartialObservation: input.allowPartialObservation ?? false,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(input.nativeObservationState === undefined
         ? {}
         : { nativeObservationState: input.nativeObservationState }),
@@ -1678,6 +1679,7 @@ export function createHostedEveSessionService(input: {
       const page = await input.store.readUnsettledResponseOperations({
         principal,
         sessionId,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(cursor === undefined ? {} : { cursor }),
         limit: 100,
       });
@@ -2829,7 +2831,9 @@ export function createHostedEveSessionService(input: {
         }
         const summary = eveSessionResultSchema.parse(summaryStatus);
         const observed = await input.store.observeSessionPaged({
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(summary.uiPreview?.appId === undefined ? {} : { appId: summary.uiPreview.appId }),
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(explicitSendOperationId === undefined ? {} : { explicitSendOperationId }),
           events: readSpoolEvents(spool),
           expectedCheckpointDigest: current.checkpointDigest,
@@ -3369,6 +3373,7 @@ export function createHostedEveSessionService(input: {
             throw new HostedSessionRecoveryUnavailableError();
           }
           const stored = await input.store.observeSessionPaged({
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(explicitSendOperationId === undefined ? {} : { explicitSendOperationId }),
             events: readCheckpointEvents(session),
             expectedCheckpointDigest: session.checkpointDigest,
@@ -3528,9 +3533,11 @@ export function createHostedEveSessionService(input: {
             await assertTerminalReadAuthority(activationFailure);
           }
           const stored = await input.store.observeSessionPaged({
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(activationFailure !== undefined || explicitSendOperationId === undefined
               ? {}
               : { explicitSendOperationId }),
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(summary.uiPreview?.appId === undefined ? {} : { appId: summary.uiPreview.appId }),
             events: orderedEvents,
             expectedCheckpointDigest: session.checkpointDigest,
@@ -3637,6 +3644,7 @@ export function createHostedEveSessionService(input: {
       if (idleCheckpointDue && legacyCheckpoint !== undefined) {
         const checkpoint = session.checkpoint ?? legacyCheckpoint;
         const checkpointed = await input.store.observeSession?.({
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(session.appId === undefined ? {} : { appId: session.appId }),
           checkpoint,
           nowEpochMs: observedAt,
@@ -3696,6 +3704,7 @@ export function createHostedEveSessionService(input: {
         throw new HostedSessionRecoveryUnavailableError();
       }
       const observed = await input.store.observeSession?.({
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(session.appId === undefined ? {} : { appId: session.appId }),
         checkpoint: session.checkpoint,
         nowEpochMs: now(),
@@ -4621,6 +4630,7 @@ export function createHostedEveSessionService(input: {
               };
               const recorded = await input.store.recordSendDelivery?.({
                 delivery: marker,
+                // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
                 ...(input.store.readUnsettledSendAcknowledgements === undefined
                   ? {}
                   : { cancellationRevisionAtDispatch: binding.cancellationRevision ?? 0 }),
@@ -4981,6 +4991,7 @@ export function createHostedEveSessionService(input: {
               };
             },
             kind: "start",
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(recoverySource === undefined ? {} : { nativeRecovery: recoverySource }),
             request,
             resumeSessionId: existing.sessionId,
@@ -5137,6 +5148,7 @@ export function createHostedEveSessionService(input: {
                   const summary = eveSessionResultSchema.parse(summaryStatus);
                   const replaced = await input.store.replaceSessionAdapterPaged({
                     adapterSessionId: response.adapterSessionId,
+                    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
                     ...(summary.uiPreview?.appId === undefined
                       ? {}
                       : { appId: summary.uiPreview.appId }),
@@ -5194,6 +5206,7 @@ export function createHostedEveSessionService(input: {
               try {
                 const replaced = await input.store.replaceSessionAdapterPaged({
                   adapterSessionId: response.adapterSessionId,
+                  // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
                   ...(result.uiPreview?.appId === undefined
                     ? {}
                     : { appId: result.uiPreview.appId }),
@@ -5235,6 +5248,7 @@ export function createHostedEveSessionService(input: {
             const replaced = hostedSessionRecordSchema.parse(
               await replaceSessionAdapter.call(input.store, {
                 adapterSessionId: response.adapterSessionId,
+                // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
                 ...(result.uiPreview?.appId === undefined ? {} : { appId: result.uiPreview.appId }),
                 checkpoint,
                 expectedAdapterGeneration: existing.adapterGeneration,

@@ -277,6 +277,7 @@ export const createPostgresCentralHostStore = (database: Database) => {
         planDigest: centralHostPlanDigest(plan),
         effects: Object.fromEntries(plan.effects.map((effect) => [effect, "idle"])),
         attempts: {},
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(plan.kind === CENTRAL_HOST_SETUP_KIND ? { nativeDeployment: { status: "empty" } } : {}),
       });
       const operationRef = centralHostOperationRef(plan);

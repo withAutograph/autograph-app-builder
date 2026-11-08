@@ -76,9 +76,11 @@ const preparationPlanningAction = (input: HostedRuntimeInput, reason: string) =>
     environment: input.environment,
     operation: "prepare" as const,
     projectId: input.projectId,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(input.plan.normalActorProgram === undefined
       ? {}
       : { normalActorProgram: input.plan.normalActorProgram }),
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(input.plan.authSignupPolicy === undefined
       ? {}
       : {
@@ -86,6 +88,7 @@ const preparationPlanningAction = (input: HostedRuntimeInput, reason: string) =>
             version: input.plan.authSignupPolicy.version,
             organizationId: input.plan.authSignupPolicy.organizationId,
             eligibility: input.plan.authSignupPolicy.eligibility,
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(input.plan.authSignupPolicy.allowedEmails === undefined
               ? {}
               : { allowedEmails: input.plan.authSignupPolicy.allowedEmails }),

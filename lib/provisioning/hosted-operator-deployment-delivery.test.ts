@@ -893,6 +893,7 @@ const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
   const original = hostedOperatorPlanSchema.parse({
     ...gatewayPlan,
     stage: "app",
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(addAppGrant
       ? {}
       : {
@@ -957,6 +958,7 @@ const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
       }
       return effect;
     }),
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(addAppGrant
       ? {
           appTrustedSources: {

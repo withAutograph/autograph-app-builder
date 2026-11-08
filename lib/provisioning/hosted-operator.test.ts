@@ -482,6 +482,7 @@ const completedOwnerBootstrap = async (normalActors = false) => {
       { description: "Prepare Auth", id: "install:auth", kind: "install" },
       { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
     ],
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(normalActors
       ? {
           normalActorProgram: {

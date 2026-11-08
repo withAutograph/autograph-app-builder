@@ -765,6 +765,7 @@ export const createRepositoryProductionNativeHandler =
                 label: id,
               })),
               canManage: true,
+              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
               ...(known.description
                 ? {
                     appUrl: new URL(

@@ -54,6 +54,7 @@ export const createHostedOperatorApprovalObserver = (input: {
     config: { baseUrl: input.builderOrigin },
     workloadIdentity: input.workloadIdentity,
     verifyReadAuthority: input.verifyReadAuthority,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(input.fetchImplementation === undefined
       ? {}
       : { fetchImplementation: input.fetchImplementation }),

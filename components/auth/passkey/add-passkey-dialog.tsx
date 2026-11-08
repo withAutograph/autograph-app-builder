@@ -64,7 +64,9 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
     const name = (formData.get("name") as string)?.trim();
 
     submitRequest({
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(name ? { name } : {}),
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(authenticatorAttachment ? { authenticatorAttachment } : {}),
     });
   };

@@ -1199,6 +1199,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
               meta: reader.expectedMeta,
               name: project.name,
               project: project.id,
+              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
               ...((deps.target ?? "app") === "app" &&
               input.plan.delivery?.projectSettings !== undefined
                 ? { projectSettings: input.plan.delivery.projectSettings }

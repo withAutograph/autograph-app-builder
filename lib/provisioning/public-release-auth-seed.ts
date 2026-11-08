@@ -63,6 +63,7 @@ const associatedDataFor = (scope: PublicReleaseAuthSeedScope, version: 1 | 2) =>
     purpose: `public-release-auth-seed-v${version}`,
     digest,
     ref,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(version === 1 ? {} : { creationSessionId: scope.sessionId }),
   });
 };

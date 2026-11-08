@@ -151,6 +151,7 @@ const seedGeneratedEnvelope = (
     .digest("hex");
   const content = JSON.stringify({
     appId: "spend-review",
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(capturedDescription === undefined ? {} : { description: capturedDescription }),
     files: Object.fromEntries(
       Object.entries(f.files).map(([name, bytes]) => [name, bytes.toString("base64")]),

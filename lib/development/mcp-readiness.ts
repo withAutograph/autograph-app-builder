@@ -37,6 +37,7 @@ async function mcpRequest(input: {
     headers: {
       accept: "application/json, text/event-stream",
       "content-type": "application/json",
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(input.sessionId ? { "mcp-session-id": input.sessionId } : {}),
     },
     method: "POST",

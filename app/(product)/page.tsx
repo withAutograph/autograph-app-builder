@@ -100,6 +100,7 @@ async function HomeContent({ searchParams }: PageProps) {
     notices.push({
       provider,
       status,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(status === "failed"
         ? {
             reason: parseProviderConnectionFailureReason(

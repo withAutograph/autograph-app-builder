@@ -150,6 +150,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         context: body.context,
         createSession: true,
         name: "Primary passkey",
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(authenticatorAttachment ? { authenticatorAttachment } : {}),
       });
       if (isPasskeyOnboardingAlreadyAuthenticated(result)) {

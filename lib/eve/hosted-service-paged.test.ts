@@ -1506,6 +1506,7 @@ describe("paged hosted session observation", () => {
             publicEventCount: total,
           }),
           pendingRequests,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(accepted && kind === "send" ? { nativeDeliveryState: sendProof } : {}),
         };
         return {

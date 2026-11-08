@@ -433,6 +433,7 @@ export const createBuilderVercelProvider = (
             persistent: true,
             region: DEFAULT_SANDBOX_REGION,
             mounts: { "/workspace": drive },
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(options?.sandboxEnvironment === undefined
               ? {}
               : { env: { ...options.sandboxEnvironment } }),

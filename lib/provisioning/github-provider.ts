@@ -220,6 +220,7 @@ export async function provisionGitHubRepository(input: {
         fetch: request,
         token: args.token,
       }).request(`${args.method ?? "GET"} ${args.path}`, {
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(record(args.body) ? args.body : {}),
       });
       if (!args.expected.includes(response.status)) {

@@ -92,6 +92,7 @@ const fixture = (
         installer_id: worker.id,
         installer_sha256: sha,
         tenant_id: null,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(mutation ? { effect_id: "install-control-schema", sequence: 1 } : {}),
       });
       frame(`${spool}/requests/1.ready`, { version: 1, run_id: runId, frame_id: 1 });
@@ -112,9 +113,11 @@ const fixture = (
           frame(`${spool}/requests/${frameId}.json`, {
             ...base,
             kind,
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(kind === "check_fence"
               ? {}
               : { sequence: 1, effect_id: "fence-app-integration-authority" }),
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(kind === "checkpoint_effect"
               ? { receipt: { state: "applied", readback_sha256: "d".repeat(64) } }
               : {}),

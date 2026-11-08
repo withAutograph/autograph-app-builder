@@ -35,10 +35,12 @@ export function providerEmulationSeed(input: SeedInput) {
           },
         ],
         name: EMULATED_APP_NAME,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(input.githubAppPrivateKey ? { private_key: input.githubAppPrivateKey } : {}),
         slug: "autograph-app-builder",
       },
     ],
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(input.strictGitHubOAuth
       ? {
           oauth_apps: [

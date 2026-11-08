@@ -90,6 +90,7 @@ const rpc = (id: unknown, result: unknown, status = 200) =>
       ? undefined
       : JSON.stringify({
           jsonrpc: "2.0",
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(id === undefined ? {} : { id }),
           result,
         }),

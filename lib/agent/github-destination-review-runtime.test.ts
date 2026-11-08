@@ -363,6 +363,7 @@ const ownedRevisionTool = async (published = true, marker = true) => {
       sourceReceiptDigest: sourceEvidence.digest,
       destinationReviewDigest: destination.digest,
     },
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(marker ? { publishedGitHubDraftProposalDigest: proposal.digest } : {}),
   } as unknown as Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
   toolPorts.state = state;

@@ -470,6 +470,7 @@ export function createPasskeyPlugin(input: {
 }) {
   const now = input.now ?? (() => new Date());
   return passkey({
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(input.config ? { origin: input.config.origin, rpID: input.config.rpId } : {}),
     registration: {
       async afterVerification({ ctx, context }) {

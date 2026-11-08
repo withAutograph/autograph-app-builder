@@ -150,6 +150,7 @@ export const readUnapprovedCapturePredecessor = (
         bootstrap: {
           auth,
           candidate: gateway,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(gatewayAuthority === undefined ? {} : { gateway: gatewayAuthority }),
         },
         priorOperator: old,

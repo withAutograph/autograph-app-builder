@@ -136,6 +136,7 @@ export const repositoryProductionClientForContext = async (ctx: WorkflowStepTool
         appAccessSnapshotSchema.extend({ version: z.literal(1), setup: setupSchema }),
         {
           approvedByCallId: ctx.callId,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(plan.intent.creatorEmail === undefined
             ? {}
             : { creatorEmail: plan.intent.creatorEmail }),

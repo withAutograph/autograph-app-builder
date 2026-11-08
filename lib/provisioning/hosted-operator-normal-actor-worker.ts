@@ -309,6 +309,7 @@ export const createNormalActorOrganizationWorkers = (
           const observed = await launcher.inspect({
             ...input.effect,
             ...prepared,
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(historical === undefined || original === undefined
               ? {}
               : {

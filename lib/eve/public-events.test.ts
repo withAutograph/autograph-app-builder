@@ -198,6 +198,7 @@ function recordedPrototypeEvents(input?: {
             revision,
             sessionId: "wrun_1",
             size: Buffer.byteLength(content),
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(input?.invalidated === undefined ? {} : { invalidated: input.invalidated }),
           },
           toolName: input?.resultToolName ?? "record_prototype_artifact",

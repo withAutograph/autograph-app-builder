@@ -478,6 +478,7 @@ describe("approved hosted runtime consumers", () => {
       const bindings = vi.fn().mockResolvedValue({
         environment,
         nativePreview: publicOrigin === undefined || publicDelivery ? undefined : { publicOrigin },
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(publicDelivery
           ? { publicDelivery: { publicOrigin, appEntryPath: "/actual-catalog-route" } }
           : {}),
@@ -773,6 +774,7 @@ describe("approved hosted runtime consumers", () => {
       await expect(
         runtime.runTask({
           task: "test-e2e",
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(failure === "resume" ? { allowDispatch: false, commandId: "retained-command" } : {}),
         }),
       ).rejects.toThrow("SDK failure [REDACTED] and [REDACTED]");

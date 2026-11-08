@@ -216,6 +216,7 @@ describe("protected repository Production dispatcher", () => {
             roles: appIntent.creatorRoles.map((id) => ({ id, label: id })),
             creator: {
               status: state.state === "identity-required" ? "sign_in_required" : "setting_up",
+              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
               ...(state.signInUrl === undefined ? {} : { signInUrl: state.signInUrl }),
             },
           };

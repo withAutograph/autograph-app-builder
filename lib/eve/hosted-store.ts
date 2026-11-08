@@ -479,6 +479,7 @@ export const hostedSessionCreationDigest = (record: HostedSessionRecord): string
         principal: parsed.principal,
         sessionId: parsed.sessionId,
         version: 1,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(parsed.version === 2 && (parsed.sourceHandoffId ?? "") !== ""
           ? { sourceHandoffId: parsed.sourceHandoffId }
           : {}),
@@ -1873,6 +1874,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
               InMemoryHostedEveStore.operationKey(principal, operation.operationId),
             ) ?? null,
         })),
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(operations.length > page.length && last !== undefined
           ? {
               nextCursor: {

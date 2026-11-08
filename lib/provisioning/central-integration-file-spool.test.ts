@@ -163,6 +163,7 @@ const fixture = (mutation = false, write = false, capture = false) => {
       : worker,
     context: wire,
     runId,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(capture
       ? {}
       : {

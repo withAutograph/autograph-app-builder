@@ -1224,6 +1224,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           .set({
             ...operationValues(updated),
             // An old ACK has no dispatch baseline; retries must never invent one.
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(operation.sendDelivery === undefined && revision !== undefined
               ? { sendCancellationRevisionAtDispatch: revision }
               : {}),

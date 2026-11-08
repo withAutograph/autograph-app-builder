@@ -263,6 +263,7 @@ describe("Preview OAuth activation contract", () => {
             Response.json({
               client_name: "Privileged client",
               redirect_uris: ["https://client.example/callback"],
+              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
               ...(tokenEndpointAuthMethod === undefined
                 ? {}
                 : { token_endpoint_auth_method: tokenEndpointAuthMethod }),

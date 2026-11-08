@@ -489,6 +489,7 @@ describe("owned compiled artifact workflow hook", () => {
       completion.compilation.context,
       `draft-reconciliation:${digest}`,
       {
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(completion.compilation.release.status === "published"
           ? completion.compilation.release.selection
           : {}),

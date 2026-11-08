@@ -231,6 +231,7 @@ async function main() {
       name: referenceRoot.split("/").pop(),
       publicModules: Object.keys(reference.modules),
     },
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(selectedCase
       ? {
           case: {

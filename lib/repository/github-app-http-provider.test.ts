@@ -67,6 +67,7 @@ function unicodeDraftMaterial(
     .map((path) => {
       const change = {
         after: { digest, mode: "644" },
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(includePreimages
           ? {
               before: {

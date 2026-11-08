@@ -390,6 +390,7 @@ describe("production native target configuration resolver", () => {
               : `private-plan/${id}`,
             planDigest: "a".repeat(64),
             idempotencyKey: "same-operation",
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(action.endsWith("approval") ? {} : { callId: "approved-call" }),
           }),
     };

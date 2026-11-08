@@ -73,6 +73,7 @@ const response = (state: "reserved" | "submission_unknown", operationId = "respo
     sessionId: source.sessionId,
     principal,
     state,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(state === "submission_unknown" ? { safeErrorCode: "submission_unknown" } : {}),
     requestDigest: `sha256:${"c".repeat(64)}`,
     createdAtEpochMs: 1,

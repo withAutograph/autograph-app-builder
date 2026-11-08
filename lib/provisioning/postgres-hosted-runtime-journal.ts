@@ -73,6 +73,7 @@ export const createPostgresHostedRuntimeJournalStore = (
           createdAt: input.now,
           record: hostedRuntimeJournalRecordSchema.parse({
             approvedByCallId: input.approvedByCallId,
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(input.environmentGitBranch === undefined
               ? {}
               : { environmentGitBranch: input.environmentGitBranch }),

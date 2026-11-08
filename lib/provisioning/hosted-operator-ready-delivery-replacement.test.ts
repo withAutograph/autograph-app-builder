@@ -433,6 +433,7 @@ describe("native externally managed policy recovery integration", () => {
         authorize: async () => context,
         assertAuthorized: async () => {},
         plan,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(planningCase === "approved-default"
           ? {}
           : {

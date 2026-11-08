@@ -299,6 +299,7 @@ const fixture = async (
   state.actors = program.actors.map((actor, index) => ({
     actorKey: actor.actorKey,
     signup: "complete",
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(actor.account === "create-email-password"
       ? { credentials: { password: randomBytes(32).toString("base64url") } }
       : {}),

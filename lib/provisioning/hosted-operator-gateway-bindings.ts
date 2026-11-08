@@ -1402,6 +1402,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
           )
         : request(`/v10/projects/${encodeURIComponent(projectId)}/env`, "POST", {
             comment,
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(gitBranch === null ? {} : { gitBranch }),
             key,
             target: ["preview"],
