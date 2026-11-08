@@ -27,7 +27,6 @@ type ProgressRecord = Parameters<typeof readOperatorPreparationProgress>[0];
 const fixture = (): ProgressRecord & { operator: NonNullable<ProgressRecord["operator"]> } => ({
   operator: {
     plan: {
-      stage: "auth-bootstrap",
       effects: [
         { description: "Read Auth schema", id: "auth-schema", kind: "install" },
         { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
@@ -35,6 +34,7 @@ const fixture = (): ProgressRecord & { operator: NonNullable<ProgressRecord["ope
         { description: "Observe Gateway", id: "other-gateway", kind: "gateway-delivery" },
       ],
       normalActorProgram: program,
+      stage: "auth-bootstrap",
     },
     receipts: [
       {
@@ -50,13 +50,13 @@ describe("recorded preparation progress", () => {
   it("keeps partial bootstrap distinct from existing Auth readiness and exposes no private values", () => {
     const record = {
       ...fixture(),
-      privateState: { credential: "private-credential" },
       operator: {
         ...fixture().operator,
         authPreparation: { catalogFingerprint: "old-auth-readiness" },
-        pendingEffectId: "gateway",
         pendingEffectAttempt: { id: "private-attempt" },
+        pendingEffectId: "gateway",
       },
+      privateState: { credential: "private-credential" },
     };
     const before = structuredClone(record);
     const progress = readOperatorPreparationProgress(record, now);
@@ -113,7 +113,7 @@ describe("recorded preparation progress", () => {
     ["private-lease", undefined, "unclassified"],
   ] as const)("classifies lease presence and expiry (%s, %s)", (leaseId, leaseExpiresAt, lease) => {
     expect(
-      readOperatorPreparationProgress({ ...fixture(), leaseId, leaseExpiresAt }, now)?.lease,
+      readOperatorPreparationProgress({ ...fixture(), leaseExpiresAt, leaseId }, now)?.lease,
     ).toBe(lease);
   });
 

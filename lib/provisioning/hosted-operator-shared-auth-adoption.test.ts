@@ -1047,7 +1047,7 @@ describe("native composition adoption boundary", () => {
             return unavailable();
           },
         },
-        store: { read: unavailable, compareAndSet: unavailable },
+        store: { compareAndSet: unavailable, read: unavailable },
       },
       readNormalActorRuntimeBindings: unavailable,
       readNormalActorPreparation: unavailable,
@@ -1104,9 +1104,9 @@ describe("native composition adoption boundary", () => {
     };
     const schemaRead = vi.fn(async () => structuredClone(requirePreparation(f.source.record)));
     vi.spyOn(authReadinessModule, "createHostedOperatorAuthReadiness").mockImplementation(() => ({
+      reconcileMigration: unavailable,
       verify: schemaRead,
       verifyPublication: unavailable,
-      reconcileMigration: unavailable,
     }));
     const native = composeHostedOperatorDependencies(configuration, controlPlane);
     checkpointSharedAuthAdoption.mockImplementationOnce(async (input) => {
