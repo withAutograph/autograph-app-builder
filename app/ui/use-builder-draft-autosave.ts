@@ -30,6 +30,12 @@ export interface BuilderDraftAutosaveOptions<T> {
   debounceMs?: number;
   /** Revision used as the base for snapshots queued immediately after mount. */
   initialRevision?: number;
+  /** Baseline and first-observation policy for automatic snapshot tracking. */
+  snapshotTracking?: {
+    initialSnapshot?: T;
+    readSnapshot: () => T;
+    saveInitialSnapshot: boolean;
+  };
   /** Defaults to navigator.onLine when available. */
   isOnline?: () => boolean;
   /** Called after a hidden/pagehide flush is requested, for transport telemetry. */
@@ -43,6 +49,10 @@ export interface BuilderDraftAutosave<T> {
   error: Error | undefined;
   lastSavedAt: string | undefined;
   schedule: (snapshot: T) => string;
+  /** Track a rendered snapshot and schedule it only when it changes. */
+  observeSnapshot: () => void;
+  /** Adopt a recovered or remote snapshot without scheduling a save. */
+  adoptSnapshot: (snapshot: T) => void;
   flush: (reason?: Exclude<BuilderDraftAutosaveReason, "debounce">) => Promise<void>;
   retry: () => Promise<void>;
   /** Reads the recovery snapshot without dispatching it. */
@@ -95,6 +105,11 @@ export function useBuilderDraftAutosave<T>(
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(globalThis.undefined);
   const draining = useRef<Promise<boolean> | undefined>(globalThis.undefined);
   const acknowledgedRevision = useRef(options.initialRevision ?? 0);
+  const snapshotFingerprint = useRef<string | undefined>(
+    options.snapshotTracking?.initialSnapshot === undefined
+      ? undefined
+      : JSON.stringify(options.snapshotTracking.initialSnapshot),
+  );
   const mounted = useRef(true);
   const save = useRef(options.save);
   const isOnline = useRef(options.isOnline);
@@ -168,9 +183,7 @@ export function useBuilderDraftAutosave<T>(
               setLastSavedAt(acknowledgement.savedAt);
             }
           } catch (saveError) {
-            if (!queued.current) {
-              queued.current = current;
-            }
+            queued.current ??= current;
             updateStatus(
               online() ? "error" : "offline",
               saveError instanceof Error ? saveError : new Error("builder-draft-save-failed"),
@@ -235,6 +248,34 @@ export function useBuilderDraftAutosave<T>(
     },
     [dispatch, online, options.debounceMs, options.outbox, updateStatus],
   );
+
+  const adoptSnapshot = useCallback((snapshot: T) => {
+    snapshotFingerprint.current = JSON.stringify(snapshot);
+  }, []);
+
+  const observeSnapshot = useCallback(() => {
+    const readSnapshot = options.snapshotTracking?.readSnapshot;
+    if (readSnapshot === undefined) {
+      return;
+    }
+    const snapshot = readSnapshot();
+    const fingerprint = JSON.stringify(snapshot);
+    if (snapshotFingerprint.current === undefined) {
+      snapshotFingerprint.current = fingerprint;
+      if (options.snapshotTracking?.saveInitialSnapshot === true) {
+        schedule(snapshot);
+      }
+      return;
+    }
+    if (snapshotFingerprint.current !== fingerprint) {
+      snapshotFingerprint.current = fingerprint;
+      schedule(snapshot);
+    }
+  }, [
+    options.snapshotTracking?.readSnapshot,
+    options.snapshotTracking?.saveInitialSnapshot,
+    schedule,
+  ]);
 
   const restorePending = useCallback(() => options.outbox.read(), [options.outbox]);
 
@@ -319,6 +360,8 @@ export function useBuilderDraftAutosave<T>(
   }, []);
 
   return {
+    adoptSnapshot,
+    observeSnapshot,
     discardPending,
     discardSupersededByRemoteRevision,
     error,

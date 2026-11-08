@@ -553,10 +553,6 @@ export default defineConfig({
       rules: { "eslint/no-await-in-loop": "off" },
     },
     {
-      files: [builderControllerPath],
-      rules: { "react-doctor/no-pass-data-to-parent": "off" },
-    },
-    {
       files: [
         "app/(product)/auth/setting-up/page.tsx",
         "app/ui/builder-continuation.tsx",

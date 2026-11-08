@@ -401,32 +401,6 @@ export function useBuilderController({
     },
     [initialBrief, requestServerSave, saveActiveBuilderDraftAction],
   );
-  const autosave = useBuilderDraftAutosave({
-    debounceMs: 500,
-    initialRevision: durableDraftRevision ?? 0,
-    outbox: draftOutbox,
-    save: saveDraft,
-  });
-  const {
-    discardPending: discardPendingDraft,
-    discardSupersededByRemoteRevision,
-    restorePending,
-    resumePending,
-    schedule: scheduleAutosave,
-  } = autosave;
-  const [draftSaveError, setDraftSaveError] = useState("");
-  const [draftSyncNotice, setDraftSyncNotice] = useState("");
-  // Do not infer a user edit from React's post-hydration renders. Apart from
-  // creating needless writes, an initial default-draft save can outlive a
-  // closing tab and race a later authenticated visit. Track the last snapshot
-  // we intentionally queued instead; every actual field or local-control
-  // change produces a distinct snapshot.
-  const autosaveSnapshotFingerprint = useRef<string | undefined>(
-    initialDraft ? JSON.stringify(initialDraft) : undefined,
-  );
-  const visibleProviderNotices = providerNotices.filter(
-    (notice) => !(notice.status === "failed" && notice.reason === "configuration-unavailable"),
-  );
   const draftSnapshot = useCallback(
     (origin = focusOrigin.current): BuilderDraft => {
       // React Hook Form is the live form authority. `useWatch` deliberately
@@ -465,6 +439,30 @@ export function useBuilderController({
       team,
       zdrOnly,
     ],
+  );
+  const autosave = useBuilderDraftAutosave({
+    debounceMs: 500,
+    initialRevision: durableDraftRevision ?? 0,
+    snapshotTracking: {
+      initialSnapshot: initialDraft,
+      readSnapshot: draftSnapshot,
+      saveInitialSnapshot: Boolean(initialBrief) && !initialDraft,
+    },
+    outbox: draftOutbox,
+    save: saveDraft,
+  });
+  const {
+    discardPending: discardPendingDraft,
+    discardSupersededByRemoteRevision,
+    restorePending,
+    resumePending,
+    adoptSnapshot,
+    observeSnapshot,
+  } = autosave;
+  const [draftSaveError, setDraftSaveError] = useState("");
+  const [draftSyncNotice, setDraftSyncNotice] = useState("");
+  const visibleProviderNotices = providerNotices.filter(
+    (notice) => !(notice.status === "failed" && notice.reason === "configuration-unavailable"),
   );
   const applyAuthoritativeDraft = useCallback(
     async (
@@ -526,10 +524,11 @@ export function useBuilderController({
       appNameEditedByUser.current = snapshot.appNameEditedByUser;
       generatedAppName.current = snapshot.appNameEditedByUser ? undefined : snapshot.form.appName;
       repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
-      autosaveSnapshotFingerprint.current = JSON.stringify(snapshot);
+      adoptSnapshot(snapshot);
       setDraftSyncNotice("Updated from another device");
     },
     [
+      adoptSnapshot,
       builderForm,
       discardSupersededByRemoteRevision,
       setConnectedConnections,
@@ -699,7 +698,7 @@ export function useBuilderController({
         appNameEditedByUser.current = snapshot.appNameEditedByUser;
         generatedAppName.current = snapshot.appNameEditedByUser ? undefined : snapshot.form.appName;
         repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
-        autosaveSnapshotFingerprint.current = JSON.stringify(snapshot);
+        adoptSnapshot(snapshot);
         if (!disposed) {
           void resumePending();
         }
@@ -716,7 +715,7 @@ export function useBuilderController({
     return () => {
       disposed = true;
     };
-  }, [builderForm, discardPendingDraft, restorePending, resumePending]);
+  }, [adoptSnapshot, builderForm, discardPendingDraft, restorePending, resumePending]);
   useEffect(() => {
     const controller = new AbortController();
     let wasHidden = document.visibilityState === "hidden";
@@ -858,23 +857,8 @@ export function useBuilderController({
     return () => window.clearTimeout(timer);
   }, [draftSyncNotice]);
   useEffect(() => {
-    const snapshot = draftSnapshot();
-    const fingerprint = JSON.stringify(snapshot);
-    if (autosaveSnapshotFingerprint.current === undefined) {
-      // Establish the hydrated server/form state as the baseline. The first
-      // deliberate edit (including a non-RHF builder control) will differ.
-      autosaveSnapshotFingerprint.current = fingerprint;
-      if (initialBrief && !initialDraft) {
-        scheduleAutosave(snapshot);
-      }
-      return;
-    }
-    if (autosaveSnapshotFingerprint.current === fingerprint) {
-      return;
-    }
-    autosaveSnapshotFingerprint.current = fingerprint;
-    scheduleAutosave(snapshot);
-  }, [draftSnapshot, form, initialBrief, initialDraft, scheduleAutosave]);
+    observeSnapshot();
+  }, [form, observeSnapshot]);
   const beginProviderConnection = async (provider: ProviderField) => {
     focusOrigin.current = provider;
     const draft = draftSnapshot(provider);
