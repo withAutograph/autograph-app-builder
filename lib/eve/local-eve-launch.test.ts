@@ -176,8 +176,8 @@ describe("closed local Eve launch", () => {
       oidcToken: sentinel,
       pinnedNode: "/mise/node/24.18.0/bin/node",
       repositoryRoot: input.repositoryRoot,
-      vercelProject: { orgId: "team_example", projectId: "prj_example" },
       resume: true,
+      vercelProject: { orgId: "team_example", projectId: "prj_example" },
     });
     expect(recovering.args).toContain("--resume");
     expect(recovering.environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS).toBe("0");

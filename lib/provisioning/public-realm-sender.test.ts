@@ -35,13 +35,13 @@ const enrollment = publicRealmEnrollmentSchema.parse({
   },
 });
 const sender = {
-  issuer: "https://oidc.vercel.com/owned",
   audience: "https://vercel.com/owned",
+  environment: "production" as const,
+  issuer: "https://oidc.vercel.com/owned",
   ownerId: "team_owned",
   projectId: "prj_app",
-  environment: "production" as const,
-  subject: "owner:owned:project:app:environment:production",
   publicEnrollment: enrollment,
+  subject: "owner:owned:project:app:environment:production",
 };
 const payload = {
   iss: sender.issuer,
@@ -52,8 +52,8 @@ const payload = {
   sub: sender.subject,
 };
 const request = new Request("https://builder.example/api/hosted-operator/realm-identity", {
-  method: "POST",
   headers: { authorization: "Bearer native.provider.token" },
+  method: "POST",
 });
 it("verifies only the enrolled native Production sender without replacing its subject", async () => {
   const verify = vi.fn(async () => ({ payload }));

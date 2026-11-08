@@ -239,9 +239,9 @@ describe("read-only native source observation authority", () => {
     const binding = createNativeRecoveryBinding({
       assertOwner,
       store: {
-        getSession: () => Promise.resolve(source),
-        getPrivateOperation,
         commitNativeRecoveryReceipt,
+        getPrivateOperation,
+        getSession: () => Promise.resolve(source),
       },
     });
     const coordinates = {

@@ -62,6 +62,11 @@ const fixture = (withoutDestination = false) => {
   let drift = false;
   let reads = 0;
   const read = createBuilderPublicationDestinationReader({
+    readProvisioning: async (input) => {
+      reads += 1;
+      expect(input.authority).toEqual(authority);
+      return row;
+    },
     readSelection: async () => {
       if (drift) {
         epoch += 1;
@@ -86,19 +91,14 @@ const fixture = (withoutDestination = false) => {
         owner: { adapterGeneration: epoch },
       };
     },
-    readProvisioning: async (input) => {
-      reads += 1;
-      expect(input.authority).toEqual(authority);
-      return row;
-    },
   });
   return {
-    read,
-    row,
     drift: () => {
       drift = true;
     },
+    read,
     reads: () => reads,
+    row,
   };
 };
 it("selects the saved Builder-created destination without changing starter provenance or performing writes", async () => {

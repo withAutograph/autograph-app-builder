@@ -99,14 +99,14 @@ describe("Vercel project provisioning", () => {
     [
       JSON.stringify({ error: { code: "forbidden", message: "secret" } }),
       "iad1::failure_123",
-      { statusCode: 403, code: "forbidden", requestRef: "iad1::failure_123" },
+      { code: "forbidden", requestRef: "iad1::failure_123", statusCode: 403 },
     ],
     [
       JSON.stringify({ error: { code: "secret", message: "secret" }, token: "secret" }),
       "https://secret.example",
       { statusCode: 403 },
     ],
-    ["not-json", "iad1::failure_123", { statusCode: 403, requestRef: "iad1::failure_123" }],
+    ["not-json", "iad1::failure_123", { requestRef: "iad1::failure_123", statusCode: 403 }],
   ])("retains only allowlisted provider failure facts", async (body, requestRef, diagnostic) => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
     const request = vi.fn<typeof fetch>(async (_url, init) => {
@@ -192,14 +192,14 @@ describe("Vercel project provisioning", () => {
     [
       { error: { code: "forbidden", message: "secret" } },
       "iad1::failure_123",
-      { statusCode: 403, code: "forbidden", requestRef: "iad1::failure_123" },
+      { code: "forbidden", requestRef: "iad1::failure_123", statusCode: 403 },
     ],
     [
       { error: { code: "secret", message: "secret" }, token: "secret" },
       "https://secret.example",
       { statusCode: 403 },
     ],
-    ["not-json", "iad1::failure_123", { statusCode: 403, requestRef: "iad1::failure_123" }],
+    ["not-json", "iad1::failure_123", { requestRef: "iad1::failure_123", statusCode: 403 }],
   ])("retains only allowlisted provider failure facts", async (body, requestRef, diagnostic) => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
     const request = vi.fn<typeof fetch>(async (_url, init) => {

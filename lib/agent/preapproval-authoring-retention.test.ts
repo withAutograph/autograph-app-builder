@@ -28,7 +28,7 @@ import {
 const roots: string[] = [];
 afterEach(async () => {
   vi.unstubAllEnvs();
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 const fixture = async () => {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "authoring-retention-")));
@@ -108,7 +108,7 @@ const fixture = async () => {
     }
     await handler({ data: { message: value, sequence: 0, turnId: "two" } }, delivered);
   };
-  return { receive, message, decision, state, delivered };
+  return { decision, delivered, message, receive, state };
 };
 it("keeps a genuine internal delivery out of product requirements but retains forged marker text", async () => {
   await contextStorage.run(new ContextContainer(), async () => {

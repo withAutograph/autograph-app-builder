@@ -143,10 +143,10 @@ describe("owner-bound private Realm identity link contract", () => {
     expect(operatorPlanDigest(changed)).not.toBe(operatorPlanDigest(scoped));
   });
   it.each([
-    { source: "builderProduction", from: "preview", to: "preview" },
-    { source: "builderProduction", from: "production", to: "production" },
-    { source: "operatorPreview", from: "production", to: "preview" },
-    { source: "operatorPreview", from: "preview", to: "production" },
+    { from: "preview", source: "builderProduction", to: "preview" },
+    { from: "production", source: "builderProduction", to: "production" },
+    { from: "production", source: "operatorPreview", to: "preview" },
+    { from: "preview", source: "operatorPreview", to: "production" },
   ])("rejects broadened $source environment scope $from to $to", ({ source, from, to }) => {
     expect(
       hostedOperatorPlanSchema.safeParse({

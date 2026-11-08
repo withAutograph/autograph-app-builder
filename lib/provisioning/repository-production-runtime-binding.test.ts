@@ -69,20 +69,20 @@ const fixture = () => {
   };
   return {
     context,
-    writes: () => writes,
-    row: () => row,
     loseResponse: () => {
       loseResponse = true;
     },
     replaceRow: (value?: Record<string, string | string[]>) => {
       row = value;
     },
+    row: () => row,
     service: createRepositoryProductionRuntimeBinding({
       teamId: "team",
       signal: new AbortController().signal,
       readCredential: async () => "provider-token",
       fetch: fetcher,
     }),
+    writes: () => writes,
   };
 };
 describe("Production runtime credential binding", () => {
