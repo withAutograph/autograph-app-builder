@@ -117,7 +117,7 @@ const completed = () => {
       ],
     },
   }));
-  return { program: approved, state, operationRef };
+  return { operationRef, program: approved, state };
 };
 
 describe("actual normal actor runtime projection", () => {
@@ -184,7 +184,7 @@ describe("actual normal actor runtime projection", () => {
     const fixture = completed();
     const state = initialNormalActorState(approved, operationRef);
     state.actors = fixture.state.actors.filter((actor) => actor.actorKey === "unassigned");
-    const projection = projectNormalActorRuntime({ program: approved, state, operationRef });
+    const projection = projectNormalActorRuntime({ operationRef, program: approved, state });
     expect(projection.identities.actors).toEqual([
       expect.objectContaining({ actorKey: "unassigned", organizationId: null, roles: [] }),
     ]);

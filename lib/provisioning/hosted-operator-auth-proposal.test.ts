@@ -65,9 +65,9 @@ describe("private existing Auth proposal", () => {
   it("places the scoped credential in a separate 0600 file and publishes only the observed plan", async () => {
     const f = fixture();
     const result = await f.propose({
-      resource,
-      directMigrationUrl: migrationUrl,
       assertCurrentOwner: f.assertCurrentOwner,
+      directMigrationUrl: migrationUrl,
+      resource,
     });
     expect(result.planDigest).toBe("b".repeat(64));
     expect(result.content.toString()).not.toContain("private-fixture");
@@ -77,8 +77,8 @@ describe("private existing Auth proposal", () => {
     const input = files.find((file) => file !== credential);
     expect(input?.mode).toBe(0o600);
     expect(JSON.parse(input!.content.toString())).toMatchObject({
-      resource,
       directMigrationUrlFile: credential?.path,
+      resource,
     });
     expect(input!.content.toString()).not.toContain(migrationUrl);
     expect(JSON.stringify(vi.mocked(f.sandbox.runCommand).mock.calls)).not.toContain(migrationUrl);
@@ -93,7 +93,7 @@ describe("private existing Auth proposal", () => {
   });
   it("keeps new targets credential free", async () => {
     const f = fixture(false);
-    const result = await f.propose({ resource, assertCurrentOwner: f.assertCurrentOwner });
+    const result = await f.propose({ assertCurrentOwner: f.assertCurrentOwner, resource });
     expect(result.content.toString()).toContain('"proposal":"new-empty"');
     expect(vi.mocked(f.sandbox.writeFiles).mock.calls[0]?.[0]).toHaveLength(1);
   });
@@ -109,7 +109,7 @@ describe("private existing Auth proposal", () => {
     async (directMigrationUrl) => {
       const f = fixture();
       await expect(
-        f.propose({ resource, directMigrationUrl, assertCurrentOwner: f.assertCurrentOwner }),
+        f.propose({ assertCurrentOwner: f.assertCurrentOwner, directMigrationUrl, resource }),
       ).rejects.toMatchObject({ code: "resource_mismatch" });
       expect(f.createSandbox).not.toHaveBeenCalled();
     },
@@ -118,9 +118,9 @@ describe("private existing Auth proposal", () => {
     const f = fixture(false);
     await expect(
       f.propose({
-        resource,
-        directMigrationUrl: migrationUrl,
         assertCurrentOwner: f.assertCurrentOwner,
+        directMigrationUrl: migrationUrl,
+        resource,
       }),
     ).rejects.toMatchObject({ code: "resource_mismatch" });
     expect(f.sandbox.delete).toHaveBeenCalledOnce();
@@ -130,9 +130,9 @@ describe("private existing Auth proposal", () => {
     f.assertCurrentOwner.mockResolvedValueOnce().mockRejectedValueOnce(new Error("ownership lost"));
     await expect(
       f.propose({
-        resource,
-        directMigrationUrl: migrationUrl,
         assertCurrentOwner: f.assertCurrentOwner,
+        directMigrationUrl: migrationUrl,
+        resource,
       }),
     ).rejects.toThrow("ownership lost");
     expect(f.sandbox.writeFiles).not.toHaveBeenCalled();

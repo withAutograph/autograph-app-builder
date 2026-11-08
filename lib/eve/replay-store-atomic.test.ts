@@ -223,7 +223,7 @@ const fixture = () => {
       nowEpochMs: 2000,
       ...override,
     });
-  return { submit, publish, update, discardStage, spy, transaction };
+  return { discardStage, publish, spy, submit, transaction, update };
 };
 
 describe("atomic verified replay publication", () => {

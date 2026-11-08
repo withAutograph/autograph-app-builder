@@ -604,29 +604,29 @@ it.each([
 
 it("classifies actor and principal observations without conflating denied scope and missing membership", () => {
   const scope = {
-    appId: "spend-review",
     actorId: "actor",
+    appId: "spend-review",
     organizationId: "org",
     role: "reviewer",
   };
   const row = { ...scope, active: true, fenceGeneration: 3 };
   expect(
     classifyActorBinding(
-      { ok: false, error: { code: "authorization_denied", details: [{ code: "scope_mismatch" }] } },
+      { error: { code: "authorization_denied", details: [{ code: "scope_mismatch" }] }, ok: false },
       scope,
     ),
   ).toBe("principal_scope_denied");
-  expect(classifyActorBinding({ ok: true, data: null }, scope)).toBe("actor_absent");
-  expect(classifyActorBinding({ ok: true, data: { ...row, active: false } }, scope)).toBe(
+  expect(classifyActorBinding({ data: null, ok: true }, scope)).toBe("actor_absent");
+  expect(classifyActorBinding({ data: { ...row, active: false }, ok: true }, scope)).toBe(
     "actor_inactive",
   );
-  expect(classifyActorBinding({ ok: true, data: row }, scope)).toBe("actor_active");
+  expect(classifyActorBinding({ data: row, ok: true }, scope)).toBe("actor_active");
   expect(() =>
-    classifyActorBinding({ ok: true, data: { ...row, actorId: "foreign" } }, scope),
+    classifyActorBinding({ data: { ...row, actorId: "foreign" }, ok: true }, scope),
   ).toThrow();
   expect(() =>
     classifyActorBinding(
-      { ok: false, error: { code: "authorization_denied", details: [{ code: "unknown" }] } },
+      { error: { code: "authorization_denied", details: [{ code: "unknown" }] }, ok: false },
       scope,
     ),
   ).toThrow();

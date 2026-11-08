@@ -166,6 +166,16 @@ const fixture = () => {
     }
   >();
   const store: HostedRuntimeJournalStore = {
+    async compareAndSet(input) {
+      const matches = row?.revision === input.expectedRevision;
+      if (matches) {
+        row = {
+          revision: input.expectedRevision + 1,
+          record: hostedRuntimeJournalRecordSchema.parse(input.record),
+        };
+      }
+      return matches ? structuredClone(row) : undefined;
+    },
     async read() {
       return row ? structuredClone(row) : undefined;
     },
@@ -183,16 +193,6 @@ const fixture = () => {
         }),
       };
       return structuredClone(row);
-    },
-    async compareAndSet(input) {
-      const matches = row?.revision === input.expectedRevision;
-      if (matches) {
-        row = {
-          revision: input.expectedRevision + 1,
-          record: hostedRuntimeJournalRecordSchema.parse(input.record),
-        };
-      }
-      return matches ? structuredClone(row) : undefined;
     },
     async reserveFenceGeneration(input) {
       const current = row;
@@ -279,11 +279,11 @@ const fixture = () => {
     deps,
     observedRows,
     request,
-    revokeOwner: () => {
-      authorized = false;
-    },
     revokeApproval: () => {
       approved = false;
+    },
+    revokeOwner: () => {
+      authorized = false;
     },
     get row() {
       return row;

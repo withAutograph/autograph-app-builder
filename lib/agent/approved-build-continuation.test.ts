@@ -337,12 +337,12 @@ it("projects only the independently acquired existing repository into private de
   };
   const project = (repositoryAccess = access) =>
     decideApprovedBuildContinuation({
-      state,
-      repositoryAccess,
       adapterSessionId: scope.sessionId,
       approvalMatches: () => false,
       blocked: false,
       pendingInput: false,
+      repositoryAccess,
+      state,
       turnId: "revision-turn",
       turnSequence: 1,
     });
@@ -353,12 +353,12 @@ it("projects only the independently acquired existing repository into private de
   ).toBeUndefined();
   expect(
     decideApprovedBuildContinuation({
-      state: { ...state, sourceReceipt: { ...state.sourceReceipt, sourceKind: "fresh-template" } },
-      repositoryAccess: access,
       adapterSessionId: scope.sessionId,
       approvalMatches: () => false,
       blocked: false,
       pendingInput: false,
+      repositoryAccess: access,
+      state: { ...state, sourceReceipt: { ...state.sourceReceipt, sourceKind: "fresh-template" } },
       turnId: "revision-turn",
       turnSequence: 1,
     }).existingRepositorySource,
