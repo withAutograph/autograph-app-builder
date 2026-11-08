@@ -82,7 +82,7 @@ const command = (name: string, args: string[]) => {
   if (tools === undefined) {
     throw new Error("Owned PostgreSQL17 tools required.");
   }
-  execFileSync(path.join(tools, name), args, { stdio: "pipe", env: fixtureEnvironment });
+  execFileSync(path.join(tools, name), args, { env: fixtureEnvironment, stdio: "pipe" });
 };
 const operation = (id: string) =>
   hostedOperationRecordSchema.parse({
@@ -198,7 +198,7 @@ describe.skipIf(tools === undefined)("authoring custody against actual PostgreSQ
       command("pg_ctl", ["-D", path.join(root, "data"), "-m", "immediate", "-w", "stop"]);
     }
     if (root !== undefined) {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
   it("persists actual decision, ignores older turn, and rejects foreign owner/adapter", async () => {

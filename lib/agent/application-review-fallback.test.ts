@@ -87,14 +87,14 @@ const model = (id: string, steps: Step[]) => {
 };
 const record = [
   {
-    name: "recordReviewEvidence",
     input: { findings: [finding], remainingRuntimeChecks: ["Verify persistence."] },
+    name: "recordReviewEvidence",
   },
 ];
-const complete = [{ name: "completeReview", input: { remainingRuntimeChecks: [] } }];
+const complete = [{ input: { remainingRuntimeChecks: [] }, name: "completeReview" }];
 const reads = [
-  { name: "readRequirements", input: { id: "original" } },
-  { name: "readSource", input: { path: "app/save.ts" } },
+  { input: { id: "original" }, name: "readRequirements" },
+  { input: { path: "app/save.ts" }, name: "readSource" },
 ];
 
 describe("durable application reviewer fallback", () => {
@@ -148,14 +148,14 @@ describe("durable application reviewer fallback", () => {
     const primary = model("terra", [record, new Error("first")]);
     const otherFinding = {
       ...finding,
-      requirementQuote: "Save the record",
       explanation: "A second independent finding.",
+      requirementQuote: "Save the record",
     };
     const fallback = model("sol", [
       [
         {
-          name: "recordReviewEvidence",
           input: { findings: [otherFinding], remainingRuntimeChecks: [] },
+          name: "recordReviewEvidence",
         },
       ],
       complete,
@@ -172,8 +172,8 @@ describe("durable application reviewer fallback", () => {
     const primary = model("terra", [
       [
         {
-          name: "recordReviewEvidence",
           input: { findings: [], remainingRuntimeChecks: ["Verify server persistence."] },
+          name: "recordReviewEvidence",
         },
       ],
       new Error("first"),
@@ -191,8 +191,8 @@ describe("durable application reviewer fallback", () => {
     const primary = model("terra", [
       [
         {
-          name: "recordReviewEvidence",
           input: { findings: [], remainingRuntimeChecks: ["Verify server persistence."] },
+          name: "recordReviewEvidence",
         },
       ],
       new Error("first"),
@@ -207,7 +207,7 @@ describe("durable application reviewer fallback", () => {
   });
   it("preserves prior findings when fallback evidence access fails", async () => {
     const primary = model("terra", [record, new Error("first")]);
-    const fallback = model("sol", [[{ name: "readSource", input: { path: "app/save.ts" } }]]);
+    const fallback = model("sol", [[{ input: { path: "app/save.ts" }, name: "readSource" }]]);
     const failedEvidence = {
       ...evidence,
       readSource: () => Promise.reject(new Error("unavailable")),
@@ -270,16 +270,16 @@ describe("durable application reviewer fallback", () => {
     });
     await expect(
       assessApplicationSource(input, evidence, {
-        policy,
         abortSignal: controller.signal,
         assertCurrentOwner: guard,
+        policy,
         testModels: { sol: fallback, terra: primary },
       }),
     ).rejects.toThrow();
     expect(fallback.doGenerateCalls).toHaveLength(0);
   });
   it("never falls back after evidence becomes unavailable", async () => {
-    const primary = model("terra", [[{ name: "readSource", input: { path: "app/save.ts" } }]]);
+    const primary = model("terra", [[{ input: { path: "app/save.ts" }, name: "readSource" }]]);
     const fallback = model("sol", [complete]);
     const inaccessible: ApplicationReviewEvidence = {
       ...evidence,
@@ -303,8 +303,8 @@ describe("durable application reviewer fallback", () => {
     });
     await expect(
       assessApplicationSource(input, evidence, {
-        policy,
         assertCurrentOwner: guard,
+        policy,
         testModels: { sol: fallback, terra: primary },
       }),
     ).rejects.toThrow("owner revoked");

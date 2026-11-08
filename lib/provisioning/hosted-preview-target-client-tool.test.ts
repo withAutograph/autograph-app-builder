@@ -203,9 +203,9 @@ describe("closed export tool pre-dispatch diagnostics", () => {
     hooks.resolve.mockResolvedValue(selection);
     hooks.export.mockResolvedValue({ status: "planned" });
     hooks.client.mockResolvedValue({
+      planTenantExport: hooks.export,
       request: hooks.request,
       resolvePreviewTarget: hooks.resolve,
-      planTenantExport: hooks.export,
       sessionId: selection.sessionId,
     });
   });
@@ -350,9 +350,9 @@ describe("saved export lookup tool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hooks.client.mockResolvedValue({
-      request: hooks.request,
-      readTenantExport: hooks.readExport,
       planTenantExport: hooks.export,
+      readTenantExport: hooks.readExport,
+      request: hooks.request,
       resolvePreviewTarget: hooks.resolve,
       sessionId: selection.sessionId,
     });
@@ -364,15 +364,15 @@ describe("saved export lookup tool", () => {
       status: { state: "planned" },
     };
     hooks.readExport.mockResolvedValueOnce(saved);
-    await expect(getTool.execute({ operation: "export", exportId }, toolCtx)).resolves.toEqual(
+    await expect(getTool.execute({ exportId, operation: "export" }, toolCtx)).resolves.toEqual(
       saved,
     );
     const clientCall = hooks.client.mock.calls.at(-1);
     expect(clientCall?.slice(0, 2)).toEqual([ctx.session.auth, ctx.session.id]);
     expect(clientCall?.[3]).toEqual({
       logicalSessionId: ctx.session.id,
-      ownerRunId: ctx.session.ownerRunId,
       ownerAnchorRunId: ctx.session.ownerAnchorRunId,
+      ownerRunId: ctx.session.ownerRunId,
     });
     expect(hooks.readExport).toHaveBeenCalledWith(exportId, ctx.abortSignal);
     expect(hooks.request).not.toHaveBeenCalled();
@@ -403,7 +403,7 @@ describe("saved export lookup tool", () => {
   });
   it("preserves a saved export ownership refusal without returning an intent or replanning", async () => {
     hooks.readExport.mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
-    await expect(getTool.execute({ operation: "export", exportId }, toolCtx)).resolves.toEqual({
+    await expect(getTool.execute({ exportId, operation: "export" }, toolCtx)).resolves.toEqual({
       authenticatedBehavior: "unassessed",
       code: "authorization_required",
       exportId,
@@ -419,12 +419,12 @@ describe("saved continuity lookup tool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hooks.client.mockResolvedValue({
-      request: hooks.request,
       readContinuity: hooks.readContinuity,
       readContinuityBindings: hooks.readContinuityBindings,
       readContinuityCheckpoints: hooks.readContinuityCheckpoints,
       readContinuityVerifiedActors: hooks.readContinuityVerifiedActors,
       readTenantExport: hooks.readExport,
+      request: hooks.request,
       resolvePreviewTarget: hooks.resolve,
       sessionId: selection.sessionId,
     });
@@ -435,10 +435,10 @@ describe("saved continuity lookup tool", () => {
     hooks.readContinuityCheckpoints.mockResolvedValueOnce(checkpoint);
     hooks.readContinuityVerifiedActors.mockResolvedValueOnce(actors);
     await expect(
-      getTool.execute({ operation: "continuity-checkpoints", intentId }, toolCtx),
+      getTool.execute({ intentId, operation: "continuity-checkpoints" }, toolCtx),
     ).resolves.toEqual(checkpoint);
     await expect(
-      getTool.execute({ operation: "continuity-verified-actors", intentId }, toolCtx),
+      getTool.execute({ intentId, operation: "continuity-verified-actors" }, toolCtx),
     ).resolves.toEqual(actors);
     expect(hooks.request).not.toHaveBeenCalled();
     expect(hooks.resolve).not.toHaveBeenCalled();
@@ -457,7 +457,7 @@ describe("saved continuity lookup tool", () => {
     };
     hooks.readContinuityBindings.mockResolvedValueOnce(result);
     await expect(
-      getTool.execute({ operation: "continuity-bindings", intentId }, toolCtx),
+      getTool.execute({ intentId, operation: "continuity-bindings" }, toolCtx),
     ).resolves.toEqual(result);
     expect(hooks.readContinuityBindings).toHaveBeenCalledWith(intentId, ctx.abortSignal);
     expect(hooks.request).not.toHaveBeenCalled();
@@ -470,15 +470,15 @@ describe("saved continuity lookup tool", () => {
       status: { state: "planned" },
     };
     hooks.readContinuity.mockResolvedValueOnce(saved);
-    await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toBe(
+    await expect(getTool.execute({ intentId, operation: "continuity" }, toolCtx)).resolves.toBe(
       saved,
     );
     const clientCall = hooks.client.mock.calls.at(-1);
     expect(clientCall?.slice(0, 2)).toEqual([ctx.session.auth, ctx.session.id]);
     expect(clientCall?.[3]).toEqual({
       logicalSessionId: ctx.session.id,
-      ownerRunId: ctx.session.ownerRunId,
       ownerAnchorRunId: ctx.session.ownerAnchorRunId,
+      ownerRunId: ctx.session.ownerRunId,
     });
     expect(hooks.readContinuity).toHaveBeenCalledWith(intentId, ctx.abortSignal);
     expect(hooks.request).not.toHaveBeenCalled();
@@ -488,7 +488,7 @@ describe("saved continuity lookup tool", () => {
   });
   it("returns an ownership refusal without exposing a saved continuity intent", async () => {
     hooks.readContinuity.mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
-    await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
+    await expect(getTool.execute({ intentId, operation: "continuity" }, toolCtx)).resolves.toEqual({
       authenticatedBehavior: "unassessed",
       code: "authorization_required",
       intentId,
@@ -505,7 +505,7 @@ describe("saved continuity lookup tool", () => {
         continuityReadStage: "client_response_validation",
       }),
     );
-    await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
+    await expect(getTool.execute({ intentId, operation: "continuity" }, toolCtx)).resolves.toEqual({
       authenticatedBehavior: "unassessed",
       code: "operator_unavailable",
       continuityReadStage: "client_response_validation",
@@ -520,7 +520,7 @@ describe("saved continuity lookup tool", () => {
   });
   it("does not invent a stage or expose raw details for an unclassified failure", async () => {
     hooks.readContinuity.mockRejectedValueOnce(new Error("private provider detail"));
-    await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
+    await expect(getTool.execute({ intentId, operation: "continuity" }, toolCtx)).resolves.toEqual({
       authenticatedBehavior: "unassessed",
       code: "operator_unavailable",
       intentId,

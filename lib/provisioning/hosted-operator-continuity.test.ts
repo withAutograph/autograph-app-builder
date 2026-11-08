@@ -137,6 +137,16 @@ const setup = () => {
   });
   const deps: HostedContinuityDependencies = {
     store: {
+      async compareAndSet(input) {
+        if (rejectCas || row?.revision !== input.expectedRevision) {
+          rejectCas = false;
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional CAS absence is the supported conflict result.
+          return undefined;
+        }
+        row = continuityRecordSchema.parse(structuredClone(input.record));
+        records.push(read());
+        return read();
+      },
       async read(input) {
         return row !== undefined &&
           input.intentId === row.requestId &&
@@ -146,16 +156,6 @@ const setup = () => {
       },
       async reserve(input) {
         row ??= continuityRecordSchema.parse(structuredClone(input.record));
-        records.push(read());
-        return read();
-      },
-      async compareAndSet(input) {
-        if (rejectCas || row?.revision !== input.expectedRevision) {
-          rejectCas = false;
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional CAS absence is the supported conflict result.
-          return undefined;
-        }
-        row = continuityRecordSchema.parse(structuredClone(input.record));
         records.push(read());
         return read();
       },
@@ -984,6 +984,14 @@ describe("continuity recovery preserves frozen plans", () => {
     const f = setup();
     const rows = new Map<string, ContinuityRecord>();
     f.deps.store = {
+      compareAndSet: async ({ record, expectedRevision }) => {
+        if (rows.get(record.requestId)?.revision !== expectedRevision) {
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS conflicts explicitly return no row.
+          return undefined;
+        }
+        rows.set(record.requestId, structuredClone(record));
+        return structuredClone(record);
+      },
       read: async ({ intentId }) => structuredClone(rows.get(intentId)),
       reserve: async ({ record }) => {
         if (!rows.has(record.requestId)) {
@@ -994,14 +1002,6 @@ describe("continuity recovery preserves frozen plans", () => {
           throw new Error("Controlled record missing");
         }
         return structuredClone(saved);
-      },
-      compareAndSet: async ({ record, expectedRevision }) => {
-        if (rows.get(record.requestId)?.revision !== expectedRevision) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS conflicts explicitly return no row.
-          return undefined;
-        }
-        rows.set(record.requestId, structuredClone(record));
-        return structuredClone(record);
       },
     };
     return { ...f, rows, operations: createHostedContinuityOperations(f.deps) };

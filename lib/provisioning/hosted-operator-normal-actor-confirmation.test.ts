@@ -223,7 +223,7 @@ const fixture = () => {
       },
     },
   };
-  return { context, record, payload, nonceSha256, proofRef, proofSha256, keyring, now };
+  return { context, keyring, nonceSha256, now, payload, proofRef, proofSha256, record };
 };
 const readState = (record: HostedRuntimeJournalRecord) =>
   decryptNormalActorState({ ...scope, sealed: record.accountPreparation!.sealedState });
@@ -242,8 +242,8 @@ describe("human confirmation of private actual actor capture", () => {
     operator.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000009" };
     const reservation = {
       operationRef: operator.operationRef,
-      planDigest: operator.planDigest,
       participantCapture: true,
+      planDigest: operator.planDigest,
     };
     expect(canReserveIdentityLink(input.record, reservation)).toBe(true);
     expect(
@@ -285,10 +285,10 @@ describe("human confirmation of private actual actor capture", () => {
       storageState: {
         cookies: [
           {
-            name: normalCookie.name,
-            value: normalCookie.value,
             domain: normalCookie.domain,
             expires: -1,
+            name: normalCookie.name,
+            value: normalCookie.value,
           },
         ],
         origins: [],

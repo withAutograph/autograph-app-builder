@@ -148,9 +148,9 @@ describe("private Realm readback native transport", () => {
     const owner = dependencies();
     const reader = createHostedOperatorPublicJwksReader(
       {
-        configuration: realmConfiguration,
-        assertPlanningAuthorized: owner.assertPlanningAuthorized,
         assertCurrentOwner: owner.assertCurrentOwner,
+        assertPlanningAuthorized: owner.assertPlanningAuthorized,
+        configuration: realmConfiguration,
       },
       native,
     );
@@ -197,9 +197,9 @@ describe("private Realm readback native transport", () => {
     const owner = dependencies();
     const reader = createHostedOperatorPublicJwksReader(
       {
-        configuration: realmConfiguration,
-        assertPlanningAuthorized: owner.assertPlanningAuthorized,
         assertCurrentOwner: owner.assertCurrentOwner,
+        assertPlanningAuthorized: owner.assertPlanningAuthorized,
+        configuration: realmConfiguration,
       },
       native,
     );
@@ -213,9 +213,9 @@ describe("private Realm readback native transport", () => {
     owner.assertCurrentOwner.mockRejectedValue(new Error("Owner revoked"));
     const reader = createHostedOperatorPublicJwksReader(
       {
-        configuration: realmConfiguration,
-        assertPlanningAuthorized: owner.assertPlanningAuthorized,
         assertCurrentOwner: owner.assertCurrentOwner,
+        assertPlanningAuthorized: owner.assertPlanningAuthorized,
+        configuration: realmConfiguration,
       },
       native,
     );
@@ -393,10 +393,10 @@ describe("normal Auth native transport", () => {
     });
     expect(native.verifyOidc).toHaveBeenCalledWith("private-native-token", {
       audience: builderWorkload.audience,
+      environment: builderWorkload.environment,
       issuer: builderWorkload.issuer,
       ownerId: builderWorkload.ownerId,
       projectId: builderWorkload.projectId,
-      environment: builderWorkload.environment,
     });
   });
   it("requires a configured Builder workload rather than borrowing Operator identity", async () => {
