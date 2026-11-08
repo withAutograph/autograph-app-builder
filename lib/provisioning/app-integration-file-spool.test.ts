@@ -224,8 +224,8 @@ it("reuses the fenced framed transport for fixed integration readback and privat
     >["createSandbox"],
   });
   expect(result).toMatchObject({
-    status: "applied",
     receipt: { resourceId: context.resource.resource_id },
+    status: "applied",
   });
   expect(f.input.assertCurrent).toHaveBeenCalled();
   expect(f.stop).toHaveBeenCalledOnce();
@@ -281,7 +281,7 @@ it("authorizes the stopped snapshot only at the app fence frame, not narrow owne
   expect(checkpoint).toHaveBeenCalledWith(
     expect.objectContaining({
       effectId: "fence-app-integration-authority",
-      receipt: { state: "applied", readbackSha256: "d".repeat(64) },
+      receipt: { readbackSha256: "d".repeat(64), state: "applied" },
     }),
   );
 });
