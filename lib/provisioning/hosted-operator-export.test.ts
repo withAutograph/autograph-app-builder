@@ -264,12 +264,14 @@ describe("protected tenant export orchestration", () => {
           changed === "owner"
             ? { ...context.authority, ownerUserId: "another-owner" }
             : context.authority,
-        target: {
-          ...context.target,
-          ...(changed === "app" ? { appId: "another-app" } : {}),
-          ...(changed === "session" ? { sessionId: "another-session" } : {}),
-        },
+        target: { ...context.target },
       };
+      if (changed === "app") {
+        foreign.target.appId = "another-app";
+      }
+      if (changed === "session") {
+        foreign.target.sessionId = "another-session";
+      }
       await expect(f.operations.readPlan(foreign, planned.plan.exportId)).rejects.toThrow();
       expect(f.dependencies.readApproval).not.toHaveBeenCalled();
       expect(f.dependencies.runWorker).not.toHaveBeenCalled();

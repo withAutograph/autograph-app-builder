@@ -333,15 +333,22 @@ describe("automatic observation of one approved execution", () => {
           sleepUntil: () => {
             sleeps += 1;
             const status = outcome === "prepared" ? "prepared" : "blocked";
-            f.setObserved({
-              ...f.observed,
-              status,
-              ...(outcome === "prepared" ? {} : { code: outcome }),
-              execution: {
-                state: "settled",
-                outcome: { status, ...(outcome === "prepared" ? {} : { code: outcome }) },
-              },
-            });
+            const settledObservation = (): OperatorPublicResult => {
+              const observed: OperatorPublicResult = { ...f.observed, status };
+              if (outcome !== "prepared") {
+                observed.code = outcome;
+              }
+              const settled: Extract<
+                NonNullable<OperatorPublicResult["execution"]>,
+                { state: "settled" }
+              >["outcome"] = { status };
+              if (outcome !== "prepared") {
+                settled.code = outcome;
+              }
+              observed.execution = { state: "settled", outcome: settled };
+              return observed;
+            };
+            f.setObserved(settledObservation());
             return Promise.resolve();
           },
         },

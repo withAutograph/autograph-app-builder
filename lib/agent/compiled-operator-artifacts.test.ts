@@ -116,16 +116,25 @@ vi.mock("../provisioning/hosted-operator-artifact-store", async (importOriginal)
 }));
 vi.mock("../provisioning/hosted-operator-artifact-selection", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  createPostgresOperatorArtifactSelections: () => ({
-    read: mocks.readSelection,
-    readExact: mocks.readExact,
-    ...(mocks.publishedSourceLookupAvailable
-      ? { readPublishedSource: mocks.readPublishedSource }
-      : {}),
-    record: mocks.record,
-    recordDestination: mocks.recordDestination,
-    ...(mocks.associationAvailable ? { associatePublishedSource: mocks.associate } : {}),
-  }),
+  createPostgresOperatorArtifactSelections: () => {
+    const readers: Pick<OperatorArtifactSelections, "read" | "readExact" | "readPublishedSource"> =
+      {
+        read: mocks.readSelection,
+        readExact: mocks.readExact,
+      };
+    if (mocks.publishedSourceLookupAvailable) {
+      readers.readPublishedSource = mocks.readPublishedSource;
+    }
+    const selections: OperatorArtifactSelections = {
+      ...readers,
+      record: mocks.record,
+      recordDestination: mocks.recordDestination,
+    };
+    if (mocks.associationAvailable) {
+      selections.associatePublishedSource = mocks.associate;
+    }
+    return selections;
+  },
 }));
 
 const digest = "a".repeat(64);

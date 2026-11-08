@@ -1380,14 +1380,21 @@ export function createHostedEveSessionService(input: {
         throw new HostedCheckpointObservationConflictError();
       }
     };
-    const run = await runHistoricalApprovalReplay({
+    const replayDetails: Pick<
+      Parameters<typeof runHistoricalApprovalReplay>[0],
+      "binding" | "checkpoint" | "trustedEvents"
+    > &
+      Partial<Parameters<typeof runHistoricalApprovalReplay>[0]> = {
       binding,
       checkpoint,
       // oxlint-disable-next-line eslint/no-use-before-define -- The reader closure is initialized before reconciliation is invoked.
       trustedEvents: () => readCheckpointEvents(session),
-      ...(metadata.approvalReplayProgress === undefined
-        ? {}
-        : { progress: metadata.approvalReplayProgress }),
+    };
+    if (metadata.approvalReplayProgress !== undefined) {
+      replayDetails.progress = metadata.approvalReplayProgress;
+    }
+    const run = await runHistoricalApprovalReplay({
+      ...replayDetails,
       assertOwner,
       observe: async (previous) => {
         const spoolDetails: Pick<
@@ -1983,15 +1990,15 @@ export function createHostedEveSessionService(input: {
         },
       );
       // Preserve this read's public cursor and event page; the continuation's pending state is current.
-      return omitControlledGuardQuestions(
-        {
-          ...result,
-          inputRequests: next.inputRequests ?? [],
-          status: next.status,
-          ...(next.error === undefined ? {} : { error: next.error }),
-        },
-        ids,
-      );
+      const continuedResult = {
+        ...result,
+        inputRequests: next.inputRequests ?? [],
+        status: next.status,
+      };
+      if (next.error !== undefined) {
+        continuedResult.error = next.error;
+      }
+      return omitControlledGuardQuestions(continuedResult, ids);
     } catch (error) {
       if (!(error instanceof HostedSubmissionUnknownError)) {
         throw error;

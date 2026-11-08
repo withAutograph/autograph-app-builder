@@ -583,11 +583,13 @@ describe("exact legacy technical response and owner proof", () => {
         throw new Error("Expected submitted technical response.");
       }
       const [, submitted] = submittedCall;
-      const response = {
-        ...submitted,
-        ...(variant === "wrong-text" ? { text: "different" } : {}),
-        ...(variant === "approval-option" ? { optionId: "approve" } : {}),
-      };
+      const response: InputResponse = { ...submitted };
+      if (variant === "wrong-text") {
+        response.text = "different";
+      }
+      if (variant === "approval-option") {
+        response.optionId = "approve";
+      }
       const events = [
         nativeEvent(
           variant === "message-only"

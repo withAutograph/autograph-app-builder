@@ -252,19 +252,22 @@ describe("Production creator continuation", () => {
     "does not reuse a verified creator across a different %s",
     async (difference) => {
       const source = await linkedOwner();
-      const next = harness({
-        scope: {
-          ...scope,
-          appId: "another-app",
-          authority: {
-            ...scope.authority,
-            ...(difference === "owner" ? { ownerUserId: "other-owner" } : {}),
-            ...(difference === "workspace" ? { workspaceId: "other-workspace" } : {}),
-          },
-        },
-        ...(difference === "realm" ? { realmDigest: "f".repeat(64) } : {}),
-        candidates: [source],
-      });
+      const targetScope: RepositoryProductionScope = {
+        ...scope,
+        appId: "another-app",
+        authority: { ...scope.authority },
+      };
+      if (difference === "owner") {
+        targetScope.authority.ownerUserId = "other-owner";
+      }
+      if (difference === "workspace") {
+        targetScope.authority.workspaceId = "other-workspace";
+      }
+      const options: NonNullable<Parameters<typeof harness>[0]> = { scope: targetScope };
+      if (difference === "realm") {
+        options.realmDigest = "f".repeat(64);
+      }
+      const next = harness({ ...options, candidates: [source] });
       await next.bridge.prepare(next.context());
       expect(next.requests.map((request) => request.action)).toEqual(["create", "send"]);
       expect(await next.bridge.readCreator(next.row())).toHaveProperty("state", "required");
