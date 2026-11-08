@@ -690,21 +690,17 @@ const verifyStateRootContents = function verifyStateRootContents(
   })) {
     if (entry.name === ghcrDockerConfigName) {
       assertExactGhcrDockerConfig(stateRoot);
-      continue;
-    }
-    if (entry.name === ghcrBoundHelperName) {
+    } else if (entry.name === ghcrBoundHelperName) {
       assertExactGhcrBoundHelper(stateRoot);
-      continue;
-    }
-    if (entry.name === githubStateRootName) {
+    } else if (entry.name === githubStateRootName) {
       assertGithubStateRoot(join(stateRoot, githubStateRootName));
-      continue;
+    } else {
+      const kind = receiptKinds[entry.name as keyof typeof receiptKinds];
+      if (kind === undefined || !entry.isFile() || entry.isSymbolicLink()) {
+        throw new Error("Image lifecycle state contains an unknown or unsafe artifact.");
+      }
+      readReceipt(stateRoot, entry.name, kind, provenance);
     }
-    const kind = receiptKinds[entry.name as keyof typeof receiptKinds];
-    if (kind === undefined || !entry.isFile() || entry.isSymbolicLink()) {
-      throw new Error("Image lifecycle state contains an unknown or unsafe artifact.");
-    }
-    readReceipt(stateRoot, entry.name, kind, provenance);
   }
 };
 
