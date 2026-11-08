@@ -499,20 +499,16 @@ export default defineConfig({
     {
       // Preserve existing callback return contracts pending review.
       files: [
-        ".storybook/create-app/layouts.tsx",
         sharedLintFile5,
         "app/ui/builder-destination.tsx",
-        "app/ui/builder-form.tsx",
         "app/ui/builder-model-controls.tsx",
         "app/ui/builder-provider-controls.tsx",
         handoffControlsPath,
         handoffProgressPath,
-        "app/ui/route-error.test.tsx",
         builderControllerPath,
         draftAutosavePath,
         "components/auth/passkey/add-passkey-dialog.tsx",
         "components/auth/passkey/delete-passkey-dialog.tsx",
-        "components/auth/passkey/passkey.tsx",
         "components/auth/passkey/rename-passkey-dialog.tsx",
         "components/auth/provider-button.tsx",
         "components/auth/settings/security/fresh-session-prompt.tsx",

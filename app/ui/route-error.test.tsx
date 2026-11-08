@@ -58,11 +58,15 @@ describe("native route error recovery", () => {
         expect(button.disabled).toBe(false);
         expect(retry).not.toHaveBeenCalled();
         // oxlint-disable-next-line eslint/require-await -- preserve React act callback contract
-        await act(async () => button.click());
+        await act(async () => {
+          button.click();
+        });
         expect(retry).toHaveBeenCalledOnce();
       } finally {
         // oxlint-disable-next-line eslint/require-await -- preserve React act callback contract
-        await act(async () => root.unmount());
+        await act(async () => {
+          root.unmount();
+        });
         container.remove();
       }
     },

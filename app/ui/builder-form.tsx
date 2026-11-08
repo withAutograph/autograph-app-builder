@@ -58,10 +58,12 @@ export function Builder({
         {connectionFlow ? (
           <ConnectionDrawer
             flow={connectionFlow}
-            onClose={() => setConnectionFlow(null)}
-            onStageChange={(stage) =>
-              setConnectionFlow((current) => (current ? { ...current, stage } : current))
-            }
+            onClose={() => {
+              setConnectionFlow(null);
+            }}
+            onStageChange={(stage) => {
+              setConnectionFlow((current) => (current ? { ...current, stage } : current));
+            }}
             onConnected={completeConnection}
           />
         ) : null}
