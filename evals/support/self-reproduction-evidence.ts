@@ -7,6 +7,8 @@ export const evidencePrefix = "SELF_REPRODUCTION_EVIDENCE ";
 
 // Apply to structured receipts and native diagnostics before persistence. Never
 // serialize the runtime environment or session continuation credentials.
+export function sanitizeEvidence(value: string): string;
+export function sanitizeEvidence(value: unknown): unknown;
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sanitizeEvidence(value: unknown): unknown {
   if (typeof value === "string") {

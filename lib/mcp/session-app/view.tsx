@@ -186,7 +186,9 @@ export function AuthorizationControl({
         <button
           type="button"
           className="authorization-action"
-          onClick={connect}
+          onClick={() => {
+            void connect();
+          }}
           disabled={!canOpen}
         >
           {isGitHub ? "Continue with GitHub" : "Continue"}
@@ -723,7 +725,9 @@ export function SessionAppView({
             className="primary"
             disabled={!complete || !canCallTools || state === "submitting"}
             aria-describedby={(continueGuidance ?? "") === "" ? undefined : "continue-guidance"}
-            onClick={submit}
+            onClick={() => {
+              void submit();
+            }}
           >
             {state === "submitting" ? "Submitting…" : "Continue"}
           </button>

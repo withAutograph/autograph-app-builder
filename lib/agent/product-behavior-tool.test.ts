@@ -60,9 +60,10 @@ const scenario = {
   readPointer: "/draft/marker",
   writePath: "/api/drafts",
 };
+const getSandbox = vi.fn(() => Promise.resolve({ id: "sandbox-one" }));
 const context = {
   abortSignal: new AbortController().signal,
-  getSandbox: vi.fn(() => Promise.resolve({ id: "sandbox-one" })),
+  getSandbox,
   session: { id: "session-one" },
 } as unknown as Parameters<typeof verifyAppBehavior.execute>[1];
 
@@ -104,7 +105,7 @@ describe("verify_app_behavior", () => {
         context,
       ),
     ).rejects.toThrow("not present in the accepted walkthrough");
-    expect(context.getSandbox).not.toHaveBeenCalled();
+    expect(getSandbox).not.toHaveBeenCalled();
     expect(mocks.readback).not.toHaveBeenCalled();
   });
 

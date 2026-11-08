@@ -242,7 +242,7 @@ try {
         `${incoming.method} ${incoming.url} HTTP/${incoming.httpVersion}\r\n${Object.entries(
           incoming.headers,
         )
-          .map(([name, value]) => `${name}: ${value}`)
+          .map(([name, value]) => `${name}: ${String(value)}`)
           .join("\r\n")}\r\n\r\n`,
       );
       upstream.write(head);

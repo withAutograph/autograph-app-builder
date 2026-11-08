@@ -222,7 +222,7 @@ await writeFile(
     "",
     "| Evaluated (UTC) | App | Subjective score / 100 |",
     "| --- | --- | --- |",
-    ...rows.map((r) => `| ${r.date} | [${r.name}](${r.path}/README.md) | ${r.score} |`),
+    ...rows.map((r) => `| ${r.date} | [${r.name}](${r.path}/README.md) | ${String(r.score)} |`),
     "",
   ].join("\n"),
 );

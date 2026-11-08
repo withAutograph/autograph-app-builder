@@ -250,10 +250,10 @@ async function fill(control: HTMLInputElement | HTMLTextAreaElement, value: stri
     control instanceof HTMLTextAreaElement
       ? HTMLTextAreaElement.prototype
       : HTMLInputElement.prototype;
-  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () => {
-    setter?.call(control, value);
+    descriptor?.set?.call(control, value);
     control.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }

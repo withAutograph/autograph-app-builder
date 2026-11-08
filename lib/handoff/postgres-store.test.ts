@@ -46,27 +46,25 @@ function store(input: {
   const set = vi.fn();
   const updateWhere = vi.fn<(query: ReturnType<PgDialect["sqlToQuery"]>) => void>();
   const readWhere = vi.fn<(query: ReturnType<PgDialect["sqlToQuery"]>) => void>();
+  const selectWhere = (condition: SQL) => {
+    readWhere(new PgDialect().sqlToQuery(condition));
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    return { limit: async () => input.current ?? [] };
+  };
+  const updateCondition = (condition: SQL) => {
+    updateWhere(new PgDialect().sqlToQuery(condition));
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    return { returning: async () => input.updated ?? [] };
+  };
   const select = vi.fn(() => ({
-    from: () => ({
-      where: (condition: SQL) => {
-        readWhere(new PgDialect().sqlToQuery(condition));
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        return { limit: async () => input.current ?? [] };
-      },
-    }),
+    from: () => ({ where: selectWhere }),
   }));
   const database = {
     select,
     update: () => ({
       set: (values: unknown) => {
         set(values);
-        return {
-          where: (condition: SQL) => {
-            updateWhere(new PgDialect().sqlToQuery(condition));
-            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-            return { returning: async () => input.updated ?? [] };
-          },
-        };
+        return { where: updateCondition };
       },
     }),
   } as unknown as Parameters<typeof createPostgresBuilderHandoffStore>[0];

@@ -32,10 +32,12 @@ const ready: ReadyRepositoryAccess = {
 };
 const reference = { fullName: "acme/stock", name: "stock", owner: "acme" };
 const input = { repository: reference.fullName };
+const getToken = vi.fn();
+const requireAuth = vi.fn();
 const ctx = {
   callId: "call_one",
-  getToken: vi.fn(),
-  requireAuth: vi.fn(),
+  getToken,
+  requireAuth,
   session: { auth: {}, id: "ses_one" },
 } as unknown as ToolContext;
 const runtime = {
@@ -56,8 +58,8 @@ describe("repository access tool continuity", () => {
     });
     expect(runtime.classify).toHaveBeenCalledTimes(1);
     expect(runtime.authorization).not.toHaveBeenCalled();
-    expect(ctx.getToken).not.toHaveBeenCalled();
-    expect(ctx.requireAuth).not.toHaveBeenCalled();
+    expect(getToken).not.toHaveBeenCalled();
+    expect(requireAuth).not.toHaveBeenCalled();
   });
   it("retries an outage without entering authorization", async () => {
     runtime.classify.mockResolvedValue({
@@ -69,7 +71,7 @@ describe("repository access tool continuity", () => {
       retryable: true,
     });
     expect(runtime.authorization).not.toHaveBeenCalled();
-    expect(ctx.getToken).not.toHaveBeenCalled();
+    expect(getToken).not.toHaveBeenCalled();
   });
   it("parks missing access in the existing same-session authorization flow and rechecks it", async () => {
     runtime.classify
@@ -88,7 +90,7 @@ describe("repository access tool continuity", () => {
       requestId: "call_one",
       sessionId: "ses_one",
     });
-    expect(ctx.getToken).toHaveBeenCalledOnce();
+    expect(getToken).toHaveBeenCalledOnce();
     expect(runtime.classify).toHaveBeenCalledTimes(2);
   });
   it("does not record access when a post-authorization read is unavailable", async () => {
@@ -107,6 +109,6 @@ describe("repository access tool continuity", () => {
       reason: "provider_unavailable",
       retryable: true,
     });
-    expect(ctx.requireAuth).not.toHaveBeenCalled();
+    expect(requireAuth).not.toHaveBeenCalled();
   });
 });

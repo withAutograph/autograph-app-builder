@@ -35,6 +35,12 @@ function storage() {
     }
     return tableRows;
   };
+  const selectFrom = (table: unknown) => ({
+    where: () => {
+      const result = Promise.resolve(rowsFor(table));
+      return Object.assign(result, { limit: () => result });
+    },
+  });
   const database = {
     insert: vi.fn((table: unknown) => ({
       values: (row: Record<string, unknown>) => ({
@@ -47,14 +53,7 @@ function storage() {
         },
       }),
     })),
-    select: vi.fn(() => ({
-      from: (table: unknown) => ({
-        where: () => {
-          const result = Promise.resolve(rowsFor(table));
-          return Object.assign(result, { limit: () => result });
-        },
-      }),
-    })),
+    select: vi.fn(() => ({ from: selectFrom })),
     transaction: async (operation: (tx: unknown) => Promise<unknown>) => {
       const before = structuredClone([...rows.values()]);
       try {

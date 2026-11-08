@@ -76,6 +76,20 @@ const generationTranscriptFile = "generation-transcript.jsonl";
 const nativeResultFile = "native-result.json";
 const candidateRuntimeFile = "candidate-runtime.json";
 const candidateInteractionsFile = "candidate-interactions.json";
+const prefixCandidateCaptureObservation = (observation: Observation): Observation => ({
+  ...observation,
+  artifacts: [
+    candidateInteractionsFile,
+    ...observation.artifacts.map((path) => `candidate-interactions/${path}`),
+  ],
+  assertions: observation.assertions.map((assertion) => ({
+    ...assertion,
+    artifacts: [
+      candidateInteractionsFile,
+      ...observation.artifacts.map((path) => `candidate-interactions/${path}`),
+    ],
+  })),
+});
 
 const { basename, isAbsolute, join, relative, resolve } = nodePath;
 
@@ -116,7 +130,7 @@ const output = resolve(
 const records: Record<string, unknown>[] = [];
 const started = Date.now();
 const captures: { label: string; files: string[]; status: string }[] = [];
-let generation: Record<string, unknown> = { status: "pending" };
+let generation: Record<string, unknown> & { status: string } = { status: "pending" };
 interface PreservedInputFile {
   path: string;
   sha256: string;
@@ -156,7 +170,7 @@ let candidateRuntime: CandidateRuntimeReceipt | { status: "not-run" | "failed"; 
   reason: "Candidate runtime evaluation was not requested.",
   status: "not-run",
 };
-let candidate: Record<string, unknown> = {
+let candidate: Record<string, unknown> & { status: string } = {
   reason: "No candidate export has been supplied.",
   status: "unavailable",
 };
@@ -1068,7 +1082,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
           const content = await readFile(join(root, file), "utf-8");
           await writeFile(
             join(output, "settings-source", basename(file)),
-            String(sanitizeEvidence(content)),
+            sanitizeEvidence(content),
             { mode: 0o600 },
           );
         },
@@ -1118,13 +1132,13 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
           candidateFiles.map(async (file) => {
             const destination = join(output, "candidate", file.path);
             await mkdir(resolve(destination, ".."), { mode: 0o700, recursive: true });
-            await writeFile(destination, String(sanitizeEvidence(file.content)), { mode: 0o600 });
+            await writeFile(destination, sanitizeEvidence(file.content), { mode: 0o600 });
           }),
         );
         candidate = {
           files: candidateFiles.map((file) => ({
             path: `candidate/${file.path}`,
-            sha256: digest(String(sanitizeEvidence(file.content))),
+            sha256: digest(sanitizeEvidence(file.content)),
           })),
           provenance: "operator-supplied export; not automatically attributed to this generation",
           revision: revision(candidateRoot),
@@ -1283,20 +1297,9 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
                 );
                 const captured = interactions.output as { observations?: Observation[] } | null;
                 if (Array.isArray(captured?.observations)) {
-                  sandboxCaptureObservations = captured.observations.map((observation) => ({
-                    ...observation,
-                    artifacts: [
-                      candidateInteractionsFile,
-                      ...observation.artifacts.map((path) => `candidate-interactions/${path}`),
-                    ],
-                    assertions: observation.assertions.map((assertion) => ({
-                      ...assertion,
-                      artifacts: [
-                        candidateInteractionsFile,
-                        ...observation.artifacts.map((path) => `candidate-interactions/${path}`),
-                      ],
-                    })),
-                  }));
+                  sandboxCaptureObservations = captured.observations.map(
+                    prefixCandidateCaptureObservation,
+                  );
                 }
                 captures.push({
                   files: interactionArtifacts.map(({ path }) => `candidate-interactions/${path}`),
@@ -1326,9 +1329,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       await runConfiguredWorkflowAdapters(candidateRoot);
     } catch (error) {
       errors.push(
-        `Trusted workflow adapter failed: ${String(
-          sanitizeEvidence(error instanceof Error ? error.message : String(error)),
-        )}`,
+        `Trusted workflow adapter failed: ${sanitizeEvidence(error instanceof Error ? error.message : String(error))}`,
       );
       await jsonFile(trustedWorkflowReceiptsFile, trustedWorkflowReceipts);
     }
@@ -1386,7 +1387,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       });
     }
   } catch (error) {
-    errors.push(String(sanitizeEvidence(error instanceof Error ? error.message : String(error))));
+    errors.push(sanitizeEvidence(error instanceof Error ? error.message : String(error)));
     if (generation.status === "pending" || generation.status === "running") {
       generation = { ...generation, status: "failed" };
     }
@@ -1397,7 +1398,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       await stopReference?.();
     }
   }
-  if (!["completed", "not-run"].includes(String(generation.status)) || errors.length) {
+  if (!["completed", "not-run"].includes(generation.status) || errors.length) {
     process.exitCode = 1;
   }
   if (values.json === true) {
@@ -1410,6 +1411,6 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
 try {
   await main();
 } catch (error) {
-  console.error(String(sanitizeEvidence(error instanceof Error ? error.message : String(error))));
+  console.error(sanitizeEvidence(error instanceof Error ? error.message : String(error)));
   process.exitCode = 1;
 }

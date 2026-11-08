@@ -93,26 +93,30 @@ export async function writePairedCaptureManifest(
   outputRoot: string,
   observations: PairedCaptureRun["observations"],
 ): Promise<PairedCaptureRun["manifest"]> {
+  const captureForSide = (
+    side: (typeof sides)[number],
+    requirementId: string,
+    viewport: (typeof desktopViewports)[number],
+    state: CaptureState,
+  ) => {
+    const observation = observations[side].find((item) => item.requirementId === requirementId);
+    const prefix = `parity/captures/${viewport.name}/${state}/${side}`;
+    const capture: PairedCaptureManifestRow["reference"] = {
+      disposition: observation?.disposition ?? "not-run",
+    };
+    if (observation?.artifacts.includes(`${prefix}.png`) === true) {
+      capture.png = `${prefix}.png`;
+    }
+    if (observation?.artifacts.includes(`${prefix}.json`) === true) {
+      capture.receipt = `${prefix}.json`;
+    }
+    return [side, capture];
+  };
   const rows = desktopViewports.flatMap((viewport) =>
     captureStates.map((state): PairedCaptureManifestRow => {
       const requirementId = `capture/${viewport.name}/${state}`;
       const pair = Object.fromEntries(
-        sides.map((side) => {
-          const observation = observations[side].find(
-            (item) => item.requirementId === requirementId,
-          );
-          const prefix = `parity/captures/${viewport.name}/${state}/${side}`;
-          const capture: PairedCaptureManifestRow["reference"] = {
-            disposition: observation?.disposition ?? "not-run",
-          };
-          if (observation?.artifacts.includes(`${prefix}.png`) === true) {
-            capture.png = `${prefix}.png`;
-          }
-          if (observation?.artifacts.includes(`${prefix}.json`) === true) {
-            capture.receipt = `${prefix}.json`;
-          }
-          return [side, capture];
-        }),
+        sides.map((side) => captureForSide(side, requirementId, viewport, state)),
       ) as Pick<PairedCaptureManifestRow, "reference" | "candidate">;
       return { requirementId, state, viewport, ...pair };
     }),

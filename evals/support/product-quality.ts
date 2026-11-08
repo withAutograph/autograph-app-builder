@@ -161,30 +161,34 @@ export function evaluatePrototypeQuality(input: {
     throw new Error("This product-quality scenario has no prototype contract.");
   }
   const hardFailures: string[] = [];
-  const require = (condition: boolean, message: string) => {
+  const requireCondition = (condition: boolean, message: string) => {
     if (!condition) {
       hardFailures.push(message);
     }
   };
-  require(/<html\s+lang=["']en["']/iu.test(input.html), "Prototype lacks a language.");
-  require(/<meta\s+name=["']viewport["']/iu.test(
-    input.html,
-  ), "Prototype lacks a responsive viewport.");
-  require(/<main[\s>]/iu.test(input.html), "Prototype lacks a main landmark.");
-  require(/<section\s+aria-labelledby=/iu.test(
-    input.html,
-  ), "Prototype lacks labelled workflow regions.");
-  require(!/lorem ipsum|todo:|placeholder text/iu.test(
-    input.html,
-  ), "Prototype contains unfinished placeholder content.");
+  requireCondition(/<html\s+lang=["']en["']/iu.test(input.html), "Prototype lacks a language.");
+  requireCondition(
+    /<meta\s+name=["']viewport["']/iu.test(input.html),
+    "Prototype lacks a responsive viewport.",
+  );
+  requireCondition(/<main[\s>]/iu.test(input.html), "Prototype lacks a main landmark.");
+  requireCondition(
+    /<section\s+aria-labelledby=/iu.test(input.html),
+    "Prototype lacks labelled workflow regions.",
+  );
+  requireCondition(
+    !/lorem ipsum|todo:|placeholder text/iu.test(input.html),
+    "Prototype contains unfinished placeholder content.",
+  );
   for (const text of prototype.requiredText) {
-    require(input.html.includes(text), `Prototype omitted ${text}.`);
+    requireCondition(input.html.includes(text), `Prototype omitted ${text}.`);
   }
   const appSpecResult = validateBuildReadyAppSpec(input.appSpec);
-  require(appSpecResult.valid, "Prototype AppSpec is not build-ready.");
-  require(input.appSpec.includes(
-    `prototype/${prototype.appId}/index.html`,
-  ), "AppSpec does not bind the evaluated prototype path.");
+  requireCondition(appSpecResult.valid, "Prototype AppSpec is not build-ready.");
+  requireCondition(
+    input.appSpec.includes(`prototype/${prototype.appId}/index.html`),
+    "AppSpec does not bind the evaluated prototype path.",
+  );
   return {
     hardFailures,
     score: {
