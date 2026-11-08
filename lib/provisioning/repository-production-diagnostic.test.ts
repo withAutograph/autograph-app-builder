@@ -1,9 +1,11 @@
 /* oxlint-disable eslint/require-await -- Synthetic ports retain the asynchronous failure boundary. */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { HostedOperatorError } from "./hosted-operator-contract";
 import {
   observeRepositoryProductionPhase,
   reportRepositoryProductionFailure,
+  reportRepositoryProductionProgress,
 } from "./repository-production-diagnostic";
 
 afterEach(() => vi.restoreAllMocks());
@@ -75,14 +77,13 @@ describe("private Production failure diagnostics", () => {
     const failure = new Error(message, { cause: "private-cause-token" });
     failure.stack = "private-stack-url";
     reportRepositoryProductionFailure("setup_prepare", "setup_unavailable", failure);
-    expect(log).toHaveBeenCalledWith(
-      JSON.stringify({
-        event: "builder.repository_production_failure",
-        phase: "setup_prepare",
-        code: "setup_unavailable",
-        reason,
-      }),
-    );
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({
+      event: "builder.repository_production_failure",
+      phase: "setup_prepare",
+      code: "setup_unavailable",
+      reason,
+      errorKind: "Error",
+    });
     const output = log.mock.calls.flat().join("");
     expect(output).not.toContain(message);
     expect(output).not.toContain("private");
@@ -111,6 +112,110 @@ describe("private Production failure diagnostics", () => {
     expect(output).not.toContain("reason");
     expect(output).not.toContain(known);
     expect(output).not.toContain("private-token");
+  });
+
+  it("retains a real typed operator code without exposing its private cause", () => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const failure = new HostedOperatorError("operator_unavailable", {
+      cause: new Error("private-provider-key"),
+    });
+    reportRepositoryProductionFailure("setup_prepare", "setup_unavailable", failure);
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({
+      operatorCode: "operator_unavailable",
+      errorKind: "Error",
+    });
+    expect(log.mock.calls.flat().join("")).not.toContain("private-provider-key");
+  });
+
+  it.each([
+    [new Error("private-error"), "Error"],
+    [new TypeError("private-type"), "TypeError"],
+    [new RangeError("private-range"), "RangeError"],
+    [new DOMException("private-cancel", "AbortError"), "DOMException"],
+  ])("recognizes native error kind without reading inherited names", (failure, kind) => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    reportRepositoryProductionFailure("setup_prepare", "setup_unavailable", failure);
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({ errorKind: kind });
+    expect(log.mock.calls.flat().join("")).not.toContain("private");
+  });
+
+  it("extracts only allowlisted SQLSTATEs from bounded own-data cause chains", () => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const driver = { code: "42501", message: "private-sql", status: 403 };
+    const wrapped = new Error("private-query-and-parameters", { cause: driver });
+    reportRepositoryProductionFailure("setup_prepare", "setup_unavailable", wrapped);
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({ sqlState: "42501" });
+    const output = log.mock.calls.flat().join("");
+    expect(output).not.toContain("private");
+    expect(output).not.toContain("httpStatus");
+    log.mockClear();
+    const tooDeep = { cause: { cause: { cause: { cause: driver } } } };
+    const inherited: unknown = Object.create({ cause: driver });
+    const cyclic = { cause: {} };
+    cyclic.cause = cyclic;
+    for (const failure of [tooDeep, inherited, cyclic]) {
+      reportRepositoryProductionFailure("setup_prepare", "setup_unavailable", failure);
+    }
+    expect(log.mock.calls.flat().join("")).not.toContain("sqlState");
+  });
+
+  it("does not invoke hostile field getters or proxy reads while collecting metadata", () => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const access = vi.fn(() => {
+      throw new Error("private getter");
+    });
+    const inner = Object.defineProperties({}, { code: { get: access }, cause: { get: access } });
+    const failure = new Proxy(new Error("private-wrapper", { cause: inner }), { get: access });
+    reportRepositoryProductionFailure("setup_prepare", "setup_unavailable", failure);
+    expect(access).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalled();
+    expect(log.mock.calls.flat().join("")).not.toContain("private");
+  });
+
+  it("retains cancellation and the exact original error even when its observer fails", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const failure = new HostedOperatorError("operator_unavailable");
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const run = async () => {
+      throw failure;
+    };
+    await expect(
+      observeRepositoryProductionPhase(
+        "setup_prepare",
+        "setup_unavailable",
+        run,
+        controller.signal,
+      ),
+    ).rejects.toBe(failure);
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({ requestAborted: true });
+    log.mockImplementation(() => {
+      throw new Error("observer unavailable");
+    });
+    await expect(
+      observeRepositoryProductionPhase(
+        "setup_prepare",
+        "setup_unavailable",
+        run,
+        controller.signal,
+      ),
+    ).rejects.toBe(failure);
+  });
+
+  it("publishes only fixed progress labels and ignores progress logging failure", () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    reportRepositoryProductionProgress("connections", "started");
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toEqual({
+      event: "builder.repository_production_progress",
+      phase: "connections",
+      state: "started",
+    });
+    log.mockImplementation(() => {
+      throw new Error("logger unavailable");
+    });
+    expect(() => {
+      reportRepositoryProductionProgress("worker_input", "completed");
+    }).not.toThrow();
   });
 
   it("preserves the exact original rejection when diagnostic access or logging fails", async () => {

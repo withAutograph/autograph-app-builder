@@ -175,6 +175,7 @@ export const createRepositoryProductionHandler =
         "setup_prepare",
         "setup_unavailable",
         () => resolved.setup.prepare(resolved.scope, resolved.intent),
+        request.signal,
       );
       const access = await observeRepositoryProductionPhase(
         "setup_projection",

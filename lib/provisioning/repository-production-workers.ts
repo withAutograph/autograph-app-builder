@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   observeRepositoryProductionPhase,
   reportRepositoryProductionFailure,
+  reportRepositoryProductionProgress,
 } from "./repository-production-diagnostic";
 import {
   encryptVercelToken,
@@ -197,6 +198,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     }
     const worker = deps.profile.workers[operation];
     const connections = await deps.readConnections(context);
+    reportRepositoryProductionProgress("worker_input", "started");
     const urls = {
       ...appConnections(row),
       authOperator: connections.authOperator,
@@ -358,7 +360,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       );
     }
     await assertCurrent(context);
-    return await (deps.runWorker ?? runRepositoryProductionFileSpool)(deps.profile.sandbox, {
+    const workerInput: Parameters<typeof runRepositoryProductionFileSpool>[1] = {
       operation,
       worker,
       context: workerContext,
@@ -386,7 +388,12 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
               await context.checkpoint(z.json().parse(frame));
             },
           }),
-    });
+    };
+    reportRepositoryProductionProgress("worker_input", "completed");
+    return await (deps.runWorker ?? runRepositoryProductionFileSpool)(
+      deps.profile.sandbox,
+      workerInput,
+    );
   };
   const observe = (
     value: Awaited<ReturnType<typeof runRepositoryProductionFileSpool>>,
@@ -412,6 +419,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     }
     const worker = deps.profile.workers.authManagement;
     const connection = await deps.readConnections(context);
+    reportRepositoryProductionProgress("worker_input", "started");
     const resource = deps.profile.authResource;
     const authResource = {
       version: 1,
@@ -457,7 +465,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       installer: { id: worker.id, sha256: worker.sha256 },
       tenant_targets: [scope.organizationId],
     };
-    return await (deps.runWorker ?? runRepositoryProductionFileSpool)(deps.profile.sandbox, {
+    const workerInput: Parameters<typeof runRepositoryProductionFileSpool>[1] = {
       operation: "auth-management",
       worker,
       context: workerContext,
@@ -479,7 +487,12 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
               await context.checkpoint(z.json().parse(frame));
             },
           }),
-    });
+    };
+    reportRepositoryProductionProgress("worker_input", "completed");
+    return await (deps.runWorker ?? runRepositoryProductionFileSpool)(
+      deps.profile.sandbox,
+      workerInput,
+    );
   };
   const managedAuth = async (
     context: RepositoryProductionEffectContext,

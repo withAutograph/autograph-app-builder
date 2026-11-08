@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { operatorPublicResultSchema } from "./hosted-operator-contract";
 
 const failureSchema = z.strictObject({
   event: z.literal("builder.repository_production_failure"),
@@ -31,6 +32,21 @@ const failureSchema = z.strictObject({
     "provider_unavailable",
     "credentials_unavailable",
   ]),
+  operatorCode: operatorPublicResultSchema.shape.code,
+  errorKind: z
+    .enum([
+      "Error",
+      "TypeError",
+      "RangeError",
+      "ReferenceError",
+      "SyntaxError",
+      "URIError",
+      "EvalError",
+      "AggregateError",
+      "DOMException",
+    ])
+    .optional(),
+  requestAborted: z.boolean().optional(),
   reason: z
     .enum([
       "approval_required",
@@ -72,26 +88,79 @@ const reasonByMessage = new Map<string, NonNullable<Failure["reason"]>>([
   ["repository_production_access_reconciliation_required", "reconciliation_required"],
 ]);
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- Exception fields remain untrusted until projected through closed schemas.
+const ownData = (value: unknown, name: string): unknown => {
+  try {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Never invoke exception accessors.
+    if (value === null || typeof value !== "object") {
+      return undefined;
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(value, name);
+    return descriptor && Object.hasOwn(descriptor, "value") ? descriptor.value : undefined;
+  } catch {
+    return undefined;
+  }
+};
+const builtinErrorKinds = [
+  [Error.prototype, "Error"],
+  [TypeError.prototype, "TypeError"],
+  [RangeError.prototype, "RangeError"],
+  [ReferenceError.prototype, "ReferenceError"],
+  [SyntaxError.prototype, "SyntaxError"],
+  [URIError.prototype, "URIError"],
+  [EvalError.prototype, "EvalError"],
+  [AggregateError.prototype, "AggregateError"],
+  [DOMException.prototype, "DOMException"],
+] as const;
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Only fixed native prototype identities or own closed names are recognized.
+const errorKind = (error: unknown): Failure["errorKind"] => {
+  const named = failureSchema.shape.errorKind.unwrap().safeParse(ownData(error, "name"));
+  if (named.success) {
+    return named.data;
+  }
+  try {
+    let prototype: unknown = Object.getPrototypeOf(error);
+    for (let depth = 0; depth < 3 && prototype !== null; depth += 1) {
+      const currentPrototype = prototype;
+      const known = builtinErrorKinds.find(([candidate]) => candidate === currentPrototype);
+      if (known) {
+        return known[1];
+      }
+      prototype = Object.getPrototypeOf(prototype);
+    }
+  } catch {
+    // Hostile prototype traps cannot suppress the remaining closed fields.
+  }
+  return undefined;
+};
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Wrapped drivers contribute only allowlisted SQLSTATEs through own data properties.
+const sqlState = (error: unknown): Failure["sqlState"] => {
+  let current = error;
+  for (let depth = 0; depth < 4; depth += 1) {
+    const parsed = failureSchema.shape.sqlState.unwrap().safeParse(ownData(current, "code"));
+    if (parsed.success) {
+      return parsed.data;
+    }
+    current = ownData(current, "cause");
+  }
+  return undefined;
+};
+
 /** Private exceptions contribute only closed labels and numeric status, never raw text or causes. */
 export const reportRepositoryProductionFailure = (
   phase: Failure["phase"],
   code: Failure["code"],
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Only own data descriptors are projected into the closed diagnostic schema.
   error?: unknown,
+  signal?: AbortSignal,
 ): void => {
   try {
-    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Descriptor values remain untrusted until parsed below.
-    const own = (name: string): unknown =>
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Read data descriptors only; never invoke exception accessors.
-      error !== null && typeof error === "object"
-        ? Object.getOwnPropertyDescriptor(error, name)?.value
-        : undefined;
-    const message = z.string().safeParse(own("message"));
+    const message = z.string().safeParse(ownData(error, "message"));
     // ZodError need not extend Error, and its custom instanceof reads instance properties.
     const fixedReason = message.success ? reasonByMessage.get(message.data) : undefined;
-    const reason = own("name") === "ZodError" ? "schema_invalid" : fixedReason;
-    const sqlState = failureSchema.shape.sqlState.unwrap().safeParse(own("code"));
-    const statuses = [own("statusCode"), own("status")];
+    const reason = ownData(error, "name") === "ZodError" ? "schema_invalid" : fixedReason;
+    const operatorCode = failureSchema.shape.operatorCode.safeParse(ownData(error, "code"));
+    const statuses = [ownData(error, "statusCode"), ownData(error, "status")];
     const httpStatus = statuses
       .map((value) => failureSchema.shape.httpStatus.unwrap().safeParse(value))
       .find((value) => value.success);
@@ -101,9 +170,12 @@ export const reportRepositoryProductionFailure = (
           event: "builder.repository_production_failure",
           phase,
           code,
+          errorKind: errorKind(error),
+          sqlState: sqlState(error),
           ...(reason === undefined ? {} : { reason }),
-          ...(sqlState.success ? { sqlState: sqlState.data } : {}),
+          ...(operatorCode.success ? { operatorCode: operatorCode.data } : {}),
           ...(httpStatus?.success ? { httpStatus: httpStatus.data } : {}),
+          ...(signal === undefined ? {} : { requestAborted: signal.aborted }),
         }),
       ),
     );
@@ -112,15 +184,36 @@ export const reportRepositoryProductionFailure = (
   }
 };
 
+const progressSchema = z.strictObject({
+  event: z.literal("builder.repository_production_progress"),
+  phase: z.enum(["connections", "worker_input"]),
+  state: z.enum(["started", "completed"]),
+});
+export const reportRepositoryProductionProgress = (
+  phase: z.infer<typeof progressSchema>["phase"],
+  state: z.infer<typeof progressSchema>["state"],
+): void => {
+  try {
+    console.info(
+      JSON.stringify(
+        progressSchema.parse({ event: "builder.repository_production_progress", phase, state }),
+      ),
+    );
+  } catch {
+    // Progress visibility never changes the protected operation.
+  }
+};
+
 export const observeRepositoryProductionPhase = async <T>(
   phase: Failure["phase"],
   code: Failure["code"],
   run: () => Promise<T>,
+  signal?: AbortSignal,
 ): Promise<T> => {
   try {
     return await run();
   } catch (error) {
-    reportRepositoryProductionFailure(phase, code, error);
+    reportRepositoryProductionFailure(phase, code, error, signal);
     throw error;
   }
 };

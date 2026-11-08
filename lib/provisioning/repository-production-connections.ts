@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   observeRepositoryProductionPhase,
   reportRepositoryProductionFailure,
+  reportRepositoryProductionProgress,
 } from "./repository-production-diagnostic";
 
 import {
@@ -54,6 +55,7 @@ export const createRepositoryProductionConnectionReader =
     };
   }) =>
   async () => {
+    reportRepositoryProductionProgress("connections", "started");
     const io = input.io ?? {
       getOidc: getVercelOidcToken,
       verifyOidc: async (token, options) => {
@@ -187,6 +189,7 @@ export const createRepositoryProductionConnectionReader =
         ),
       ]);
       await assertCurrent();
+      reportRepositoryProductionProgress("connections", "completed");
       return { maintenanceUrl, authOperator, authRuntime, oidcToken };
     }
     const projectPath = `/projects/${encodeURIComponent(scope.projectId)}`;
@@ -271,5 +274,6 @@ export const createRepositoryProductionConnectionReader =
       ),
     ]);
     await assertCurrent();
+    reportRepositoryProductionProgress("connections", "completed");
     return { maintenanceUrl, authOperator, authRuntime, oidcToken };
   };
