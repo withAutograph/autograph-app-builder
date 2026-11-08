@@ -168,7 +168,9 @@ function hostedFixture(
       });
     }
     const secondary = authorization === `Bearer ${secondaryToken}`;
-    const body = JSON.parse(String(init?.body));
+    const body = z
+      .object({ id: z.unknown().optional(), method: z.string(), params: z.unknown().optional() })
+      .parse(JSON.parse(String(init?.body)));
     if (body.method === "initialize") {
       return rpc(body.id, {
         capabilities: {},
@@ -185,8 +187,9 @@ function hostedFixture(
     if (body.method !== "tools/call") {
       return new Response("", { status: 400 });
     }
-    const name = body.params.name as string;
-    const args = body.params.arguments as Record<string, unknown>;
+    const { name, arguments: args } = z
+      .object({ arguments: z.record(z.string(), z.unknown()), name: z.string() })
+      .parse(body.params);
     const tool = (structuredContent: unknown, isError = false) =>
       rpc(body.id, { isError, structuredContent });
     const denialFailure = (direction: "primary-reads-secondary" | "secondary-reads-primary") => {
@@ -221,14 +224,11 @@ function hostedFixture(
         return tool(session("primary-session", "working", 0), true);
       }
       for (const response of args.responses) {
-        if (
-          response === null ||
-          typeof response !== "object" ||
-          typeof (response as { requestId?: unknown }).requestId !== "string"
-        ) {
+        const parsedResponse = z.object({ requestId: z.string() }).safeParse(response);
+        if (!parsedResponse.success) {
           return tool(session("primary-session", "working", 0), true);
         }
-        approved.add((response as { requestId: string }).requestId);
+        approved.add(parsedResponse.data.requestId);
       }
       return tool(session("primary-session", "working", 0));
     }

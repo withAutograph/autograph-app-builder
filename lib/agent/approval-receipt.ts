@@ -91,10 +91,15 @@ export function approvalTarget(receipt: ApprovalReceipt): ApprovalTarget {
   };
 }
 
+type GitHubApprovalSource = Pick<
+  ImmutableGitHubSourceReceipt,
+  "digest" | "resolvedRef" | "resolvedSha"
+> & {
+  repository: Pick<ImmutableGitHubSourceReceipt["repository"], "owner" | "name" | "repositoryId">;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function approvalTargetFromGitHubSource(
-  source: ImmutableGitHubSourceReceipt,
-): ApprovalTarget {
+export function approvalTargetFromGitHubSource(source: GitHubApprovalSource): ApprovalTarget {
   return {
     baseRef: source.resolvedRef,
     baseSha: source.resolvedSha,
@@ -140,7 +145,7 @@ const approvalTargetFromDraftHead = (proposal: DraftHeadApprovalSubject): Approv
 });
 
 export const approvalTargetFromExistingDraftUpdate: (
-  proposal: ExistingDraftUpdateProposal,
+  proposal: DraftHeadApprovalSubject,
 ) => ApprovalTarget = approvalTargetFromDraftHead;
 
 export const approvalTargetFromExistingDraftReconciliation: (
@@ -727,7 +732,7 @@ export function approvalRequestDecision(input: {
   phase: "appspec" | "change_set";
   toolName: "accept_app_spec" | "accept_change_set";
   toolInput: Record<string, unknown>;
-  githubSource: ImmutableGitHubSourceReceipt | undefined;
+  githubSource: GitHubApprovalSource | undefined;
   subjectDigest: string;
 }): "user-approval" | { type: "denied"; reason: string } {
   const receipt = input.toolInput.approvalReceipt;
