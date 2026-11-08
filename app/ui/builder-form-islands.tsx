@@ -81,7 +81,8 @@ export function BuilderAppDetails() {
       }}
       onBriefChange={updateBrief}
       onCycleBrief={() => {
-        const currentIndex = briefExamples.indexOf(form.brief as (typeof briefExamples)[number]);
+        const examples: readonly string[] = briefExamples;
+        const currentIndex = examples.indexOf(form.brief);
         const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % briefExamples.length;
         updateBrief(briefExamples[nextIndex]);
       }}
