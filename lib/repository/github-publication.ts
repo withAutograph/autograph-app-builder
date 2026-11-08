@@ -844,11 +844,11 @@ export function assertExactGitHubFreshRepositoryContent(input: {
     throw new Error("The fresh repository content schema is invalid.");
   }
   const algorithm = proposal.sourceTree.length === 64 ? "sha256" : "sha1";
-  const paths = content.files.map((file) => file.path);
+  const paths = content.files.map((file: GitHubFreshRepositoryContentFile) => file.path);
   if (
     new Set(paths).size !== paths.length ||
     content.files.some(
-      (file) =>
+      (file: GitHubFreshRepositoryContentFile) =>
         !exactKeys(file, ["path", "mode", "objectId", "digest", "bytes"]) ||
         !safeSourcePath(file.path) ||
         (file.mode !== "100644" && file.mode !== "100755") ||
@@ -908,7 +908,7 @@ export function assertExactGitHubDraftPullRequestContent(input: {
     );
   }
   const mismatchedBytes = content.changes.find(
-    (change) =>
+    (change: GitHubPublicationContentChange) =>
       change.kind !== "deleted" && bytesDigest(change.after.bytes) !== change.after.digest,
   );
   if (mismatchedBytes !== undefined && mismatchedBytes.kind !== "deleted") {

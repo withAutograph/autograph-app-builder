@@ -530,7 +530,8 @@ export async function inspectFixtureApplyOverlay(
   if (!Array.isArray(parsed)) {
     throw new TypeError("The prepared workspace manifest is invalid.");
   }
-  const sourceFiles = parsed.map((candidate) => {
+  const manifestEntries: unknown[] = parsed;
+  const sourceFiles = manifestEntries.map((candidate) => {
     if (
       typeof candidate !== "object" ||
       candidate === null ||
