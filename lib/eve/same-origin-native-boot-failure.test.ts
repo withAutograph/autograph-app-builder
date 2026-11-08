@@ -6,6 +6,7 @@ import type { HostedPrincipal } from "./hosted-auth";
 import { InMemoryHostedEveStore } from "./hosted-store";
 import { createSameOriginEveTransport, observeSameOriginEveStream } from "./same-origin-http";
 import type { InternalEveEvent } from "./public-events";
+import type { NativeRecoveryBinding } from "./native-recovery-contract";
 
 const principal: HostedPrincipal = {
   issuer: "https://identity.example",
@@ -16,6 +17,11 @@ const principal: HostedPrincipal = {
 };
 const config = { baseUrl: "https://builder.example", timeoutMs: 10_000 };
 const workloadIdentity = { token: () => Promise.resolve("fixture-workload") };
+interface BootStreamHeaders {
+  [name: string]: string;
+  "content-type": string;
+}
+
 const stream = (
   input: {
     events?: unknown[];
@@ -25,16 +31,19 @@ const stream = (
   } = {},
 ) => {
   const events = input.events ?? [];
-  return new Response(events.map((event) => JSON.stringify(event)).join("\n"), {
-    headers: {
-      "content-type": "application/x-ndjson",
-      "x-eve-session-id": input.sessionId ?? "run_boot",
-      "x-eve-stream-format": "ndjson",
-      "x-eve-stream-version": "25",
-      "x-eve-stream-tail-index": String(input.tailIndex ?? events.length - 1),
-      ...(input.status === undefined ? {} : { "x-eve-native-recovery-boot-status": input.status }),
-    },
-  });
+  const ResponseConstructor = Response;
+  const body = events.map((event) => JSON.stringify(event)).join("\n");
+  const headers: BootStreamHeaders = {
+    "content-type": "application/x-ndjson",
+    "x-eve-session-id": input.sessionId ?? "run_boot",
+    "x-eve-stream-format": "ndjson",
+    "x-eve-stream-version": "25",
+    "x-eve-stream-tail-index": String(input.tailIndex ?? events.length - 1),
+  };
+  if (input.status !== undefined) {
+    headers["x-eve-native-recovery-boot-status"] = input.status;
+  }
+  return new ResponseConstructor(body, { headers });
 };
 const observe = (response: () => Response, onEvent: (event: InternalEveEvent) => void = () => {}) =>
   observeSameOriginEveStream({
@@ -157,19 +166,18 @@ describe("verified native recovery boot failure", () => {
         throw new Error("Expected native recovery");
       }
       const ownerRunId = starts === 2 ? "run_boot" : "run_recovered";
-      const recoveryBinding = {
-        ...recovery,
-        ownerRunId,
-        provenance: {
-          kind:
-            starts === 2 ? ("failed-turn-input" as const) : ("validated-recovery-input" as const),
-          sourceStepId: "validated-step",
-          sourceEventId: "validated-event",
-          sourceSlot: 0,
-          checkpointVersion: 1 as const,
-          ...(starts === 2 ? {} : { resumePhase: "await-input" as const }),
-        },
+      const binding = { ...recovery, ownerRunId };
+      const provenance: NativeRecoveryBinding["provenance"] = {
+        kind: starts === 2 ? "failed-turn-input" : "validated-recovery-input",
+        sourceStepId: "validated-step",
+        sourceEventId: "validated-event",
+        sourceSlot: 0,
+        checkpointVersion: 1,
       };
+      if (starts !== 2) {
+        provenance.resumePhase = "await-input";
+      }
+      const recoveryBinding = { ...binding, provenance };
       await store.commitNativeRecoveryReceipt({
         principal,
         descriptor: recovery,
