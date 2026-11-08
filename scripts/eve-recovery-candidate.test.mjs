@@ -905,7 +905,7 @@ test("reconnect preserves a UTF-8 NDJSON value split across complete native fram
   const world = {
     streams: {
       async getInfo() {
-        return { tailIndex: 1, done: false };
+        return { done: false, tailIndex: 1 };
       },
       async get(_run, _name, startIndex) {
         starts.push(startIndex);
@@ -947,7 +947,7 @@ for (const interrupted of [false, true]) {
       streams: {
         async getInfo() {
           infos += 1;
-          return { tailIndex: frameCount - 1, done: false };
+          return { done: false, tailIndex: frameCount - 1 };
         },
         async get(_run, _name, startIndex) {
           starts.push(startIndex);
@@ -995,7 +995,7 @@ test("an empty unclosed captured tail never opens a live stream", async () => {
     streams: {
       async getInfo() {
         infos += 1;
-        return { tailIndex: -1, done: false };
+        return { done: false, tailIndex: -1 };
       },
       get() {
         throw new Error("empty tail must not follow stream");
@@ -1255,9 +1255,9 @@ test("context primitive canonicalization preserves mutable identities, descripto
   let getterReads = 0;
   const context = { permission: sharedPermission, array: ["same-issuer"], readonly: "same-issuer" };
   Object.defineProperty(context, "readonly", {
+    enumerable: true,
     value: "same-issuer",
     writable: false,
-    enumerable: true,
   });
   Object.defineProperty(context, "accessor", {
     get() {
@@ -1335,13 +1335,13 @@ test("actual collector identifies the exact authority-anchor status refusal with
       const f = await fixture({ status });
       const result = await f.collect({ ...f.input, allowParked: true });
       assert.deepEqual(result, {
-        kind: "unavailable",
-        reason: "source-not-terminal",
         boundary: {
+          allowParked: true,
           stage: "authority_anchor",
           status: status === "waiting" ? "waiting" : "other",
-          allowParked: true,
         },
+        kind: "unavailable",
+        reason: "source-not-terminal",
       });
       assert.equal(JSON.stringify(result).includes("private-canary"), false);
     }),
