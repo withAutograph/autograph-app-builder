@@ -189,12 +189,12 @@ export const reviewApplicationWithJournal = async (
   }
   const options: ApplicationSourceReviewOptions = {
     ...input.options,
-    cacheSessionId: applicationSourceReviewCacheSessionId(input.options?.sessionId, key),
     async assertCurrentOwner() {
       assertNotStopped();
       await input.journal.assertCurrentOwner();
       assertNotStopped();
     },
+    cacheSessionId: applicationSourceReviewCacheSessionId(input.options?.sessionId, key),
   };
   const assessment = reusable
     ? { ...retained.assessment, invocation: { ...emptySourceReviewInvocation(), journalReuses: 1 } }
@@ -319,10 +319,12 @@ export const reviewAppliedProductSource = async (input: {
       selectedBaseline === undefined
         ? undefined
         : await readAppBaselineMarker(sandbox, selectedBaseline);
+    const observedPaths = observed.files.map((file) => file.path);
+    const changedPaths = input.normalizedChanges.map((change) => change.path);
     const visibility = applicationReviewVisibility({
-      observedPaths: observed.files.map((file) => file.path),
-      changedPaths: input.normalizedChanges.map((change) => change.path),
+      changedPaths,
       hasSelectedBaseline: selectedBaseline !== undefined,
+      observedPaths,
       unexposedReleasePrefixes: marker?.unexposedReleasePrefixes,
     });
     currentInput.omissions.push(...visibility.omissions);
@@ -345,9 +347,9 @@ export const reviewAppliedProductSource = async (input: {
         });
     }
     const evidence = createApplicationReviewEvidence(evidenceInput);
+    const { abortSignal, sessionId } = input;
     const options: ApplicationSourceReviewOptions = {
-      abortSignal: input.abortSignal,
-      sessionId: input.sessionId,
+      abortSignal,
       onInvocation(invocation) {
         console.info(
           JSON.stringify({
@@ -355,6 +357,16 @@ export const reviewAppliedProductSource = async (input: {
             event: "app_builder.source_review_invocation",
             sessionId: input.sessionId,
             ...invocation,
+          }),
+        );
+      },
+      onRequest(completedRequest) {
+        console.info(
+          JSON.stringify({
+            callId: input.callId,
+            event: "app_builder.source_review_request_finished",
+            sessionId: input.sessionId,
+            ...completedRequest,
           }),
         );
       },
@@ -371,27 +383,18 @@ export const reviewAppliedProductSource = async (input: {
           }),
         );
       },
-      onRequest(completedRequest) {
-        console.info(
-          JSON.stringify({
-            callId: input.callId,
-            event: "app_builder.source_review_request_finished",
-            sessionId: input.sessionId,
-            ...completedRequest,
-          }),
-        );
-      },
+      sessionId,
     };
     const assessment = await reviewApplicationWithJournal({
-      reviewInput: currentInput,
-      normalizedChanges: input.normalizedChanges,
-      evidence,
-      journal,
-      options,
       currentDigest: async () => {
         const { treeDigest } = await inspectApplyOverlay(sandbox, input.applyReceipt.applyRoot);
         return treeDigest;
       },
+      evidence,
+      journal,
+      normalizedChanges: input.normalizedChanges,
+      options,
+      reviewInput: currentInput,
     });
     input.abortSignal?.throwIfAborted();
     retainScopedProductSourceAssessment(assessment, bindingDigest);
@@ -486,10 +489,12 @@ export const prepareAppliedProductSourceReview = async (
     const baseline = selected?.appId === input.appSpec.appId ? selected : undefined;
     const marker =
       baseline === undefined ? undefined : await readAppBaselineMarker(sandbox, baseline);
+    const observedPaths = input.observed.files.map((file) => file.path);
+    const changedPaths = input.normalizedChanges.map((change) => change.path);
     const visibility = applicationReviewVisibility({
-      observedPaths: input.observed.files.map((file) => file.path),
-      changedPaths: input.normalizedChanges.map((change) => change.path),
+      changedPaths,
       hasSelectedBaseline: baseline !== undefined,
+      observedPaths,
       unexposedReleasePrefixes: marker?.unexposedReleasePrefixes,
     });
     if (input.appSpec.version === 2) {
@@ -530,11 +535,13 @@ export const prepareAppliedProductSourceReview = async (
       reviewKey,
       reviewInput: privateReviewInput,
     };
+    const { appId } = input.appSpec;
+    const { sessionAuth, sessionId, abortSignal } = input;
     const store = await sourceReviewContextStoreForSession({
-      appId: input.appSpec.appId,
-      sessionAuth: input.sessionAuth,
-      sessionId: input.sessionId,
-      abortSignal: input.abortSignal,
+      abortSignal,
+      appId,
+      sessionAuth,
+      sessionId,
     });
     return {
       reference: {
@@ -566,11 +573,13 @@ export const finalizeAppliedProductSourceReview = async (
     if (input.sessionId === undefined || input.reference.appId !== input.appSpec.appId) {
       return unavailable();
     }
+    const { appId } = input.appSpec;
+    const { sessionAuth, sessionId, abortSignal } = input;
     const store = await sourceReviewContextStoreForSession({
-      appId: input.appSpec.appId,
-      sessionAuth: input.sessionAuth,
-      sessionId: input.sessionId,
-      abortSignal: input.abortSignal,
+      abortSignal,
+      appId,
+      sessionAuth,
+      sessionId,
     });
     const context = await store.readContext(input.reference.contextRef);
     const currentKey = applicationSourceReviewKey(current, input.normalizedChanges);
