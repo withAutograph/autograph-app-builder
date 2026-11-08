@@ -29,7 +29,7 @@ const sessionSchema = z
       expiresAt: z.iso.datetime({ offset: true }),
       activeOrganizationId: id.nullable().optional(),
     }),
-    user: z.object({ id, email }),
+    user: z.object({ email, id }),
   })
   .nullable();
 
@@ -497,7 +497,7 @@ export const createHostedOperatorNormalAuthClient = (options: {
       await request(
         "sign_up",
         "sign-up/email",
-        z.object({ user: z.object({ id, email }) }),
+        z.object({ user: z.object({ email, id }) }),
         parseInput(signUpInput, input, "sign_up"),
       );
     },
@@ -505,7 +505,7 @@ export const createHostedOperatorNormalAuthClient = (options: {
       await request(
         "sign_in",
         "sign-in/email",
-        z.object({ user: z.object({ id, email }) }),
+        z.object({ user: z.object({ email, id }) }),
         parseInput(credentials, input, "sign_in"),
       );
     },

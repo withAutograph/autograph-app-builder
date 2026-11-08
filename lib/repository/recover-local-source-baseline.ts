@@ -55,8 +55,6 @@ const cleanGit = (root: string, args: string[], input?: string) =>
     gitExecutable,
     ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-C", root, ...args],
     {
-      input,
-      maxBuffer: 32 * 1024 * 1024,
       env: {
         NODE_ENV: "test",
         PATH: gitExecutablePath,
@@ -66,6 +64,8 @@ const cleanGit = (root: string, args: string[], input?: string) =>
         GIT_CONFIG_GLOBAL: "/dev/null",
         GIT_TERMINAL_PROMPT: "0",
       },
+      input,
+      maxBuffer: 32 * 1024 * 1024,
     },
   );
 
@@ -89,12 +89,12 @@ export const recoverLocalSourceBaseline = async (input: {
     throw new Error("source_baseline_authority_unavailable");
   }
   const authority = await readLocalOperatorArtifactAuthority({
-    APP_BUILDER_EXECUTION_MODE: "development",
-    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
-    APP_BUILDER_LOCAL_ADAPTER: "1",
-    EVE_HOSTED_ADAPTER: "0",
-    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
     APP_BUILDER_DEV_RUNS_ROOT: input.runsRoot,
+    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+    APP_BUILDER_EXECUTION_MODE: "development",
+    APP_BUILDER_LOCAL_ADAPTER: "1",
+    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+    EVE_HOSTED_ADAPTER: "0",
   });
   if (authority === undefined) {
     throw new Error("source_baseline_authority_unavailable");
@@ -276,7 +276,6 @@ export const recoverLocalSourceBaseline = async (input: {
       request.originalSourceSha,
     ],
     {
-      input: "Explicit source-only baseline recovery capture\n",
       env: {
         NODE_ENV: "test",
         PATH: gitExecutablePath,
@@ -284,6 +283,7 @@ export const recoverLocalSourceBaseline = async (input: {
         GIT_NO_REPLACE_OBJECTS: "1",
         GIT_CONFIG_GLOBAL: "/dev/null",
       },
+      input: "Explicit source-only baseline recovery capture\n",
     },
   )
     .toString()
@@ -295,13 +295,10 @@ export const recoverLocalSourceBaseline = async (input: {
   if (readLocalEveCycleBinding(cycleFile) !== cycle) {
     throw new Error("source_baseline_authority_changed");
   }
+  const { originalSourceSha, workspaceDigest } = request;
   const manifest = {
-    version: 1 as const,
     kind: "local-planning-source-baseline" as const,
-    originalSourceSha: request.originalSourceSha,
-    workspaceDigest: request.workspaceDigest,
-    sourceSha: captured,
-    sourceTree: tree,
+    originalSourceSha,
     provenance: {
       kind: "recovered-source-archives",
       originalSourceRoot: originalRoot,
@@ -309,6 +306,10 @@ export const recoverLocalSourceBaseline = async (input: {
       archives: archiveProofs,
       files: actual.files,
     },
+    sourceSha: captured,
+    sourceTree: tree,
+    version: 1 as const,
+    workspaceDigest,
   };
   const pack = spawn(gitExecutable, ["--git-dir", gitRoot, "pack-objects", "--stdout", "--revs"], {
     env: {
@@ -335,6 +336,9 @@ export const recoverLocalSourceBaseline = async (input: {
     authority,
     manifest,
     pack: new ReadableStream<Uint8Array>({
+      cancel() {
+        packInput.destroy();
+      },
       async pull(controller) {
         const item = await chunks.next();
         if (item.done === true) {
@@ -345,9 +349,6 @@ export const recoverLocalSourceBaseline = async (input: {
           throw new TypeError("source_baseline_invalid_pack_stream");
         }
         controller.enqueue(item.value);
-      },
-      cancel() {
-        packInput.destroy();
       },
     }),
   });

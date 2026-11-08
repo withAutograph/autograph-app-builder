@@ -852,9 +852,11 @@ export const createRealmIdentityCallbackDeploymentHandler =
                 JSON.parse(await readBody(incoming.clone(), 32_768)),
               );
               const routed = routing(candidate.nonce, candidate.proof);
+              const { ownerSessionId } = routed;
+              const nonceSha256 = realmIdentityNonceSha256(routed.nonce);
               await selectCanonicalRuntime({
-                ownerSessionId: routed.ownerSessionId,
-                nonceSha256: realmIdentityNonceSha256(routed.nonce),
+                nonceSha256,
+                ownerSessionId,
               });
             }
             const nativeSender: NormalActorCaptureSender =

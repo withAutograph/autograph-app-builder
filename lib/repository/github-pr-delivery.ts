@@ -204,9 +204,9 @@ const runMatchesPull = (
 
 const readReadyHistory = async (request: Request, pull: z.infer<typeof pullSchema>) => {
   const response = await request({
+    body: { query: readyQuery, variables: { id: pull.node_id } },
     method: "POST",
     path: "/graphql",
-    body: { query: readyQuery, variables: { id: pull.node_id } },
   });
   return readySchema.parse(response).data.node;
 };
@@ -283,20 +283,17 @@ const checkReadyRun = async (
         job.head_sha !== run.head_sha,
     )
   ) {
-    return { checks: "pending", readyAt, checkRunId: run.id };
+    const checkRunId = run.id;
+    return { checkRunId, checks: "pending", readyAt };
   }
   if (jobs.length !== 1 || jobs[0]?.status !== "completed") {
-    return {
-      checks: run.status === "completed" ? "failed" : "pending",
-      readyAt,
-      checkRunId: run.id,
-    };
+    const checks = run.status === "completed" ? "failed" : "pending";
+    const checkRunId = run.id;
+    return { checkRunId, checks, readyAt };
   }
-  return {
-    checks: jobs[0].conclusion === "success" ? "passed" : "failed",
-    readyAt,
-    checkRunId: run.id,
-  };
+  const checks = jobs[0].conclusion === "success" ? "passed" : "failed";
+  const checkRunId = run.id;
+  return { checkRunId, checks, readyAt };
 };
 
 export const createGitHubPrDeliveryProvider = (
@@ -372,10 +369,10 @@ export const createGitHubPrDeliveryProvider = (
       }
       assertMutationActive(signal);
       const payload = await request({
+        body: { query: readyMutation, variables: { id: before.pull.node_id } },
+        effect: "ready",
         method: "POST",
         path: "/graphql",
-        effect: "ready",
-        body: { query: readyMutation, variables: { id: before.pull.node_id } },
       });
       const rejection = z
         .object({

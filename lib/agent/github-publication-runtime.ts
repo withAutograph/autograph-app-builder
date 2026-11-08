@@ -660,8 +660,8 @@ export function composeGitHubPublicationRuntime(input: {
     };
     return {
       installationIdentityDigest: proposal.installationIdentityDigest,
-      reviewedTarget,
       receipt,
+      reviewedTarget,
     };
   };
   const ownedDraftRecovery = (
@@ -1564,20 +1564,24 @@ export function composeGitHubPublicationRuntime(input: {
       });
     },
     async inspectAppliedExistingDraftReconciliation(request) {
+      const { proposal, review } = request;
+      const recovery = ownedDraftRecovery(request.recovery);
       return await inspectAppliedExistingDraftReconciliation({
         adapter: draftReconciliationAdapter,
-        proposal: request.proposal,
-        review: request.review,
-        recovery: ownedDraftRecovery(request.recovery),
+        proposal,
+        recovery,
+        review,
       });
     },
     async reconcileExistingDraft(request) {
+      const { contentSource, proposal, review } = request;
+      const recovery = ownedDraftRecovery(request.recovery);
       return await reconcileExistingDraft({
         adapter: draftReconciliationAdapter,
-        contentSource: request.contentSource,
-        proposal: request.proposal,
-        review: request.review,
-        recovery: ownedDraftRecovery(request.recovery),
+        contentSource,
+        proposal,
+        recovery,
+        review,
       });
     },
   };
