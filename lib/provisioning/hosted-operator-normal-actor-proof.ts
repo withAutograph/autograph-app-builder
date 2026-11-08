@@ -171,7 +171,7 @@ const readProof = async ({
     }
     // Browser-session correlation would invoke the separate human capture callback; this nonce is already bound to the approved retained organization candidate.
     const cookie = cookieHeader(storageState, origin, path);
-    observe({ stage: "proof_request", cookiePresent: cookie !== "" });
+    observe({ cookiePresent: cookie !== "", stage: "proof_request" });
     if (cookie === "") {
       throw unavailable();
     }
@@ -189,13 +189,12 @@ const readProof = async ({
       cache: "no-store",
       signal: AbortSignal.timeout(20_000),
     });
-    const responseFacts = {
-      cookiePresent: cookie !== "",
-      httpStatus: response.status,
-      redirected: response.redirected,
-      contentTypeValid:
-        response.headers.get("content-type")?.startsWith(REALM_OPERATOR_PROOF_MEDIA_TYPE) === true,
-    };
+    const cookiePresent = cookie !== "";
+    const httpStatus = response.status;
+    const { redirected } = response;
+    const contentTypeValid =
+      response.headers.get("content-type")?.startsWith(REALM_OPERATOR_PROOF_MEDIA_TYPE) === true;
+    const responseFacts = { contentTypeValid, cookiePresent, httpStatus, redirected };
     observe({ stage: "proof_response", ...responseFacts });
     if (
       ![
@@ -277,7 +276,7 @@ const selectedOwner = (input: CollectorInput, retained: RetainedActors) => {
   ) {
     throw mismatch();
   }
-  return { organization, candidate, actor };
+  return { actor, candidate, organization };
 };
 const assertRealmBinding = (
   input: HostedOperatorContext,
@@ -428,16 +427,19 @@ export const createHostedOperatorNormalActorProofCollector = (
       ) {
         throw mismatch();
       }
+      const { record, nonce } = pending;
+      const storageState = normal.exportStorageState();
+      const { origin } = preparation.program;
       const proof = await readProof({
-        record: pending.record,
-        nonce: pending.nonce,
         artifacts,
+        assertCurrent,
         context: input,
         fetch,
-        storageState: normal.exportStorageState(),
-        origin: preparation.program.origin,
-        assertCurrent,
+        nonce,
         observe,
+        origin,
+        record,
+        storageState,
       });
       observe({ stage: "proof_verify" });
       const verified = await readVerifiedRealmAccess({
@@ -451,11 +453,8 @@ export const createHostedOperatorNormalActorProofCollector = (
         readback: async (request) => {
           observe({ stage: "proof_readback_request" });
           const response = await binding.readback(request);
-          observe({
-            stage: "proof_readback_response",
-            httpStatus: response.status,
-            redirected: response.redirected,
-          });
+          const { status: httpStatus, redirected } = response;
+          observe({ httpStatus, redirected, stage: "proof_readback_response" });
           return response;
         },
       });

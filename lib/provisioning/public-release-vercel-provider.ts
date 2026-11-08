@@ -170,8 +170,8 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
     url.searchParams.set("teamId", plan.project.teamId);
     const fetchRequest = deps.fetch ?? fetch;
     const options: RequestInit = {
-      method,
       headers: { authorization: `Bearer ${credential.token}`, "content-type": "application/json" },
+      method,
     };
     if (body !== undefined) {
       options.body = JSON.stringify(body);
@@ -610,8 +610,8 @@ export const createPublicReleaseVercelBindingSnapshot =
       const url = new URL(route, VERCEL_API_ORIGIN);
       url.searchParams.set("teamId", scope.teamId);
       const response = await (deps.fetch ?? fetch)(url, {
-        method: "GET",
         headers: { authorization: `Bearer ${credential.token}` },
+        method: "GET",
         redirect: "error",
         signal: scope.signal,
       });
@@ -720,8 +720,8 @@ export const createPublicReleaseVercelActiveDeploymentSnapshot =
     const url = new URL(`/v9/projects/${encodeURIComponent(scope.projectId)}`, VERCEL_API_ORIGIN);
     url.searchParams.set("teamId", scope.teamId);
     const response = await (deps.fetch ?? fetch)(url, {
-      method: "GET",
       headers: { authorization: `Bearer ${credential.token}` },
+      method: "GET",
       redirect: "error",
       signal: scope.signal,
     });
