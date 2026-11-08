@@ -1808,9 +1808,9 @@ export function createHostedEveSessionService(input: {
     result: EveSessionResult,
   ): Promise<EveSessionResult | undefined> => {
     const marker = operation.internalSessionLimitResponse;
+    const notSessionLimitResponse = operation.kind !== "respond" || marker === undefined;
     if (
-      operation.kind !== "respond" ||
-      marker === undefined ||
+      notSessionLimitResponse ||
       operation.sessionId !== result.sessionId ||
       tenantKeyFor(operation.principal) !== tenantKeyFor(principal) ||
       !["reserved", "submission_unknown"].includes(operation.state)
@@ -4173,9 +4173,10 @@ export function createHostedEveSessionService(input: {
           nowEpochMs: now(),
         });
       }
+      const canObserveCancellation =
+        input.transport.observe !== undefined && input.transport.cancelAccepted !== undefined;
       const paged =
-        input.transport.observe !== undefined &&
-        input.transport.cancelAccepted !== undefined &&
+        canObserveCancellation &&
         input.store.observeSessionPaged !== undefined &&
         input.store.readCheckpointPage !== undefined;
       let snapshot: HostedEngineSnapshot;
@@ -4456,12 +4457,14 @@ export function createHostedEveSessionService(input: {
             return false;
           }
           const receipt = matches[0];
-          return (
+          const sameApproval =
             receipt !== undefined &&
             // Native target response recovery requires proof of the complete original batch.
             // This legacy shortcut checks only the IDs supplied by its caller.
             receipt.toolName !== PREPARE_NATIVE_TARGET_TOOL &&
-            privateResourceApprovalSessionId(receipt) === approvalSessionId &&
+            privateResourceApprovalSessionId(receipt) === approvalSessionId;
+          return (
+            sameApproval &&
             receipt.responderPrincipalId === principal.ownerUserId &&
             receipt.outcome === (response.kind === "approve" ? "approved" : "cancelled")
           );
@@ -4474,10 +4477,14 @@ export function createHostedEveSessionService(input: {
             sessionId,
           });
           const latest = toDurableHostedSessionRecord(await requireSession(sessionId));
-          const currentIsStable =
+          const sameAdapter =
             latest.adapterSessionId === durable.adapterSessionId &&
-            latest.adapterGeneration === durable.adapterGeneration &&
-            canonical(latest.nativeRecoveryBinding) === canonical(durable.nativeRecoveryBinding) &&
+            latest.adapterGeneration === durable.adapterGeneration;
+          const sameRecovery =
+            sameAdapter &&
+            canonical(latest.nativeRecoveryBinding) === canonical(durable.nativeRecoveryBinding);
+          const currentIsStable =
+            sameRecovery &&
             current.error === undefined &&
             (current.status === "working" || current.status === "completed");
           if (currentIsStable) {
@@ -4512,9 +4519,10 @@ export function createHostedEveSessionService(input: {
           : undefined;
       const settledResult = await mutate({
         async dispatch(operationId) {
+          const canObserveSend =
+            input.transport.observe !== undefined && input.transport.sendAccepted !== undefined;
           const paged =
-            input.transport.observe !== undefined &&
-            input.transport.sendAccepted !== undefined &&
+            canObserveSend &&
             input.store.observeSessionPaged !== undefined &&
             input.store.readCheckpointPage !== undefined;
           let preflight: Awaited<ReturnType<typeof readMutationPreflight>> | undefined;
@@ -4721,9 +4729,11 @@ export function createHostedEveSessionService(input: {
             ["sessionId", operation.kind === "resume" ? request.resumeSessionId : undefined],
           ]),
         );
-        if (
+        const wrongStart =
           (operation.kind !== "start" && operation.kind !== "resume") ||
-          operation.clientRequestId !== request.clientRequestId ||
+          operation.clientRequestId !== request.clientRequestId;
+        if (
+          wrongStart ||
           tenantKeyFor(operation.principal) !== tenantKeyFor(principal) ||
           operation.requestDigest !== expectedDigest
         ) {

@@ -1166,18 +1166,26 @@ export const createGitHubAppHttpProvider = (input: {
       const baseName = stringProperty(baseRepository, "name");
       const headName = stringProperty(headRepository, "name");
       const headSha = objectId.parse(stringProperty(head, "sha"));
+      const invalidHistoricalPullRequest =
+        "historical-source-pull-request-not-merged-in-repository";
       if (
         stringProperty(pull.body, "state") !== "closed" ||
         typeof property(pull.body, "merged_at") !== "string" ||
         decimalProperty(pull.body, "number") !== String(source.pullRequestNumber) ||
-        decimalProperty(baseRepository, "id") !== repositoryId ||
+        decimalProperty(baseRepository, "id") !== repositoryId
+      ) {
+        throw new Error(invalidHistoricalPullRequest);
+      }
+      if (
         decimalProperty(headRepository, "id") !== repositoryId ||
         baseOwner !== repositoryOwner ||
         headOwner !== repositoryOwner ||
-        baseName !== repositoryName ||
-        headName !== repositoryName
+        baseName !== repositoryName
       ) {
-        throw new Error("historical-source-pull-request-not-merged-in-repository");
+        throw new Error(invalidHistoricalPullRequest);
+      }
+      if (headName !== repositoryName) {
+        throw new Error(invalidHistoricalPullRequest);
       }
       commitSha = headSha;
       const { pullRequestNumber: selectedPullRequestNumber } = source;
@@ -1790,9 +1798,11 @@ export const createGitHubAppHttpProvider = (input: {
                 ]);
           if (
             (change.kind === "added" && (change.before !== undefined || after === undefined)) ||
-            (change.kind === "deleted" && (change.before === undefined || after !== undefined)) ||
-            (change.kind === "modified" && (change.before === undefined || after === undefined))
+            (change.kind === "deleted" && (change.before === undefined || after !== undefined))
           ) {
+            throw new Error(invalidMaterialMessage);
+          }
+          if (change.kind === "modified" && (change.before === undefined || after === undefined)) {
             throw new Error(invalidMaterialMessage);
           }
           return change;
@@ -1816,9 +1826,11 @@ export const createGitHubAppHttpProvider = (input: {
         snapshot.repositoryId !== proposal.repositoryId ||
         snapshot.owner !== proposal.owner ||
         snapshot.name !== proposal.name ||
-        snapshot.visibility !== proposal.visibility ||
-        snapshot.defaultBranch !== proposal.baseBranch
+        snapshot.visibility !== proposal.visibility
       ) {
+        return { code: repositoryIdentityChangedCode, status: "rejected" };
+      }
+      if (snapshot.defaultBranch !== proposal.baseBranch) {
         return { code: repositoryIdentityChangedCode, status: "rejected" };
       }
       const upstreamCompare = await github({
@@ -1984,9 +1996,11 @@ export const createGitHubAppHttpProvider = (input: {
         base.repositoryId !== proposal.repositoryId ||
         base.owner !== proposal.owner ||
         base.name !== proposal.name ||
-        base.headSha !== proposal.expectedBaseSha ||
-        base.headTree !== proposal.expectedBaseTree
+        base.headSha !== proposal.expectedBaseSha
       ) {
+        return { code: branchMovedCode, status: "rejected" };
+      }
+      if (base.headTree !== proposal.expectedBaseTree) {
         return { code: branchMovedCode, status: "rejected" };
       }
       const accessToken = await token(draftPermissions, [proposal.repositoryId]);

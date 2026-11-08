@@ -249,20 +249,29 @@ export const gitTreeId = (files: readonly FreshBootstrapFile[]): string => {
 };
 
 const commitActor = (identity: FreshBootstrapIdentity): string => {
+  const invalidIdentity = "The fresh-bootstrap Git identity is invalid.";
   if (
     !/^(?![.-])[A-Za-z0-9._/-]+$/u.test(identity.initialBranch) ||
     identity.initialBranch.includes("..") ||
     identity.initialBranch.includes("@{") ||
-    identity.initialBranch.includes("//") ||
+    identity.initialBranch.includes("//")
+  ) {
+    throw new Error(invalidIdentity);
+  }
+  if (
     identity.initialBranch.endsWith("/") ||
     identity.authorName.trim() !== identity.authorName ||
     identity.authorName.length === 0 ||
-    /[\n\r<>]/u.test(identity.authorName) ||
+    /[\n\r<>]/u.test(identity.authorName)
+  ) {
+    throw new Error(invalidIdentity);
+  }
+  if (
     !/^[^\s<>@]+@[^\s<>@]+$/u.test(identity.authorEmail) ||
     /[\0\r]/u.test(identity.commitMessage) ||
     identity.commitMessage.trim().length === 0
   ) {
-    throw new Error("The fresh-bootstrap Git identity is invalid.");
+    throw new Error(invalidIdentity);
   }
   const milliseconds = Date.parse(identity.commitTimestamp);
   const offset = /(?<sign>[+-])(?<hours>\d{2}):(?<minutes>\d{2})$/u.exec(identity.commitTimestamp);

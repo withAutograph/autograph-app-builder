@@ -1114,9 +1114,10 @@ export const latestInstalledUiPreview = (
 ): PublicUiPreview | undefined => {
   let latest: PublicUiPreview | undefined;
   for (const event of events) {
+    if (event.type !== actionResultEvent || event.data.status !== "completed") {
+      continue;
+    }
     if (
-      event.type !== actionResultEvent ||
-      event.data.status !== "completed" ||
       event.data.result.kind !== toolResultKind ||
       event.data.result.isError === true ||
       event.data.result.toolName !== "record_ui_preview"

@@ -555,10 +555,12 @@ const assertCapability = async (
   if (capability === undefined) {
     throw new Error("Fresh local bootstrap production capability is not configured.");
   }
-  if (
+  const invalidCapabilityAuthority =
     capability.kind !== "fresh-bootstrap-local-v1" ||
     (capability.authority !== "configured-production" &&
-      capability.authority !== "structural-test-injection") ||
+      capability.authority !== "structural-test-injection");
+  if (
+    invalidCapabilityAuthority ||
     hasMissingBootstrapTools(capability) ||
     (capability.lockStrategy !== "flock" && capability.lockStrategy !== "lockf")
   ) {
@@ -1354,10 +1356,10 @@ const assertNoLinkRoute = async (root: PathIdentity, destination: string): Promi
     cursor = nodePath.resolve(cursor, part);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const value = await lstat(cursor);
+    const invalidDirectoryOwner =
+      value.isSymbolicLink() || !value.isDirectory() || value.uid !== process.geteuid?.();
     if (
-      value.isSymbolicLink() ||
-      !value.isDirectory() ||
-      value.uid !== process.geteuid?.() ||
+      invalidDirectoryOwner ||
       value.dev.toString() !== root.device ||
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (value.mode & 0o022) !== 0 ||
@@ -1402,11 +1404,13 @@ const inspectDestinationPrestate = async (input: {
     }
     return { destinationPath: destination, kind: "absent", parent };
   }
-  if (
+  const invalidDestinationDirectory =
     input.expected !== emptyDirectory ||
     value.isSymbolicLink() ||
     !value.isDirectory() ||
-    value.uid !== process.geteuid?.() ||
+    value.uid !== process.geteuid?.();
+  if (
+    invalidDestinationDirectory ||
     value.dev.toString() !== input.capability.allowedRoot.device ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (value.mode & 0o777) !== 0o700 ||
