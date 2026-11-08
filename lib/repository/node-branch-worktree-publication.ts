@@ -1119,7 +1119,9 @@ const assertOwnedPartialWorktree = async (
       ) {
         const change = changes[changeIndex];
         const approved: ApprovedPath = { path: change.path };
-        if (change.after !== undefined) approved.afterState = { kind: "regular", ...change.after };
+        if (change.after !== undefined) {
+          approved.afterState = { kind: "regular", ...change.after };
+        }
         yield approved;
         changeIndex += 1;
       }
@@ -1139,7 +1141,9 @@ const assertOwnedPartialWorktree = async (
     while (changeIndex < changes.length) {
       const change = changes[changeIndex];
       const approved: ApprovedPath = { path: change.path };
-      if (change.after !== undefined) approved.afterState = { kind: "regular", ...change.after };
+      if (change.after !== undefined) {
+        approved.afterState = { kind: "regular", ...change.after };
+      }
       yield approved;
       changeIndex += 1;
     }
@@ -2053,7 +2057,9 @@ const pendingReceipt = (input: {
     publishedByCallId: input.callId,
     status: "pending" as const,
   };
-  if (input.recoveryOfDigest !== undefined) unsigned.recoveryOfDigest = input.recoveryOfDigest;
+  if (input.recoveryOfDigest !== undefined) {
+    unsigned.recoveryOfDigest = input.recoveryOfDigest;
+  }
   return { digest: branchJournalDigest(unsigned), ...unsigned };
 };
 

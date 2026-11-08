@@ -163,13 +163,17 @@ function sha256(bytes: Uint8Array) {
 /* eslint-disable eslint/no-await-in-loop, unicorn/no-negated-condition, eslint/no-negated-condition, sonarjs/too-many-break-or-continue-in-loop, promise/prefer-await-to-callbacks -- These loops and callbacks are required for bounded-memory stream parsing. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function responseBytes(response: Response) {
-  if (!response.body) return new Uint8Array(await response.arrayBuffer());
+  if (!response.body) {
+    return new Uint8Array(await response.arrayBuffer());
+  }
   const chunks: Uint8Array[] = [];
   const reader = response.body.getReader();
   try {
     for (;;) {
       const item = await reader.read();
-      if (item.done) break;
+      if (item.done) {
+        break;
+      }
       chunks.push(item.value);
     }
   } finally {
@@ -199,7 +203,9 @@ async function tarFiles(tar: AsyncIterable<Uint8Array>) {
         const next = await iterator.next();
         ended = next.done === true;
         if (!ended) {
-          if (!(next.value instanceof Uint8Array)) throw new Error(STARTER_ARCHIVE_INVALID);
+          if (!(next.value instanceof Uint8Array)) {
+            throw new Error(STARTER_ARCHIVE_INVALID);
+          }
           const chunk = Buffer.from(next.value);
           if (chunk.byteLength > 0) {
             chunks.push(chunk);
@@ -209,7 +215,9 @@ async function tarFiles(tar: AsyncIterable<Uint8Array>) {
       }
     }
     if (length < size) {
-      if (length === 0 && allowEnd) return null;
+      if (length === 0 && allowEnd) {
+        return null;
+      }
       throw new Error(STARTER_ARCHIVE_INVALID);
     }
     const bytes = Buffer.concat(chunks, length);
@@ -246,16 +254,22 @@ async function tarFiles(tar: AsyncIterable<Uint8Array>) {
     if (invalidPathOrSize || ![0, 48].includes(type) || files.has(path)) {
       throw new Error(STARTER_ARCHIVE_INVALID);
     }
-    if (!Number.isSafeInteger(size)) throw new Error(STARTER_ARCHIVE_INVALID);
+    if (!Number.isSafeInteger(size)) {
+      throw new Error(STARTER_ARCHIVE_INVALID);
+    }
     const bytes = await readExact(size);
-    if (!bytes) throw new Error(STARTER_ARCHIVE_INVALID);
+    if (!bytes) {
+      throw new Error(STARTER_ARCHIVE_INVALID);
+    }
     files.set(path, {
       bytes,
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       mode: rawMode & 0o111 ? "100755" : "100644",
     });
     const padding = (512 - (size % 512)) % 512;
-    if (padding > 0 && !(await readExact(padding))) throw new Error(STARTER_ARCHIVE_INVALID);
+    if (padding > 0 && !(await readExact(padding))) {
+      throw new Error(STARTER_ARCHIVE_INVALID);
+    }
   }
   for await (const chunk of { [Symbol.asyncIterator]: () => iterator }) {
     // Drain the compressed archive so its integrity digest is checked in full.
@@ -315,7 +329,9 @@ export async function loadStarterSource(input: {
   if (!archiveResponse.ok) {
     throw new Error("starter-archive-unavailable");
   }
-  if (!archiveResponse.body) throw new Error(STARTER_ARCHIVE_INVALID);
+  if (!archiveResponse.body) {
+    throw new Error(STARTER_ARCHIVE_INVALID);
+  }
   let archiveBytes = 0;
   const archiveHash = createHash("sha256");
   /* oxlint-disable promise/prefer-await-to-callbacks -- Transform callbacks keep hashing inside the backpressured byte stream. */

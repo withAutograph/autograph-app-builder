@@ -35,9 +35,12 @@ function parseArguments(args: readonly string[]) {
   for (let index = 0; index < args.length; index += 2) {
     const flag = args[index];
     const value = args[index + 1];
-    if (flag === undefined || value === undefined || !flag.startsWith("--"))
+    if (flag === undefined || value === undefined || !flag.startsWith("--")) {
       throw new Error("Arguments must be exact --name value pairs.");
-    if (values.has(flag)) throw new Error(`Duplicate argument ${flag}.`);
+    }
+    if (values.has(flag)) {
+      throw new Error(`Duplicate argument ${flag}.`);
+    }
     values.set(flag, value);
   }
   const miseBin = values.get("--mise-bin");
@@ -55,9 +58,12 @@ function parseArguments(args: readonly string[]) {
     arrustedRoot === undefined ||
     artifact === undefined ||
     artifactSha256 === undefined
-  )
+  ) {
     throw new Error(usage);
-  if (values.size !== 0) throw new Error(usage);
+  }
+  if (values.size !== 0) {
+    throw new Error(usage);
+  }
   return {
     arrustedRoot: realpathSync(arrustedRoot),
     artifact: realpathSync(artifact),
@@ -67,8 +73,9 @@ function parseArguments(args: readonly string[]) {
 }
 
 const input = parseArguments(process.argv.slice(2));
-if (!isAbsolute(input.miseBin) || basename(input.miseBin) !== "mise")
+if (!isAbsolute(input.miseBin) || basename(input.miseBin) !== "mise") {
   throw new Error("The mise executable must use an absolute canonical path.");
+}
 const miseStat = statSync(input.miseBin);
 if (
   !miseStat.isFile() ||
@@ -76,8 +83,9 @@ if (
   (miseStat.mode & 0o022) !== 0 ||
   !/^[0-9a-f]{64}$/u.test(input.artifactSha256) ||
   sha256(readFileSync(input.artifact)) !== input.artifactSha256
-)
+) {
   throw new Error("The hosted dependency artifact binding is invalid.");
+}
 
 const git = (args: readonly string[]) =>
   execFileSync("/usr/bin/git", ["-C", input.arrustedRoot, ...args], {
@@ -87,15 +95,17 @@ if (
   git(["rev-parse", "HEAD^{commit}"]) !== TARGET_SHA ||
   git(["rev-parse", "HEAD^{tree}"]) !== TARGET_TREE ||
   git(["status", "--porcelain=v1"]) !== ""
-)
+) {
   throw new Error("Arrusted source is not the exact clean supported target.");
+}
 
 const root = mkdtempSync(join(tmpdir(), "hosted-arrusted-proof."));
 try {
   extract({ cwd: root, file: input.artifact, sync: true });
   const seed = join(root, ".app-builder-hosted-seed");
-  if (existsSync(join(seed, "source-tree.tar.gz")))
+  if (existsSync(join(seed, "source-tree.tar.gz"))) {
     throw new Error("The hosted dependency artifact still embeds source.");
+  }
   const repository = join(root, "repository");
   mkdirSync(repository);
   const sourceTar = join(root, "canonical-source.tar");
@@ -146,8 +156,9 @@ try {
     identity.appId !== "builder-proof" ||
     identity.workspacePath !== "apps/builder-proof" ||
     identity.packageName !== "@autograph/builder-proof"
-  )
+  ) {
     throw new Error("The hosted dependency artifact returned an unexpected planning result.");
+  }
   process.stdout.write(
     `${JSON.stringify({
       appId: identity.appId,

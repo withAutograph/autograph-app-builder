@@ -54,19 +54,20 @@ export function releaseEndpoint(value: string | undefined) {
   return endpoint.origin;
 }
 
+const hasExactToolNames = (names: readonly (string | undefined)[]): names is typeof TOOL_NAMES =>
+  names.length === TOOL_NAMES.length &&
+  new Set(names).size === names.length &&
+  !names.some((name, index) => name !== TOOL_NAMES[index]);
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function registeredAutographToolNames(handlerSource: string) {
   const names = [...handlerSource.matchAll(/server\.registerTool\(\s*"(?<name>[^"]+)"/gu)].map(
     (match) => match[1],
   );
-  if (
-    names.length !== TOOL_NAMES.length ||
-    new Set(names).size !== names.length ||
-    names.some((name, index) => name !== TOOL_NAMES[index])
-  ) {
+  if (!hasExactToolNames(names)) {
     throw new Error(`The MCP handler must register exactly ${TOOL_NAMES.join(", ")} in order.`);
   }
-  return names as unknown as typeof TOOL_NAMES;
+  return names;
 }
 
 const pad = (value: string, length: number) => Buffer.from(value).subarray(0, length);

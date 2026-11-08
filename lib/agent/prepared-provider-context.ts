@@ -25,6 +25,10 @@ let providerDatabase: ReturnType<typeof openHostedPostgresDatabase> | undefined;
 type PreparedIntent = BuilderHandoffIntent & {
   providers?: { githubInstallationId?: string; vercelInstallationId?: string };
 };
+export type PreparedGitHubSelection = Pick<
+  PreparedIntent,
+  "repository" | "providers" | "provisioning"
+>;
 
 /** Call only after the durable handoff reader has verified the session. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -44,7 +48,7 @@ export function preparedHandoffReturnPath(sessionAuth: unknown) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function preparedGitHubRepository(intent: PreparedIntent) {
+export function preparedGitHubRepository(intent: PreparedGitHubSelection) {
   return (
     intent.repository.resolvedFullName ??
     (intent.provisioning?.github.status === "succeeded"
@@ -56,7 +60,7 @@ export function preparedGitHubRepository(intent: PreparedIntent) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function withPreparedGitHubSelection(
   input: RepositoryAccessToolInput,
-  intent: PreparedIntent | undefined,
+  intent: PreparedGitHubSelection | undefined,
 ): RepositoryAccessToolInput {
   if (!intent || input.selectedInstallationId !== undefined) {
     return input;

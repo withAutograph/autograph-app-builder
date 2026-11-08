@@ -1270,7 +1270,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       const calls: { url: string; method: string }[] = [];
       const { proposal, content } = unicodeDraftMaterial(false, scenario === "modified");
       const [firstChange] = content.changes;
-      if (firstChange === undefined) throw new Error("Expected a reviewed change.");
+      if (firstChange === undefined) {
+        throw new Error("Expected a reviewed change.");
+      }
       const pathSegments = firstChange.path.split("/");
       let treeDepth = 0;
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -1896,8 +1898,10 @@ describe("existing draft reconciliation provider", () => {
       const method = init.method ?? "GET";
       const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, url });
-      if (url.endsWith("/app")) return json({ id: 123, slug: "autograph-app-builder" });
-      if (url.endsWith("/app/installations/456/access_tokens"))
+      if (url.endsWith("/app")) {
+        return json({ id: 123, slug: "autograph-app-builder" });
+      }
+      if (url.endsWith("/app/installations/456/access_tokens")) {
         return json(
           {
             permissions: z.object({ permissions: z.unknown() }).parse(body).permissions,
@@ -1905,7 +1909,8 @@ describe("existing draft reconciliation provider", () => {
           },
           201,
         );
-      if (url.endsWith("/repositories/100"))
+      }
+      if (url.endsWith("/repositories/100")) {
         return json({
           default_branch: "main",
           id: 100,
@@ -1913,9 +1918,11 @@ describe("existing draft reconciliation provider", () => {
           owner: { login: "withAutograph" },
           private: true,
         });
-      if (url.endsWith("/repos/withAutograph/example-app/actions/variables?per_page=100&page=1"))
+      }
+      if (url.endsWith("/repos/withAutograph/example-app/actions/variables?per_page=100&page=1")) {
         return json({ variables: [] });
-      if (url.endsWith("/repos/withAutograph/example-app/pulls/1500"))
+      }
+      if (url.endsWith("/repos/withAutograph/example-app/pulls/1500")) {
         return json({
           base: { ref: "main", repo: { id: 100 } },
           body: `<!-- App-Builder-Idempotency: ${"d".repeat(64)} -->`,
@@ -1927,9 +1934,11 @@ describe("existing draft reconciliation provider", () => {
           state: merged ? "closed" : "open",
           user: { id: 900, login: "autograph-app-builder[bot]", type: "Bot" },
         });
-      if (url.endsWith(`/git/ref/heads/${branchName}`))
+      }
+      if (url.endsWith(`/git/ref/heads/${branchName}`)) {
         return merged ? json({}, 404) : json({ node_id: "REF_NODE", object: { sha: liveRef } });
-      if (url.endsWith(`/commits/${head}`))
+      }
+      if (url.endsWith(`/commits/${head}`)) {
         return json({
           commit: {
             message: `Add demo\n\nApp-Builder-Idempotency: ${"d".repeat(64)}`,
@@ -1937,17 +1946,21 @@ describe("existing draft reconciliation provider", () => {
           },
           sha: head,
         });
-      if (url.endsWith("/commits/HEAD"))
+      }
+      if (url.endsWith("/commits/HEAD")) {
         return json({ commit: { tree: { sha: baseTree } }, sha: base });
-      if (url.endsWith(`/commits/${base}`) || url.endsWith("/commits/refs/heads/main"))
+      }
+      if (url.endsWith(`/commits/${base}`) || url.endsWith("/commits/refs/heads/main")) {
         return json({ commit: { tree: { sha: baseTree } }, sha: base });
-      if (url.endsWith(`/git/commits/${liveRef}`))
+      }
+      if (url.endsWith(`/git/commits/${liveRef}`)) {
         return json({
           message: liveMessage,
           parents: [{ sha: head }, { sha: base }],
           tree: { sha: resolvedTree },
         });
-      if (url.endsWith(`/commits/${liveRef}`))
+      }
+      if (url.endsWith(`/commits/${liveRef}`)) {
         return json({
           commit: {
             message: liveMessage,
@@ -1955,14 +1968,22 @@ describe("existing draft reconciliation provider", () => {
           },
           sha: liveRef,
         });
-      if (url.endsWith(`/git/trees/${baseTree}`) && method === "GET")
+      }
+      if (url.endsWith(`/git/trees/${baseTree}`) && method === "GET") {
         return json({ tree: [], truncated: false });
-      if (url.endsWith("/git/blobs") && method === "POST")
+      }
+      if (url.endsWith("/git/blobs") && method === "POST") {
         return json({ sha: "6".repeat(40) }, 201);
-      if (url.endsWith("/git/trees") && method === "POST") return json({ sha: resolvedTree }, 201);
-      if (url.endsWith("/git/commits") && method === "POST") return json({ sha: mergeCommit }, 201);
-      if (url.endsWith("/repos/withAutograph/example-app") && method === "GET")
+      }
+      if (url.endsWith("/git/trees") && method === "POST") {
+        return json({ sha: resolvedTree }, 201);
+      }
+      if (url.endsWith("/git/commits") && method === "POST") {
+        return json({ sha: mergeCommit }, 201);
+      }
+      if (url.endsWith("/repos/withAutograph/example-app") && method === "GET") {
         return json({ id: 100, node_id: "REPO_NODE" });
+      }
       if (url.endsWith("/graphql") && method === "POST") {
         liveRef = mergeCommit;
         return json({ data: { updateRefs: { clientMutationId: null } } });

@@ -218,7 +218,9 @@ describe("closed local Eve launch", () => {
 
     writeFileSync(liveSourceFile, "edited planning input\n");
     const liveRoot = invocation.environment.REPOSITORY_LOCAL_ROOTS;
-    if (liveRoot === undefined) throw new Error("Live source root was not configured.");
+    if (liveRoot === undefined) {
+      throw new Error("Live source root was not configured.");
+    }
     expect(liveRoot).toBe(input.environment.APP_BUILDER_DEVELOPMENT_SOURCE_ROOT);
     expect(readFileSync(path.join(liveRoot, "brief.md"), "utf-8")).toBe("edited planning input\n");
   });

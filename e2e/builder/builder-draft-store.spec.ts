@@ -121,8 +121,12 @@ test("PostgreSQL keeps one active draft across simultaneous device creation and 
       [first.row.revision, second.row.revision].toSorted((left, right) => {
         const a = String(left);
         const b = String(right);
-        if (a < b) return -1;
-        if (a > b) return 1;
+        if (a < b) {
+          return -1;
+        }
+        if (a > b) {
+          return 1;
+        }
         return 0;
       }),
     ).toEqual([1, 2]);

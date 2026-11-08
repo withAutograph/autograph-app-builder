@@ -142,8 +142,13 @@ try {
   const copies = await Promise.allSettled(
     files.map(async (file) => {
       // Git also lists submodule directory entries; they are not app sources.
-      const info = await lstat(path.join(source, file)).catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") {
+      const info = await lstat(path.join(source, file)).catch((error: unknown) => {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ) {
           return null;
         }
         throw error;
@@ -171,8 +176,13 @@ try {
   await Promise.all(
     packageDirectories.map(async (directory) => {
       const dependencyView = path.join(source, directory, "node_modules");
-      const installed = await lstat(dependencyView).catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") {
+      const installed = await lstat(dependencyView).catch((error: unknown) => {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ) {
           return null;
         }
         throw error;

@@ -247,8 +247,9 @@ const resourceEffectSummary = (
   plan: HostedOperatorPlan,
   effect: HostedOperatorPlan["effects"][number],
 ) => {
-  if (plan.action === "cleanup")
+  if (plan.action === "cleanup") {
     return "Remove the app-owned Preview resources included in this cleanup plan.";
+  }
   if (effect.resourceId === plan.authDatabase.resourceId) {
     return /never recreate or rotate shared auth/iu.test(effect.description)
       ? "Verify the existing shared sign-in resources and access; do not recreate or rotate shared Auth."
@@ -317,15 +318,18 @@ const operatorEffectSummaries = (plan: HostedOperatorPlan) => {
       effect.kind === "access" ||
       effect.kind === AUTH_MEMBERSHIP_EFFECT ||
       effect.kind === "auth-signup-policy"
-    )
+    ) {
       continue;
+    }
     summaries.add(effectSummaryByKind[effect.kind](plan, effect));
   }
   return [...summaries];
 };
 const signupApprovalDescription = (plan: HostedOperatorPlan) => {
   const signupPolicy = plan.authSignupPolicy;
-  if (signupPolicy === undefined || !planHasEffect(plan, "auth-signup-policy")) return "";
+  if (signupPolicy === undefined || !planHasEffect(plan, "auth-signup-policy")) {
+    return "";
+  }
   const { action } = plan;
   const eligibility =
     signupPolicy.eligibility === "public" ? "anyone" : "approved email addresses only";
@@ -344,22 +348,29 @@ const operatorActorLookups = (plan: HostedOperatorPlan) => {
   return { actorByKey, organizationById };
 };
 const operatorMembershipNames = (plan: HostedOperatorPlan) => {
-  if (!planHasEffect(plan, AUTH_MEMBERSHIP_EFFECT)) return [];
+  if (!planHasEffect(plan, AUTH_MEMBERSHIP_EFFECT)) {
+    return [];
+  }
   const membership = plan.authMembership;
-  if (membership === undefined)
+  if (membership === undefined) {
     return plan.normalActorProgram?.organizations.map((organization) => organization.name) ?? [];
+  }
   return membership.kind === "create-owned-organization"
     ? [membership.name]
     : membership.organizations.map((organization) => organization.name);
 };
 const operatorOwnedOrganizations = (plan: HostedOperatorPlan) => {
   const membership = plan.authMembership;
-  if (!planHasEffect(plan, AUTH_MEMBERSHIP_EFFECT) || membership === undefined) return [];
+  if (!planHasEffect(plan, AUTH_MEMBERSHIP_EFFECT) || membership === undefined) {
+    return [];
+  }
   return membership.kind === "create-owned-organization" ? [membership] : membership.organizations;
 };
 const operatorInstallationScopeSummary = (plan: HostedOperatorPlan) => {
   const organizationIds = plan.appInstallation?.customerIds ?? [];
-  if (organizationIds.length === 0) return "";
+  if (organizationIds.length === 0) {
+    return "";
+  }
   return `App schema installation tenant references (provider organization identifiers):\n${organizationIds
     .map(
       (organizationId) =>
@@ -408,7 +419,9 @@ const operatorMembershipSummary = (plan: HostedOperatorPlan) => {
   return { membershipSummary, organizationReferenceSummary };
 };
 const operatorAccessEffect = (plan: HostedOperatorPlan) => {
-  if (planHasEffect(plan, "revoke")) return "Revoke";
+  if (planHasEffect(plan, "revoke")) {
+    return "Revoke";
+  }
   return planHasEffect(plan, "access") ? "Grant" : undefined;
 };
 const operatorAccessSummary = (
@@ -421,9 +434,12 @@ const operatorAccessSummary = (
     const lines = appAccessLines.map((line) => `- ${line}`).join("\n");
     return `${accessDescription}\n${lines}`;
   }
-  if (unresolvedAccessLines.length > 0)
+  if (unresolvedAccessLines.length > 0) {
     return "See Access details for each app user and its roles.";
-  if (accessEffect === undefined) return "No app-user access changes are included in this plan.";
+  }
+  if (accessEffect === undefined) {
+    return "No app-user access changes are included in this plan.";
+  }
   return accessEffect === "Revoke"
     ? "No app-user access is included in the revoke effect."
     : "No app-user access is included in the grant effect.";
@@ -573,7 +589,9 @@ const operatorApprovalDescription = (
 
 const continuityApprovalDescription = (input: unknown): string | undefined => {
   const parsed = continuityApprovalToolInputSchema.safeParse(input);
-  if (!parsed.success) return undefined;
+  if (!parsed.success) {
+    return undefined;
+  }
   let intentId: string;
   try {
     intentId = continuityApprovalIntentId(parsed.data);
@@ -611,8 +629,9 @@ const nativeTargetApprovalDescription = (input: unknown): string | undefined => 
     !parsed.success ||
     parsed.data.appId !== parsed.data.plan.appId ||
     nativeTargetOnboardingPlanDigest(parsed.data.plan) !== parsed.data.planDigest
-  )
+  ) {
     return undefined;
+  }
   const { plan } = parsed.data;
   const conflict =
     plan.conflictPolicy === "stop-on-conflict"
@@ -648,13 +667,20 @@ function otherPublicApprovalDescription(input: unknown, toolName?: string): stri
     return undefined;
   }
   const record = input;
-  if (toolName === "prepare-app-central-integrations")
+  if (toolName === "prepare-app-central-integrations") {
     return centralHostApprovalDescription(record);
-  if (toolName === "prepare-app-native-target") return nativeTargetApprovalDescription(record);
-  if (toolName === "run-app-continuity-tests") return continuityApprovalDescription(record);
+  }
+  if (toolName === "prepare-app-native-target") {
+    return nativeTargetApprovalDescription(record);
+  }
+  if (toolName === "run-app-continuity-tests") {
+    return continuityApprovalDescription(record);
+  }
   if (toolName === "export-app-hosted-data") {
     const parsed = tenantExportApprovalInputSchema.safeParse(record);
-    if (!parsed.success) return undefined;
+    if (!parsed.success) {
+      return undefined;
+    }
     const { plan } = parsed.data;
     return [
       `Export the selected customer's ${plan.scope.appId} data for private review. Builder will read the app's public tables in a read-only snapshot and keep the export and manifest private to you in this session. No external recipient or database changes are included. This may contain customer information; approve only if you need this export.`,

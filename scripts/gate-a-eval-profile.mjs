@@ -305,7 +305,9 @@ export function installGateAEvalProfile(environment, value, repositoryRoot) {
     }
   } else {
     environment.APP_BUILDER_REAL_SANDBOX = "1";
-    if (profile.profile === "sandbox") Object.assign(environment, developmentExecutionEnvironment);
+    if (profile.profile === "sandbox") {
+      Object.assign(environment, developmentExecutionEnvironment);
+    }
     environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS = "360000";
     environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS = "360000";
     if (profile.profile === hostedArtifactProfile) {

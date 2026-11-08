@@ -21,11 +21,8 @@ interface SeedInput {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function providerEmulationSeed(input: SeedInput): {
-  github: GitHubSeedConfig;
-  vercel: VercelSeedConfig;
-} {
-  const github: GitHubSeedConfig = {
+export function providerEmulationSeed(input: SeedInput) {
+  const github = {
     apps: [
       {
         app_id: 12_345,
@@ -76,7 +73,7 @@ export function providerEmulationSeed(input: SeedInput): {
         name: "Autograph Developer",
       },
     ],
-  };
+  } satisfies GitHubSeedConfig;
   return {
     github,
     vercel: {
@@ -99,6 +96,6 @@ export function providerEmulationSeed(input: SeedInput): {
           username: EMULATED_DEVELOPER_LOGIN,
         },
       ],
-    },
+    } satisfies VercelSeedConfig,
   };
 }

@@ -2,7 +2,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { Browser, BrowserContext, BrowserContextOptions, Page } from "playwright";
+import type { BrowserContextOptions, Page } from "playwright";
 
 import { runtimeReceiptSchema } from "./self-reproduction-parity-evidence";
 import { sides, workflowMatrix } from "./self-reproduction-parity";
@@ -23,15 +23,15 @@ export type Preparation =
       reason: string;
     };
 
-export interface TrustedBrowserWorkflowAdapter {
+export interface TrustedBrowserWorkflowAdapter<TPage = Page> {
   contextOptions?: BrowserContextOptions;
   /** Seeds only records owned by this eval run in the side's real persistence layer. */
-  prepare: (page: Page, workflowId: WorkflowId) => Promise<Preparation>;
+  prepare: (page: TPage, workflowId: WorkflowId) => Promise<Preparation>;
   /** Drives the rendered application. It may request isolated contexts for auth/readback checks. */
   exercise: (
-    page: Page,
+    page: TPage,
     workflowId: WorkflowId,
-    freshPage: () => Promise<Page>,
+    freshPage: () => Promise<TPage>,
   ) => Promise<{
     reason: string;
     assertions: AssertionResult[];
@@ -77,10 +77,15 @@ const failedObservation = (
  * adapters are evaluator code: generated applications can expose normal
  * fixture endpoints, but cannot author observations or assertion outcomes.
  */
-export const runTrustedBrowserWorkflows = async (input: {
-  browser: Browser;
+export const runTrustedBrowserWorkflows = async <TPage>(input: {
+  browser: {
+    newContext: (options?: BrowserContextOptions) => Promise<{
+      newPage: () => Promise<TPage>;
+      close: () => Promise<void>;
+    }>;
+  };
   outputRoot: string;
-  adapters: Partial<Record<(typeof sides)[number], TrustedBrowserWorkflowAdapter>>;
+  adapters: Partial<Record<(typeof sides)[number], TrustedBrowserWorkflowAdapter<TPage>>>;
 }): Promise<TrustedWorkflowRun> => {
   const observations: TrustedWorkflowRun["observations"] = { candidate: [], reference: [] };
   const receipts: unknown[] = [];
@@ -89,7 +94,7 @@ export const runTrustedBrowserWorkflows = async (input: {
       const receiptPath = `parity/workflows/${workflow.id}/${side}.json`;
       const adapter = input.adapters[side];
       let observation: Observation;
-      const contexts: BrowserContext[] = [];
+      const contexts: { close: () => Promise<void> }[] = [];
       // oxlint-disable-next-line eslint/no-negated-condition, unicorn/no-negated-condition -- absent adapter is the explicit unassessed branch
       if (!adapter) {
         observation = {

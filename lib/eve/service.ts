@@ -402,11 +402,21 @@ function resultForEvents(
   if (inputRequests.length !== 0 && options.suppressInputRequests !== true) {
     result.inputRequests = inputRequests;
   }
-  if (applicationSource !== undefined) result.applicationSource = applicationSource;
-  if (prototype !== undefined) result.prototype = prototype;
-  if (uiPreview !== undefined) result.uiPreview = uiPreview;
-  if (workingPreview !== undefined) result.workingPreview = workingPreview;
-  if (options.error !== undefined) result.error = options.error;
+  if (applicationSource !== undefined) {
+    result.applicationSource = applicationSource;
+  }
+  if (prototype !== undefined) {
+    result.prototype = prototype;
+  }
+  if (uiPreview !== undefined) {
+    result.uiPreview = uiPreview;
+  }
+  if (workingPreview !== undefined) {
+    result.workingPreview = workingPreview;
+  }
+  if (options.error !== undefined) {
+    result.error = options.error;
+  }
   return result;
 }
 
@@ -425,10 +435,18 @@ function acceptedResult(
     sessionId,
     status: "working",
   };
-  if (applicationSource !== undefined) result.applicationSource = applicationSource;
-  if (prototype !== undefined) result.prototype = prototype;
-  if (uiPreview !== undefined) result.uiPreview = uiPreview;
-  if (workingPreview !== undefined) result.workingPreview = workingPreview;
+  if (applicationSource !== undefined) {
+    result.applicationSource = applicationSource;
+  }
+  if (prototype !== undefined) {
+    result.prototype = prototype;
+  }
+  if (uiPreview !== undefined) {
+    result.uiPreview = uiPreview;
+  }
+  if (workingPreview !== undefined) {
+    result.workingPreview = workingPreview;
+  }
   return result;
 }
 
@@ -862,10 +880,15 @@ export function createLocalEveSessionService(
       throw new LocalSessionRecoveryUnavailableError();
     }
     if (resumeMode === "recover") {
-      if (resumeSessionId === undefined || options.recoverTerminal === undefined)
+      if (resumeSessionId === undefined || options.recoverTerminal === undefined) {
         throw new LocalSessionRecoveryUnavailableError();
-      if (localActiveResponses.has(resumeSessionId) || state.continuationPumps.has(resumeSessionId))
+      }
+      if (
+        localActiveResponses.has(resumeSessionId) ||
+        state.continuationPumps.has(resumeSessionId)
+      ) {
         throw new Error(CONTINUATION_ALREADY_ACTIVE_MESSAGE);
+      }
       await options.recoverTerminal(resumeSessionId, clientRequestId);
       state.unavailableSessions.delete(resumeSessionId);
       state.recoveryRequired.delete(resumeSessionId);
@@ -996,12 +1019,15 @@ export function createLocalEveSessionService(
           operation.sessionId === sessionId &&
           operation.marker.stoppedBuildTurnId !== undefined &&
           provesSessionLimitResponse(operation.marker, inputs)
-        )
+        ) {
           stoppedTurns.push(operation.marker.stoppedBuildTurnId);
+        }
       }
       if (stoppedTurns.length > 0) {
         const decision = await readLocalBuildDecision(sessionId);
-        if (decision !== undefined && stoppedTurns.includes(decision.turnId)) return false;
+        if (decision !== undefined && stoppedTurns.includes(decision.turnId)) {
+          return false;
+        }
       }
       const approved = await continueApprovedLocalBuild({
         active: status === "working",
@@ -1011,10 +1037,16 @@ export function createLocalEveSessionService(
         pendingInput: outstandingInstalledEveRequests(snapshot.events).length > 0,
         sessionId,
       });
-      if (approved) return true;
-      if (!localAuthoringConfigured()) return false;
+      if (approved) {
+        return true;
+      }
+      if (!localAuthoringConfigured()) {
+        return false;
+      }
       const drafting = await readLocalAuthoringDecision(sessionId);
-      if (drafting !== undefined && stoppedTurns.includes(drafting.turnId)) return false;
+      if (drafting !== undefined && stoppedTurns.includes(drafting.turnId)) {
+        return false;
+      }
       const outcome = await continueLocalPreapprovalAuthoring({
         sessionId,
         active: status !== "waiting",
@@ -1030,8 +1062,9 @@ export function createLocalEveSessionService(
             deriveInstalledEveStatus(fresh.events) !== "waiting" ||
             outstandingInstalledEveRequests(fresh.events).length > 0;
           const changed = !isDeepStrictEqual(await readLocalAuthoringDecision(sessionId), decision);
-          if (unavailable || active || changed)
+          if (unavailable || active || changed) {
             throw new Error("The accepted authoring boundary changed.");
+          }
           await requireSettledModelTurn(sessionId);
         },
       });
@@ -1066,10 +1099,11 @@ export function createLocalEveSessionService(
     }
     const settledIds = resolvedGuardRequestIds(inputs);
     for (const operation of state.guardOperations.values()) {
-      if (operation.sessionId === sessionId && operation.state === "succeeded")
+      if (operation.sessionId === sessionId && operation.state === "succeeded") {
         settledIds.push(
           ...guardRequestIds({ pending: operation.marker.batches, resolved: [], version: 1 }),
         );
+      }
     }
     const stopAwaitingCancellation = [...state.guardOperations.values()].some(
       (operation) =>
@@ -1077,7 +1111,7 @@ export function createLocalEveSessionService(
         operation.marker.decision === "stop" &&
         !provesSessionLimitResponse(operation.marker, inputs),
     );
-    if (stopAwaitingCancellation)
+    if (stopAwaitingCancellation) {
       return {
         ...omitControlledGuardQuestions(result, ids),
         error: {
@@ -1087,12 +1121,15 @@ export function createLocalEveSessionService(
         },
         status: "working",
       };
-    if (ids.length === 0) return omitControlledGuardQuestions(result, settledIds);
+    }
+    if (ids.length === 0) {
+      return omitControlledGuardQuestions(result, settledIds);
+    }
     const stopped = [...state.guardOperations.values()].some(
       (operation) =>
         operation.sessionId === sessionId && matchesPendingGuardStop(operation.marker, inputs),
     );
-    if (stopped)
+    if (stopped) {
       return {
         ...omitControlledGuardQuestions(result, ids),
         error: {
@@ -1102,6 +1139,7 @@ export function createLocalEveSessionService(
         },
         status: "working",
       };
+    }
     const expected = outstandingInstalledEveRequests(events);
     const nativeIds = inputs.pending.flatMap((batch) =>
       batch.requests.map((request) => request.requestId),
@@ -1110,16 +1148,19 @@ export function createLocalEveSessionService(
       expected.some((request) => request.kind === "authorization") ||
       expected.length !== nativeIds.length ||
       expected.some((request, index) => request.requestId !== nativeIds[index])
-    )
+    ) {
       return result;
+    }
     if (
       inputs.pending.some((batch) =>
         batch.requests.some((request) => !isLegacySessionLimitRequest(request)),
       )
-    )
+    ) {
       return omitControlledGuardQuestions(result, ids);
-    if (localActiveResponses.has(sessionId))
+    }
+    if (localActiveResponses.has(sessionId)) {
       return { ...omitControlledGuardQuestions(result, ids), status: "working" };
+    }
     const clientRequestId = stableId("framework_usage", {
       batch: inputs.pending[0],
       generation: state.generation,
@@ -1249,7 +1290,7 @@ export function createLocalEveSessionService(
       if (
         localAuthoringConfigured() &&
         (await readLocalAuthoringDispatchState(sessionId)) === "unknown"
-      )
+      ) {
         return {
           ...result,
           status: "working",
@@ -1259,6 +1300,7 @@ export function createLocalEveSessionService(
               "The drafting continuation may have been accepted. Preserve this session and observe its outcome without resending.",
           },
         };
+      }
       return { ...result, status: "working" };
     }
     if (result.status === "waiting" && localAuthoringConfigured()) {
@@ -1311,13 +1353,15 @@ export function createLocalEveSessionService(
     sessionId: string,
   ) => {
     const retained = state.guardOperations.get(key);
-    if (retained !== undefined && retained.requestDigest !== requestDigest)
+    if (retained !== undefined && retained.requestDigest !== requestDigest) {
       throw new Error("The framework response identity changed.");
+    }
     if (retained !== undefined && retained.state === "reserved") {
       await recoverDurableTail(sessionId);
       const actual = privateInputForEvents(localSessionEvents.get(sessionId) ?? []);
-      if (!provesSessionLimitResponse(retained.marker, actual))
+      if (!provesSessionLimitResponse(retained.marker, actual)) {
         throw new Error("The framework continuation acceptance is still unknown.");
+      }
       retained.state = "succeeded";
       localRequests.set(key, sessionId);
     }
@@ -1334,8 +1378,9 @@ export function createLocalEveSessionService(
       ids.length > 0 &&
       !stopGuardOnly &&
       !ids.every((id) => responses.some((response) => response.requestId === id))
-    )
+    ) {
       responses = mergeSessionLimitResponses(inputs, responses);
+    }
     const expected = stopGuardOnly
       ? frameworkGuardBatches(inputs).flatMap((batch) =>
           batch.requests.map((entry) => entry.requestId),
@@ -1402,13 +1447,14 @@ export function createLocalEveSessionService(
       const prepared = prepareLocalGuardResponses(sessionId, responses, stopGuardOnly);
       const { ids, inputs } = prepared;
       ({ responses } = prepared);
-      if (ids.length > 0)
+      if (ids.length > 0) {
         state.guardOperations.set(key, {
           marker: await localGuardMarker(sessionId, inputs, stopGuardOnly, responses),
           requestDigest,
           sessionId,
           state: "reserved",
         });
+      }
       let result: CancellableResponse;
       try {
         result = await acceptLocalContinuation(
@@ -1424,7 +1470,9 @@ export function createLocalEveSessionService(
         throw error;
       }
       const operation = state.guardOperations.get(key);
-      if (operation !== undefined) operation.state = "succeeded";
+      if (operation !== undefined) {
+        operation.state = "succeeded";
+      }
       state.restartInterrupted.delete(sessionId);
       consumeSessionResponse(sessionId, result);
       localRequests.set(key, sessionId);
@@ -1449,10 +1497,12 @@ export function createLocalEveSessionService(
           batches.some((entry) =>
             entry.requests.some((pending) => !pending.optionIds.includes("stop")),
           )
-        )
+        ) {
           throw new Error("The cancellation input batch changed.");
-        if (turnId !== undefined && batches.some((entry) => entry.turnId !== turnId))
+        }
+        if (turnId !== undefined && batches.some((entry) => entry.turnId !== turnId)) {
           throw new Error("The cancellation turn changed.");
+        }
         const request = {
           clientRequestId: stableId("framework_stop", {
             batch,
@@ -1474,7 +1524,9 @@ export function createLocalEveSessionService(
   };
   service.cancel = async ({ sessionId, turnId }) => {
     await options.cancelRecovery?.(sessionId);
-    if (localAuthoringConfigured()) await blockLocalAuthoringContinuation(sessionId, turnId);
+    if (localAuthoringConfigured()) {
+      await blockLocalAuthoringContinuation(sessionId, turnId);
+    }
     if (state.unavailableSessions.has(sessionId)) {
       throw new LocalSessionRecoveryUnavailableError();
     }
@@ -1485,7 +1537,9 @@ export function createLocalEveSessionService(
       });
     }
     const stopped = await stopLocalSessionLimitGuard(sessionId, turnId);
-    if (stopped !== undefined) return stopped;
+    if (stopped !== undefined) {
+      return stopped;
+    }
     const active = localActiveResponses.get(sessionId);
     if (turnId === undefined && active !== undefined) {
       try {
@@ -1593,7 +1647,9 @@ export function createEveSessionService(
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
           });
-          if (!response.ok) throw new LocalSessionRecoveryUnavailableError();
+          if (!response.ok) {
+            throw new LocalSessionRecoveryUnavailableError();
+          }
           return localRecoveryResponseSchema.parse(await response.json());
         });
       };

@@ -30,6 +30,8 @@ interface CommandAuthority {
   store: SandboxExecutionLeaseStore;
 }
 
+type LeaseSandbox = Parameters<typeof getBuilderSandboxId>[0] & Pick<RuntimeSandboxSession, "stop">;
+
 interface RuntimeDependencies {
   enabled: (environment: Readonly<Record<string, string | undefined>>) => boolean;
   store: (environment: Readonly<Record<string, string | undefined>>) => SandboxExecutionLeaseStore;
@@ -142,7 +144,7 @@ async function stopWithin(
 export async function acquireHostedSandboxExecutionLease(input: {
   sessionId: string;
   sessionAuth: unknown;
-  sandbox: RuntimeSandboxSession;
+  sandbox: LeaseSandbox;
   environment?: Readonly<Record<string, string | undefined>>;
   nowEpochMs?: number;
 }) {
@@ -231,7 +233,7 @@ export async function assertHostedSandboxCommandAuthority(input: {
 export async function releaseHostedSandboxExecutionLease(input: {
   sessionId: string;
   sessionAuth: unknown;
-  sandbox: RuntimeSandboxSession;
+  sandbox: LeaseSandbox;
   reason: SandboxLeaseReleaseReason;
   environment?: Readonly<Record<string, string | undefined>>;
   nowEpochMs?: number;

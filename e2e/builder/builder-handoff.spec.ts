@@ -69,7 +69,9 @@ async function getWithTransientRetry(page: Page, path: string) {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const retryable = /(?:ECONNRESET|ECONNREFUSED|ETIMEDOUT)/u.test(message);
-      if (!retryable || attempt >= 2) throw error;
+      if (!retryable || attempt >= 2) {
+        throw error;
+      }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await delay(250 * 2 ** attempt);
     }
@@ -87,14 +89,17 @@ async function prepareNamedHandoff(
   await waitForBuilderReady(page);
   await page.locator("#app-brief").fill(brief);
   await page.getByLabel("App Name").fill(appName);
-  if (destination === "Cursor")
+  if (destination === "Cursor") {
     await page.getByRole("radio", { exact: true, name: "Cursor" }).check();
+  }
   await expect(page.locator("#app-brief")).toHaveValue(brief);
   await completeHandoff(page);
   const url = page.url();
   const { pathname } = new URL(url);
   const id = pathname.split("/").at(-1);
-  if (id === undefined || id === null || id === "") throw new Error("Handoff URL is missing an ID");
+  if (id === undefined || id === null || id === "") {
+    throw new Error("Handoff URL is missing an ID");
+  }
   return { id, pathname, statusPath: `/api/builder/handoffs/${id}`, url };
 }
 
@@ -310,8 +315,12 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
   let mcpRequests = 0;
   page.on("request", (request) => {
     const { pathname } = new URL(request.url());
-    if (request.method() === "GET" && pathname === handoff.statusPath) polled += 1;
-    if (pathname === "/mcp") mcpRequests += 1;
+    if (request.method() === "GET" && pathname === handoff.statusPath) {
+      polled += 1;
+    }
+    if (pathname === "/mcp") {
+      mcpRequests += 1;
+    }
   });
   // Observe a fresh browser poll before changing the fixture. A request already
   // in flight when the listener is attached can otherwise report continuation
@@ -395,12 +404,14 @@ test("Cursor install link remains hidden until its dedicated local client is reg
       await setupCursorClient(database, `${appOrigin}/mcp`);
       await expect(install).toBeVisible({ timeout: 15_000 });
       const installHref = await install.getAttribute("href");
-      if (installHref === undefined || installHref === null || installHref === "")
+      if (installHref === undefined || installHref === null || installHref === "") {
         throw new Error("Cursor install link is missing an href");
+      }
       const installUrl = new URL(installHref);
       const installConfig = installUrl.searchParams.get("config");
-      if (installConfig === undefined || installConfig === null || installConfig === "")
+      if (installConfig === undefined || installConfig === null || installConfig === "") {
         throw new Error("Cursor install link is missing its configuration");
+      }
       const config = z
         .looseObject({ auth: z.looseObject({ CLIENT_ID: z.unknown() }), url: z.unknown() })
         .parse(JSON.parse(Buffer.from(installConfig, "base64").toString("utf-8")));
@@ -411,9 +422,12 @@ test("Cursor install link remains hidden until its dedicated local client is reg
     } finally {
       await database.transaction(async (tx) => {
         await tx.delete(schema.oauthClient).where(eq(schema.oauthClient.clientId, cursorClientId));
-        if (clientsBefore.length) await tx.insert(schema.oauthClient).values(clientsBefore);
-        if (bindingsBefore.length)
+        if (clientsBefore.length) {
+          await tx.insert(schema.oauthClient).values(clientsBefore);
+        }
+        if (bindingsBefore.length) {
           await tx.insert(schema.oauthClientResource).values(bindingsBefore);
+        }
       });
     }
   } finally {
@@ -493,8 +507,9 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   );
   expect(state.opened.at(-1)).toMatch(/^codex:\/\/new\?prompt=/u);
   const codexLaunchUrl = state.opened.at(-1);
-  if (codexLaunchUrl === undefined || codexLaunchUrl === null || codexLaunchUrl === "")
+  if (codexLaunchUrl === undefined || codexLaunchUrl === null || codexLaunchUrl === "") {
     throw new Error("Codex launch URL is missing");
+  }
   expect(new URL(codexLaunchUrl).searchParams.get("prompt")).toBe(state.clipboard[0]);
 
   await expect(page.getByText("Launch requested for Codex", { exact: false })).toBeVisible();
@@ -531,12 +546,14 @@ test("Cursor handoff carries the exact copied prompt", async ({ context, page })
   const install = page.getByRole("link", { name: "Add Autograph to Cursor" });
   await expect(install).toBeVisible();
   const installHref = await install.getAttribute("href");
-  if (installHref === undefined || installHref === null || installHref === "")
+  if (installHref === undefined || installHref === null || installHref === "") {
     throw new Error("Cursor install link is missing an href");
+  }
   const installUrl = new URL(installHref);
   const installConfig = installUrl.searchParams.get("config");
-  if (installConfig === undefined || installConfig === null || installConfig === "")
+  if (installConfig === undefined || installConfig === null || installConfig === "") {
     throw new Error("Cursor install link is missing its configuration");
+  }
   expect(JSON.parse(Buffer.from(installConfig, "base64").toString("utf-8"))).toEqual({
     auth: { CLIENT_ID: "autograph-cursor-desktop" },
     url: `${appOrigin}/mcp`,
@@ -548,8 +565,9 @@ test("Cursor handoff carries the exact copied prompt", async ({ context, page })
   expect(state.clipboard[0]).not.toContain("codex plugin");
   expect(state.opened.at(-1)).toMatch(/^cursor:\/\/anysphere\.cursor-deeplink\/prompt\?text=/u);
   const cursorLaunchUrl = state.opened.at(-1);
-  if (cursorLaunchUrl === undefined || cursorLaunchUrl === null || cursorLaunchUrl === "")
+  if (cursorLaunchUrl === undefined || cursorLaunchUrl === null || cursorLaunchUrl === "") {
     throw new Error("Cursor launch URL is missing");
+  }
   expect(new URL(cursorLaunchUrl).searchParams.get("text")).toBe(state.clipboard[0]);
   await expect(page.getByRole("button", { name: "Open in Cursor" })).toBeVisible();
 });
@@ -585,8 +603,9 @@ test("expired handoff renews in place without changing intent or provisioning re
 
   const handoffUrl = page.url();
   const handoffId = new URL(handoffUrl).pathname.split("/").at(-1);
-  if (handoffId === undefined || handoffId === null || handoffId === "")
+  if (handoffId === undefined || handoffId === null || handoffId === "") {
     throw new Error("Handoff URL is missing an ID");
+  }
   const statusPath = `/api/builder/handoffs/${handoffId}`;
   const preparedResponse = await getWithTransientRetry(page, statusPath);
   expect(preparedResponse.ok()).toBe(true);
@@ -595,8 +614,12 @@ test("expired handoff renews in place without changing intent or provisioning re
 
   const provisioningRequests: string[] = [];
   page.on("request", (request) => {
-    if (request.method() === "POST" && new URL(request.url()).pathname === "/api/builder/provision")
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/api/builder/provision"
+    ) {
       provisioningRequests.push(request.url());
+    }
   });
   const sql = postgres(databaseUrl, { max: 1 });
   try {

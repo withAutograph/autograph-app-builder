@@ -54,7 +54,9 @@ const appDescription = (id: string) =>
   });
 
 const planningCommandOutput = (command: string, mode: string): string => {
-  if (command.startsWith("stat ")) return `${mode}\n`;
+  if (command.startsWith("stat ")) {
+    return `${mode}\n`;
+  }
   if (command.startsWith("mise run --no-deps app:describe ")) {
     return appDescription(command.split(" ").at(-1) ?? "missing-app-id");
   }
@@ -111,7 +113,9 @@ describe("planning from the current checkout", () => {
         existingAppChanges: files.map((path) => ({ path, content: `changed ${path}` })),
         sandbox,
       });
-      if (!("operation" in result.proposal)) throw new Error("Expected an existing-app plan");
+      if (!("operation" in result.proposal)) {
+        throw new Error("Expected an existing-app plan");
+      }
       expect(
         result.proposal.iteration.changes.map((change) => ({
           path: change.path,
@@ -149,7 +153,9 @@ describe("planning from the current checkout", () => {
       // oxlint-disable-next-line eslint/require-await -- Sandbox fixture models an asynchronous copy.
       run: vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: "" })),
       async writeFile({ content: stream }: { content: ReadableStream<Uint8Array> }) {
-        for await (const bytes of stream) written.push(Buffer.from(bytes).toString("utf-8"));
+        for await (const bytes of stream) {
+          written.push(Buffer.from(bytes).toString("utf-8"));
+        }
       },
       // oxlint-disable-next-line eslint/require-await -- Sandbox fixture models an asynchronous profile write.
       writeTextFile: vi.fn(async () => {}),
@@ -159,7 +165,9 @@ describe("planning from the current checkout", () => {
       appSpecDigest: "a".repeat(64),
       appSpecStream: new ReadableStream<Uint8Array>({
         start(controller) {
-          for (const piece of pieces) controller.enqueue(Buffer.from(piece, "utf-8"));
+          for (const piece of pieces) {
+            controller.enqueue(Buffer.from(piece, "utf-8"));
+          }
           controller.close();
         },
       }),
@@ -448,7 +456,9 @@ describe("planning from the current checkout", () => {
       operation: "iterate-existing-app",
       plan: { source: { schema: { kind: "kernel", path: "apps/example/schema/example.cue" } } },
     });
-    if (!("operation" in result.proposal)) throw new Error("Expected revision");
+    if (!("operation" in result.proposal)) {
+      throw new Error("Expected revision");
+    }
     expect(result.proposal.iteration.changes[0]).not.toHaveProperty("after");
     expect(sandbox.run).toHaveBeenCalledWith({
       command: "mise run --no-deps app:describe example",

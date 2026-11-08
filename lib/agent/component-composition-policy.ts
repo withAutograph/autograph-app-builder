@@ -13,8 +13,12 @@ const gitObject = z.string().regex(/^[a-f0-9]{40}$/u);
 function sortedUnique<T extends z.ZodType<string>>(item: T) {
   return z.array(item).superRefine((values, context) => {
     const sorted = [...values].toSorted((left, right) => {
-      if (left < right) return -1;
-      if (left > right) return 1;
+      if (left < right) {
+        return -1;
+      }
+      if (left > right) {
+        return 1;
+      }
       return 0;
     });
     if (

@@ -59,11 +59,11 @@ export function createPreviewEmulateHandler(input: {
     services: {
       github: {
         emulator: github,
-        seed: seed.github as unknown as Record<string, unknown>,
+        seed: seed.github,
       },
       vercel: {
         emulator: vercel,
-        seed: seed.vercel as unknown as Record<string, unknown>,
+        seed: seed.vercel,
       },
     },
   });

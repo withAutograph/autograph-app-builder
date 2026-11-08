@@ -954,7 +954,9 @@ wait
       await runSequentially(
         Array.from({ length: 100 }, (_, attempts) => attempts),
         async () => {
-          if (existsSync(descendant)) return;
+          if (existsSync(descendant)) {
+            return;
+          }
           await delay(10);
         },
       );

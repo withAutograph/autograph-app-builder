@@ -17,6 +17,12 @@ import { originalCssSource } from "./css-source-map";
 import type { CssSourceMap } from "./css-source-map";
 import { runSequentially } from "../../lib/async-sequential";
 
+declare global {
+  interface Window {
+    axe: typeof axe;
+  }
+}
+
 const TOKEN_REFERENCE = "token-reference";
 const MATCHING_LITERAL = "matching-literal";
 const UNMATCHED_LITERAL = "unmatched-literal";
@@ -442,21 +448,7 @@ export async function measurePage(page: Page) {
         }
       }
     }
-    const result = await (
-      window as unknown as {
-        axe: {
-          run: () => Promise<{
-            violations: {
-              id: string;
-              impact: string;
-              help: string;
-              nodes: { target: string[]; failureSummary: string }[];
-            }[];
-            incomplete: unknown[];
-          }>;
-        };
-      }
-    ).axe.run();
+    const result = await window.axe.run();
     return {
       accessibility: {
         manualReviewCount: result.incomplete.length,

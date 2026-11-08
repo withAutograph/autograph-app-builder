@@ -22,7 +22,17 @@ const chartCompositions = new Set([
 
 /** Compile the submitted interface against the actual checkout, not substitutes. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function uiPreviewRendererFiles(input: UiPreviewInput) {
+export function uiPreviewRendererFiles(
+  input: Pick<UiPreviewInput, "appId" | "catalogGaps" | "files" | "routes"> & {
+    manifest: {
+      productionCompositions: Pick<
+        UiPreviewInput["manifest"]["productionCompositions"][number],
+        "name"
+      >[];
+      screens: Pick<UiPreviewInput["manifest"]["screens"][number], "entry" | "route">[];
+    };
+  },
+) {
   const root = `.builder-preview/${uiPreviewSourceDigest(input)}`;
   // These public compositions use Arrusted's AG Charts runtime. Match its
   // Storybook setup only when the submitted interface actually uses charts.

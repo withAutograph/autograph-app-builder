@@ -450,9 +450,7 @@ describe("preview command termination", () => {
       wait: vi.fn(() => exited.promise),
     };
     let settled = false;
-    const cleanup = stopWorkingPreviewCommand(
-      command as unknown as Parameters<typeof stopWorkingPreviewCommand>[0],
-    ).then(() => {
+    const cleanup = stopWorkingPreviewCommand(command).then(() => {
       settled = true;
     });
     await vi.waitFor(() => {

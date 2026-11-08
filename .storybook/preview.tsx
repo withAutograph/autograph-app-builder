@@ -31,7 +31,9 @@ storybookQueryClient.setQueryDefaults(authQueryKeys.session, {
 
 const preview: Preview = {
   afterEach: ({ canvasElement, title }) => {
-    if (!usesCreateAppShell(title)) return;
+    if (!usesCreateAppShell(title)) {
+      return;
+    }
 
     void expect(
       canvasElement.querySelector("[data-create-app-story-environment]"),

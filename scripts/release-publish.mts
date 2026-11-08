@@ -28,8 +28,12 @@ const promotionReceiptName = "promotion-receipt.json";
 const compareAssetNames = (left: unknown, right: unknown) => {
   const leftText = String(left);
   const rightText = String(right);
-  if (leftText < rightText) return -1;
-  if (leftText > rightText) return 1;
+  if (leftText < rightText) {
+    return -1;
+  }
+  if (leftText > rightText) {
+    return 1;
+  }
   return 0;
 };
 const execFileAsync = promisify(execFile);

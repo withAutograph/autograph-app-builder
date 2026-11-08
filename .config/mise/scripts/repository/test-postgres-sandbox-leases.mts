@@ -19,15 +19,18 @@ import { createPostgresSandboxExecutionLeaseStore } from "../../../../lib/sandbo
 function argument(name: string) {
   const index = process.argv.indexOf(name);
   const value = index === -1 ? undefined : process.argv[index + 1];
-  if (value === undefined || value.length === 0) throw new Error(`Missing ${name}.`);
+  if (value === undefined || value.length === 0) {
+    throw new Error(`Missing ${name}.`);
+  }
   return value;
 }
 
 const host = argument("--host");
 const recoveryInProgressReason = "recovery-in-progress";
 const port = Number(argument("--port"));
-if (!Number.isInteger(port) || port < 1 || port > 65_535)
+if (!Number.isInteger(port) || port < 1 || port > 65_535) {
   throw new Error("Invalid PostgreSQL port.");
+}
 
 const client = postgres({
   database: "postgres",
@@ -260,8 +263,9 @@ try {
     nowEpochMs: 0,
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning tool or script contract
     async stopSandbox(providerSandboxId) {
-      if (providerSandboxId === batchFailed.lease.providerSandboxId)
+      if (providerSandboxId === batchFailed.lease.providerSandboxId) {
         throw new Error("provider unavailable");
+      }
     },
     store,
   });

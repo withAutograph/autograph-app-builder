@@ -471,7 +471,9 @@ const gapRow = (gap: ReportGap) =>
 
 const captureFileLink = (item: { label: string }, file: string) => {
   const link = `<a href="${escapeHtml(file)}">${escapeHtml(basename(file))}</a>`;
-  if (!/\.(?:png|jpe?g|webp)$/iu.test(file)) return link;
+  if (!/\.(?:png|jpe?g|webp)$/iu.test(file)) {
+    return link;
+  }
   return `${link}<img src="${escapeHtml(file)}" alt="${escapeHtml(item.label)} ${escapeHtml(basename(file))}" style="display:block;max-width:100%;margin:12px 0">`;
 };
 

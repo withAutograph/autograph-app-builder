@@ -79,9 +79,13 @@ const assertOwnerBoundResolvedDirectory = (path: string, packageRoot = path): vo
     if (writableByOthers && (stat.uid === ownerId || !sticky)) {
       throw new Error(OWNER_BOUND_INPUT_ERROR);
     }
-    if (current === boundary) insidePackage = false;
+    if (current === boundary) {
+      insidePackage = false;
+    }
     const parent = nodePath.dirname(current);
-    if (parent === current) return;
+    if (parent === current) {
+      return;
+    }
     current = parent;
   }
 };
@@ -128,7 +132,9 @@ export const resolveInstalledEveCli = (repositoryRootInput: string): string => {
     rootMetadata.optionalDependencies,
     rootMetadata.peerDependencies,
   ].some((section) => {
-    if (section === undefined) return false;
+    if (section === undefined) {
+      return false;
+    }
     return Object.hasOwn(closedObject(section, "Repository dependencies"), "eve");
   });
   if (!declared) {

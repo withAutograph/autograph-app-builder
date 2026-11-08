@@ -101,7 +101,9 @@ const artifactChunkEnvelope = (input: {
     mediaType,
     path,
   };
-  if (baseRevision !== undefined) Object.assign(chunkInput, { baseRevision });
+  if (baseRevision !== undefined) {
+    Object.assign(chunkInput, { baseRevision });
+  }
   return {
     data: {
       actions: [
@@ -325,7 +327,9 @@ const validateArtifactChunkOwnership = (
   if (expectedPrototypeArtifactMediaType(input.path) !== input.mediaType) {
     throw new Error("Prototype artifact media type is not allowed for its path.");
   }
-  if (input.content.length === 0) throw new Error("Prototype artifact chunks must not be empty.");
+  if (input.content.length === 0) {
+    throw new Error("Prototype artifact chunks must not be empty.");
+  }
   if (!/^[a-f0-9]{64}$/u.test(input.expectedDigest)) {
     throw new Error("Prototype artifact expected digest must be a lowercase SHA-256 digest.");
   }
@@ -344,8 +348,9 @@ const validateArtifactChunkOwnership = (
     throw new Error("Prototype artifact state belongs to a different session.");
   }
   const recordedAppIds = new Set(input.artifacts.map((artifact) => artifact.appId));
-  if (recordedAppIds.size > 1)
+  if (recordedAppIds.size > 1) {
     throw new Error("Prototype artifact state contains multiple app ids.");
+  }
   const recordedAppId = input.artifacts[0]?.appId;
   if (recordedAppId !== undefined && recordedAppId !== appId) {
     throw new Error("This app build already owns a different prototype app.");
@@ -413,7 +418,9 @@ const resolveChunkContinuation = (
       );
     }
     const retry = pendingChunkRetry(prior, input, transfer, chunkDigest);
-    if (retry !== undefined) return { kind: "retry", result: retry };
+    if (retry !== undefined) {
+      return { kind: "retry", result: retry };
+    }
     if (input.chunkIndex !== transfer.nextChunkIndex) {
       throw new Error(
         `Prototype artifact chunk ${input.chunkIndex} is out of order; the next required chunk is ${transfer.nextChunkIndex}. Retry the next chunk with the current revision ${prior.revision}.`,
@@ -426,8 +433,9 @@ const resolveChunkContinuation = (
     }
     return { kind: "write", restart, transfer };
   }
-  if (input.chunkIndex !== 0)
+  if (input.chunkIndex !== 0) {
     throw new Error("Prototype artifact transfer must start with chunk 0.");
+  }
   return { kind: "write", restart };
 };
 
@@ -438,7 +446,9 @@ const artifactForCompletedChunk = (
   chunkDigest: string,
 ): PrototypeArtifactChunkResult => {
   const contentHash = createHash("sha256");
-  for (const chunk of chunks) contentHash.update(chunk, "utf-8");
+  for (const chunk of chunks) {
+    contentHash.update(chunk, "utf-8");
+  }
   const digest = contentHash.digest("hex");
   if (digest !== input.expectedDigest) {
     throw new Error(
@@ -540,7 +550,9 @@ export const recordPrototypeArtifactChunk = (
   }
   const chunkDigest = sha256(input.content);
   const continuation = resolveChunkContinuation(prior, input, chunkDigest);
-  if (continuation.kind === "retry") return continuation.result;
+  if (continuation.kind === "retry") {
+    return continuation.result;
+  }
   const { restart, transfer } = continuation;
   const chunks =
     transfer === undefined || restart ? [input.content] : [...transfer.chunks, input.content];

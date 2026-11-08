@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { RuntimeSandboxSession } from "eve/sandbox";
 import { InMemorySandboxExecutionLeaseStore } from "./execution-lease";
 import {
   acquireHostedSandboxExecutionLease,
@@ -30,7 +29,7 @@ function sandboxFixture(stop = vi.fn(async () => {})) {
   return {
     id: "provider_session_1",
     stop,
-  } as unknown as RuntimeSandboxSession;
+  };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

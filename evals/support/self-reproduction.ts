@@ -168,7 +168,9 @@ export function buildRequirements(
   const text = candidate?.map((file) => file.content).join("\n") ?? "";
   const has = (expression: RegExp) => expression.test(text);
   const sourceStatus = (id: string, expression: RegExp): RequirementStatus => {
-    if (!candidateAvailable) return "blocked";
+    if (!candidateAvailable) {
+      return "blocked";
+    }
     return workflowEvidence?.[id]?.status ?? (has(expression) ? "unassessed" : "failed");
   };
   const workflow = (id: string, title: string, expression: RegExp, expected: string) => ({

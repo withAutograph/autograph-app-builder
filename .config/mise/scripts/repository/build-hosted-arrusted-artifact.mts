@@ -69,17 +69,21 @@ function parseArguments(args: readonly string[]) {
   for (let index = 0; index < args.length; index += 2) {
     const flag = args[index];
     const value = args[index + 1];
-    if (flag === undefined || value === undefined || !flag.startsWith("--"))
+    if (flag === undefined || value === undefined || !flag.startsWith("--")) {
       throw new Error("Arguments must be exact --name value pairs.");
-    if (values.has(flag)) throw new Error(`Duplicate argument ${flag}.`);
+    }
+    if (values.has(flag)) {
+      throw new Error(`Duplicate argument ${flag}.`);
+    }
     values.set(flag, value);
   }
   const arrustedRoot = values.get("--arrusted-root");
   const output = values.get("--output");
   values.delete("--arrusted-root");
   values.delete("--output");
-  if (arrustedRoot === undefined || output === undefined || values.size !== 0)
+  if (arrustedRoot === undefined || output === undefined || values.size !== 0) {
     throw new Error("usage: hosted:artifact-build -- --arrusted-root <path> --output <path>");
+  }
   return { arrustedRoot: realpathSync(arrustedRoot), output: path.resolve(output) };
 }
 
@@ -120,10 +124,13 @@ function packageRoot(
   name: string,
 ): string | undefined {
   const candidate = path.join(resolutionRoot, ...name.split("/"));
-  if (!existsSync(candidate)) return undefined;
+  if (!existsSync(candidate)) {
+    return undefined;
+  }
   const resolved = realpathSync(candidate);
-  if (!within(installedRoot, resolved))
+  if (!within(installedRoot, resolved)) {
     throw new Error(`Dependency ${name} resolves outside node_modules.`);
+  }
   return resolved;
 }
 
@@ -131,7 +138,9 @@ function packageRoot(
 function packageResolutionRoot(packagePath: string): string {
   const marker = `${path.sep}node_modules${path.sep}`;
   const index = packagePath.lastIndexOf(marker);
-  if (index === -1) throw new Error("Dependency is outside a package store.");
+  if (index === -1) {
+    throw new Error("Dependency is outside a package store.");
+  }
   return packagePath.slice(0, index + marker.length - 1);
 }
 
@@ -140,8 +149,9 @@ function packageVersion(packagePath: string): string {
   const manifest = JSON.parse(readFileSync(path.join(packagePath, "package.json"), "utf-8")) as {
     version?: string;
   };
-  if (typeof manifest.version !== "string")
+  if (typeof manifest.version !== "string") {
     throw new Error("Dependency package version is missing.");
+  }
   return manifest.version;
 }
 
@@ -157,39 +167,54 @@ function dependencyClosure(root: string): Map<string, string> {
   const rootVersions = new Map<string, string>();
   for (const name of EXECUTION_ROOT_PACKAGES) {
     const packagePath = packageRoot(installedRoot, installedRoot, name);
-    if (packagePath === undefined) throw new Error(`Dependency ${name} is missing.`);
+    if (packagePath === undefined) {
+      throw new Error(`Dependency ${name} is missing.`);
+    }
     rootVersions.set(name, packageVersion(packagePath));
   }
   while (pending.length > 0) {
     const current = pending.shift();
-    if (current === undefined) continue;
+    if (current === undefined) {
+      continue;
+    }
     const { name, resolutionRoot, destination } = current;
     const packagePath = packageRoot(installedRoot, resolutionRoot, name);
-    if (packagePath === undefined) throw new Error(`Dependency ${name} is missing.`);
+    if (packagePath === undefined) {
+      throw new Error(`Dependency ${name} is missing.`);
+    }
     const manifest = JSON.parse(readFileSync(path.join(packagePath, "package.json"), "utf-8")) as {
       version?: string;
       dependencies?: Record<string, string>;
       optionalDependencies?: Record<string, string>;
     };
-    if (typeof manifest.version !== "string")
+    if (typeof manifest.version !== "string") {
       throw new Error("Dependency package version is missing.");
-    if (name === REQUIRED_PACKAGE && manifest.version !== REQUIRED_PACKAGE_VERSION)
+    }
+    if (name === REQUIRED_PACKAGE && manifest.version !== REQUIRED_PACKAGE_VERSION) {
       throw new Error("The required microfrontends version drifted.");
+    }
     const existing = packages.get(destination);
     if (existing !== undefined) {
-      if (packageVersion(existing) !== manifest.version)
+      if (packageVersion(existing) !== manifest.version) {
         throw new Error(`Dependency destination ${destination} drifted.`);
+      }
       continue;
     }
     packages.set(destination, packagePath);
-    if (!rootVersions.has(name)) rootVersions.set(name, manifest.version);
+    if (!rootVersions.has(name)) {
+      rootVersions.set(name, manifest.version);
+    }
     const childResolutionRoot = packageResolutionRoot(packagePath);
     const enqueue = (dependency: string) => {
       const dependencyPath = packageRoot(installedRoot, childResolutionRoot, dependency);
-      if (dependencyPath === undefined) return false;
+      if (dependencyPath === undefined) {
+        return false;
+      }
       const dependencyVersion = packageVersion(dependencyPath);
       const rootVersion = rootVersions.get(dependency);
-      if (rootVersion === undefined) rootVersions.set(dependency, dependencyVersion);
+      if (rootVersion === undefined) {
+        rootVersions.set(dependency, dependencyVersion);
+      }
       const dependencyDestination =
         rootVersion === undefined || rootVersion === dependencyVersion
           ? dependency
@@ -201,10 +226,15 @@ function dependencyClosure(root: string): Map<string, string> {
       });
       return true;
     };
-    for (const dependency of Object.keys(manifest.dependencies ?? {}).toSorted())
-      if (!enqueue(dependency)) throw new Error(`Dependency ${dependency} is missing.`);
+    for (const dependency of Object.keys(manifest.dependencies ?? {}).toSorted()) {
+      if (!enqueue(dependency)) {
+        throw new Error(`Dependency ${dependency} is missing.`);
+      }
+    }
     for (const dependency of Object.keys(manifest.optionalDependencies ?? {}).toSorted()) {
-      if (dependency.includes("musl")) continue;
+      if (dependency.includes("musl")) {
+        continue;
+      }
       enqueue(dependency);
     }
   }
@@ -216,11 +246,15 @@ function normalizeTree(root: string): void {
   const visit = (entryPath: string): void => {
     const entry = lstatSync(entryPath);
     if (entry.isDirectory()) {
-      for (const name of readdirSync(entryPath).toSorted()) visit(path.join(entryPath, name));
+      for (const name of readdirSync(entryPath).toSorted()) {
+        visit(path.join(entryPath, name));
+      }
       chmodSync(entryPath, 0o755);
     } else if (entry.isSymbolicLink()) {
       const target = realpathSync(entryPath);
-      if (!within(root, target)) throw new Error("Artifact symlink escapes its root.");
+      if (!within(root, target)) {
+        throw new Error("Artifact symlink escapes its root.");
+      }
     } else if (entry.isFile()) {
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       chmodSync(entryPath, entry.mode & 0o111 ? 0o755 : 0o644);
@@ -253,15 +287,17 @@ function writeGzipTar(root: string, entries: readonly string[], output: string) 
 }
 
 const { arrustedRoot, output } = parseArguments(process.argv.slice(2));
-if (process.platform !== "linux" || process.arch !== "x64")
+if (process.platform !== "linux" || process.arch !== "x64") {
   throw new Error("Hosted execution artifacts must be built on Linux x86_64.");
+}
 const scratch = mkdtempSync(path.join(tmpdir(), "app-builder-hosted-artifact."));
 try {
   const commit = git(arrustedRoot, ["rev-parse", "HEAD^{commit}"], "utf-8").trim();
   const tree = git(arrustedRoot, ["rev-parse", "HEAD^{tree}"], "utf-8").trim();
   const status = git(arrustedRoot, ["status", "--porcelain=v1"], "utf-8").trim();
-  if (commit !== TARGET_SHA || tree !== TARGET_TREE || status !== "")
+  if (commit !== TARGET_SHA || tree !== TARGET_TREE || status !== "") {
     throw new Error("Arrusted source is not the exact clean supported target.");
+  }
 
   const seed = path.join(scratch, ".app-builder-hosted-seed");
   const dependencyRoot = path.join(seed, "dependency-cache");
@@ -287,13 +323,15 @@ try {
     ["next", "../next/dist/bin/next"],
     ["turbo", "../turbo/bin/turbo"],
     ["vp", "../vite-plus/bin/vp"],
-  ] as const)
+  ] as const) {
     symlinkSync(target, path.join(binaryDirectory, name));
-  for (const binary of ["next", "turbo", "vp"] as const)
+  }
+  for (const binary of ["next", "turbo", "vp"] as const) {
     execFileSync(process.execPath, [path.join(binaryDirectory, binary), "--version"], {
       cwd: dependencyStage,
       encoding: "utf-8",
     });
+  }
   execFileSync(
     process.execPath,
     ["--input-type=module", "--eval", 'await import("@autograph/vite-config")'],

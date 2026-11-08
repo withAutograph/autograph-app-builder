@@ -101,7 +101,9 @@ test("passkeys are added, renamed, and protected through stock settings UI", asy
       })
       .toBe(1);
   } finally {
-    if (!page.isClosed()) await authenticator?.dispose();
+    if (!page.isClosed()) {
+      await authenticator?.dispose();
+    }
   }
 });
 
