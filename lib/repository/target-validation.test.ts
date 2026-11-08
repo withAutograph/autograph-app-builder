@@ -843,14 +843,14 @@ describe("target validation", () => {
       expect(result).toMatchObject({
         ok: false,
         receipt: {
-          reason: "tooling-prerequisite",
           commandFailure: {
-            name: "check-build",
             exitCode: 134,
             failureClass: "native-tool-panic",
             // oxlint-disable-next-line typescript/no-unsafe-assignment -- Vitest asymmetric matcher checks the safe prerequisite hint.
             hint: expect.stringContaining("repairOnly"),
+            name: "check-build",
           },
+          reason: "tooling-prerequisite",
         },
       });
     },
@@ -987,11 +987,11 @@ describe("target validation", () => {
       const routePath = `apps/example/app/${segment}/page.tsx`;
       expect(compilerDiagnostics(`${routePath}(4,2): error TS2304: private source text`)).toEqual([
         {
-          path: routePath,
-          line: 4,
-          column: 2,
           code: "TS2304",
+          column: 2,
+          line: 4,
           message: "A referenced name is missing; inspect its declaration or import.",
+          path: routePath,
         },
       ]);
       expect(
@@ -1164,8 +1164,8 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
         expect(streaming ? chunks.join("") : result.stdout).toContain(stateDirectory);
         expect(streaming ? spawn : run).toHaveBeenCalledOnce();
         expect((streaming ? spawn : run).mock.calls[0]?.[0].env).toEqual({
-          APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
           APP_RUNTIME_STATE_DIR: stateDirectory,
+          APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
         });
         expect(streaming ? run : spawn).not.toHaveBeenCalled();
       } finally {
@@ -1176,20 +1176,20 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
   );
 
   it.each([
-    { outcome: "build", exitCode: 0 },
-    { outcome: "already compiled", alreadyCompiled: true as const, exitCode: 0 },
-    { outcome: "native output rejected", exitCode: 42 },
-    { outcome: "compile failed", exitCode: 43 },
-    { outcome: "private runner with catalog helper", privateRunner: true, exitCode: 0 },
+    { exitCode: 0, outcome: "build" },
+    { alreadyCompiled: true as const, exitCode: 0, outcome: "already compiled" },
+    { exitCode: 42, outcome: "native output rejected" },
+    { exitCode: 43, outcome: "compile failed" },
+    { exitCode: 0, outcome: "private runner with catalog helper", privateRunner: true },
     {
+      exitCode: 0,
+      legacyEnv: true,
       outcome: "oldest runner helper names",
       privateRunner: true,
-      legacyEnv: true,
-      exitCode: 0,
     },
-    { outcome: "catalog failed", privateRunner: true, exitCode: 45 },
-    { outcome: "build failed", privateRunner: true, exitCode: 44 },
-    { outcome: "private verifier rejected", privateRunner: true, exitCode: 1 },
+    { exitCode: 45, outcome: "catalog failed", privateRunner: true },
+    { exitCode: 44, outcome: "build failed", privateRunner: true },
+    { exitCode: 1, outcome: "private verifier rejected", privateRunner: true },
   ])("executes the selected checkout's build without lint: $outcome", async (scenario) => {
     const directory = mkdtempSync(path.join(tmpdir(), "builder-native-delivery-"));
     const environmentPath = localRuntimeEnvironmentPath(directory, "example");

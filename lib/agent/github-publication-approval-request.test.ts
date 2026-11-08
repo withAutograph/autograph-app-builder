@@ -274,7 +274,7 @@ describe("native draft publication approval", () => {
       const pending = await h.run(h.initial, { message: "Publish the reviewed app." });
       const event = h.events.find((value) => value.type === "input.requested");
       const request = event?.data.requests.find((value) => value.kind === "tool-approval");
-      expect(request?.action).toMatchObject({ toolName: "publish_github_draft_pr", input });
+      expect(request?.action).toMatchObject({ input, toolName: "publish_github_draft_pr" });
       expect(fixture.publish).not.toHaveBeenCalled();
       if (!request) {
         throw new Error("Expected the ordinary native approval request");

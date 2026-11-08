@@ -409,7 +409,7 @@ describe("unchanged paged observation reuse", () => {
     });
     vi.mocked(f.adapter.start).mockClear();
     const result = await f.service.get({ cursor: 3, limit: 10, sessionId: f.sessionId });
-    expect(result).toMatchObject({ status: "input_required", cursor: 4, inputRequests: [request] });
+    expect(result).toMatchObject({ cursor: 4, inputRequests: [request], status: "input_required" });
     expect(result.events.map((event) => event.index)).toEqual([3]);
     const stored = await f.getSession(principal, f.sessionId);
     expect(stored).toMatchObject({
@@ -1510,7 +1510,7 @@ describe("paged hosted session observation", () => {
         };
       };
       const f = await fixture(observe);
-      await f.service.get({ sessionId: f.sessionId, cursor: 0, limit: 1 });
+      await f.service.get({ cursor: 0, limit: 1, sessionId: f.sessionId });
       const sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(async (input) => {
         accepted = true;
         await input.onAccepted?.("fixture-delivery");
@@ -1553,7 +1553,7 @@ describe("paged hosted session observation", () => {
       expect(remainder.events.map((event) => event.index)).toEqual(
         Array.from({ length: Math.max(0, delta - 100) }, (_, index) => baseline + 100 + index),
       );
-      const history = await f.service.get({ sessionId: f.sessionId, cursor: 0, limit: 1 });
+      const history = await f.service.get({ cursor: 0, limit: 1, sessionId: f.sessionId });
       expect(history.events[0]).toMatchObject({ index: 0, text: "history 0" });
     },
   );
@@ -2028,12 +2028,12 @@ describe("send preflight dispatch classification", () => {
         const result = await service.send(request);
         expect(result).toMatchObject({ cursor: 1, events: [], status: "waiting" });
         expect(await f.base.getPrivateOperation(principal, operationId)).toMatchObject({
-          state: "succeeded",
           sendDelivery: {
-            deliveryId: "fixture-delivery",
-            adapterSessionId: "adapter_1",
             adapterGeneration: initial.adapterGeneration,
+            adapterSessionId: "adapter_1",
+            deliveryId: "fixture-delivery",
           },
+          state: "succeeded",
         });
         expect(await service.send(request)).toEqual(result);
       } else {
