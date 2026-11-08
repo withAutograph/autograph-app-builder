@@ -534,8 +534,9 @@ describe("Production creator continuation", () => {
     });
   });
 
-  it("preserves existing invitations, bound actors and uncertain reads when choosing an account", async () => {
-    for (const state of ["invitation", "actor", "grant", "unknown"] as const) {
+  it.each(["invitation", "actor", "grant", "unknown"] as const)(
+    "preserves existing %s state when choosing an account",
+    async (state) => {
       const h = harness();
       await h.bridge.prepare(h.context());
       if (state !== "invitation") h.absentLegacy();
@@ -547,8 +548,8 @@ describe("Production creator continuation", () => {
         h.bridge.chooseRecipient(h.context(), "other@example.com", randomUUID()),
       ).rejects.toThrow();
       expect(h.row()).toEqual(before);
-    }
-  });
+    },
+  );
 
   it("reuses the linked account email across apps and does not borrow it for an explicitly different account", async () => {
     const source = await linkedOwner();

@@ -485,7 +485,6 @@ export default defineConfig({
       files: [
         "e2e/support/harness.ts",
         "lib/provisioning/hosted-operator-ready-replacement-native.ts",
-        productionCreatorTestPath,
       ],
       rules: { "eslint/no-await-in-loop": "off" },
     },
