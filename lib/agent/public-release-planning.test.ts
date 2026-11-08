@@ -11,10 +11,10 @@ type Client = Parameters<typeof planPublicAppWithGuidance>[0];
 
 it("returns the canonical saved session destination control after public planning discovers no destination", async () => {
   const client = {
-    sessionId: "saved/public?session",
     plan: vi
       .fn<Client["plan"]>()
       .mockRejectedValue(new PublicReleasePrerequisiteError("builder_destination_required")),
+    sessionId: "saved/public?session",
   };
   const result = await planPublicAppWithGuidance(client, "invoice-app");
   expect(result).toMatchObject({
@@ -28,10 +28,10 @@ it("returns the canonical saved session destination control after public plannin
 });
 it("keeps a runtime prerequisite on the same app without offering another destination", async () => {
   const client = {
-    sessionId: "saved-session",
     plan: vi
       .fn<Client["plan"]>()
       .mockRejectedValue(new PublicReleasePrerequisiteError("prepared_runtime_required")),
+    sessionId: "saved-session",
   };
   const result = await planPublicAppWithGuidance(client, "invoice-app");
   expect(result).toMatchObject({ code: "prepared_runtime_required", status: "blocked" });
@@ -44,8 +44,8 @@ it("preserves successful plans and unexpected failures without repeating the req
     planDigest: publicReleasePlanDigest(plan),
   };
   const client = {
-    sessionId: "saved-session",
     plan: vi.fn<Client["plan"]>().mockResolvedValue(planned),
+    sessionId: "saved-session",
   };
   expect(await planPublicAppWithGuidance(client, "invoice-app")).toBe(planned);
   const failure = new Error("authorization-required");

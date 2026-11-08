@@ -8,7 +8,7 @@ import {
 
 const facts = (program = runtimeResourceDiagnosticProgram) => {
   const result = spawnSync(process.execPath, ["-e", program], { encoding: "utf-8" });
-  return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
+  return { exitCode: result.status ?? 1, stderr: result.stderr, stdout: result.stdout };
 };
 describe("bounded runtime resource diagnostics", () => {
   it("runs the actual fixed observation program and preserves advisory scope", async () => {

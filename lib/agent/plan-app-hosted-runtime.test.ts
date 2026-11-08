@@ -21,8 +21,8 @@ vi.mock("./acceptance-runtime-root", () => ({
 }));
 vi.mock("../provisioning/hosted-operator-client", () => ({
   hostedOperatorClientForSession: () => ({
-    resolvePreviewTarget: mocks.select,
     planContinuity: mocks.plan,
+    resolvePreviewTarget: mocks.select,
   }),
 }));
 

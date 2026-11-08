@@ -53,7 +53,7 @@ describe("durable private compute resource journal", () => {
         }),
       ).rejects.toThrow("another local owner");
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
 });

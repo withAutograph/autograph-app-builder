@@ -145,10 +145,10 @@ describe("replacement checkout dependencies", () => {
       throw new Error("Missing install attempt");
     }
     expect(install).toMatchObject({
-      executionCommand: "bun install --frozen-lockfile",
       dispatchedCommandDigest: createHash("sha256")
         .update(workspaceBinInstallCommand("/workspace/repository", true))
         .digest("hex"),
+      executionCommand: "bun install --frozen-lockfile",
     });
     expect(install.excerpt.length).toBeLessThanOrEqual(2400);
     expect(install.truncated).toBe(true);

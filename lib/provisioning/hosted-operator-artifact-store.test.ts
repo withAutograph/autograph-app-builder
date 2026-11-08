@@ -63,13 +63,13 @@ const fixture = () => {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Deliberate partial database transport fixture.
   const db = database as unknown as Database;
   const store = createPostgresOperatorArtifactStore({
-    database: db,
     assertCurrentOwner: async () => {
       if (revoked) {
         throw new Error("owner revoked");
       }
       await Promise.resolve();
     },
+    database: db,
   });
   return {
     db,
