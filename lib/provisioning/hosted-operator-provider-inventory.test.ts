@@ -349,16 +349,19 @@ describe("private read-only operator provider inventory", () => {
     await expect(
       readHostedOperatorProviderInventory({ ...f.input, diagnosticSink: sink }),
     ).rejects.toThrow("operator_unavailable");
-    expect(sink.mock.calls.map(([event]) => event.inventoryReadFailure)).toContainEqual(
-      expect.objectContaining({
-        target: "app",
-        operation: "project",
-        phase,
-        ...(status && phase === "http_response"
-          ? { httpStatus: status, errorClass: "operator_error", publicCode: "operator_unavailable" }
-          : {}),
-      }),
-    );
+    const failures = sink.mock.calls.map(([event]) => event.inventoryReadFailure);
+    const expectedFailure =
+      status && phase === "http_response"
+        ? {
+            errorClass: "operator_error",
+            httpStatus: status,
+            operation: "project",
+            phase,
+            publicCode: "operator_unavailable",
+            target: "app",
+          }
+        : { operation: "project", phase, target: "app" };
+    expect(failures).toContainEqual(expect.objectContaining(expectedFailure));
     expect(
       sink.mock.calls.filter(([event]) => event.inventoryReadFailure !== undefined),
     ).toHaveLength(1);

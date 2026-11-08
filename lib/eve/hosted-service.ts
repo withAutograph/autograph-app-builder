@@ -955,6 +955,26 @@ interface SendReadEvidence {
   binding: SendObservationBinding;
 }
 
+// Recovery settlement may atomically inherit a newer private build decision
+// from the locked source or original authority. Compare the public child
+// proposal and committed record without this store-owned projection.
+const comparableStartSession = <T extends HostedSessionRecord | HostedPagedSessionBase>(
+  operation: HostedOperationRecord,
+  session: T,
+): T => {
+  if (operation.nativeRecovery === undefined || session.version !== 2) {
+    return session;
+  }
+  const {
+    privateBuildDecision: _storeOwnedDecision,
+    privateAuthoringDecision: _storeOwnedAuthoring,
+    ...comparable
+  } = session;
+  void _storeOwnedAuthoring;
+  void _storeOwnedDecision;
+  return comparable as T;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createHostedEveSessionService(input: {
   principal: HostedPrincipal;
@@ -1122,26 +1142,6 @@ export function createHostedEveSessionService(input: {
         : new HostedSubmissionUnknownError(verificationStep);
     }
   }
-
-  // Recovery settlement may atomically inherit a newer private build decision
-  // from the locked source or original authority. Compare the public child
-  // proposal and committed record without this store-owned projection.
-  const comparableStartSession = <T extends HostedSessionRecord | HostedPagedSessionBase>(
-    operation: HostedOperationRecord,
-    session: T,
-  ): T => {
-    if (operation.nativeRecovery === undefined || session.version !== 2) {
-      return session;
-    }
-    const {
-      privateBuildDecision: _storeOwnedDecision,
-      privateAuthoringDecision: _storeOwnedAuthoring,
-      ...comparable
-    } = session;
-    void _storeOwnedAuthoring;
-    void _storeOwnedDecision;
-    return comparable as T;
-  };
 
   // eslint-disable-next-line eslint/func-style -- Called by settlement, exact retry and GET after canonical readback.
   async function activateCommittedRecovery(operation: HostedOperationRecord): Promise<void> {

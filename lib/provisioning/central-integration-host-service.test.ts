@@ -127,20 +127,20 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
         ? structuredClone(row)
         : undefined,
     reserve: async (selected) => {
-      row ??= {
-        operationRef: centralHostOperationRef(selected),
-        revision: 1,
-        record: centralHostRecordSchema.parse({
+      if (row === undefined) {
+        const operationRef = centralHostOperationRef(selected);
+        const record: CentralHostRecord = {
           kind: "central-integration-host-journal-v1",
           plan: selected,
           planDigest: centralHostPlanDigest(selected),
           effects: Object.fromEntries(selected.effects.map((effect) => [effect, "idle"])),
           attempts: {},
-          ...(selected.kind === "central-integration-host-setup-v1"
-            ? { nativeDeployment: { status: "empty" } }
-            : {}),
-        }),
-      };
+        };
+        if (selected.kind === "central-integration-host-setup-v1") {
+          record.nativeDeployment = { status: "empty" };
+        }
+        row = { operationRef, revision: 1, record: centralHostRecordSchema.parse(record) };
+      }
       return structuredClone(row);
     },
     compareAndSet: async (before, raw): Promise<CentralHostRow | undefined> => {

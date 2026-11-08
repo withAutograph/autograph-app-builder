@@ -553,6 +553,21 @@ function consumeResponse(
   })();
 }
 
+// GET has already reconciled canonical history. A decision is only an
+// eligibility hint here; the dispatch path still observes native state
+// and the controller rereads the durable decision.
+const hasRunnableLocalContinuation = async (sessionId: string) => {
+  const approved = await readLocalBuildDecision(sessionId);
+  if (approved?.decision === "runnable" && approved.scope !== undefined) {
+    return true;
+  }
+  if (!localAuthoringConfigured()) {
+    return false;
+  }
+  const authoring = await readLocalAuthoringDecision(sessionId);
+  return authoring?.decision === "runnable" && authoring.scope !== undefined;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createLocalEveSessionService(
   client: LocalSessionClient,
@@ -948,21 +963,6 @@ export function createLocalEveSessionService(
       async () => await sessionAtBufferedTail(sessionId).send(message, { turnPolicy: "queue" }),
     );
     consumeSessionResponse(sessionId, response);
-  };
-
-  // GET has already reconciled canonical history. A decision is only an
-  // eligibility hint here; the dispatch path still observes native state
-  // and the controller rereads the durable decision.
-  const hasRunnableLocalContinuation = async (sessionId: string) => {
-    const approved = await readLocalBuildDecision(sessionId);
-    if (approved?.decision === "runnable" && approved.scope !== undefined) {
-      return true;
-    }
-    if (!localAuthoringConfigured()) {
-      return false;
-    }
-    const authoring = await readLocalAuthoringDecision(sessionId);
-    return authoring?.decision === "runnable" && authoring.scope !== undefined;
   };
 
   const continueLocalApprovedWork = async (sessionId: string): Promise<boolean> => {

@@ -246,10 +246,10 @@ describe("deployment Browser preview route", () => {
     expect(providers.receipt).toHaveBeenCalledWith(
       {},
       {
-        principal: owner,
         authoritySessionId: fixture.publicId,
         logicalSessionId: "wrun_original",
         ownerRunId: "wrun_recovered",
+        principal: owner,
       },
     );
     expect(response.headers.get("cache-control")).toBe("no-store");

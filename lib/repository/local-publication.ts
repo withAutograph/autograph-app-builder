@@ -189,14 +189,15 @@ const canonicalChanges = (review: ReviewedChangeSetReceipt): readonly OverlayCha
         throw new Error("The reviewed change set contains an unsupported file mode or digest.");
       }
     }
-    const malformedAdditionOrModification =
-      (change.kind === "added" && (change.before !== undefined || change.after === undefined)) ||
-      (change.kind === "modified" && (change.before === undefined || change.after === undefined));
-    if (
-      malformedAdditionOrModification ||
-      (change.kind === "deleted" && (change.before === undefined || change.after !== undefined))
-    ) {
-      throw new Error("The reviewed change set contains a malformed change.");
+    const malformedChangeMessage = "The reviewed change set contains a malformed change.";
+    if (change.kind === "added" && (change.before !== undefined || change.after === undefined)) {
+      throw new Error(malformedChangeMessage);
+    }
+    if (change.kind === "modified" && (change.before === undefined || change.after === undefined)) {
+      throw new Error(malformedChangeMessage);
+    }
+    if (change.kind === "deleted" && (change.before === undefined || change.after !== undefined)) {
+      throw new Error(malformedChangeMessage);
     }
   }
   if (review.changes.length === 0) {

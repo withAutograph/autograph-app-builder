@@ -1606,31 +1606,49 @@ export function assertExactDraftPullRequestProposal(proposal: DraftPullRequestPr
     repositoryObservationDigest: proposal.repositoryObservationDigest,
     reviewDigest: proposal.reviewDigest,
   });
+  const invalidDraftProposalMessage = "The draft pull-request proposal is malformed.";
   if (
     proposal.version !== GITHUB_PUBLICATION_VERSION ||
     !isDecimal(proposal.repositoryId) ||
     !safeName(proposal.owner) ||
-    !safeName(proposal.name) ||
+    !safeName(proposal.name)
+  ) {
+    throw new Error(invalidDraftProposalMessage);
+  }
+  if (
     proposal.visibility !== "private" ||
     !safeBranch(proposal.baseBranch) ||
     !isObjectId(proposal.baseSha) ||
-    !isObjectId(proposal.baseTree) ||
+    !isObjectId(proposal.baseTree)
+  ) {
+    throw new Error(invalidDraftProposalMessage);
+  }
+  if (
     !isDigest(proposal.repositoryObservationDigest) ||
     proposal.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
     typeof proposal.releaseGate.configured !== "boolean" ||
-    !isDigest(proposal.reviewDigest) ||
+    !isDigest(proposal.reviewDigest)
+  ) {
+    throw new Error(invalidDraftProposalMessage);
+  }
+  if (
     !isDigest(proposal.changeSetDigest) ||
     !isDigest(proposal.changedContentDigest) ||
     JSON.stringify(canonicalPaths(proposal.approvedPaths)) !==
-      JSON.stringify(proposal.approvedPaths) ||
-    !safeBranch(proposal.branchName) ||
-    proposal.draft !== true ||
+      JSON.stringify(proposal.approvedPaths)
+  ) {
+    throw new Error(invalidDraftProposalMessage);
+  }
+  if (!safeBranch(proposal.branchName) || proposal.draft !== true) {
+    throw new Error(invalidDraftProposalMessage);
+  }
+  if (
     !safeTitle(proposal.title) ||
     proposal.idempotencyKey !== idempotencyKey ||
     proposal.branchName !== `app-builder/review-${idempotencyKey.slice(0, 20)}` ||
     proposal.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request"
   ) {
-    throw new Error("The draft pull-request proposal is malformed.");
+    throw new Error(invalidDraftProposalMessage);
   }
 }
 
@@ -1689,23 +1707,31 @@ function assertDraftReadBack(
   }
   exactDigest(readBack, "Draft publication provider read-back");
   assertExactRepositoryObservation(readBack.repository);
+  const invalidDraftRepositoryMessage =
+    "Draft publication repository identity or release-gate state changed. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.";
   if (
     readBack.version !== GITHUB_PUBLICATION_VERSION ||
     readBack.idempotencyKey !== proposal.idempotencyKey ||
     readBack.repository.repositoryId !== proposal.repositoryId ||
-    readBack.repository.owner !== proposal.owner ||
+    readBack.repository.owner !== proposal.owner
+  ) {
+    throw new Error(invalidDraftRepositoryMessage);
+  }
+  if (
     readBack.repository.name !== proposal.name ||
     readBack.repository.visibility !== proposal.visibility ||
     readBack.repository.defaultBranch !== proposal.baseBranch ||
-    readBack.repository.installationIdentityDigest !== proposal.installationIdentityDigest ||
+    readBack.repository.installationIdentityDigest !== proposal.installationIdentityDigest
+  ) {
+    throw new Error(invalidDraftRepositoryMessage);
+  }
+  if (
     readBack.repository.releaseGate.name !== proposal.releaseGate.name ||
     readBack.repository.releaseGate.configured !== proposal.releaseGate.configured ||
     JSON.stringify(canonicalPathsOrEmpty(readBack.changedPathsSinceBase)) !==
       JSON.stringify(readBack.changedPathsSinceBase)
   ) {
-    throw new Error(
-      "Draft publication repository identity or release-gate state changed. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.",
-    );
+    throw new Error(invalidDraftRepositoryMessage);
   }
   const conflictingPath = canonicalPathsOrEmpty(readBack.changedPathsSinceBase).find((path) =>
     proposal.approvedPaths.some((approved) => pathsOverlap(path, approved)),

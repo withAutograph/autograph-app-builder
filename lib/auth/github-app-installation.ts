@@ -41,6 +41,9 @@ export type GitHubOAuthErrorCategory =
 
 export type GitHubOAuthCallbackError = "access_denied" | "temporarily_unavailable" | "server_error";
 
+const isGitHubOAuthCallbackError = (value: string | null): value is GitHubOAuthCallbackError =>
+  ["access_denied", "temporarily_unavailable", "server_error"].includes(value ?? "");
+
 export interface GitHubCallbackDiagnostic {
   queryKeys: string[];
   keyCounts: Record<string, number>;
@@ -467,9 +470,7 @@ const callbackInput = (url: string) => {
       throw new GitHubCallbackParseError(invalidCallbackReason);
     }
     return {
-      error: ["access_denied", "temporarily_unavailable", "server_error"].includes(oauthError)
-        ? (oauthError as GitHubOAuthCallbackError)
-        : undefined,
+      error: isGitHubOAuthCallbackError(oauthError) ? oauthError : undefined,
       kind: "oauth-error" as const,
       state,
     };
@@ -533,8 +534,8 @@ const githubCallbackDiagnostic = (url: string): GitHubCallbackDiagnostic => {
     ...codeLength,
     codePresent: code !== null,
   };
-  if (["access_denied", "temporarily_unavailable", "server_error"].includes(error ?? "")) {
-    codeDetails.error = error as GitHubOAuthCallbackError;
+  if (isGitHubOAuthCallbackError(error)) {
+    codeDetails.error = error;
   }
   const queryDetails: Pick<
     GitHubCallbackDiagnostic,
