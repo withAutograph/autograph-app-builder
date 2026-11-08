@@ -104,7 +104,7 @@ describe("verified native recovery boot failure", () => {
 
   it("rejects wrong-session, unavailable and incomplete reads rather than proving failure", async () => {
     await expect(
-      observe(() => stream({ status: "failed", sessionId: "other-run" })),
+      observe(() => stream({ sessionId: "other-run", status: "failed" })),
     ).rejects.toThrow("incompatible stream contract");
     await expect(observe(() => new Response(null, { status: 503 }))).rejects.toThrow("unavailable");
     await expect(observe(() => stream({ status: "failed", tailIndex: 1 }))).rejects.toThrow(
@@ -236,8 +236,8 @@ describe("verified native recovery boot failure", () => {
       nativeRecoveryBinding: {
         logicalSessionId: "run_original",
         originalAuthoritySessionId: original.sessionId,
-        sourceOwnerRunId: "run_boot",
         provenance: { kind: "validated-recovery-input", resumePhase: "await-input" },
+        sourceOwnerRunId: "run_boot",
       },
     });
     expect(await store.getSession(principal, original.sessionId)).toEqual(originalRecord);

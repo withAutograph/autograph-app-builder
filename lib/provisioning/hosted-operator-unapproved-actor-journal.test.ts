@@ -24,10 +24,10 @@ describe("unapproved app capture continuity", () => {
     const { record, added: baseAdded } = captureFixture();
     const added = normalActorProgramSchema.parse({
       ...baseAdded,
-      organizations: [
-        { organizationId: "qa-org", ownerActorKey: "reviewer", name: "QA", slug: "qa" },
-      ],
       memberships: [{ actorKey: "reviewer", organizationId: "qa-org", role: "owner" }],
+      organizations: [
+        { name: "QA", organizationId: "qa-org", ownerActorKey: "reviewer", slug: "qa" },
+      ],
     });
     const previous = requiredFixture(record.operator);
     const gateway = structuredClone(requiredFixture(record.retainedAuth));
@@ -215,13 +215,13 @@ describe("unapproved app capture continuity", () => {
         activeOrganizationId: "existing-organization",
       };
       await journal.capture(context, {
-        version: 1,
         actorKey: "owner",
         nonceSha256: nonce,
-        proofSha256,
-        proof,
-        session,
         normalCookie: cookie,
+        proof,
+        proofSha256,
+        session,
+        version: 1,
       });
       const { hostOnly, ...storageCookie } = cookie;
       void hostOnly;

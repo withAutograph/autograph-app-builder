@@ -84,8 +84,8 @@ describe("historical approval replay orchestration", () => {
         ...f,
         observe: () =>
           Promise.resolve({
+            nativeTail: { complete: false, nativeTailIndex: 4, nextNativeIndex: 3 },
             progress: first,
-            nativeTail: { complete: false, nextNativeIndex: 3, nativeTailIndex: 4 },
           }),
       }),
     ).resolves.toEqual({ status: "partial" });
@@ -94,8 +94,8 @@ describe("historical approval replay orchestration", () => {
     const observe = vi.fn((prior: ApprovalReplayProgress | undefined) => {
       expect(prior).toEqual(first);
       return Promise.resolve({
+        nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 5 },
         progress: progress(true),
-        nativeTail: { complete: true, nextNativeIndex: 5, nativeTailIndex: 4 },
       });
     });
     await expect(runHistoricalApprovalReplay({ ...f, progress: first, observe })).resolves.toEqual({
@@ -125,8 +125,8 @@ describe("historical approval replay orchestration", () => {
           ...f,
           observe: () =>
             Promise.resolve({
+              nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 5 },
               progress: p,
-              nativeTail: { complete: true, nextNativeIndex: 5, nativeTailIndex: 4 },
             }),
         }),
       ).rejects.toThrow();
@@ -140,8 +140,8 @@ describe("historical approval replay orchestration", () => {
         ...f,
         observe: () =>
           Promise.resolve({
+            nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 5 },
             progress: p,
-            nativeTail: { complete: true, nextNativeIndex: 5, nativeTailIndex: 4 },
           }),
       }),
     ).rejects.toThrow("prefix mismatch");
@@ -155,8 +155,8 @@ describe("historical approval replay orchestration", () => {
         ...f,
         observe: () =>
           Promise.resolve({
+            nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 5 },
             progress: progress(true),
-            nativeTail: { complete: true, nextNativeIndex: 5, nativeTailIndex: 4 },
           }),
       }),
     ).rejects.toThrow("checkpoint changed");
@@ -169,8 +169,8 @@ describe("historical approval replay orchestration", () => {
         ...f,
         observe: () =>
           Promise.resolve({
+            nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 3 },
             progress: progress(false),
-            nativeTail: { complete: true, nextNativeIndex: 3, nativeTailIndex: 4 },
           }),
       }),
     ).rejects.toThrow("incomplete");
