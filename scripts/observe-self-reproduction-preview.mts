@@ -18,6 +18,7 @@ import type {
 
 import { observePreviewWebSockets } from "./self-reproduction-preview-websockets";
 
+const reportIndexFilename = "index.html";
 const { values } = parseArgs({
   options: {
     "brief-file": { type: "string" },
@@ -241,7 +242,7 @@ if (finding.status === "ready") {
       viewports,
     };
     await writePreviewObservationReport(output, report);
-    console.log(`Preview observation complete; report: ${path.join(output, "index.html")}`);
+    console.log(`Preview observation complete; report: ${path.join(output, reportIndexFilename)}`);
     if (rows.some((row) => row.status === "failed" || row.status === "blocked")) {
       process.exitCode = 1;
     }
@@ -263,7 +264,7 @@ if (finding.status === "ready") {
       browserRow.reason += ` Observation stopped after an evaluator error: ${sanitizePreviewEvidence(String(error)).slice(0, 1000)}`;
     }
     await writePreviewObservationReport(output, report);
-    console.error(`Preview observation blocked; report: ${path.join(output, "index.html")}`);
+    console.error(`Preview observation blocked; report: ${path.join(output, reportIndexFilename)}`);
     process.exitCode = 75;
   } finally {
     await browser?.close().catch(() => {
@@ -272,6 +273,8 @@ if (finding.status === "ready") {
   }
 } else {
   await writePreviewObservationReport(output, unavailablePreviewReport(statePath, finding));
-  console.log(`Preview observation ${finding.status}; report: ${path.join(output, "index.html")}`);
+  console.log(
+    `Preview observation ${finding.status}; report: ${path.join(output, reportIndexFilename)}`,
+  );
   process.exitCode = finding.status === "expired" ? 75 : 1;
 }
