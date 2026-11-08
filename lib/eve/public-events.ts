@@ -506,7 +506,11 @@ export const createInstalledPrototypeReferenceReducer = (input: {
           value.appId !== appId ||
           value.path !== `prototype/${appId}/index.html` ||
           value.sessionId !== input.sessionId ||
-          value.recordedByCallId !== receipt.callId ||
+          value.recordedByCallId !== receipt.callId
+        ) {
+          return;
+        }
+        if (
           value.digest !== value.artifactDigest ||
           value.artifactRevision !==
             sha256(
@@ -553,7 +557,11 @@ export const createInstalledPrototypeReferenceReducer = (input: {
         value.sessionId !== input.sessionId ||
         value.recordedByCallId !== receipt.callId ||
         value.appId !== prototypePathPattern.exec(request.path)?.groups?.appId ||
-        value.path !== request.path ||
+        value.path !== request.path
+      ) {
+        return;
+      }
+      if (
         value.mediaType !== request.mediaType ||
         value.revision !== revision ||
         (request.expectedDigest !== undefined && value.digest !== request.expectedDigest) ||
@@ -753,10 +761,10 @@ export const createInstalledPrototypeProjector = (
           totalBytes: z.number().int().positive().optional(),
         })
         .safeParse(event.data.result.output);
+      if (input === undefined || !output.success || input.path !== output.data.path) {
+        return;
+      }
       if (
-        input === undefined ||
-        !output.success ||
-        input.path !== output.data.path ||
         input.digest !== output.data.digest ||
         (input.revision !== undefined && input.revision !== output.data.revision)
       ) {
@@ -770,10 +778,11 @@ export const createInstalledPrototypeProjector = (
         return;
       }
       const { byteOffset, nextOffsetBytes, totalBytes, chunkDigest } = output.data;
+      if (nextOffsetBytes === undefined || totalBytes === undefined || chunkDigest === undefined) {
+        readChunks.delete(output.data.path);
+        return;
+      }
       if (
-        nextOffsetBytes === undefined ||
-        totalBytes === undefined ||
-        chunkDigest === undefined ||
         input.offsetBytes !== byteOffset ||
         sha256(output.data.content) !== chunkDigest ||
         Buffer.byteLength(output.data.content, "utf-8") !== nextOffsetBytes - byteOffset
@@ -907,7 +916,12 @@ export const createInstalledPrototypeProjector = (
         if (
           output.data.revision !== revision ||
           output.data.appId !== appId ||
-          output.data.path !== input.path ||
+          output.data.path !== input.path
+        ) {
+          transfers.delete(input.path);
+          return;
+        }
+        if (
           output.data.mediaType !== input.mediaType ||
           output.data.size !== receivedBytes ||
           output.data.recordedByCallId !== callId

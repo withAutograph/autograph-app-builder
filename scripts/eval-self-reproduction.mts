@@ -146,7 +146,7 @@ const errors: string[] = [];
 const runConfiguredPairedCaptures = async () => {
   const adapterFile =
     values["capture-adapter"] ??
-    (values["reference-url"] && values["candidate-url"]
+    (Boolean(values["reference-url"]) && Boolean(values["candidate-url"])
       ? join(root, "evals/self-reproduction/default-capture-adapter.ts")
       : undefined);
   if (adapterFile === undefined || adapterFile === null || adapterFile === "") {
@@ -974,7 +974,10 @@ complete paired desktop state matrix against both supplied URLs.
 The checked-in brief and fixed answers are always preserved unchanged.`);
     return;
   }
-  if (values["report-only"] !== true && !(values.generator && process.env.NODE_ENV === "test")) {
+  if (
+    values["report-only"] !== true &&
+    !(Boolean(values.generator) && process.env.NODE_ENV === "test")
+  ) {
     throw new Error(
       "Self-reproduction generation requires the public App Builder entrypoint. Guided internal-stage generation is retired. Run an ordinary Builder session with the product brief, then use --report-only --candidate-root PATH to assess its output.",
     );
@@ -1007,7 +1010,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
   try {
     const providedCheckout = values["arrusted-root"] ?? process.env.SELF_REPRODUCTION_ARRUSTED_ROOT;
     const templateSource =
-      providedCheckout ||
+      Boolean(providedCheckout) ||
       values["candidate-runtime"] === true ||
       (values["report-only"] !== true && !values.generator)
         ? await prepareSelfReproductionTemplateSource({

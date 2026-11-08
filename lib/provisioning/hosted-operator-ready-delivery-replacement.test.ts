@@ -44,6 +44,8 @@ const requireFixtureValue = <T>(value: T | null | undefined, description: string
   }
   return value;
 };
+const firstFixtureValue = <T>(values: readonly T[] | undefined, description: string): T =>
+  requireFixtureValue(requireFixtureValue(values, description)[0], description);
 
 const externalPolicy: ExternallyManagedTrustedSources = {
   mode: "externally-managed-trusted-sources",
@@ -466,7 +468,10 @@ describe("native externally managed policy recovery integration", () => {
               .trustedSources,
           );
           if (input.effect.kind === "gateway-delivery") {
-            await input.checkpointGatewayDelivery!(
+            if (input.checkpointGatewayDelivery === undefined) {
+              throw new Error("Missing fixture gateway delivery checkpoint");
+            }
+            await input.checkpointGatewayDelivery(
               [
                 {
                   deploymentId: "default-gateway",
@@ -1108,8 +1113,11 @@ describe("native externally managed policy recovery integration", () => {
         expect(
           requireFixtureValue(row.record.operator, "journal operator").gatewayDeliveryCandidates,
         ).toEqual([]);
-        const archived = requireFixtureValue(row.record.operator, "journal operator")
-          .retainedReadyDeliveryOperations![0].operator;
+        const archived = firstFixtureValue(
+          requireFixtureValue(row.record.operator, "journal operator")
+            .retainedReadyDeliveryOperations,
+          "retained ready delivery operation",
+        ).operator;
         expect(archived.retainedRenewalOperations).toEqual(oldHistories);
         const readsAfterProposal = calls.filter((call) =>
           call.path.startsWith("/v4/aliases/"),
@@ -1167,8 +1175,11 @@ describe("native externally managed policy recovery integration", () => {
           expect(renewed.plan?.effects).toEqual(uncertain.plan.effects);
           expect(renewed.planDigest).not.toBe(uncertain.planDigest);
           expect(
-            requireFixtureValue(row.record.operator, "journal operator")
-              .retainedReadyDeliveryOperations![0].operator.retainedRenewalOperations,
+            firstFixtureValue(
+              requireFixtureValue(row.record.operator, "journal operator")
+                .retainedReadyDeliveryOperations,
+              "retained ready delivery operation",
+            ).operator.retainedRenewalOperations,
           ).toEqual(oldHistories);
           const provenance = retentionRenewalDeliveryProvenance(row.record);
           expect(provenance).toContainEqual(
@@ -1230,8 +1241,11 @@ describe("native externally managed policy recovery integration", () => {
         ).toHaveLength(2);
         if (loseAlias) {
           expect(
-            requireFixtureValue(row.record.operator, "journal operator")
-              .gatewayDeliveryCandidates![0].gatewayAliasAttempted,
+            firstFixtureValue(
+              requireFixtureValue(row.record.operator, "journal operator")
+                .gatewayDeliveryCandidates,
+              "gateway delivery candidate",
+            ).gatewayAliasAttempted,
           ).toBe(true);
           await handler(request(execute));
           expect(
@@ -1240,8 +1254,11 @@ describe("native externally managed policy recovery integration", () => {
         }
         if (outcome === "drift") {
           expect(
-            requireFixtureValue(row.record.operator, "journal operator")
-              .gatewayDeliveryCandidates![0].gatewayAliasAttempted,
+            firstFixtureValue(
+              requireFixtureValue(row.record.operator, "journal operator")
+                .gatewayDeliveryCandidates,
+              "gateway delivery candidate",
+            ).gatewayAliasAttempted,
           ).toBeUndefined();
           expect(aliasTarget).toBe("unrelated-ready-gateway");
           expect(
@@ -1250,8 +1267,11 @@ describe("native externally managed policy recovery integration", () => {
         }
         if (outcome === "transient-hook") {
           expect(
-            requireFixtureValue(row.record.operator, "journal operator")
-              .gatewayDeliveryCandidates![0].gatewayAliasAttempted,
+            firstFixtureValue(
+              requireFixtureValue(row.record.operator, "journal operator")
+                .gatewayDeliveryCandidates,
+              "gateway delivery candidate",
+            ).gatewayAliasAttempted,
           ).toBeUndefined();
           expect(
             calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),
@@ -1276,8 +1296,11 @@ describe("native externally managed policy recovery integration", () => {
           ).toHaveLength(0);
         }
         expect(
-          requireFixtureValue(row.record.operator, "journal operator")
-            .retainedReadyDeliveryOperations![0].operator.retainedRenewalOperations,
+          firstFixtureValue(
+            requireFixtureValue(row.record.operator, "journal operator")
+              .retainedReadyDeliveryOperations,
+            "retained ready delivery operation",
+          ).operator.retainedRenewalOperations,
         ).toEqual(oldHistories);
         expect(row.record.privateState).toEqual(protectedBefore);
         expect(executed.indexOf("bindings")).toBeLessThan(executed.indexOf("delivery"));

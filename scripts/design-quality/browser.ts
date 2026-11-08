@@ -217,8 +217,10 @@ export const generatedSource = (path: string | undefined, generated: string[]) =
   const clean = path.replaceAll("\\", "/");
   return generated.some((candidate) => {
     const expected = sourcePath(candidate)?.replaceAll("\\", "/");
-    return Boolean(
-      expected && (clean === expected || clean.endsWith(`/${expected.replace(/^\/+/u, "")}`)),
+    return (
+      expected !== undefined &&
+      expected !== "" &&
+      (clean === expected || clean.endsWith(`/${expected.replace(/^\/+/u, "")}`))
     );
   });
 };

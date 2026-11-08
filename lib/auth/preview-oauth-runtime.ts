@@ -431,10 +431,14 @@ const previewOAuthRuntimeConfigSchema = z
     }
     if (
       config.passkeyOnboarding === null &&
-      (!config.githubClientId ||
-        !config.githubClientSecret ||
-        !config.vercelClientId ||
-        !config.vercelClientSecret)
+      (config.githubClientId === undefined ||
+        config.githubClientId === "" ||
+        config.githubClientSecret === undefined ||
+        config.githubClientSecret === "" ||
+        config.vercelClientId === undefined ||
+        config.vercelClientId === "" ||
+        config.vercelClientSecret === undefined ||
+        config.vercelClientSecret === "")
     ) {
       context.addIssue({
         code: "custom",

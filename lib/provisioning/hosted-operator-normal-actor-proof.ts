@@ -365,7 +365,7 @@ export const createHostedOperatorNormalActorProofCollector = (
       const binding = await deps.resolveRealmBinding({ context: input, preparation });
       if (binding.bootstrap !== undefined) {
         completedParticipantBootstrapSchema.parse(binding.bootstrap);
-        assertBootstrapCurrent = binding.assertBootstrapCurrent;
+        ({ assertBootstrapCurrent } = binding);
         if (assertBootstrapCurrent === undefined) {
           throw mismatch();
         }
