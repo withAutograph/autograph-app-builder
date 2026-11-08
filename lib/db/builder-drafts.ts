@@ -30,7 +30,10 @@ function rowPredicate(authority: BuilderDraftAuthority, draftId: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseRow(row: typeof builderDrafts.$inferSelect): BuilderDraftRow {
-  return {
+  const prefix: Pick<
+    BuilderDraftRow,
+    "authority" | "createdAt" | "draftId" | "lastClientMutationId"
+  > = {
     authority: hostedTenantAuthoritySchema.parse({
       audience: row.audience,
       issuer: row.issuer,
@@ -39,9 +42,12 @@ function parseRow(row: typeof builderDrafts.$inferSelect): BuilderDraftRow {
     }),
     createdAt: row.createdAt,
     draftId: row.draftId,
-    ...(row.lastClientMutationId === null
-      ? {}
-      : { lastClientMutationId: row.lastClientMutationId }),
+  };
+  if (row.lastClientMutationId !== null) {
+    prefix.lastClientMutationId = row.lastClientMutationId;
+  }
+  return {
+    ...prefix,
     record: builderDraftRecordSchema.parse(row.record),
     revision: row.revision,
     status: builderDraftStatusSchema.parse(row.status),
