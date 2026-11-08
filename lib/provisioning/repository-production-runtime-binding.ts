@@ -1,5 +1,5 @@
 /* oxlint-disable sonarjs/expression-complexity -- Credential adoption requires every owner, environment and dispatch identity to match. */
-/* oxlint-disable eslint/no-await-in-loop -- Reconcile the credential before publishing the dependent public boundary, checkpointing each write in order. */
+/* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Reconcile the credential before publishing the dependent public boundary, checkpointing each write in order. */
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { repositoryProductionOperationRef } from "./repository-production-contract";
@@ -8,6 +8,7 @@ import {
   repositoryProductionAppBoundary,
   repositoryProductionAppBoundaryKey,
 } from "./repository-production-app-boundary";
+import type { RepositoryProductionRuntimeEndpoint } from "./repository-production-app-boundary";
 import {
   observeRepositoryProductionPhase,
   reportRepositoryProductionFailure,
@@ -50,6 +51,7 @@ const checkpointSchema = z.object({
 });
 export const createRepositoryProductionRuntimeBinding = (input: {
   teamId: string;
+  runtimeEndpoint: RepositoryProductionRuntimeEndpoint;
   readCredential: (context: RepositoryProductionEffectContext) => Promise<string>;
   signal: AbortSignal;
   fetch?: typeof fetch;
@@ -111,7 +113,9 @@ export const createRepositoryProductionRuntimeBinding = (input: {
   };
   const bindings = (row: RepositoryProductionRow, runtimeUrl: string) => {
     const credential = metadata(row, runtimeUrl);
-    const value = JSON.stringify(repositoryProductionAppBoundary(row, runtimeUrl));
+    const value = JSON.stringify(
+      repositoryProductionAppBoundary(row, runtimeUrl, input.runtimeEndpoint),
+    );
     const key = repositoryProductionAppBoundaryKey(row.record.scope.appId);
     if (key === credential.key) {
       conflict("runtime_binding_ownership");

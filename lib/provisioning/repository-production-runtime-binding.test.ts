@@ -133,6 +133,7 @@ const fixture = () => {
     },
     service: createRepositoryProductionRuntimeBinding({
       teamId: "team",
+      runtimeEndpoint: { hostname: "ep-test.neon.tech", port: 5432 },
       signal: new AbortController().signal,
       readCredential: async () => "provider-token",
       fetch: fetcher,
@@ -152,15 +153,26 @@ describe("Production runtime credential binding", () => {
   ])("isolates the public boundary key for app %s", (appId, key) => {
     expect(repositoryProductionAppBoundaryKey(appId)).toBe(key);
   });
-  it.each(["role", "database"])(
+  it.each(["role", "database", "hostname", "port"])(
     "rejects a credential for the wrong owned %s before binding public metadata",
     async (part) => {
       const f = fixture();
-      const wrong =
-        part === "role"
-          ? runtimeUrl.replace("app_role", "foreign_role")
-          : runtimeUrl.replace("app_db", "foreign_db");
-      await expect(f.service.apply(f.context, wrong)).rejects.toThrow("binding_conflict");
+      const wrong = new URL(runtimeUrl);
+      if (part === "role") {
+        wrong.username = "foreign_role";
+      }
+      if (part === "database") {
+        wrong.pathname = "/foreign_db";
+      }
+      if (part === "hostname") {
+        wrong.hostname = "foreign.neon.tech";
+      }
+      if (part === "port") {
+        wrong.port = "5433";
+      }
+      await expect(f.service.apply(f.context, wrong.toString())).rejects.toThrow(
+        "binding_conflict",
+      );
       expect([f.writes(), f.boundaryWrites()]).toEqual([0, 0]);
     },
   );

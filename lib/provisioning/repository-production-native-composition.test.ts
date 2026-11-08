@@ -81,6 +81,7 @@ const fixture = () => {
   };
   const applied: string[] = [];
   let creatorActive = true;
+  let runtimeReady = true;
   const acquired: RepositoryProductionIntent[] = [];
   const assertAuthorized: RepositoryProductionSetupPorts["assertAuthorized"] = async (
     target,
@@ -115,11 +116,18 @@ const fixture = () => {
     },
     apply: async (context) => {
       applied.push(context.effect);
+      if (context.effect === "bind-runtime") {
+        runtimeReady = true;
+      }
       if (context.effect === "creator-access") {
         creatorActive = true;
       }
     },
-    reconcile: async (context) => ({ receipt: { effect: context.effect }, state: "applied" }),
+    isRuntimeBindingReady: () => runtimeReady,
+    reconcile: async (context) =>
+      context.effect === "bind-runtime" && !runtimeReady
+        ? { state: "not-applied" }
+        : { receipt: { effect: context.effect }, state: "applied" },
   };
   const setup = createRepositoryProductionIntentBoundSetup(
     ports,
@@ -149,9 +157,12 @@ const fixture = () => {
     applied,
     acquired,
     assertAuthorized,
+    requireRuntimeMetadata: () => {
+      runtimeReady = false;
+    },
     resource: structuredClone(initial.resource),
     credentials: structuredClone(initial.privateState),
-    markPending: (effect: "creator-access" | "install-schema") => {
+    markPending: (effect: "creator-access" | "install-schema" | "bind-runtime") => {
       row = {
         ...row,
         record: {
@@ -171,6 +182,33 @@ const fixture = () => {
 };
 
 describe("automatic setup completion", () => {
+  it.each([false, true])(
+    "resumes only missing runtime metadata before the durable-ready shortcut (pending: %s)",
+    async (pending) => {
+      const h = fixture();
+      await h.setup.prepare(scope, revised);
+      h.removeCreator();
+      h.requireRuntimeMetadata();
+      if (pending) {
+        h.markPending("bind-runtime");
+      }
+      const before = structuredClone(h.row());
+      h.applied.length = 0;
+      expect(await h.setup.status(scope, revised)).toMatchObject({
+        state: pending ? "reconciling" : "checking-access",
+      });
+      expect(await h.setup.resume(scope, revised)).toMatchObject({ state: "ready" });
+      expect(h.applied).toEqual(["bind-runtime"]);
+      expect(h.creatorActive()).toBe(false);
+      expect(h.row().operationRef).toBe(before.operationRef);
+      expect(h.row().record.resource).toEqual(before.record.resource);
+      expect(h.row().record.privateState).toEqual(before.record.privateState);
+      const acquired = h.acquired.length;
+      expect(await h.setup.resume(scope, revised)).toMatchObject({ state: "ready" });
+      expect(h.acquired).toHaveLength(acquired);
+      expect(h.applied).toEqual(["bind-runtime"]);
+    },
+  );
   it.each(["creator", "invitee"] as const)(
     "returns pending when another physical continuation owns the %s completion slot",
     async (target) => {

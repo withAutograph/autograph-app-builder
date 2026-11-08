@@ -4,6 +4,12 @@ import type {
   RepositoryProductionScope,
 } from "./repository-production-contract";
 
+const invalidBoundary = () => new Error("repository_production_runtime_binding_conflict");
+export interface RepositoryProductionRuntimeEndpoint {
+  hostname: string;
+  port: number;
+}
+
 /** The existing native Gateway verification route, bound to the approved public origin. */
 export const repositoryProductionGatewayVerification = (scope: RepositoryProductionScope) => ({
   publicOrigin: scope.publicOrigin,
@@ -14,36 +20,41 @@ export const repositoryProductionGatewayVerification = (scope: RepositoryProduct
 export const repositoryProductionAppBoundaryKey = (appId: string) =>
   `${appId.replaceAll("-", "_").toUpperCase()}_APP_BOUNDARY`;
 
-/** Project public verifier/runtime facts from the same owned runtime credential, never its password. */
+/** Bind configured endpoint and saved resource facts to the credential without exposing its password. */
 export const repositoryProductionAppBoundary = (
   row: RepositoryProductionRow,
   runtimeUrl: string,
+  endpoint: RepositoryProductionRuntimeEndpoint,
 ) => {
   const { resource, scope } = row.record;
   let runtime: URL;
   try {
     runtime = new URL(runtimeUrl);
   } catch {
-    throw new Error("repository_production_runtime_binding_conflict");
+    throw invalidBoundary();
+  }
+  if (row.record.intent.storage.kind !== "postgres" || resource === undefined) {
+    throw invalidBoundary();
   }
   if (
-    row.record.intent.storage.kind !== "postgres" ||
-    resource === undefined ||
     runtime.protocol !== "postgresql:" ||
     runtime.username !== resource.runtimeRole ||
     runtime.pathname !== `/${resource.database}`
   ) {
-    throw new Error("repository_production_runtime_binding_conflict");
+    throw invalidBoundary();
   }
   const verification = repositoryProductionGatewayVerification(scope);
+  if (runtime.hostname !== endpoint.hostname || Number(runtime.port || 5432) !== endpoint.port) {
+    throw invalidBoundary();
+  }
   return protectedAppBoundarySchema.parse({
     version: 1,
     mode: "protected-gateway-v1",
     appId: scope.appId,
     verification: { publicOrigin: verification.publicOrigin, jwksUrl: verification.jwksUrl },
     runtime: {
-      hostname: runtime.hostname,
-      port: Number(runtime.port || 5432),
+      hostname: endpoint.hostname,
+      port: endpoint.port,
       database: resource.database,
       runtimeRole: resource.runtimeRole,
       environment: "hosted",

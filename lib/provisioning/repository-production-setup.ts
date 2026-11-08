@@ -172,10 +172,12 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
           intent: { ...row.record.intent, creatorEmail: intent.creatorEmail },
         });
       }
+      const noPendingAccessChanges =
+        row.record.appAccessUpgrade?.state !== "pending" &&
+        row.record.creatorRoleUpdate?.state !== "pending";
       const runtimeOnly =
         row.record.intent.storage.kind === "postgres" &&
-        row.record.appAccessUpgrade?.state !== "pending" &&
-        row.record.creatorRoleUpdate?.state !== "pending" &&
+        noPendingAccessChanges &&
         selectedEffects(row.record)
           .filter((effect) => effect !== BIND_RUNTIME_EFFECT)
           .every((effect) => row.record.effects[effect].state === "applied") &&
