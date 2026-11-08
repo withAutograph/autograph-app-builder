@@ -886,7 +886,7 @@ const acquireLease = async (
   const { promise: exited, resolve: resolveExit } = Promise.withResolvers<undefined>();
   holder.once("error", (error) => {
     terminal = error;
-    resolveExit(undefined as undefined);
+    resolveExit(undefined);
   });
   holder.once("exit", (code, signal) => {
     if (terminal === undefined && (!releasing || code !== 0 || signal !== null)) {
@@ -894,7 +894,7 @@ const acquireLease = async (
       const detail = helperError.trim() === "" ? "." : `: ${helperError.trim()}`;
       terminal = new Error(`${message}${detail}`);
     }
-    resolveExit(undefined as undefined);
+    resolveExit(undefined);
   });
   const { promise: ready, reject, resolve } = Promise.withResolvers<undefined>();
   const timeout = setTimeout(() => {
@@ -905,7 +905,7 @@ const acquireLease = async (
   holder.stdout.once("data", (chunk: string) => {
     clearTimeout(timeout);
     if (chunk === "READY\n") {
-      resolve(undefined as undefined);
+      resolve(undefined);
     } else {
       reject(new Error("Lease handshake failed."));
     }
@@ -1005,7 +1005,7 @@ const quiesceAbandonedLease = async (
   holder.stderr.on("data", (chunk: string) => (stderr += chunk));
   const { promise: exited, resolve: resolveExit } = Promise.withResolvers<undefined>();
   holder.once("exit", () => {
-    resolveExit(undefined as undefined);
+    resolveExit(undefined);
   });
   const { promise: ready, reject, resolve } = Promise.withResolvers<undefined>();
   const timeout = setTimeout(() => {
@@ -1016,7 +1016,7 @@ const quiesceAbandonedLease = async (
   holder.stdout.once("data", (chunk: string) => {
     clearTimeout(timeout);
     if (chunk === "READY\n") {
-      resolve(undefined as undefined);
+      resolve(undefined);
     } else {
       reject(new Error("Lease quiescence handshake failed."));
     }

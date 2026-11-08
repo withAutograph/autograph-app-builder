@@ -620,26 +620,21 @@ export const executeTargetIdentityAndPlanning = async (input: {
       if (requested.operation === "delete" && before === null) {
         continue;
       }
-      changes.push({
-        ...(requested.operation === "delete"
-          ? {}
-          : {
-              after: {
-                content: requested.content,
-                digest: sha256(requested.content),
-                mode,
-              },
-            }),
-        ...(before === null
-          ? {}
-          : {
-              before: {
-                digest: sha256(before),
-                mode,
-              },
-            }),
-        path: requested.path,
-      });
+      const content: Omit<TargetIterationChange, "path"> = {};
+      if (requested.operation !== "delete") {
+        content.after = {
+          content: requested.content,
+          digest: sha256(requested.content),
+          mode,
+        };
+      }
+      if (before !== null) {
+        content.before = {
+          digest: sha256(before),
+          mode,
+        };
+      }
+      changes.push({ ...content, path: requested.path });
     }
     if (
       changes.length === 0 &&

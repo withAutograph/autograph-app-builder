@@ -408,10 +408,10 @@ export const hashBranchPublicationSourceBlob = async (
     );
   }
   await finishGitDiagnosticCapture(diagnosticCapture, false);
-  return {
-    ...(collectBytes ? { bytes: Buffer.concat(chunks) } : {}),
-    digest: hash.digest("hex"),
-  };
+  if (collectBytes) {
+    return { bytes: Buffer.concat(chunks), digest: hash.digest("hex") };
+  }
+  return { digest: hash.digest("hex") };
 };
 
 const gitCanonicalPathList = async (
@@ -780,7 +780,7 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
       rejectReady(new Error("The OS publication lock handshake failed."));
       return;
     }
-    resolveReady(undefined as undefined);
+    resolveReady(undefined);
   });
   await ready;
   const lockLostError = () => {
