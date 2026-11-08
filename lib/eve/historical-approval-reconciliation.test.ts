@@ -95,8 +95,8 @@ const binding = {
   workspaceId: principal.workspaceId,
 };
 const publicEvents: PublicEveEvent[] = [
-  { type: "status", index: 0, status: "working" },
-  { type: "status", index: 1, status: "input_required" },
+  { index: 0, status: "working", type: "status" },
+  { index: 1, status: "input_required", type: "status" },
 ];
 const stream = async function* stream(events: PublicEveEvent[]) {
   for (const event of events) {
@@ -111,15 +111,15 @@ const requestEvent = (): MessageStreamEvent => ({
     stepIndex: 0,
     turnId: "turn",
     requests: ["one", "two"].map((requestId) => ({
-      kind: "tool-approval" as const,
-      requestId,
-      prompt: "Approve",
       action: {
-        kind: "tool-call" as const,
-        toolName: "prepare-app-native-target",
         callId: `call-${requestId}`,
         input: toolInput,
+        kind: "tool-call" as const,
+        toolName: "prepare-app-native-target",
       },
+      kind: "tool-approval" as const,
+      prompt: "Approve",
+      requestId,
     })),
   },
 });
@@ -191,10 +191,10 @@ const response = {
   })),
 };
 const approvals = ["one", "two"].map((requestId) => ({
-  requestId,
   callId: `call-${requestId}`,
-  toolName: "prepare-app-native-target" as const,
+  requestId,
   toolInput,
+  toolName: "prepare-app-native-target" as const,
 }));
 const batch = {
   requests: approvals.map(({ requestId, toolName }) => ({
@@ -270,7 +270,7 @@ describe("historical native approval reconciliation contracts", () => {
   });
   it("rejects rewritten public prefix before accepting replayed proof", async () => {
     await expect(
-      verify(binding, [publicEvents[0], { type: "status", index: 1, status: "waiting" }]),
+      verify(binding, [publicEvents[0], { index: 1, status: "waiting", type: "status" }]),
     ).rejects.toThrow("prefix mismatch");
   });
 });

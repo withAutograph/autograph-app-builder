@@ -109,7 +109,7 @@ describe("unapproved app capture continuity", () => {
       receipts: [],
     };
     record.approvedByCallId = "new-call";
-    let row: HostedRuntimeJournalRow = { revision: 1, record };
+    let row: HostedRuntimeJournalRow = { record, revision: 1 };
     const checks: string[] = [];
     let revoked = "";
     const journal = createNormalActorJournal({

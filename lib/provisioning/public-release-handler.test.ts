@@ -302,7 +302,7 @@ describe("public app release lifecycle", () => {
 it("records observation failures without changing completed effects or claiming readiness", async () => {
   const f = fixture();
   vi.mocked(f.ports.observe).mockRejectedValue(
-    new PublicReleaseProviderError({ statusCode: 403, code: "forbidden" }),
+    new PublicReleaseProviderError({ code: "forbidden", statusCode: 403 }),
   );
   const ctx = invocation();
   const selected = await f.handler.plan(ctx, plan.selection.appId);
@@ -335,7 +335,7 @@ it.each([
   [
     200,
     {
-      errors: [{ type: "private-unrecognized-type", message: "private-provider-body" }],
+      errors: [{ message: "private-provider-body", type: "private-unrecognized-type" }],
       data: null,
     },
     { provider: "github", requestRef: "ABCD:1234:AA00:1234", statusCode: 200 },
@@ -357,8 +357,8 @@ it.each([
           return Response.json(body, {
             status,
             headers: {
-              "x-github-request-id": "ABCD:1234:AA00:1234",
               "set-cookie": "private-cookie",
+              "x-github-request-id": "ABCD:1234:AA00:1234",
             },
           });
         }
