@@ -111,7 +111,7 @@ test("actual Eve keeps in-flight A, dispatches idle B static/dynamic, restores t
     await first.writeGeneration("A");
     const client = await first.start();
     const created = await client.sessions.create({ message: dynamicInitial });
-    const sessionId = created.session.state.sessionId;
+    const { sessionId } = created.session.state;
     assert.deepEqual(await collect(created.response), {
       count: 1,
       generation: "A",
@@ -203,7 +203,7 @@ test("actual pending approval survives B activation and restore with its A execu
     await f.writeGeneration("A");
     const client = await f.start();
     const created = await client.sessions.create({ message: staticApproval });
-    const sessionId = created.session.state.sessionId;
+    const { sessionId } = created.session.state;
     let pending;
     for await (const event of created.response) {
       assert.notEqual(event.type, "session.failed");

@@ -480,7 +480,7 @@ test("same recovery request adopts once, preserves original authority, and activ
       hook = undefined;
     },
   };
-  const commitReceipt = ports.commitReceipt;
+  const { commitReceipt } = ports;
   let failFirstCommit = true;
   ports.commitReceipt = async (input) => {
     if (failFirstCommit) {

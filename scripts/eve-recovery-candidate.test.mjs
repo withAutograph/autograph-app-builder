@@ -1013,7 +1013,7 @@ test("an empty unclosed captured tail never opens a live stream", async () => {
 for (const status of ["running", "pending"]) {
   test(`nonterminal ${status} owner never reads native snapshot`, async () => {
     const f = await snapshotFixture();
-    const get = f.world.runs.get;
+    const { get } = f.world.runs;
     f.world.runs.get = async (...args) => ({ ...(await get(...args)), status });
     const result = await f.collect(f.input);
     assert.partialDeepStrictEqual(result, { kind: "unavailable", reason: "source-not-terminal" });

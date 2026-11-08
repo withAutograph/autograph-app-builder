@@ -186,7 +186,7 @@ test("foreign receipt is rejected before private collection", async () => {
 
 test("new receipt during collection prevents recording and cannot become activation", async () => {
   const { state, deps, input } = setup();
-  const collect = deps.collect;
+  const { collect } = deps;
   deps.collect = async (value) => {
     const result = await collect(value);
     state.receipt = { ...state.receipt, ownerRunId: "other-child" };
@@ -199,7 +199,7 @@ test("new receipt during collection prevents recording and cannot become activat
 
 test("new Stop during collection prevents recording", async () => {
   const { state, deps, input } = setup();
-  const collect = deps.collect;
+  const { collect } = deps;
   deps.collect = async (value) => {
     const result = await collect(value);
     state.denied = true;
