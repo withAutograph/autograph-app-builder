@@ -1080,11 +1080,12 @@ const assertOwnedPartialWorktree = async (
   if (!rootState.isDirectory() || rootState.isSymbolicLink()) {
     throw new Error("The partial approved worktree path is unsafe.");
   }
-  const approvedPaths = async function* approvedPaths(): AsyncGenerator<{
+  interface ApprovedPath {
     path: string;
     baseState?: FileState;
     afterState?: FileState;
-  }> {
+  }
+  const approvedPaths = async function* approvedPaths(): AsyncGenerator<ApprovedPath> {
     const changes = [...proposal.changes].toSorted((left, right) =>
       compareOverlayPaths(left.path, right.path),
     );
@@ -1095,34 +1096,29 @@ const assertOwnedPartialWorktree = async (
         compareOverlayPaths(changes[changeIndex].path, entry.path) < 0
       ) {
         const change = changes[changeIndex];
-        yield {
-          path: change.path,
-          ...(change.after === undefined
-            ? {}
-            : { afterState: { kind: "regular" as const, ...change.after } }),
-        };
+        const approved: ApprovedPath = { path: change.path };
+        if (change.after !== undefined) approved.afterState = { kind: "regular", ...change.after };
+        yield approved;
         changeIndex += 1;
       }
       const change = changes[changeIndex];
-      yield {
+      const approved: ApprovedPath = {
         baseState: entry.state,
         path: entry.path,
-        ...(change?.path === entry.path && change.after !== undefined
-          ? { afterState: { kind: "regular" as const, ...change.after } }
-          : {}),
       };
+      if (change?.path === entry.path && change.after !== undefined) {
+        approved.afterState = { kind: "regular", ...change.after };
+      }
+      yield approved;
       if (change?.path === entry.path) {
         changeIndex += 1;
       }
     }
     while (changeIndex < changes.length) {
       const change = changes[changeIndex];
-      yield {
-        path: change.path,
-        ...(change.after === undefined
-          ? {}
-          : { afterState: { kind: "regular" as const, ...change.after } }),
-      };
+      const approved: ApprovedPath = { path: change.path };
+      if (change.after !== undefined) approved.afterState = { kind: "regular", ...change.after };
+      yield approved;
       changeIndex += 1;
     }
   };
@@ -2025,13 +2021,13 @@ const pendingReceipt = (input: {
   recoveryOfDigest?: string;
 }): BranchWorktreePublicationPendingReceipt => {
   const { digest: proposalDigest, ...proposal } = input.proposal;
-  const unsigned = {
+  const unsigned: Omit<BranchWorktreePublicationPendingReceipt, "digest"> = {
     ...proposal,
     proposalDigest,
     publishedByCallId: input.callId,
     status: "pending" as const,
-    ...(input.recoveryOfDigest === undefined ? {} : { recoveryOfDigest: input.recoveryOfDigest }),
   };
+  if (input.recoveryOfDigest !== undefined) unsigned.recoveryOfDigest = input.recoveryOfDigest;
   return { digest: branchJournalDigest(unsigned), ...unsigned };
 };
 

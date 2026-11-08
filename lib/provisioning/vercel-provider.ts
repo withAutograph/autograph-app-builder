@@ -88,7 +88,8 @@ export async function provisionVercelProject(input: {
     }
     let response: Response;
     try {
-      response = await request(`https://api.vercel.com${args.path}${query}`, {
+      const url = `https://api.vercel.com${args.path}${query}`;
+      const options: RequestInit = {
         headers: {
           Accept: "application/json",
           Authorization: `Bearer ${input.token}`,
@@ -98,8 +99,11 @@ export async function provisionVercelProject(input: {
         method: args.method ?? "GET",
         redirect: "error",
         signal: AbortSignal.timeout(20_000),
-        ...(args.body === undefined ? {} : { body: JSON.stringify(args.body) }),
-      });
+      };
+      if (args.body !== undefined) {
+        options.body = JSON.stringify(args.body);
+      }
+      response = await request(url, options);
     } catch {
       throw new Error("provider-unavailable");
     }
@@ -112,20 +116,26 @@ export async function provisionVercelProject(input: {
       const requestRef = vercelProvisionDiagnosticSchema.shape.requestRef.safeParse(
         response.headers.get("x-vercel-id"),
       );
-      providerDiagnostic = {
+      const diagnostic: VercelProvisionDiagnostic = {
         statusCode: response.status,
-        ...(requestRef.success ? { requestRef: requestRef.data } : {}),
       };
+      if (requestRef.success) {
+        diagnostic.requestRef = requestRef.data;
+      }
+      providerDiagnostic = diagnostic;
     }
 
     if (failed) {
       const requestRef = vercelProvisionDiagnosticSchema.shape.requestRef.safeParse(
         response.headers.get("x-vercel-id"),
       );
-      providerDiagnostic = {
+      const diagnostic: VercelProvisionDiagnostic = {
         statusCode: response.status,
-        ...(requestRef.success ? { requestRef: requestRef.data } : {}),
       };
+      if (requestRef.success) {
+        diagnostic.requestRef = requestRef.data;
+      }
+      providerDiagnostic = diagnostic;
     }
     let body: unknown;
     try {
@@ -340,7 +350,7 @@ export async function provisionVercelProject(input: {
             status: "failed",
           };
         }
-        return {
+        const success: Extract<VercelProvisionResult, { status: "succeeded" }> = {
           dashboardUrl: `https://vercel.com/${input.installation.slug}/${project.name}`,
           framework: "services",
           installationId: input.installation.installationId,
@@ -353,27 +363,36 @@ export async function provisionVercelProject(input: {
             type: input.installation.scopeType,
           },
           status: "succeeded",
-          ...(linkedRepository ? { linkedGitHubRepository: linkedRepository } : {}),
         };
+        if (linkedRepository) {
+          success.linkedGitHubRepository = linkedRepository;
+        }
+        return success;
       },
     );
     return result ?? { code: "provider_unavailable", retryable: true, status: "failed" };
   } catch (error) {
     if (error instanceof Error && error.message === "provider-rate-limited") {
-      return {
+      const failure: Extract<VercelProvisionResult, { status: "failed" }> = {
         code: "provider_rate_limited",
         retryable: true,
         status: "failed",
-        ...(providerDiagnostic === undefined ? {} : { providerDiagnostic }),
       };
+      if (providerDiagnostic !== undefined) {
+        failure.providerDiagnostic = providerDiagnostic;
+      }
+      return failure;
     }
     if (error instanceof Error && error.message === "provider-permission-denied") {
-      return {
+      const failure: Extract<VercelProvisionResult, { status: "failed" }> = {
         code: "provider_permission_denied",
         retryable: false,
         status: "failed",
-        ...(providerDiagnostic === undefined ? {} : { providerDiagnostic }),
       };
+      if (providerDiagnostic !== undefined) {
+        failure.providerDiagnostic = providerDiagnostic;
+      }
+      return failure;
     }
     return {
       code:

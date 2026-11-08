@@ -687,7 +687,7 @@ export const createPublicReleaseDeployment = (input: {
           }
         }
 
-        const readiness = createHostedOperatorAppReadiness({
+        const readinessDependencies: Parameters<typeof createHostedOperatorAppReadiness>[0] = {
           assertAuthorized: async () => {
             await check(current, plan, false);
             await assertRuntimeAuthorized(runtimeContext);
@@ -699,13 +699,12 @@ export const createPublicReleaseDeployment = (input: {
           },
           readReleaseManifest: () =>
             Promise.resolve(original.captured.files["release-manifest.json"]),
-          ...(readInstallationScopes === undefined
-            ? {}
-            : {
-                readInstallationScopes: (readyContext) =>
-                  readInstallationScopes(readyContext, original.operator.plan),
-              }),
-        });
+        };
+        if (readInstallationScopes !== undefined) {
+          readinessDependencies.readInstallationScopes = (readyContext) =>
+            readInstallationScopes(readyContext, original.operator.plan);
+        }
+        const readiness = createHostedOperatorAppReadiness(readinessDependencies);
         const observed = await readiness({
           ...runtimeContext,
           assertCurrent: () => check(current, plan, false),

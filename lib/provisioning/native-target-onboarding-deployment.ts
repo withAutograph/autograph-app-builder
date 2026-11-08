@@ -558,14 +558,17 @@ export const createNativeTargetOnboardingDeployment = (input: {
       },
     );
     const observation = await checkpoint.read();
-    const transport = createNativeTargetApprovalHistoryTransport({
+    const transportInput: Parameters<typeof createNativeTargetApprovalHistoryTransport>[0] = {
       builderOrigin: input.builderOrigin,
       owner,
       appId: record.appId,
       workload,
       assertCanonicalAppOwner: input.owner.assertCanonicalAppOwner,
-      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-    });
+    };
+    if (input.fetch !== undefined) {
+      transportInput.fetch = input.fetch;
+    }
+    const transport = createNativeTargetApprovalHistoryTransport(transportInput);
     if (transport.observePrivateHistory === undefined) {
       throw unavailable();
     }
@@ -630,7 +633,7 @@ export const createNativeTargetOnboardingDeployment = (input: {
         // This failure precedes the provider dispatch and is a definite non-creation.
         return { status: "rejected", reason: "authorization_denied" };
       }
-      return await createNativeTargetVercelProject({
+      const projectInput: Parameters<typeof createNativeTargetVercelProject>[0] = {
         installation: credential.binding,
         token: credential.token,
         name,
@@ -638,8 +641,11 @@ export const createNativeTargetOnboardingDeployment = (input: {
         protection: plan.project.protection,
         authorizeAttempt,
         acceptProjectId,
-        ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-      });
+      };
+      if (input.fetch !== undefined) {
+        projectInput.fetch = input.fetch;
+      }
+      return await createNativeTargetVercelProject(projectInput);
     },
     observeProject: async ({ owner, plan, name, projectId }) => {
       const credential = await readInstallation(
@@ -647,15 +653,18 @@ export const createNativeTargetOnboardingDeployment = (input: {
         plan.project.installationId,
         plan.project.teamId,
       );
-      return await observeNativeTargetVercelProject({
+      const projectInput: Parameters<typeof observeNativeTargetVercelProject>[0] = {
         installation: credential.binding,
         token: credential.token,
         name,
         settings: plan.project.projectSettings,
         protection: plan.project.protection,
         projectId,
-        ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-      });
+      };
+      if (input.fetch !== undefined) {
+        projectInput.fetch = input.fetch;
+      }
+      return await observeNativeTargetVercelProject(projectInput);
     },
   });
 };

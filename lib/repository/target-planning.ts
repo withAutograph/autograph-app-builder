@@ -678,15 +678,23 @@ export const executeTargetIdentityAndPlanning = async (input: {
         : importedSchema?.exitCode === 0;
     const hasSchema =
       schemaChange === undefined ? observedSchema : schemaChange.operation !== "delete";
-    const proposal = targetIterationProposalSchemaForTopology("microfrontends.json").parse({
+    const proposalSchema = targetIterationProposalSchemaForTopology("microfrontends.json");
+    const proposalInput: z.input<typeof proposalSchema> = {
       ...creationPlan(identity, input.appSpecDigest, hasSchema),
       ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
       iteration: { changes, digest: iterationDigest },
       operation: "iterate-existing-app",
-      ...(applicationSourceImport === undefined ? {} : { applicationSourceImport }),
-      ...(sourceReconciliation === undefined ? {} : { sourceReconciliation }),
-      ...(privateCompute === undefined ? {} : { privateCompute }),
-    });
+    };
+    if (applicationSourceImport !== undefined) {
+      proposalInput.applicationSourceImport = applicationSourceImport;
+    }
+    if (sourceReconciliation !== undefined) {
+      proposalInput.sourceReconciliation = sourceReconciliation;
+    }
+    if (privateCompute !== undefined) {
+      proposalInput.privateCompute = privateCompute;
+    }
+    const proposal = proposalSchema.parse(proposalInput);
     const result = { identity, proposal, ...overlay };
     planningMarker("target-identity-and-planning", "finish");
     return result;

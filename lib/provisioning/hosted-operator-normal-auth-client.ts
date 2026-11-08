@@ -278,11 +278,12 @@ const rejectedResponse = async (
   } catch {
     // Error bodies are untrusted and stay private, including malformed or oversized responses.
   }
-  return new NormalAuthClientError("auth_rejected", {
+  const details: NonNullable<ConstructorParameters<typeof NormalAuthClientError>[1]> = {
     operation,
     httpStatus: response.status,
-    ...(authCode ? { authCode } : {}),
-  });
+  };
+  if (authCode) details.authCode = authCode;
+  return new NormalAuthClientError("auth_rejected", details);
 };
 
 const cookieSameSite = (cookie: Cookie): "Strict" | "None" | "Lax" => {
