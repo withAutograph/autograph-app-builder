@@ -473,9 +473,10 @@ const callbackInput = (url: string) => {
     };
   }
   if (code !== null) {
+    if (query.getAll("code").length !== 1 || query.getAll("state").length !== 1) {
+      throw new GitHubCallbackParseError(invalidCallbackReason);
+    }
     if (
-      query.getAll("code").length !== 1 ||
-      query.getAll("state").length !== 1 ||
       query.has("installation_id") !== query.has("setup_action") ||
       (query.has("installation_id") &&
         (query.getAll("installation_id").length !== 1 || query.getAll("setup_action").length !== 1))
@@ -685,10 +686,11 @@ const accessibleInstallation = async (input: {
       typeof totalCount !== "number" ||
       !Number.isSafeInteger(totalCount) ||
       totalCount < 0 ||
-      totalCount > 1000 ||
-      !Array.isArray(installations) ||
-      installations.length > 100
+      totalCount > 1000
     ) {
+      throw new GitHubInstallationValidationError("response-shape");
+    }
+    if (!Array.isArray(installations) || installations.length > 100) {
       throw new GitHubInstallationValidationError("response-shape");
     }
     for (const value of installations) {

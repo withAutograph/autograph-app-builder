@@ -906,9 +906,10 @@ export const createGitHubAppHttpProvider = (input: {
       path: `/repos/${encodeURIComponent(draft.owner)}/${encodeURIComponent(draft.name)}/git/commits/${draft.headSha}`,
     });
     const parents = property(applied.body, "parents");
+    if (!Array.isArray(parents) || parents.length !== 2) {
+      return false;
+    }
     return (
-      Array.isArray(parents) &&
-      parents.length === 2 &&
       stringProperty(parents[0], "sha") === proposal.expectedHeadSha &&
       stringProperty(parents[1], "sha") === proposal.expectedBaseSha &&
       stringProperty(property(applied.body, "tree"), "sha") === proposal.resolvedTree &&
@@ -1379,9 +1380,10 @@ export const createGitHubAppHttpProvider = (input: {
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/commits/${observed.headSha}`,
       });
       const parents = property(response.body, "parents");
+      if (!Array.isArray(parents) || parents.length !== 2) {
+        return false;
+      }
       return (
-        Array.isArray(parents) &&
-        parents.length === 2 &&
         stringProperty(parents[0], "sha") === proposal.expectedHeadSha &&
         stringProperty(parents[1], "sha") === proposal.expectedBaseSha &&
         stringProperty(property(response.body, "tree"), "sha") === proposal.resolvedTree &&
@@ -1421,9 +1423,10 @@ export const createGitHubAppHttpProvider = (input: {
       });
       const parents = property(response.body, "parents");
       const expectedMessage = `Update draft pull request #${proposal.pullRequestNumber}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`;
+      if (!Array.isArray(parents) || parents.length !== 1) {
+        return false;
+      }
       return (
-        Array.isArray(parents) &&
-        parents.length === 1 &&
         stringProperty(parents[0], "sha") === proposal.expectedHeadSha &&
         stringProperty(property(response.body, "tree"), "sha") === expectedTree &&
         stringProperty(response.body, "message") === expectedMessage
@@ -1452,9 +1455,10 @@ export const createGitHubAppHttpProvider = (input: {
       });
       const parents = property(response.body, "parents");
       const message = `Update draft pull request #${proposal.pullRequestNumber}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`;
+      if (!Array.isArray(parents) || parents.length !== 1) {
+        return false;
+      }
       return (
-        Array.isArray(parents) &&
-        parents.length === 1 &&
         stringProperty(parents[0], "sha") === proposal.expectedHeadSha &&
         stringProperty(property(response.body, "tree"), "sha") === resolvedTree &&
         stringProperty(response.body, "message") === message

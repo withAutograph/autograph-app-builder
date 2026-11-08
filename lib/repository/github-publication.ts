@@ -537,8 +537,10 @@ function isDecimal(value: unknown): value is string {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function safeName(value: unknown): value is string {
+  if (typeof value !== "string") {
+    return false;
+  }
   return (
-    typeof value === "string" &&
     /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$/u.test(value) &&
     value !== "." &&
     value !== ".." &&
@@ -548,22 +550,23 @@ function safeName(value: unknown): value is string {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function safeBranch(value: unknown): value is string {
+  if (typeof value !== "string") {
+    return false;
+  }
+  if (value.length === 0 || value.length > 200 || value.startsWith("/")) {
+    return false;
+  }
+  if (value.endsWith("/") || value.endsWith(".") || value.endsWith(".lock")) {
+    return false;
+  }
+  if (value.includes("..") || value.includes("@{") || /[~^:?*[\\\s]/u.test(value)) {
+    return false;
+  }
   return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 200 &&
-    !value.startsWith("/") &&
-    !value.endsWith("/") &&
-    !value.endsWith(".") &&
-    !value.endsWith(".lock") &&
-    !value.includes("..") &&
-    !value.includes("@{") &&
-    !/[~^:?*[\\\s]/u.test(value) &&
     ![...value].some((character) => {
       const code = character.codePointAt(0) ?? 0;
       return code < 32 || code === 127;
-    }) &&
-    value.split("/").every((part) => part.length > 0 && !part.startsWith("."))
+    }) && value.split("/").every((part) => part.length > 0 && !part.startsWith("."))
   );
 }
 
@@ -645,10 +648,12 @@ function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
       );
     },
   );
-  if (
+  const invalidChangeSet =
     !isDigest(review.changeSetDigest) ||
     !verifiedChangeSet ||
-    canonicalJson(review.changes) !== canonicalJson(sortedChanges) ||
+    canonicalJson(review.changes) !== canonicalJson(sortedChanges);
+  if (
+    invalidChangeSet ||
     JSON.stringify(canonicalPaths(review.approvedPaths)) !== JSON.stringify(review.approvedPaths) ||
     JSON.stringify(review.approvedPaths) !== JSON.stringify(review.changes.map(({ path }) => path))
   ) {
@@ -1059,10 +1064,12 @@ function assertReviewedBinding(
 ): void {
   parseSourceReceiptEvidence(source);
   assertCanonicalReview(review);
-  if (
+  const sourceMismatch =
     source.releaseEnabled !== false ||
     source.digest !== review.sourceReceiptDigest ||
-    source.sourceSha !== review.sourceSha ||
+    source.sourceSha !== review.sourceSha;
+  if (
+    sourceMismatch ||
     source.sourceTree !== review.sourceTree ||
     source.contractDigest !== review.repositoryContractDigest ||
     source.eligibilityDigest !== review.eligibilityDigest
@@ -1219,9 +1226,10 @@ export async function resolveImmutableExistingSource(input: {
   expectedTree: ObjectId;
   resolvedByCallId: string;
 }): Promise<ImmutableGitHubSourceReceipt> {
+  const invalidRepository =
+    !isDecimal(input.expectedInstallationId) || !isDecimal(input.repositoryId);
   if (
-    !isDecimal(input.expectedInstallationId) ||
-    !isDecimal(input.repositoryId) ||
+    invalidRepository ||
     !safeHeadRef(input.ref) ||
     !isObjectId(input.expectedSha) ||
     !isObjectId(input.expectedTree)
@@ -1275,9 +1283,10 @@ export async function resolveImmutableExistingSourceWithTargetProof(input: {
   expectedTree: ObjectId;
   resolvedByCallId: string;
 }): Promise<ImmutableGitHubSourceReceipt> {
+  const invalidRepository =
+    !isDecimal(input.expectedInstallationId) || !isDecimal(input.repositoryId);
   if (
-    !isDecimal(input.expectedInstallationId) ||
-    !isDecimal(input.repositoryId) ||
+    invalidRepository ||
     !safeHeadRef(input.ref) ||
     !isObjectId(input.expectedSha) ||
     !isObjectId(input.expectedTree)

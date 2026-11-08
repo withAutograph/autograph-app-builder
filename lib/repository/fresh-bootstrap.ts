@@ -413,15 +413,23 @@ const isPathIdentity = <Value>(value: Value): value is Value & PathIdentity => {
   if (!isRecord(value) || !hasExactKeys(value, pathIdentityKeys)) {
     return false;
   }
+  if (
+    typeof value.path !== "string" ||
+    !value.path.startsWith("/") ||
+    typeof value.device !== "string" ||
+    !/^\d+$/u.test(value.device)
+  ) {
+    return false;
+  }
+  if (
+    typeof value.inode !== "string" ||
+    !/^\d+$/u.test(value.inode) ||
+    typeof value.uid !== "string" ||
+    !/^\d+$/u.test(value.uid)
+  ) {
+    return false;
+  }
   return (
-    typeof value.path === "string" &&
-    value.path.startsWith("/") &&
-    typeof value.device === "string" &&
-    /^\d+$/u.test(value.device) &&
-    typeof value.inode === "string" &&
-    /^\d+$/u.test(value.inode) &&
-    typeof value.uid === "string" &&
-    /^\d+$/u.test(value.uid) &&
     typeof value.mode === "string" &&
     /^[0-7]+$/u.test(value.mode) &&
     typeof value.nlink === "string" &&
@@ -429,12 +437,16 @@ const isPathIdentity = <Value>(value: Value): value is Value & PathIdentity => {
   );
 };
 
-const isExecutableIdentity = (value: unknown): value is ExecutableIdentity =>
-  isRecord(value) &&
-  hasExactKeys(value, executableIdentityKeys) &&
-  isPathIdentity(Object.fromEntries(pathIdentityKeys.map((key) => [key, value[key]]))) &&
-  typeof value.sha256 === "string" &&
-  /^[0-9a-f]{64}$/u.test(value.sha256);
+const isExecutableIdentity = (value: unknown): value is ExecutableIdentity => {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, executableIdentityKeys) ||
+    !isPathIdentity(Object.fromEntries(pathIdentityKeys.map((key) => [key, value[key]])))
+  ) {
+    return false;
+  }
+  return typeof value.sha256 === "string" && /^[0-9a-f]{64}$/u.test(value.sha256);
+};
 
 const dirnameForComparison = (path: string): string => {
   const index = path.lastIndexOf("/");

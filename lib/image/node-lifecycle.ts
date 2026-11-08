@@ -408,16 +408,15 @@ const temporaryReceiptPattern = new RegExp(
 );
 const temporaryContextPattern = /^arrusted-context[.]tmp-[0-9]+-[0-9a-f-]{36}$/u;
 const temporaryBuildxPattern = /^buildx-runtime[.]tmp-[0-9]+-[0-9a-f-]{36}$/u;
+const unsafeBuildxStateMessage = "Unsafe interrupted Buildx state requires review.";
 
 const assertOwnedNoLinkTree = function assertOwnedNoLinkTree(path: string, uid: number): void {
   const stat = lstatSync(path);
-  if (
-    stat.isSymbolicLink() ||
-    stat.uid !== uid ||
-    (!stat.isDirectory() && !stat.isFile()) ||
-    (stat.isFile() && stat.nlink !== 1)
-  ) {
-    throw new Error("Unsafe interrupted Buildx state requires review.");
+  if (stat.isSymbolicLink() || stat.uid !== uid) {
+    throw new Error(unsafeBuildxStateMessage);
+  }
+  if ((!stat.isDirectory() && !stat.isFile()) || (stat.isFile() && stat.nlink !== 1)) {
+    throw new Error(unsafeBuildxStateMessage);
   }
   if (!stat.isDirectory()) {
     return;
@@ -436,7 +435,7 @@ const removeBuildxRuntime = function removeBuildxRuntime(path: string, uid: numb
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (stat.mode & 0o777) !== 0o700
   ) {
-    throw new Error("Unsafe interrupted Buildx state requires review.");
+    throw new Error(unsafeBuildxStateMessage);
   }
   assertOwnedNoLinkTree(path, uid);
   rmSync(path, { force: false, recursive: true });
@@ -540,9 +539,10 @@ const readReceipt = function readReceipt(
   ensureNoLinkPath(path, `${kind} receipt`);
   const stat = lstatSync(path);
   const uid = process.getuid?.();
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    throw new Error(`${kind} receipt must be an owned mode 0600 regular file.`);
+  }
   if (
-    !stat.isFile() ||
-    stat.isSymbolicLink() ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission bitmask.
     (stat.mode & 0o777) !== 0o600 ||
     uid === undefined ||
@@ -639,9 +639,10 @@ const assertExactGhcrBoundHelper = function assertExactGhcrBoundHelper(stateRoot
   ensureNoLinkPath(path, "GHCR bound helper");
   const stat = lstatSync(path);
   const uid = process.getuid?.();
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    throw new Error("GHCR bound helper must be an owned mode 0700 regular file.");
+  }
   if (
-    !stat.isFile() ||
-    stat.isSymbolicLink() ||
     uid === undefined ||
     stat.uid !== uid ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission bitmask.
@@ -659,9 +660,10 @@ const assertExactGhcrDockerConfig = function assertExactGhcrDockerConfig(stateRo
   ensureNoLinkPath(path, "GHCR Docker configuration");
   const stat = lstatSync(path);
   const uid = process.getuid?.();
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    throw new Error("GHCR Docker configuration must be an owned mode 0600 regular file.");
+  }
   if (
-    !stat.isFile() ||
-    stat.isSymbolicLink() ||
     uid === undefined ||
     stat.uid !== uid ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission bitmask.

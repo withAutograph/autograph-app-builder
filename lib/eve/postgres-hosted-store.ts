@@ -458,14 +458,22 @@ async function withRecoveryBuildDecision(
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isExactReservation(existing: HostedOperationRecord, candidate: HostedOperationRecord) {
+  if (
+    existing.operationId !== candidate.operationId ||
+    existing.requestDigest !== candidate.requestDigest ||
+    existing.kind !== candidate.kind ||
+    existing.clientRequestId !== candidate.clientRequestId
+  ) {
+    return false;
+  }
+  if (
+    (candidate.kind !== "start" && existing.sessionId !== candidate.sessionId) ||
+    existing.resumeSessionId !== candidate.resumeSessionId ||
+    JSON.stringify(existing.nativeRecovery) !== JSON.stringify(candidate.nativeRecovery)
+  ) {
+    return false;
+  }
   return (
-    existing.operationId === candidate.operationId &&
-    existing.requestDigest === candidate.requestDigest &&
-    existing.kind === candidate.kind &&
-    existing.clientRequestId === candidate.clientRequestId &&
-    (candidate.kind === "start" || existing.sessionId === candidate.sessionId) &&
-    existing.resumeSessionId === candidate.resumeSessionId &&
-    JSON.stringify(existing.nativeRecovery) === JSON.stringify(candidate.nativeRecovery) &&
     existing.startAlias?.canonicalClientRequestId ===
       candidate.startAlias?.canonicalClientRequestId &&
     existing.startAlias?.sourceHandoffId === candidate.startAlias?.sourceHandoffId
@@ -552,10 +560,10 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Lock the current owner before the marker operation to keep a consistent transaction order.
         const operation = await operationById(transaction, principal, input.operationId, true);
         const marker = operation?.internalBuildContinuation;
+        if (operation === null || marker === undefined || operation.state === "rejected") {
+          return false;
+        }
         if (
-          operation === null ||
-          marker === undefined ||
-          operation.state === "rejected" ||
           operation.sessionId !== current.sessionId ||
           marker.decision.adapterSessionId !== current.adapterSessionId ||
           marker.nonce !== input.nonce ||
@@ -615,16 +623,22 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         const marker = operation?.internalAuthoringContinuation;
         if (
           current.status === "cancelled" ||
-          (current.cancellationRevision ?? 0) !== (current.resumedCancellationRevision ?? 0) ||
-          operation === null ||
-          marker === undefined ||
+          (current.cancellationRevision ?? 0) !== (current.resumedCancellationRevision ?? 0)
+        ) {
+          return false;
+        }
+        if (operation === null || marker === undefined) {
+          return false;
+        }
+        if (
           operation.state === "rejected" ||
           operation.sessionId !== current.sessionId ||
           marker.decision.adapterSessionId !== current.adapterSessionId ||
-          marker.decision.scopeDigest !== input.scopeDigest ||
-          marker.nonce !== input.nonce ||
-          input.turnSequence <= marker.decision.turnSequence
+          marker.decision.scopeDigest !== input.scopeDigest
         ) {
+          return false;
+        }
+        if (marker.nonce !== input.nonce || input.turnSequence <= marker.decision.turnSequence) {
           return false;
         }
         if (marker.deliveredTurnId !== undefined) {
@@ -905,13 +919,16 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           if (durable.checkpointDigest !== input.expectedCheckpointDigest) {
             throw new HostedCheckpointObservationConflictError();
           }
-          if (
-            input.replayBinding !== undefined &&
-            (durable.adapterSessionId !== input.replayBinding.adapterSessionId ||
-              durable.adapterGeneration !== input.replayBinding.adapterGeneration ||
-              (durable.cancellationRevision ?? 0) !== input.replayBinding.cancellationRevision)
-          ) {
-            throw new HostedCheckpointObservationConflictError();
+          if (input.replayBinding !== undefined) {
+            if (
+              durable.adapterSessionId !== input.replayBinding.adapterSessionId ||
+              durable.adapterGeneration !== input.replayBinding.adapterGeneration
+            ) {
+              throw new HostedCheckpointObservationConflictError();
+            }
+            if ((durable.cancellationRevision ?? 0) !== input.replayBinding.cancellationRevision) {
+              throw new HostedCheckpointObservationConflictError();
+            }
           }
           if (
             input.verifiedReplayReceipts !== undefined &&

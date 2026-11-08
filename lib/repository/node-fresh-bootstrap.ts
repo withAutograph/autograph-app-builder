@@ -12,6 +12,7 @@ import {
   rmSync,
   writeSync,
 } from "node:fs";
+import type { Stats } from "node:fs";
 import {
   chmod,
   lstat,
@@ -524,11 +525,13 @@ const assertExactExecutable = async (expected: ExecutableIdentity): Promise<void
     throw new Error("The bootstrap helper path is not absolute.");
   }
   const current = await executableIdentity(expected.path);
-  if (
+  const locationChanged =
     current.path !== expected.path ||
     current.device !== expected.device ||
     current.inode !== expected.inode ||
-    current.uid !== expected.uid ||
+    current.uid !== expected.uid;
+  if (
+    locationChanged ||
     current.mode !== expected.mode ||
     current.nlink !== expected.nlink ||
     current.sha256 !== expected.sha256
@@ -536,6 +539,12 @@ const assertExactExecutable = async (expected: ExecutableIdentity): Promise<void
     throw new Error("The bootstrap helper identity changed after approval.");
   }
 };
+
+const hasMissingBootstrapTools = (capability: FreshBootstrapCapability) =>
+  !existsSync(capability.systemGit) ||
+  !existsSync(capability.systemPython) ||
+  !existsSync(capability.systemNode) ||
+  !existsSync(capability.lockHelper);
 
 const assertCapability = async (
   capability: FreshBootstrapCapability | undefined,
@@ -547,10 +556,7 @@ const assertCapability = async (
     capability.kind !== "fresh-bootstrap-local-v1" ||
     (capability.authority !== "configured-production" &&
       capability.authority !== "structural-test-injection") ||
-    !existsSync(capability.systemGit) ||
-    !existsSync(capability.systemPython) ||
-    !existsSync(capability.systemNode) ||
-    !existsSync(capability.lockHelper) ||
+    hasMissingBootstrapTools(capability) ||
     (capability.lockStrategy !== "flock" && capability.lockStrategy !== "lockf")
   ) {
     throw new Error("The fresh-bootstrap capability is invalid.");
@@ -704,6 +710,11 @@ const durableDirectory = async (
   await syncDirectory(nodePath.dirname(path));
 };
 
+const hasInvalidStateFileOwner = (opened: Stats, capability: FreshBootstrapCapability) =>
+  !opened.isFile() ||
+  opened.uid !== process.geteuid?.() ||
+  String(opened.dev) !== capability.stateRoot.device;
+
 const atomicWrite = async (
   capability: FreshBootstrapCapability,
   path: string,
@@ -722,9 +733,7 @@ const atomicWrite = async (
   try {
     const opened = await handle.stat();
     if (
-      !opened.isFile() ||
-      opened.uid !== process.geteuid?.() ||
-      String(opened.dev) !== capability.stateRoot.device ||
+      hasInvalidStateFileOwner(opened, capability) ||
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (opened.mode & 0o777) !== 0o600 ||
       opened.nlink !== 1
@@ -758,9 +767,7 @@ const createInitialJournal = async (
   try {
     const opened = await handle.stat();
     if (
-      !opened.isFile() ||
-      opened.uid !== process.geteuid?.() ||
-      String(opened.dev) !== capability.stateRoot.device ||
+      hasInvalidStateFileOwner(opened, capability) ||
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (opened.mode & 0o777) !== 0o600 ||
       opened.nlink !== 1
@@ -833,9 +840,7 @@ const acquireLease = async (
     try {
       const opened = await handle.stat();
       if (
-        !opened.isFile() ||
-        opened.uid !== process.geteuid?.() ||
-        String(opened.dev) !== capability.stateRoot.device ||
+        hasInvalidStateFileOwner(opened, capability) ||
         // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
         (opened.mode & 0o777) !== 0o600 ||
         opened.nlink !== 1
