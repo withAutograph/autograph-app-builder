@@ -15,7 +15,7 @@ it("continues a partial native approval read without granting authority", async 
     .fn()
     .mockRejectedValueOnce(new HostedOperatorError("operator_unavailable"))
     .mockResolvedValueOnce({ approved: true });
-  const signal = new AbortController().signal;
+  const { signal } = new AbortController();
   await expect(readContinuityApprovalWithRecovery(read, signal)).rejects.toThrow(
     "operator_unavailable",
   );

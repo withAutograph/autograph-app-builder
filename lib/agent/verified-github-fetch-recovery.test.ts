@@ -110,7 +110,7 @@ describe("preparation failure cleanup advisory", () => {
     const f = fixture();
     const cause = new Error("controlled command cause");
     const original = new TypeError("Builder could not create its checkout (exit 128)", { cause });
-    const message = original.message;
+    const { message } = original;
     const prepare = vi.fn().mockRejectedValue(original);
     const run = async () => {
       try {
@@ -155,7 +155,7 @@ describe("preparation failure cleanup advisory", () => {
 
   it("reports unavailable maintenance without replacing an ordinary preparation failure", () => {
     const error = new Error("Original command failed");
-    const message = error.message;
+    const { message } = error;
     const unavailable: DraftWorktreeRetirementAdvisory = {
       status: "unavailable",
       retired: 0,

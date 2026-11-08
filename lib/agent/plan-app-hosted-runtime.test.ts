@@ -32,7 +32,7 @@ describe("hosted continuity planning", () => {
     const planned = { status: "planned", plan: { intentId: "continuity" } };
     mocks.select.mockResolvedValue(target);
     mocks.plan.mockResolvedValue(planned);
-    const signal = new AbortController().signal;
+    const { signal } = new AbortController();
     const context = {
       abortSignal: signal,
       callId: "continuity-call",

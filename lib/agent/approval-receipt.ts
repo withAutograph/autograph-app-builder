@@ -641,7 +641,7 @@ function otherPublicApprovalDescription(input: unknown, toolName?: string): stri
   if (toolName === "export-app-hosted-data") {
     const parsed = tenantExportApprovalInputSchema.safeParse(record);
     if (!parsed.success) return undefined;
-    const plan = parsed.data.plan;
+    const { plan } = parsed.data;
     return [
       `Export the selected customer's ${plan.scope.appId} data for private review. Builder will read the app's public tables in a read-only snapshot and keep the export and manifest private to you in this session. No external recipient or database changes are included. This may contain customer information; approve only if you need this export.`,
       `Customer reference (provider identity reference):\n- ${plan.scope.customerId}`,

@@ -218,7 +218,7 @@ describe("private prepared application-review context and outcomes", () => {
 
   it("keeps an interrupted partial context unavailable without completion metadata", async () => {
     const f = fixture();
-    const put = f.store.put;
+    const { put } = f.store;
     f.store.put = async (current, chunk) => {
       if (chunk.chunkIndex === 0) {
         throw new Error("completion interrupted");
@@ -262,7 +262,7 @@ describe("private prepared application-review context and outcomes", () => {
   it("requires current ownership before I/O and after a private chunk read", async () => {
     const f = fixture();
     const ref = await f.factory().publishContext(prepared());
-    const read = f.store.read;
+    const { read } = f.store;
     f.store.read = async (current, value, index) => {
       const result = await read(current, value, index);
       f.revoke();
@@ -277,7 +277,7 @@ describe("private prepared application-review context and outcomes", () => {
   it("honors Stop before and after a chunk write without publishing a completion", async () => {
     const f = fixture();
     const controller = new AbortController();
-    const put = f.store.put;
+    const { put } = f.store;
     f.store.put = async (current, chunk) => {
       await put(current, chunk);
       controller.abort(new Error("Stop"));

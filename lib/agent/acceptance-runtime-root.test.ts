@@ -195,7 +195,7 @@ describe("acceptance workspace recovery", () => {
         }
       },
     };
-    const signal = new AbortController().signal;
+    const { signal } = new AbortController();
     try {
       await mkdir(recoveredRoot);
       await writeFile(path.join(recoveredRoot, "release"), "v3");

@@ -303,7 +303,7 @@ describe("native Gateway reporting metadata", () => {
       nativeTagFor("native-one"),
       "builder-callsite:main",
     ]);
-    const tags = tagged.gateway.tags;
+    const { tags } = tagged.gateway;
     if (!Array.isArray(tags)) {
       throw new TypeError("Missing controlled reporting tags");
     }

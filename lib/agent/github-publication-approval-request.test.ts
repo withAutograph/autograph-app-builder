@@ -134,8 +134,8 @@ const toolContext = context as never;
 
 type PublicationInput = Parameters<typeof publishTool.execute>[0];
 const setup = (input: PublicationInput) => {
-  const inputSchema = publishTool.inputSchema;
-  const approval = publishTool.approval;
+  const { inputSchema } = publishTool;
+  const { approval } = publishTool;
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Narrow the installed SDK's function-or-configuration callback API, not external input.
   if (typeof approval !== "function") {
     throw new TypeError("Expected the authored native approval policy");

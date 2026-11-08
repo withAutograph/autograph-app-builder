@@ -217,7 +217,7 @@ describe("preview command working directory", () => {
         attempts: [],
       });
       mocks.start.mockClear();
-      const signal = new AbortController().signal;
+      const { signal } = new AbortController();
       const result = startAppPreview.execute(
         {
           artifact: "prior-validated",
