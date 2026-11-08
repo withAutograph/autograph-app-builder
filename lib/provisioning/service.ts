@@ -363,11 +363,12 @@ export function projectBuilderProvisioning(row: BuilderProvisionJournalRow) {
   for (const operation of ["github", "vercel"] as const) {
     const state = row.record.operations[operation];
     const result = row.record.response[operation];
-    const expiredLease =
+    const expiredLease = Boolean(
       state.leaseId &&
       state.leaseExpiresAt &&
       Date.parse(state.leaseExpiresAt) <= Date.now() &&
-      !state.attempted;
+      !state.attempted,
+    );
     if ((!state.attempted || result.status !== "failed") && !expiredLease) {
       continue;
     }

@@ -141,7 +141,7 @@ export interface GitHubPublicationFile {
 export interface GitHubAppHttpProvider
   extends GitHubAppInstallationProvider, GitHubTargetAccessProvider {
   prDelivery: GitHubPrDeliveryProvider;
-  inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown | undefined>;
+  inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown>;
   inspectHistoricalAppSource: (input: {
     repositoryId: string;
     owner: string;
@@ -394,7 +394,7 @@ export const createGitHubAppHttpProvider = (input: {
     return {
       accountId: decimalProperty(account, "id"),
       accountLogin: stringProperty(account, "login"),
-      accountType: accountType as "Organization" | "User",
+      accountType,
       installationId: config.installationId,
       repositorySelection: selection,
     };
@@ -909,7 +909,7 @@ export const createGitHubAppHttpProvider = (input: {
     snapshotHeadSha: string,
     accessToken: string,
   ): Promise<boolean> => {
-    const reconciliation = draftRequest.reconciliation;
+    const { reconciliation } = draftRequest;
     if (await ownedDraftHead(draftRequest.recovery, observed, accessToken)) {
       return true;
     }
