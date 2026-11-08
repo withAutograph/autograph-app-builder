@@ -47,7 +47,9 @@ describe.skipIf(tools === undefined)(
   "automatic completion against actual PostgreSQL advisory locks",
   () => {
     beforeAll(async () => {
-      if (tools === undefined) throw new Error("Owned PostgreSQL tools are unavailable.");
+      if (tools === undefined) {
+        throw new Error("Owned PostgreSQL tools are unavailable.");
+      }
       const port = await new Promise<number>((resolve, reject) => {
         const server = createServer();
         server.once("error", reject);
@@ -100,7 +102,9 @@ describe.skipIf(tools === undefined)(
           { stdio: "pipe" },
         );
       }
-      if (root !== undefined) await rm(root, { recursive: true, force: true });
+      if (root !== undefined) {
+        await rm(root, { recursive: true, force: true });
+      }
     });
     const lease = () =>
       createPostgresPhysicalResourceLease({
@@ -115,7 +119,9 @@ describe.skipIf(tools === undefined)(
           }),
       });
     const lockCounts = async () => {
-      if (admin === undefined) throw new Error("Missing owned PostgreSQL fixture.");
+      if (admin === undefined) {
+        throw new Error("Missing owned PostgreSQL fixture.");
+      }
       const [counts] = await admin<{ held: number; waiting: number }[]>`
       select count(*) filter (where granted)::int as held,
              count(*) filter (where not granted)::int as waiting
@@ -253,7 +259,9 @@ describe.skipIf(tools === undefined)(
             lockKeys: [slot],
             tryAcquire: true,
             readCurrentFence: async () => {
-              if (!authorized) throw new Error("fixture authority revoked");
+              if (!authorized) {
+                throw new Error("fixture authority revoked");
+              }
               return { ...fence };
             },
           },

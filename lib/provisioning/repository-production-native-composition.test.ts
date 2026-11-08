@@ -176,7 +176,9 @@ describe("automatic setup completion", () => {
     async (target) => {
       const result = await completeRepositoryProductionInvitation({
         creator: async () => {
-          if (target === "creator") throw new PhysicalResourceLeaseBusyError();
+          if (target === "creator") {
+            throw new PhysicalResourceLeaseBusyError();
+          }
           return "not-owned";
         },
         invitee: async () => {
