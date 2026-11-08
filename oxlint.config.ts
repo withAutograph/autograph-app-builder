@@ -578,10 +578,6 @@ export default defineConfig({
       rules: { "react-doctor/async-parallel": "off" },
     },
     {
-      files: [handoffControlsPath],
-      rules: { "react-doctor/no-chain-state-updates": "off" },
-    },
-    {
       // Git object identity requires the existing SHA-1 format.
       files: [
         sharedLintFile9,

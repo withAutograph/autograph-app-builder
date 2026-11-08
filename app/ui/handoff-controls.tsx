@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useReducer,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -66,6 +67,51 @@ const renderCursorSetupLink = (destination: string, url?: string) => {
 };
 
 type HandoffAccess = "ready" | "sign-in" | "unavailable";
+
+interface HandoffViewState {
+  data: HandoffControlData;
+  access: HandoffAccess;
+  renewalNotice: string;
+}
+
+type HandoffViewAction =
+  | { type: "status"; data: HandoffControlData }
+  | { type: "access"; access: HandoffAccess }
+  | { type: "renewal"; result: HandoffRenewalActionState; currentHandoffId: string }
+  | { type: "clear-renewal-notice" };
+
+const handoffViewReducer = (
+  state: HandoffViewState,
+  action: HandoffViewAction,
+): HandoffViewState => {
+  if (action.type === "status") {
+    return { ...state, data: action.data };
+  }
+  if (action.type === "access") {
+    return { ...state, access: action.access };
+  }
+  if (action.type === "clear-renewal-notice") {
+    return { ...state, renewalNotice: "" };
+  }
+  if (action.result.status === "sign-in" || action.result.status === "unavailable") {
+    return { ...state, access: action.result.status };
+  }
+  if (action.result.status === "error") {
+    return {
+      ...state,
+      renewalNotice:
+        "We couldn’t renew this handoff. Try again; your brief and completed resources are saved.",
+    };
+  }
+  return {
+    ...state,
+    data:
+      action.result.handoff.handoffId === action.currentHandoffId
+        ? action.result.handoff
+        : state.data,
+    renewalNotice: "",
+  };
+};
 
 const subscribeToHandoffStatus = (
   handoffId: string,
@@ -154,13 +200,15 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     () => false,
   );
   const router = useRouter();
-  const [data, setData] = useState(initial);
+  const [{ data, access, renewalNotice }, dispatchHandoffView] = useReducer(handoffViewReducer, {
+    data: initial,
+    access: "ready",
+    renewalNotice: "",
+  });
   const [destination, setDestination] = useState(initial.destination);
   const [notice, setNotice] = useState("");
-  const [renewalNotice, setRenewalNotice] = useState("");
   const [launchNotice, setLaunchNotice] = useState("");
   const [copyNotice, setCopyNotice] = useState("");
-  const [access, setAccess] = useState<"ready" | "sign-in" | "unavailable">("ready");
   const renewalRequest = useRef<{ handoffId: string; id: string } | undefined>(undefined);
   const reconciledRenewal = useRef<HandoffRenewalActionState | undefined>(undefined);
   const runRenewalAction = useCallback(
@@ -196,10 +244,12 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     return subscribeToHandoffStatus(
       data.handoffId,
       (next) => {
-        setData(next);
+        dispatchHandoffView({ type: "status", data: next });
         setNotice("");
       },
-      setAccess,
+      (next) => {
+        dispatchHandoffView({ type: "access", access: next });
+      },
       setNotice,
     );
   }, [access, data.handoffId, data.status, renewalPending]);
@@ -209,25 +259,11 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       return;
     }
     reconciledRenewal.current = renewal;
-    if (renewal.status === "sign-in") {
-      setAccess("sign-in");
-      return;
+    if (renewal.status === "renewed") {
+      buildAppHandoffPrompt(renewal.handoff.handoffId, destination);
     }
-    if (renewal.status === "unavailable") {
-      setAccess("unavailable");
-      return;
-    }
-    if (renewal.status === "error") {
-      setRenewalNotice(
-        "We couldn’t renew this handoff. Try again; your brief and completed resources are saved.",
-      );
-      return;
-    }
-    setRenewalNotice("");
-    buildAppHandoffPrompt(renewal.handoff.handoffId, destination);
-    if (renewal.handoff.handoffId === data.handoffId) {
-      setData(renewal.handoff);
-    } else {
+    dispatchHandoffView({ type: "renewal", result: renewal, currentHandoffId: data.handoffId });
+    if (renewal.status === "renewed" && renewal.handoff.handoffId !== data.handoffId) {
       router.replace(`/handoff/${encodeURIComponent(renewal.handoff.handoffId)}`);
     }
   }, [data.handoffId, destination, renewal, renewalPending, router]);
@@ -261,7 +297,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
         // Session storage is optional.
       }
     }
-    setRenewalNotice("");
+    dispatchHandoffView({ type: "clear-renewal-notice" });
     const request = renewalRequest.current;
     if (!request) {
       return;
