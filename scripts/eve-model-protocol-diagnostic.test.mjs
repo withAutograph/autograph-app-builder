@@ -380,13 +380,13 @@ const fixture = async (options = {}) => {
     },
   });
   const collected = await collect({
-    binding: { ownerRunId, logicalSessionId },
     authorizeOwner: async (currentBinding) => {
       assert.deepEqual(currentBinding, { logicalSessionId, ownerRunId });
       assert.ok(Object.isFrozen(currentBinding));
       authorized = true;
       await Promise.resolve();
     },
+    binding: { logicalSessionId, ownerRunId },
   });
   assert.equal(collected.kind, "candidate");
   assert.equal(authorized, true);
@@ -715,7 +715,7 @@ test("actual SDK exposes retained mixed orphan without inventing or replaying it
     turn: { id: ORIGINAL_TURN_ID },
   });
   await contextStorage.run(ctx, () =>
-    createToolLoopHarness({ tools, resolveModel: () => Promise.resolve(model) })(session),
+    createToolLoopHarness({ resolveModel: () => Promise.resolve(model), tools })(session),
   );
   assert.equal(requests, 1);
   assert.equal(executions, 0);

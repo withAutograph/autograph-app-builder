@@ -277,10 +277,6 @@ const attachNativeSnapshot = async (world, nativeEvents, enabled) => {
     chunks.push({ index: chunks.length, data });
   }
   world.streams = {
-    getInfo: () => Promise.resolve({ tailIndex: chunks.length - 1, done: false }),
-    getChunks: () => {
-      throw new Error("Serial native snapshot pagination is forbidden.");
-    },
     get: (_id, _name, startIndex) => {
       assert.equal(startIndex, 0);
       let index = 0;
@@ -296,6 +292,10 @@ const attachNativeSnapshot = async (world, nativeEvents, enabled) => {
         }),
       );
     },
+    getChunks: () => {
+      throw new Error("Serial native snapshot pagination is forbidden.");
+    },
+    getInfo: () => Promise.resolve({ tailIndex: chunks.length - 1, done: false }),
   };
   return snapshotKey;
 };
@@ -595,6 +595,10 @@ const fixture = async (options = {}) => {
       : []),
   ];
   const world = {
+    events: {
+      get: (_runId, id) => Promise.resolve(events.find((value) => value.eventId === id)),
+      list: async () => await Promise.resolve({ data: events, hasMore: false }),
+    },
     runs: {
       get: async () =>
         await Promise.resolve({
@@ -602,10 +606,6 @@ const fixture = async (options = {}) => {
           status: options.runStatus ?? (options.failedTurn === true ? "failed" : completedStatus),
           input: "original-entry-retained",
         }),
-    },
-    events: {
-      list: async () => await Promise.resolve({ data: events, hasMore: false }),
-      get: (_runId, id) => Promise.resolve(events.find((value) => value.eventId === id)),
     },
     steps: {
       get: async (runId, id) => {
@@ -732,7 +732,7 @@ const resumeSynthetic = async (ready, denied) => {
   });
   assert.equal(executions, 0);
   const result = await contextStorage.run(ctx, () =>
-    createToolLoopHarness({ tools, resolveModel: async () => await Promise.resolve(model) })(
+    createToolLoopHarness({ resolveModel: async () => await Promise.resolve(model), tools })(
       session,
       {
         runtimeActionResults: ready.replayInput.runtimeResults.results,
@@ -1033,9 +1033,9 @@ test("running anchored-result parent is observable only through an opaque lineag
   assert.equal(terminal.collected.boundary.stage, "handoff_parent");
   const observed = await fixture({
     ...options,
-    omitListedOwner: true,
     collectFactory: createOwnedLineagePreflightCollector,
     expectedKind: "preflight",
+    omitListedOwner: true,
   });
   const payload = readOwnedLineagePreflight(observed.collected.preflight);
   assert.equal(payload.handoffChain.length, 1);

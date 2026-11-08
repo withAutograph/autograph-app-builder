@@ -141,8 +141,8 @@ it("settles native approval before dispatch, preserves results and authorizers, 
     tools,
     stepInput: {
       runtimeActionResults: [
-        { kind: "tool-result", callId: "call-one", toolName: "one", output: "one-result" },
-        { kind: "tool-result", callId: "call-free", toolName: "free", output: "free-result" },
+        { callId: "call-one", kind: "tool-result", output: "one-result", toolName: "one" },
+        { callId: "call-free", kind: "tool-result", output: "free-result", toolName: "free" },
       ],
     },
   });
@@ -169,8 +169,8 @@ it("settles native approval before dispatch, preserves results and authorizers, 
   const model = new MockLanguageModelV4({
     doGenerate: async () =>
       await Promise.resolve({
-        content: [{ type: "tool-call", toolCallId: "call-one", toolName: "one", input: "{}" }],
-        finishReason: { unified: "tool-calls", raw: "tool_calls" },
+        content: [{ input: "{}", toolCallId: "call-one", toolName: "one", type: "tool-call" }],
+        finishReason: { raw: "tool_calls", unified: "tool-calls" },
         usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
         warnings: [],
       }),
@@ -239,7 +239,7 @@ it("settles native approval before dispatch, preserves results and authorizers, 
   await assert.rejects(
     changedRun(changed, {
       attributedInputResponses: [
-        { auth, response: { requestId: "request-one", optionId: "approve" } },
+        { auth, response: { optionId: "approve", requestId: "request-one" } },
       ],
     }),
     /connection for this tool call changed/u,
@@ -290,10 +290,10 @@ it("settles native approval before dispatch, preserves results and authorizers, 
 });
 
 it.each([
-  { withInput: false, optionId: "approve" },
-  { withInput: true, optionId: "approve" },
-  { withInput: false, optionId: "cancel" },
-  { withInput: false, optionId: "approve", cancelBeforeReplay: true },
+  { optionId: "approve", withInput: false },
+  { optionId: "approve", withInput: true },
+  { optionId: "cancel", withInput: false },
+  { cancelBeforeReplay: true, optionId: "approve", withInput: false },
 ])(
   "replays native decisions with coordinated results (%o)",
   async ({ withInput, optionId, cancelBeforeReplay }) => {
@@ -345,7 +345,7 @@ it.each([
               toolName: name,
               input: name === "native" ? JSON.stringify({ value: "retained-native-input" }) : "{}",
             })),
-            finishReason: { unified: "tool-calls", raw: "tool_calls" },
+            finishReason: { raw: "tool_calls", unified: "tool-calls" },
             usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
             warnings: [],
           });
@@ -374,8 +374,8 @@ it.each([
         assert.equal(JSON.stringify(prompt).includes("new product reply"), requests > 2);
         assert.ok(JSON.stringify(prompt).includes("retained client context"));
         return Promise.resolve({
-          content: [{ type: "text", text: "complete" }],
-          finishReason: { unified: "stop", raw: "stop" },
+          content: [{ text: "complete", type: "text" }],
+          finishReason: { raw: "stop", unified: "stop" },
           usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
           warnings: [],
         });
@@ -426,10 +426,10 @@ it.each([
           cancelled(approved.session, {
             runtimeActionResults: [
               {
-                kind: "tool-result",
                 callId: "mixed-deferred",
-                toolName: "deferred",
+                kind: "tool-result",
                 output: "deferred-result",
+                toolName: "deferred",
               },
             ],
           }),
@@ -448,10 +448,10 @@ it.each([
     }
     continuationInput.runtimeActionResults = [
       {
-        kind: "tool-result",
         callId: "mixed-deferred",
-        toolName: "deferred",
+        kind: "tool-result",
         output: "deferred-result",
+        toolName: "deferred",
       },
     ];
     let completed = await invoke(approvedSession, continuationInput);
@@ -469,7 +469,7 @@ it.each([
 it("preserves approval tail metadata without changing original message parts", async () => {
   const { coalesceApprovalReplayTail } = await import(`${sdk}harness/approval-coordination.js`);
   const messages = [
-    { role: "assistant", content: "prefix" },
+    { content: "prefix", role: "assistant" },
     {
       role: "tool",
       providerOptions: { test: { message: true, precedence: "message" } },
@@ -484,7 +484,7 @@ it("preserves approval tail metadata without changing original message parts", a
     },
     {
       role: "tool",
-      content: [{ type: "tool-approval-response", approvalId: "second", approved: false }],
+      content: [{ approvalId: "second", approved: false, type: "tool-approval-response" }],
     },
     {
       role: "tool",
@@ -568,8 +568,8 @@ it.each([400, 503])(
             );
           }
           return Promise.resolve({
-            content: [{ type: "text", text: "continued" }],
-            finishReason: { unified: "stop", raw: "stop" },
+            content: [{ text: "continued", type: "text" }],
+            finishReason: { raw: "stop", unified: "stop" },
             usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
             warnings: [],
           });
@@ -581,7 +581,7 @@ it.each([400, 503])(
             toolName: name,
             input: "{}",
           })),
-          finishReason: { unified: "tool-calls", raw: "tool_calls" },
+          finishReason: { raw: "tool_calls", unified: "tool-calls" },
           usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
           warnings: [],
         });
@@ -637,10 +637,10 @@ it.each([400, 503])(
       {
         runtimeActionResults: [
           {
-            kind: "tool-result",
             callId: "failed-deferred",
-            toolName: "deferred",
+            kind: "tool-result",
             output: "deferred-completed",
+            toolName: "deferred",
           },
         ],
       },

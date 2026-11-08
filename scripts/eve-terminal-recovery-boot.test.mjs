@@ -100,6 +100,17 @@ const bootFixture = () => {
     },
   };
   const ports = {
+    createHook(options) {
+      calls.push(["hook", options]);
+      return Object.assign(activation, {
+        dispose() {
+          calls.push(["dispose-hook"]);
+        },
+        async getConflict() {
+          return null;
+        },
+      });
+    },
     createSessionInbox(id) {
       assert.equal(id, descriptor.logicalSessionId);
       return inbox;
@@ -114,30 +125,19 @@ const bootFixture = () => {
     async validateCheckpoint(input) {
       calls.push(["validate", input]);
     },
-    createHook(options) {
-      calls.push(["hook", options]);
-      return Object.assign(activation, {
-        async getConflict() {
-          return null;
-        },
-        dispose() {
-          calls.push(["dispose-hook"]);
-        },
-      });
-    },
   };
   return {
-    ports,
-    calls,
-    inbox,
-    queue,
     activate: () =>
       resolveActivation({
         kind: "activate-terminal-recovery",
         operationId: descriptor.operationId,
         ownerRunId: CHILD_WORKFLOW_RUN_ID,
       }),
+    calls,
     cancel: () => interrupt({ kind: "cancel" }),
+    inbox,
+    ports,
+    queue,
   };
 };
 const inputFor = (cp = checkpoint()) => ({

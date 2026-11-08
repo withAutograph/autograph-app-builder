@@ -401,7 +401,7 @@ test("actual native encryption and hydration preserve original typed state", asy
 });
 
 test("completed native terminal step preserves its original paired input and real approval/results despite corrupt output", async () => {
-  const f = await fixture({ status: "completed", encrypted: true });
+  const f = await fixture({ encrypted: true, status: "completed" });
   const corrupt = structuredClone(f.final);
   corrupt.sessionState.snapshot.session.history.push({
     role: "assistant",
@@ -628,7 +628,7 @@ test("inspection never exposes malformed authored phase text", async () => {
 });
 
 test("provider-cancelled terminal owner retains actual paired state and approval without effect authority", async () => {
-  const f = await fixture({ status: "cancelled", encrypted: true });
+  const f = await fixture({ encrypted: true, status: "cancelled" });
   const result = await f.collect(f.input);
   assert.equal(result.kind, "candidate");
   const payload = readTerminalRecoveryCandidate(result.candidate);
@@ -665,7 +665,7 @@ const frameNativeHistory = async (values, key) => {
   return frames.map((data, index) => ({ index, data }));
 };
 const snapshotFixture = async (fault, packing = "split") => {
-  const f = await fixture({ status: "cancelled", encrypted: true });
+  const f = await fixture({ encrypted: true, status: "cancelled" });
   const native = Array.from({ length: 5 }, (_, index) => ({
     type: "text.delta",
     data: { text: `original private native text ${index}` },

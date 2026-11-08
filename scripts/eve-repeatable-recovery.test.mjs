@@ -439,12 +439,12 @@ test("trusted Builder call contract flows through actual native prepare and reco
     {
       collect: async ({ binding: source, authorizeOwner }) => {
         await authorizeOwner(source);
-        return { kind: "candidate", candidate: f.handle };
+        return { candidate: f.handle, kind: "candidate" };
       },
       readCandidate: readTerminalRecoveryCandidate,
       reconcile: reconcileTerminalRecoveryCandidate,
       readEntry: () =>
-        Promise.resolve({ kind: "handoff", checkpoint: { sessionTimeoutMs: false } }),
+        Promise.resolve({ checkpoint: { sessionTimeoutMs: false }, kind: "handoff" }),
       start: (input) => {
         starts += 1;
         ({ checkpoint } = input);
