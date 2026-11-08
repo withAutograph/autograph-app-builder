@@ -646,7 +646,7 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
             ? {
                 apiOrigin: emulation.vercelOrigin,
                 fetch: ((resource, init) =>
-                  providerEmulationFetch(resource as URL, init, emulation)) as typeof fetch,
+                  providerEmulationFetch(resource as URL, init, emulation)) satisfies typeof fetch,
               }
             : {};
         })(),

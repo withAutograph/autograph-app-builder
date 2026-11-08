@@ -679,7 +679,7 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
                 init,
                 emulation,
               );
-            }) as typeof fetch,
+            }) satisfies typeof fetch,
           }
         : {}),
     };

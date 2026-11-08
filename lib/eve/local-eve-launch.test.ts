@@ -97,12 +97,12 @@ describe("closed local Eve launch", () => {
       exitCode: { value: null, writable: true },
       signalCode: { value: null, writable: true },
     });
-    child.kill = ((signal?: NodeJS.Signals | number) => {
+    child.kill = (signal?: NodeJS.Signals | number) => {
       if (typeof signal === "string") {
         forwarded.push(signal);
       }
       return true;
-    }) as ChildProcess["kill"];
+    };
 
     const stopped = waitForForwardedEveChild(child, signals);
     signals.emit("SIGTERM");

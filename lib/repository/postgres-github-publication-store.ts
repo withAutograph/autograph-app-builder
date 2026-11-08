@@ -109,7 +109,7 @@ function parseProposal(input: unknown): GitHubPublicationProposal {
   ) {
     throw new Error("Stored draft pull-request proposal fields are missing or unexpected.");
   }
-  const draft = stored as DraftPullRequestProposal;
+  const draft = stored;
   // oxlint-disable-next-line eslint/sort-keys -- legacy digest depends on constructor field order.
   const proposal: DraftPullRequestProposal = {
     approvedPaths: draft.approvedPaths,
