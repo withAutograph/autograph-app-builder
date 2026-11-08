@@ -424,8 +424,8 @@ describe("native normal capture deployment assembly", () => {
     expect(verified.payload.actual).toBe(true);
     await pending.readback(
       new Request(`${link.endpointOrigin}/api/auth/platform/operator-identity/readback`, {
-        method: "POST",
         body: "{}",
+        method: "POST",
       }),
     );
     expect(remote).toHaveBeenCalledTimes(2);

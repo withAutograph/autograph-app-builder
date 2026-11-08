@@ -709,7 +709,7 @@ const fixture = async (publicRelease?: {
       false,
       undefined,
       undefined,
-      { bootstrap, assertCurrent },
+      { assertCurrent, bootstrap },
     );
   };
   const beginAppPlanning = async () => {
@@ -739,15 +739,15 @@ const fixture = async (publicRelease?: {
     return appPlan;
   };
   return {
-    proposeAccess,
+    artifacts,
     assertPlanningAuthorized,
-    completeBootstrapRefresh,
     beginAppPlanning,
     collect,
+    completeBootstrapRefresh,
     input,
     journal,
+    proposeAccess,
     requests,
-    artifacts,
     get row() {
       return row;
     },

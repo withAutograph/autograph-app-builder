@@ -198,8 +198,8 @@ const applicationModel = (steps: ApplicationModelStep[]) => {
           modelId: "openai/gpt-6.1-sol",
         },
         usage: {
-          inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
-          outputTokens: { total: 5, text: 5, reasoning: 0 },
+          inputTokens: { cacheRead: 0, cacheWrite: 0, noCache: 10, total: 10 },
+          outputTokens: { reasoning: 0, text: 5, total: 5 },
         },
         warnings: [],
       });
@@ -1463,13 +1463,13 @@ describe("independent application source review", () => {
     evidence.readSource = () => {
       controller.abort();
       return Promise.resolve({
-        path: "apps/example/actions.ts",
-        digest: "source",
         content: "",
-        startLine: 1,
-        endLine: 1,
-        startColumn: 1,
+        digest: "source",
         endColumn: 1,
+        endLine: 1,
+        path: "apps/example/actions.ts",
+        startColumn: 1,
+        startLine: 1,
       });
     };
     await expect(

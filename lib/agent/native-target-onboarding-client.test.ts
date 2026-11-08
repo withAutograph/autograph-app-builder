@@ -439,8 +439,8 @@ describe("native target protected client", () => {
         Response.json({
           appId: "unknown",
           authenticatedBehavior: "unassessed",
-          status: "blocked",
           code: "resource_mismatch",
+          status: "blocked",
         }),
       );
       await expect(f.client.prepare(f.input, f.ctx)).rejects.toMatchObject({
@@ -461,16 +461,16 @@ describe("native target protected client", () => {
     }
   });
   it.each([
-    { status: "blocked", code: "authorization_required" },
-    { authenticatedBehavior: "unassessed", status: "blocked", code: "unknown-private-code" },
+    { code: "authorization_required", status: "blocked" },
+    { authenticatedBehavior: "unassessed", code: "unknown-private-code", status: "blocked" },
     {
       authenticatedBehavior: "unassessed",
-      status: "blocked",
       code: "resource_mismatch",
       secret: "private-response",
+      status: "blocked",
     },
     { authenticatedBehavior: "unassessed", status: "blocked" },
-    { authenticatedBehavior: "unassessed", status: "ready", code: "resource_mismatch" },
+    { authenticatedBehavior: "unassessed", code: "resource_mismatch", status: "ready" },
   ])("does not accept malformed, unknown or nonblocked operator results", async (result) => {
     const f = fixture();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -498,8 +498,8 @@ describe("native target protected client", () => {
         Response.json({
           appId: "another-app",
           authenticatedBehavior: "unassessed",
-          status: "blocked",
           code: "resource_mismatch",
+          status: "blocked",
         }),
       );
       await expect(f.client.prepare(f.input, f.ctx)).rejects.toMatchObject({

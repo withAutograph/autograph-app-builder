@@ -928,12 +928,12 @@ describe("draft reconciliation command progress", () => {
     const prior = [...mocks.attempts];
     mocks.local.mockResolvedValueOnce({
       command: "mise run app:local -- spend-review setup",
-      status: "failed",
       exitCode: 1,
-      stdout: "local setup began\n",
+      problem: "The selected local runtime failed",
+      status: "failed",
       stderr:
         "kernel_bind_actor_membership rejected runtime preparation\nBearer local-secret\nhttps://user:db-secret@database.invalid/app\n",
-      problem: "The selected local runtime failed",
+      stdout: "local setup began\n",
     });
     await expect(incremental("mise run app:local -- spend-review setup")).resolves.toMatchObject({
       exitCode: 1,
@@ -989,10 +989,10 @@ describe("draft reconciliation command progress", () => {
       }
       mocks.local.mockResolvedValueOnce({
         command: "mise run app:local -- spend-review setup",
-        status: "failed",
         exitCode: 3,
-        stdout: "",
+        status: "failed",
         stderr: "kernel_bind_actor_membership rejected runtime preparation",
+        stdout: "",
       });
       await expect(incremental("mise run app:local -- spend-review setup")).resolves.toMatchObject({
         exitCode: 3,
@@ -1022,10 +1022,10 @@ describe("draft reconciliation command progress", () => {
       if (mode === "returned") {
         mocks.local.mockResolvedValueOnce({
           command: "mise run app:local -- spend-review setup",
-          status: "failed",
           exitCode: null,
-          stdout: "",
+          status: "failed",
           stderr: "",
+          stdout: "",
         });
         await expect(
           incremental("mise run app:local -- spend-review setup"),
