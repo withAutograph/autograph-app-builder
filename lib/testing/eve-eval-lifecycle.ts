@@ -318,8 +318,12 @@ export function waitForEveEvalChild(
       forceTimer = setTimeout(forceGroup, gracefulTimeoutMs);
       forceTimer.unref?.();
     };
-    const interrupt = () => requestStop("SIGINT");
-    const terminate = () => requestStop("SIGTERM");
+    const interrupt = () => {
+      requestStop("SIGINT");
+    };
+    const terminate = () => {
+      requestStop("SIGTERM");
+    };
     const failed = (error: Error) => {
       if (settled) {
         return;
