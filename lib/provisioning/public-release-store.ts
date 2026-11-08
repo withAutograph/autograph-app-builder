@@ -1,10 +1,8 @@
 /* oxlint-disable eslint/complexity, sonarjs/expression-complexity -- Journal reads and CAS validate the complete immutable authority and effect history. */
 import { isDeepStrictEqual } from "node:util";
 import { and, eq, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { builderProvisioningJournals } from "../db/schema";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle uses the existing complete database schema.
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import {
   publicReleasePlanDigest,
   publicReleaseOperationRef,
@@ -18,7 +16,6 @@ import type {
 } from "./public-release-contract";
 import type { PublicReleaseStore, PublicReleaseRow } from "./public-release-handler";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 const unavailable = () => new Error("public_release_unavailable");
 const predicate = (authority: PublicReleaseAuthority, operationRef: string) =>
   and(

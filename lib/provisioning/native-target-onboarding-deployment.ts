@@ -5,11 +5,9 @@ import {
 } from "./native-target-resource-profile";
 import { isDeepStrictEqual } from "node:util";
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- The opened control-plane database uses the complete Drizzle schema.
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import { builderProvisioningJournals } from "../db/schema";
 import {
   readPrivateNativeTargetApproval,
@@ -52,7 +50,6 @@ import type {
   NativeTargetPlanRequest,
 } from "../agent/native-target-onboarding-runtime";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Current = NativeTargetCurrentOwner & { historyOwner: OperatorOwnerContext };
 interface AppOwner {
   verifyWorkload: (request: Request) => Promise<void>;

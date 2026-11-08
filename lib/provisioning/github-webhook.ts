@@ -1,7 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
 import {
@@ -9,9 +8,7 @@ import {
   hostedGitHubInstallations,
   hostedGitHubUserCredentials,
 } from "../db/schema";
-import type * as databaseSchema from "../db/schema";
-
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function verify(input: { body: Uint8Array; signature: string; secret: string }) {

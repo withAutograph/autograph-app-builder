@@ -1,11 +1,9 @@
 /* oxlint-disable eslint/complexity, sonarjs/expression-complexity -- Stored intent, immutable authority and completed effect scopes are checked together before readiness may be returned. */
 import { isDeepStrictEqual } from "node:util";
 import { and, eq, or, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 import { builderProvisioningJournals } from "../db/schema";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle database type requires the repository schema namespace.
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import type { ReadCentralIntegrationHostReady } from "./app-integration-central-authority";
 import {
   centralHostSetupPlanSchema,
@@ -150,7 +148,6 @@ export interface CentralHostRow {
   record: CentralHostRecord;
 }
 type Authority = CentralHostRecord["plan"]["authority"];
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 const nativeTransitionAllowed = (
   before: CentralHostRecord["nativeDeployment"],
   after: CentralHostRecord["nativeDeployment"],

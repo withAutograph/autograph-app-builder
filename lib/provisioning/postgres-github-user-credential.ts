@@ -1,9 +1,8 @@
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { hostedGitHubUserCredentials } from "../db/schema";
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import {
   decryptGitHubUserTokens,
   encryptGitHubUserTokens,
@@ -15,8 +14,6 @@ import type {
   GitHubUserCredentialStore,
 } from "./github-user-credential";
 import type { BuilderProvisionAuthority } from "./journal";
-
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function predicate(authority: BuilderProvisionAuthority, providerUserId: string) {

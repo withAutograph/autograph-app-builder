@@ -1,10 +1,8 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { and, desc, eq, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- The owned Drizzle schema defines this existing table.
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { prototypeArtifactChunks } from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import {
@@ -264,16 +262,14 @@ const selectedDestinationPredicate = (scope: ReturnType<typeof scoped>) =>
 
 /** Completion markers are immutable per trusted tool call and written only after every release member is durably readable. */
 export const createPostgresOperatorArtifactSelections = (input: {
-  database: PostgresJsDatabase<typeof databaseSchema>;
+  database: HostedDatabase;
   assertCurrentOwner: (context: OperatorArtifactContext) => Promise<void>;
 }): OperatorArtifactSelections => {
   // Every selection writer shares this lock, so recovery cannot hide a concurrent capture.
   const writeSelection = async <T>(
     context: OperatorArtifactContext,
     scope: ReturnType<typeof scoped>,
-    write: (
-      database: Pick<PostgresJsDatabase<typeof databaseSchema>, "select" | "insert">,
-    ) => Promise<T>,
+    write: (database: Pick<HostedDatabase, "select" | "insert">) => Promise<T>,
   ): Promise<T> => {
     await input.assertCurrentOwner(context);
     return await input.database.transaction(async (transaction) => {

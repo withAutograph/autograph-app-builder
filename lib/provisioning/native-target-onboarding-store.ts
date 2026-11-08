@@ -1,12 +1,10 @@
 /* oxlint-disable eslint/complexity, sonarjs/expression-complexity, unicorn/no-useless-undefined -- CAS transitions validate every retained authority/effect binding; absent rows intentionally return undefined. */
 import { isDeepStrictEqual } from "node:util";
 import { and, eq, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { builderProvisioningJournals } from "../db/schema";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle uses the complete existing schema as its database type.
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import { builderAppIdSchema } from "./names";
 import {
   nativeTargetAcceptedCreationSchema,
@@ -351,7 +349,6 @@ export const createInMemoryNativeTargetOnboardingStore = (): NativeTargetOnboard
   };
 };
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 const predicate = (key: NativeTargetOnboardingKey) =>
   and(
     eq(builderProvisioningJournals.issuer, key.authority.issuer),
