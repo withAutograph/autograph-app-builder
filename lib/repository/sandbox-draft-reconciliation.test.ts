@@ -1863,7 +1863,7 @@ const registeredFixture = () => {
   const root = path.join(workspaceRoot, ".app-builder/draft-reconcile/previous");
   mkdirSync(path.dirname(root), { recursive: true });
   git(checkout, "worktree", "add", "--detach", root, f.headSha);
-  return { ...f, workspaceRoot, checkout, retiredRoot: root };
+  return { ...f, checkout, retiredRoot: root, workspaceRoot };
 };
 const retire = async (f: ReturnType<typeof registeredFixture>, retainedRoots: string[] = []) =>
   await retireUnusedDraftWorktrees({
@@ -2021,22 +2021,22 @@ describe("unused draft worktree retirement", () => {
   });
 
   it.each([
-    { exitCode: 1, stdout: "private command output", stderr: "private failure" },
-    { exitCode: 0, stdout: "not JSON private payload", stderr: "" },
+    { exitCode: 1, stderr: "private failure", stdout: "private command output" },
+    { exitCode: 0, stderr: "", stdout: "not JSON private payload" },
     {
       exitCode: 0,
-      stdout: JSON.stringify({ status: "complete", retired: -1, retained: 0, reasons: {} }),
       stderr: "",
+      stdout: JSON.stringify({ status: "complete", retired: -1, retained: 0, reasons: {} }),
     },
     {
       exitCode: 0,
+      stderr: "",
       stdout: JSON.stringify({
         status: "complete",
         retired: 0,
         retained: 0,
         reasons: { "private path": 1 },
       }),
-      stderr: "",
     },
   ])(
     "returns unavailable for an untrusted cleanup response %# without exposing command details",

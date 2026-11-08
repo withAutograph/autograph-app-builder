@@ -116,11 +116,11 @@ const fixture = () => {
     return Promise.resolve(owner);
   };
   const registry = createNativeTargetOnboardingRegistry({
-    store,
-    authorize,
     assertPlanOrigin: () => Promise.resolve(),
-    readApproval: () => Promise.resolve(receipt),
+    authorize,
     now: () => time,
+    readApproval: () => Promise.resolve(receipt),
+    store,
   });
   const read = async () => {
     await authorize();
@@ -229,24 +229,24 @@ const fixture = () => {
     };
   };
   return {
-    plan,
-    state,
-    ctx,
-    ports,
-    runtime,
-    proposal,
-    planned,
     approve,
-    read,
     cancel: () => {
       if (receipt === null) {
         throw new Error("missing receipt");
       }
       receipt = { ...receipt, outcome: "cancelled" };
     },
+    ctx,
+    plan,
+    planned,
+    ports,
+    proposal,
+    read,
     revoke: () => {
       allowed = false;
     },
+    runtime,
+    state,
   };
 };
 

@@ -474,8 +474,8 @@ it("publishes the exact per-intent pair privately and refreshes the normal Gatew
     f.rows.find((r) => r.key === `PLATFORM_GATEWAY_MANAGED_TARGET_${suffix}`),
   );
   expect(JSON.parse(targetRow.value)).toEqual({
-    projection: f.record.projection,
     current: f.record.current,
+    projection: f.record.projection,
   });
   expect(f.rows.find((r) => r.key === `PLATFORM_GATEWAY_MANAGED_TRANSPORT_${suffix}`)?.value).toBe(
     f.capabilities.transport,

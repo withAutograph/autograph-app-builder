@@ -257,10 +257,10 @@ const fixture = () => {
   configuration.gateway.gitSha = "b".repeat(40);
   return {
     configuration,
-    record,
     context: structuredClone(context),
-    plan,
     now: Date.parse("2026-10-19T12:00:00Z"),
+    plan,
+    record,
   };
 };
 const propose = (f: ReturnType<typeof fixture>) =>

@@ -1573,10 +1573,10 @@ const receipt = (phase = "draft_update") => ({
 });
 
 const result = (events: ReturnType<typeof projectInstalledEveEvents>) => ({
-  sessionId: "original-session",
-  status: "waiting" as const,
   cursor: events.at(-1)?.index ?? 0,
   events,
+  sessionId: "original-session",
+  status: "waiting" as const,
 });
 
 describe("public draft pull request approval scope", () => {

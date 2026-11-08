@@ -252,12 +252,6 @@ const fixture = async (
       expect(current.record.leaseId).toBeUndefined();
     },
     store: {
-      read: async () => {
-        if (journalFailure !== undefined) {
-          throw journalFailure;
-        }
-        return structuredClone(row);
-      },
       compareAndSet: async (input) => {
         if (input.expectedRevision !== row.revision) {
           return undefined;
@@ -266,6 +260,12 @@ const fixture = async (
           revision: row.revision + 1,
           record: hostedRuntimeJournalRecordSchema.parse(input.record),
         };
+        return structuredClone(row);
+      },
+      read: async () => {
+        if (journalFailure !== undefined) {
+          throw journalFailure;
+        }
         return structuredClone(row);
       },
     },
@@ -405,9 +405,9 @@ const fixture = async (
       const [cookie] = actor.storageState.cookies;
       if (cookie !== undefined) {
         sessions.set(cookie.value, {
-          session: actor.session,
           actorKey: actor.actorKey,
           organizationId: null,
+          session: actor.session,
         });
       }
     }
@@ -416,9 +416,9 @@ const fixture = async (
     const [cookie] = actor.storageState.cookies;
     if (cookie !== undefined) {
       sessions.set(cookie.value, {
-        session: actor.session,
         actorKey: actor.actorKey,
         organizationId: actor.organizationId,
+        session: actor.session,
       });
     }
   }
@@ -475,7 +475,6 @@ const fixture = async (
     });
   };
   const runtimeDeps: Parameters<typeof createNormalActorRuntimeBindings>[0] = {
-    journalPorts,
     assertCurrentPlan: async (input) => {
       currentChecks += 1;
       await assertOwner();
@@ -484,6 +483,7 @@ const fixture = async (
         throw new HostedOperatorError("authorization_required");
       }
     },
+    journalPorts,
     normalRealmFetch: async (input) => {
       if (transportFailure !== undefined) {
         throw transportFailure;
