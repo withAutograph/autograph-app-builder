@@ -46,28 +46,28 @@ const plan = () =>
       adapterGeneration: 1,
       appSpecDigest: "a".repeat(64),
       release: {
-        id: "release-original",
         artifactRef: "artifact-original",
+        id: "release-original",
         manifestSha256: "b".repeat(64),
         schemaSha256: "c".repeat(64),
       },
     },
     project: {
-      name: "requests-app",
-      teamId: "team_fixture",
       installationId: "install_fixture",
+      name: "requests-app",
       projectSettings: {
         framework: "nextjs",
         rootDirectory: "apps/requests",
         sourceFilesOutsideRootDirectory: true,
       },
       protection: nativeTargetRequiredProjectProtection,
+      teamId: "team_fixture",
     },
     branch: "main",
     appDatabase: {
-      resourceId: "requests-resource",
       database: "requests_data",
       migratorRole: "requests_migrator",
+      resourceId: "requests-resource",
       runtimeRole: "requests_runtime",
     },
     productRoles: [],
@@ -79,22 +79,22 @@ const plan = () =>
         sourceProjectId: "source-project",
       },
       scope: {
-        projectId: "neon-project",
         branchId: "neon-branch",
         endpointId: "neon-endpoint",
         hostname: "ep-fixture.neon.tech",
         maintenanceDatabase: "maintenance",
         maintenanceRole: "installer",
+        projectId: "neon-project",
       },
     },
     worker: {
-      id: "generic-installer",
       executablePath: "/trusted/generic-worker",
-      sha256: "d".repeat(64),
+      id: "generic-installer",
       operationScope: "generated-app-release-install-v1",
+      sha256: "d".repeat(64),
       subcommand: "protected-generated-app-install",
     },
-    cost: { ownership: "current-owner", description: "Separate app target" },
+    cost: { description: "Separate app target", ownership: "current-owner" },
     retention: { policy: "Until approved cleanup" },
     conflictPolicy: "stop-on-conflict",
   });
@@ -151,9 +151,9 @@ const makeFixture = (
   const accept = async () => {
     await dispatch();
     await registry.acceptProjectId("server-invocation", p.appId, attempt().leaseId, {
+      acceptedAt: time,
       attemptId: attempt().attemptId,
       projectId: "new-project-id",
-      acceptedAt: time,
     });
   };
   const proof = () => ({
@@ -380,9 +380,9 @@ describe("native target registry authorization and restart", () => {
     f.setReceipt({ ...f.getReceipt()!, outcome: "cancelled" });
     await f.registry.recordApproval("server-invocation", f.p.appId);
     await f.registry.acceptProjectId("server-invocation", f.p.appId, attempt().leaseId, {
+      acceptedAt: time,
       attemptId: attempt().attemptId,
       projectId: "new-project-id",
-      acceptedAt: time,
     });
     expect((await f.registry.read("server-invocation", f.p.appId))?.record.stage).toBe("unknown");
     await expect(

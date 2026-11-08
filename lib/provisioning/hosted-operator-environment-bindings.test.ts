@@ -719,12 +719,12 @@ const historicalCleanupFixture = () => {
     action: "cleanup",
     appEnvironmentCleanup: saved,
     effects: [
-      { id: "revoke", kind: "revoke", description: "Revoke access" },
-      { id: "remove", kind: "remove-bindings", description: "Remove exact saved rows" },
+      { description: "Revoke access", id: "revoke", kind: "revoke" },
+      { description: "Remove exact saved rows", id: "remove", kind: "remove-bindings" },
       {
+        description: "Retire owned resources",
         id: "retire",
         kind: "retire",
-        description: "Retire owned resources",
       },
     ],
   });
@@ -903,8 +903,8 @@ const approveAppTrustedSource = (f: ReturnType<typeof fixture>) => {
     },
     effects: [
       ...f.input.plan.effects,
-      { id: "app-delivery", kind: "delivery", description: "Deliver approved app" },
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind Gateway" },
+      { description: "Deliver approved app", id: "app-delivery", kind: "delivery" },
+      { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
     ],
     gatewayBindings: {
       authBrowserOrigin: "https://auth-preview.example.test",
@@ -921,7 +921,7 @@ const approveAppTrustedSource = (f: ReturnType<typeof fixture>) => {
       },
     },
     appTrustedSources: {
-      gatewayPreview: { projectId: "prj_gateway", from: "preview", to: "preview" },
+      gatewayPreview: { from: "preview", projectId: "prj_gateway", to: "preview" },
     },
   });
 };
@@ -1131,14 +1131,14 @@ it.each([
     f.setFailedPatch("project_settings", "not_found");
     await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
     expect(f.diagnostics.at(-1)?.hostedEnvironmentBindingFailure).toEqual({
-      stage: "update_patch",
-      requestTarget: "project_settings",
-      reason: "provider_rejected",
-      providerCode: "not_found",
-      httpStatus: 404,
-      trustedSourcesVisibility,
-      approvedSourcePresent,
       approvedPairCovered: false,
+      approvedSourcePresent,
+      httpStatus: 404,
+      providerCode: "not_found",
+      reason: "provider_rejected",
+      requestTarget: "project_settings",
+      stage: "update_patch",
+      trustedSourcesVisibility,
     });
     expect(JSON.stringify(f.diagnostics)).not.toContain("private PATCH rejection");
     expect(JSON.stringify(f.diagnostics)).not.toContain("prj_gateway");
@@ -1355,8 +1355,8 @@ it("adds the missing Preview pair alongside the Gateway's existing explicit rule
     trustedSources: {
       projects: {
         prj_gateway: {
-          label: "existing explicit scope",
           customAllow: [prior, { from: { slugs: ["preview"] }, to: { slugs: ["preview"] } }],
+          label: "existing explicit scope",
         },
       },
     },

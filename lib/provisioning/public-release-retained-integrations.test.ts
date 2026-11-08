@@ -50,16 +50,16 @@ const fixture = () => {
   const capReceipt = { approvalId: "source-cap-approval", approvedByCallId: "source-cap-call" };
   const provider: [RetentionProviderBinding, RetentionProviderBinding] = [
     {
-      key: "APP_INTEGRATIONS_CAPABILITY",
       id: "env-cap",
+      key: "APP_INTEGRATIONS_CAPABILITY",
       operationRef: sourceRef,
       sha256:
         sourcePlan.environment.find((entry) => entry.key === "APP_INTEGRATIONS_CAPABILITY")
           ?.sha256 ?? "missing",
     },
     {
-      key: "APP_INTEGRATIONS_RUNTIME_CONFIGURATION",
       id: "env-config",
+      key: "APP_INTEGRATIONS_RUNTIME_CONFIGURATION",
       operationRef: sourceRef,
       sha256: attachment.capability.privateConfiguration.sha256,
     },
@@ -73,16 +73,16 @@ const fixture = () => {
       planDigest: publicReleasePlanDigest(sourcePlan),
       approvalReceipts: [publicReceipt],
       bindings: Object.fromEntries(
-        provider.map((binding) => [binding.key, { state: "applied", acceptedEnvId: binding.id }]),
+        provider.map((binding) => [binding.key, { acceptedEnvId: binding.id, state: "applied" }]),
       ),
       effects: { "bind-production-runtime": "applied", "publish-release-source": "applied" },
       observation: {
-        status: "ready",
         deploymentId: "source-native-deployment",
-        projectId: sourcePlan.project.projectId,
         environment: "production",
+        projectId: sourcePlan.project.projectId,
         publicOrigin: sourcePlan.publicOrigin,
         releaseId: sourcePlan.runtime.releaseId,
+        status: "ready",
       },
     }),
   };
@@ -98,7 +98,6 @@ const fixture = () => {
       prepared: attachment.capability,
       effects: {
         "prepare-control-database": {
-          state: "applied",
           receipt: {
             effect: "prepare-control-database",
             resourceVersion: "control-v1",
@@ -107,25 +106,25 @@ const fixture = () => {
             runtimeRole: resource.runtimeRole,
             migratorRole: resource.migratorRole,
           },
+          state: "applied",
         },
         "install-control-schema": {
-          state: "applied",
           receipt: {
             effect: "install-control-schema",
             resourceVersion: "schema-v1",
             schemaSha256: capPlan.control.schema.sha256,
           },
+          state: "applied",
         },
         "bind-service-memberships": {
-          state: "applied",
           receipt: {
             effect: "bind-service-memberships",
             resourceVersion: "members-v1",
             memberships: attachment.capability.serviceMemberships,
           },
+          state: "applied",
         },
         "register-central-app": {
-          state: "applied",
           receipt: {
             effect: "register-central-app",
             resourceVersion: "registry-v1",
@@ -135,6 +134,7 @@ const fixture = () => {
             registrationDigest: "3".repeat(64),
             principalGeneration: attachment.capability.control.principalGeneration,
           },
+          state: "applied",
         },
       },
     }),
@@ -153,12 +153,12 @@ const fixture = () => {
   const publicApproval = vi.fn(async (_plan: typeof sourcePlan, _callId: string) => publicReceipt);
   const capApproval = vi.fn(async (_plan: typeof capPlan, _callId: string) => capReceipt);
   const sourceOwner = operatorOwnerContextSchema.parse({
-    kind: "direct",
+    adapterGeneration: 1,
+    adapterSessionId: "source-native",
     authority: capPlan.authority,
+    kind: "direct",
     principal: { ...capPlan.authority, scopes: ["autograph:send"] },
     sessionId: capPlan.selection.sessionId,
-    adapterSessionId: "source-native",
-    adapterGeneration: 1,
   });
   const input: RetainedIntegrationReadScope = {
     owner: { ...sourceOwner, sessionId: "revision-session", adapterSessionId: "revision-native" },
