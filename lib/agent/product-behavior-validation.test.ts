@@ -964,6 +964,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     reason: "command-failed",
     status: "failed",
   };
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
   const dependencySandbox = (exitCode = 0) => ({
     id: "retained-sandbox",
     setNetworkPolicy: vi.fn().mockResolvedValue(null),
@@ -1039,6 +1040,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       validationFailure: missingDependencyFailure,
     };
     const failed = dependencySandbox(1);
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
     const context = (sandbox: ReturnType<typeof dependencySandbox>) =>
       ({
         callId: "retry_dependencies",

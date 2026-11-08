@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import { cursorClientId, cursorRedirectUri, setupCursorClient } from "../../lib/auth/cursor-client";
 import { previewOAuthScopes } from "../../lib/auth/preview-oauth-contract";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Pass the complete database schema to Drizzle.
 import * as schema from "../../lib/db/schema";
 import {
   appOrigin,

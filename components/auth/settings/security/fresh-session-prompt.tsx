@@ -80,6 +80,7 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
         ) : (
           <Button
             onClick={() =>
+              // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
               auth.navigate({
                 to: `${auth.basePaths.auth}/${auth.viewPaths.auth.signIn}`,
               })

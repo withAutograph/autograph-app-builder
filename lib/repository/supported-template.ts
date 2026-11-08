@@ -861,6 +861,7 @@ const developmentWorkingTreeArchive = async function developmentWorkingTreeArchi
   paths: readonly string[],
 ): Promise<void> {
   const archiveProcess = spawn(
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided tar executable.
     "tar",
     ["--create", "--gzip", "--file=-", "--null", "--files-from=-"],
     {
@@ -1393,6 +1394,7 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
   }
 
   const treeProcess = spawn(
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
     "git",
     ["-C", eligibility.sourcePath, "ls-tree", "-rz", "--full-tree", expectedSha],
     { stdio: ["ignore", "pipe", "ignore"] },
@@ -1474,6 +1476,7 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
     }
   } else {
     const archiveProcess = spawn(
+      // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
       "git",
       ["-C", eligibility.sourcePath, "archive", "--format=tar.gz", expectedSha],
       { stdio: ["ignore", "pipe", "inherit"] },

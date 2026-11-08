@@ -272,6 +272,7 @@ export function useBuilderController({
         };
       }
     },
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- The action state explicitly starts without a result.
     undefined,
   );
   const serverSaveWaiters = useRef(

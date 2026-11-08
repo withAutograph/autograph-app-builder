@@ -36,7 +36,9 @@ export function RenamePasskeyDialog({
   const [name, setName] = useState(passkey.name ?? "");
 
   const updatePasskey = useUpdatePasskey(authClient, {
-    onSuccess: () => onOpenChange(false),
+    onSuccess: () =>
+      // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+      onOpenChange(false),
   });
   const submit = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -59,7 +61,10 @@ export function RenamePasskeyDialog({
               id={`passkey-name-${passkey.id}`}
               autoFocus
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) =>
+                // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+                setName(event.target.value)
+              }
               required
             />
           </Field>

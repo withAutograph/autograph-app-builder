@@ -230,14 +230,20 @@ export function StoreInSection({
                         autoComplete="off"
                         spellCheck={false}
                         value={repository}
-                        onChange={(event) => onRepositoryChange(event.target.value)}
+                        onChange={(event) =>
+                          // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+                          onRepositoryChange(event.target.value)
+                        }
                         placeholder="my-app"
                       />
                       <label className={styles.privacyToggle} aria-label="Private repository">
                         <input
                           type="checkbox"
                           checked={privateRepository}
-                          onChange={(event) => onPrivacyChange(event.target.checked)}
+                          onChange={(event) =>
+                            // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+                            onPrivacyChange(event.target.checked)
+                          }
                         />
                         <span>
                           <i>

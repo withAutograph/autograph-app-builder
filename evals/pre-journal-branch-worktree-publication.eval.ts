@@ -7,6 +7,7 @@ import { prepareReviewedWorkflow } from "./support/reviewed-workflow";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
 const git = (root: string, args: string[]) =>
+  // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
   execFileSync("git", args, { cwd: root, encoding: "utf-8" });
 
 export default defineEval({

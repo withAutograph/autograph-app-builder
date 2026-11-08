@@ -100,12 +100,25 @@ export function ConnectionsSection({
           name="connection-search"
           autoComplete="off"
           value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
-          onKeyDown={(event) => event.key === "Escape" && onSearchChange("")}
+          onChange={(event) =>
+            // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+            onSearchChange(event.target.value)
+          }
+          onKeyDown={(event) =>
+            event.key === "Escape" &&
+            // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+            onSearchChange("")
+          }
           placeholder="Search connections…"
         />
         {search ? (
-          <button type="button" onClick={() => onSearchChange("")}>
+          <button
+            type="button"
+            onClick={() =>
+              // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+              onSearchChange("")
+            }
+          >
             Esc
           </button>
         ) : null}
@@ -125,7 +138,10 @@ export function ConnectionsSection({
               key={name}
               aria-label={comingSoon ? `${name} coming soon` : `Add ${name}`}
               disabled={comingSoon}
-              onClick={() => onAdd(name)}
+              onClick={() =>
+                // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+                onAdd(name)
+              }
             >
               <ConnectionIcon kind={connectionKind.get(name)} name={name} />
               {name}
@@ -150,10 +166,23 @@ export function ConnectionsSection({
                 <strong>{name}</strong>
                 <p>{connectionDescription(name)}</p>
               </div>
-              <button type="button" onClick={() => onCustomize(name)}>
+              <button
+                type="button"
+                onClick={() =>
+                  // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+                  onCustomize(name)
+                }
+              >
                 {connectedNames.has(name) ? "Customize" : "Connect"}
               </button>
-              <button type="button" aria-label={`Remove ${name}`} onClick={() => onRemove(name)}>
+              <button
+                type="button"
+                aria-label={`Remove ${name}`}
+                onClick={() =>
+                  // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+                  onRemove(name)
+                }
+              >
                 <X size={17} />
               </button>
             </article>
@@ -346,7 +375,10 @@ export function ConnectionDrawer({
                 <button
                   type="button"
                   disabled={!connectionName.trim()}
-                  onClick={() => onStageChange("customize")}
+                  onClick={() =>
+                    // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+                    onStageChange("customize")
+                  }
                 >
                   Continue
                 </button>

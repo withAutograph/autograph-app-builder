@@ -278,6 +278,7 @@ describe("builder handoff deployment", () => {
     const pageData = vi.fn();
     const status = createBuilderHandoffStatusRouteHandler({ pageData });
     const get = new Request(`${origin}/api/builder/handoffs/${handoffId}`);
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Model an unauthenticated lookup returning undefined.
     pageData.mockResolvedValue(undefined);
     const unauthenticated = await status(get, handoffId);
     expect(unauthenticated.status).toBe(401);

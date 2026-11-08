@@ -30,6 +30,7 @@ export const createPublicReleaseDispatcher =
     }) => Promise<PublicReleasePorts>;
   }) =>
   async (request: Request): Promise<Response> => {
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep the helper scoped to its invocation and preserve its identity.
     // oxlint-disable-next-line anti-slop/no-object-parameters -- The HTTP JSON boundary serializes only closed parsed plan/results or bounded codes.
     const response = (value: object, status = 200) =>
       Response.json(value, {

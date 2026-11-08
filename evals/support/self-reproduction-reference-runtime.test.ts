@@ -21,8 +21,10 @@ it("copies live tracked changes without credentials or ignored runtime files", a
   const root = await mkdtemp(path.join(tmpdir(), "reference-snapshot-test-"));
   const fixture = `${root}-fixture`;
   try {
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["init", "--quiet", root]);
     await writeFile(path.join(root, "app.ts"), "original");
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["add", "app.ts"], { cwd: root });
     await writeFile(path.join(root, "app.ts"), "live edit");
     await writeFile(path.join(root, ".env.local"), "synthetic-private-value");

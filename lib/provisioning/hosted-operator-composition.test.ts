@@ -1160,6 +1160,7 @@ const participantResolutionFixture = (captureOnly = false) => {
   return { ...f, accountPlan, base, organizations, ports, preparation, program, state };
 };
 
+// oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
 const unusedCompositionControlPlane = (): Parameters<
   typeof composeHostedOperatorDependencies
 >[1] => {

@@ -20,7 +20,8 @@ const repositoryRoot = pathModule.resolve(import.meta.dirname, "..");
 const launcher = pathModule.resolve(repositoryRoot, ".config/mise/scripts/trusted-node-launcher");
 const pinnedNode = process.execPath.includes("/mise/installs/")
   ? process.execPath
-  : spawnSync("mise", ["which", "node"], {
+  : // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided mise executable.
+    spawnSync("mise", ["which", "node"], {
       cwd: repositoryRoot,
       encoding: "utf-8",
     }).stdout.trim();

@@ -211,7 +211,7 @@ const harness = (
     },
     row: () => row,
     compareAndSet: async (before: RepositoryProductionRow, record: RepositoryProductionRecord) => {
-      if (before.revision !== row.revision) return undefined;
+      if (before.revision !== row.revision) return;
       row = { ...row, revision: row.revision + 1, record: structuredClone(record) };
       return structuredClone(row);
     },
@@ -415,11 +415,12 @@ describe("Production creator continuation", () => {
         },
         update: async (before, record) => {
           const id = record.command.clientRequestId;
-          if (rows.get(id)?.revision !== before.revision) return undefined;
+          if (rows.get(id)?.revision !== before.revision) return;
           const saved = { record, revision: before.revision + 1 };
           rows.set(id, saved);
           return saved;
         },
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- Model an invitation lookup with no result.
         findInvitation: async () => undefined,
       },
       execute: async (_scope, command, effect) => {
@@ -433,6 +434,7 @@ describe("Production creator continuation", () => {
         return "applied";
       },
       reconcile: async () => "absent",
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Model a verified invitation lookup with no result.
       readVerifiedInvitation: async () => undefined,
       enrollInvitee: async () => {
         throw new Error("must not grant");

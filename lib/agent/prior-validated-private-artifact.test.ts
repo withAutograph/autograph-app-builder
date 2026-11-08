@@ -37,6 +37,7 @@ const sourceFile = {
   path: "apps/example/app/page.tsx",
 };
 
+// oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
 const seed = (
   approval: "denied" | "pending" | "not-requested" = "denied",
   files: readonly OverlayFile[] = [sourceFile],

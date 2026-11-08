@@ -69,6 +69,7 @@ export function ErrorToaster() {
       ) {
         return;
       }
+      // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- Use the fallback when the nested error message is empty.
       toast.error(err.error?.message || err.message);
     };
 

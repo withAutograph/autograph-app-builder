@@ -179,6 +179,7 @@ describe("normal private compute recipe projection", () => {
       }
       Reflect.deleteProperty(current.proposal.target, "privateCompute");
       appBuilderWorkflowState.update(() => current);
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Model an absent provider profile.
       ports.profile.mockResolvedValue(undefined);
       const result = await prepareAppCreation({}, context);
       expect(result.reused).toBe(true);

@@ -180,7 +180,10 @@ const DateInput = function DateInput({ name, field, isPending }: AdditionalField
             id={`${name}-date`}
             data-empty={!date}
             aria-invalid={error !== undefined && error !== null && error !== ""}
-            disabled={isPending || field.readOnly}
+            disabled={
+              // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- A non-pending field can still be read-only.
+              isPending || field.readOnly
+            }
             className={cn(
               buttonVariants({ variant: "outline" }),
               "flex-1 justify-between font-normal",
@@ -225,7 +228,10 @@ const DateInput = function DateInput({ name, field, isPending }: AdditionalField
               onChange={(e) => {
                 setTime(e.target.value);
               }}
-              disabled={isPending || field.readOnly}
+              disabled={
+                // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- A non-pending field can still be read-only.
+                isPending || field.readOnly
+              }
               className="appearance-none bg-background [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
             />
           </Field>
@@ -279,7 +285,10 @@ const SliderField = function SliderField({ name, field, isPending }: AdditionalF
         min={min}
         max={max}
         step={step}
-        disabled={isPending || field.readOnly}
+        disabled={
+          // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- A non-pending field can still be read-only.
+          isPending || field.readOnly
+        }
       />
 
       <FieldError />
@@ -482,7 +491,10 @@ export const AdditionalField = function AdditionalField({
           id={name}
           name={name}
           defaultChecked={field.defaultValue === true || field.defaultValue === "true"}
-          disabled={isPending || field.readOnly}
+          disabled={
+            // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- A non-pending field can still be read-only.
+            isPending || field.readOnly
+          }
         />
 
         <FieldContent>
@@ -500,7 +512,10 @@ export const AdditionalField = function AdditionalField({
           name={name}
           defaultChecked={field.defaultValue === true || field.defaultValue === "true"}
           required={field.required}
-          disabled={isPending || field.readOnly}
+          disabled={
+            // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- A non-pending field can still be read-only.
+            isPending || field.readOnly
+          }
         />
 
         <FieldContent>
@@ -523,7 +538,10 @@ export const AdditionalField = function AdditionalField({
               : String(field.defaultValue)
           }
           required={field.required}
-          disabled={isPending || field.readOnly}
+          disabled={
+            // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- A non-pending field can still be read-only.
+            isPending || field.readOnly
+          }
         >
           <SelectTrigger id={name} className="w-full">
             <SelectValue placeholder={field.placeholder} />
@@ -557,7 +575,10 @@ export const AdditionalField = function AdditionalField({
               : String(field.defaultValue)
           }
           required={field.required}
-          disabled={isPending || field.readOnly}
+          disabled={
+            // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- A non-pending field can still be read-only.
+            isPending || field.readOnly
+          }
         >
           <ComboboxInput placeholder={field.placeholder} id={name} />
 

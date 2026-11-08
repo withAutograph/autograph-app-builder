@@ -174,6 +174,7 @@ const main = async () => {
   const evePort = await availableDistinctLoopbackPort(nextPort, configuredEvePort);
   const url = `http://127.0.0.1:${evePort}`;
   const development = spawn(
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided mise executable.
     "mise",
     [
       "run",

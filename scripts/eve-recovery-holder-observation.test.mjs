@@ -19,6 +19,7 @@ const { sessionCommandHookToken, sessionInboxHookToken } = await import(
 );
 
 let sequence = 0;
+// oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
 const fixture = () => {
   sequence += 1;
   const id = sequence;

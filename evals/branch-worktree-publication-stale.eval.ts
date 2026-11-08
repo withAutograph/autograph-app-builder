@@ -12,6 +12,7 @@ export default defineEval({
   async test(t) {
     const repository = createSupportedRepositoryFixture();
     const session = await prepareReviewedWorkflow(t, repository, "branch-publication-stale");
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     const head = execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: repository,
       encoding: "utf-8",
@@ -24,6 +25,7 @@ export default defineEval({
     t.succeeded();
     t.check(turn1.message, includes("rejected without creating a branch or worktree"));
     if (
+      // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
       execFileSync("git", ["rev-parse", "HEAD"], {
         cwd: repository,
         encoding: "utf-8",
@@ -32,6 +34,7 @@ export default defineEval({
       throw new Error("A stale approval changed the source HEAD.");
     }
     if (
+      // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
       execFileSync("git", ["branch", "--list", "app-builder/*"], {
         cwd: repository,
         encoding: "utf-8",

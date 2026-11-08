@@ -27,6 +27,7 @@ afterEach(() => {
     rmSync(root, { force: true, recursive: true });
   }
 });
+// oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
 const fixture = (existing?: "main" | "provider-default" | "historical-main") => {
   const root = mkdtempSync(path.join(tmpdir(), "builder-canonical-ref-"));
   roots.push(root);

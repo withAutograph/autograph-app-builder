@@ -227,7 +227,9 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
   const [notice, setNotice] = useState("");
   const [launchNotice, setLaunchNotice] = useState("");
   const [copyNotice, setCopyNotice] = useState("");
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- React requires an initial value for this optional request ref.
   const renewalRequest = useRef<{ handoffId: string; id: string } | undefined>(undefined);
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- React requires an initial value for this optional reconciliation ref.
   const reconciledRenewal = useRef<HandoffRenewalActionState | undefined>(undefined);
   const runRenewalAction = useCallback(
     async (
@@ -243,6 +245,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     },
     [],
   );
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- The renewal action explicitly starts without a result.
   const [renewal, dispatchRenewal, renewalPending] = useActionState(runRenewalAction, undefined);
   const subscribeHandoff = useCallback(
     (listener: () => void) => {

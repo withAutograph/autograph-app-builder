@@ -50,6 +50,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
     try {
       const resized = (await avatar.resize?.(file, avatar.size, avatar.extension)) || file;
 
+      // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty upload result falls back to the local avatar data.
       const image = (await avatar.upload?.(resized)) || (await fileToAvatarDataUrl(resized));
 
       updateUser(

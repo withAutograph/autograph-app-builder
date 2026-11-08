@@ -5,15 +5,10 @@ import jsPlugins, { jsPluginSettings } from "ultracite/oxlint/js-plugins";
 import next from "ultracite/oxlint/next";
 import nextJsPlugins from "ultracite/oxlint/next/js-plugins";
 
-const previewActivationCli = "lib/db/preview-activation-cli.mts";
-
 const productionCreatorTestPath = "lib/provisioning/repository-production-creator.test.ts";
 
 const handoffControlsPath = "app/ui/handoff-controls.tsx";
 
-const handoffProgressPath = "app/ui/handoff-provisioning-progress.tsx";
-const builderControllerPath = "app/ui/use-builder-controller.ts";
-const draftAutosavePath = "app/ui/use-builder-draft-autosave.ts";
 const productionSetupTestPath = "lib/provisioning/repository-production-setup.test.ts";
 
 const referenceLifecyclePath = "evals/support/self-reproduction-reference-lifecycle.ts";
@@ -25,7 +20,6 @@ const additionalAuthFieldPath = "components/auth/additional-field.tsx";
 
 const sharedLintFile1 = "evals/support/self-reproduction-reference-runtime.ts";
 const sharedLintFile2 = "lib/repository/supported-template.ts";
-const sharedLintFile3 = "scripts/self-reproduction-live.mts";
 const sharedLintFile4 = "scripts/test-capability-preload.mjs";
 
 const sharedLintFile5 = "app/ui/builder-connections.tsx";
@@ -47,7 +41,6 @@ const sharedLintFile19 = "lib/image/lifecycle.test.ts";
 const sharedLintFile20 = "lib/repository/dependency-cache.test.ts";
 const sharedLintFile21 = "lib/repository/node-branch-worktree-publication.ts";
 
-const sharedLintFile22 = "components/auth/oauth-provider/oauth-consent.tsx";
 const sharedLintFile23 = "e2e/auth/client-oauth-handoff.spec.ts";
 const sharedLintFile24 = "lib/agent/deployment-repository-access-runtime.test.ts";
 const sharedLintFile25 = "lib/auth/preview-oauth-deployment.ts";
@@ -323,45 +316,6 @@ export default defineConfig({
       rules: { "typescript/no-unsafe-argument": "off" },
     },
     {
-      // Existing calls awaiting a focused contract review.
-      files: [
-        "evals/branch-worktree-publication-negative.eval.ts",
-        "evals/branch-worktree-publication-stale.eval.ts",
-        "evals/branch-worktree-publication.eval.ts",
-        "evals/pre-journal-branch-worktree-publication.eval.ts",
-        "evals/support/self-reproduction-reference-runtime.test.ts",
-        sharedLintFile1,
-        "evals/support/supported-repository.ts",
-        sharedLintFile19,
-        nodeLocalPublicationPath,
-        "lib/repository/supported-template-development.test.ts",
-        sharedLintFile2,
-        "scripts/eval-design.mts",
-        sharedLintFile13,
-        sharedLintFile3,
-        "scripts/self-reproduction-public.mts",
-        sharedLintFile32,
-      ],
-      rules: { "sonarjs/no-os-command-from-path": "off" },
-    },
-    {
-      // Preserve existing falsy-value fallback behavior.
-      files: [
-        additionalAuthFieldPath,
-        sharedLintFile6,
-        sharedLintFile22,
-        "components/auth/passkey/delete-passkey-dialog.tsx",
-        "components/auth/passkey/passkey.tsx",
-        "components/auth/settings/account/change-avatar.tsx",
-        "components/auth/user/user-avatar.tsx",
-        "components/auth/user/user-view.tsx",
-        "lib/integrations/store-in-view-model.ts",
-        "lib/mcp/session-app/view.tsx",
-        sharedLintFile12,
-      ],
-      rules: { "typescript/prefer-nullish-coalescing": "off" },
-    },
-    {
       // Preserve existing sequential operation ordering.
       files: [
         "components/auth/settings/account/user-profile.tsx",
@@ -421,68 +375,6 @@ export default defineConfig({
         "evals/product-quality/product-quality.visual.playwright.ts",
       ],
       rules: { "github/filenames-match-regex": "off" },
-    },
-    {
-      // Preserve existing callback return contracts pending review.
-      files: [
-        sharedLintFile5,
-        "app/ui/builder-destination.tsx",
-        "app/ui/builder-model-controls.tsx",
-        "app/ui/builder-provider-controls.tsx",
-        "components/auth/passkey/delete-passkey-dialog.tsx",
-        "components/auth/passkey/rename-passkey-dialog.tsx",
-        "components/auth/provider-button.tsx",
-        "components/auth/settings/security/fresh-session-prompt.tsx",
-        "components/create-app/provider-choice-section.tsx",
-        "lib/mcp/session-app/approval-request.tsx",
-        "lib/mcp/session-app/view.tsx",
-      ],
-      rules: { "typescript/no-confusing-void-expression": "off" },
-    },
-    {
-      // Existing findings awaiting behavior-preserving contract changes.
-      files: [
-        "lib/agent/prior-validated-private-artifact.test.ts",
-        "lib/agent/product-behavior-validation.test.ts",
-        "lib/eve/private-hosted-approval.test.ts",
-        "lib/eve/test-support/draft-reviewed-recovery.ts",
-        "lib/provisioning/builder-session-destination.test.ts",
-        "lib/provisioning/hosted-operator-composition.test.ts",
-        "lib/provisioning/hosted-operator-deployment.ts",
-        "lib/provisioning/hosted-operator-export.test.ts",
-        "lib/provisioning/hosted-operator-participant-successor.test.ts",
-        "lib/provisioning/hosted-operator-unapproved-actor-journal.test.ts",
-        "lib/provisioning/public-release-dispatcher.ts",
-        productionSetupTestPath,
-        "lib/repository/canonical-acquisition-alignment.test.ts",
-        "lib/repository/local-planning-source.test.ts",
-        "lib/repository/local-preview-auth-origin.test.ts",
-        "scripts/eve-recovery-holder-observation.test.mjs",
-      ],
-      rules: { "unicorn/consistent-function-scoping": "off" },
-    },
-    {
-      // Existing explicit undefined values awaiting contract review.
-      files: [
-        "app/actions/builder.test.ts",
-        "app/ui/app-builder.test.tsx",
-        "app/ui/builder-draft-outbox.ts",
-        handoffControlsPath,
-        handoffProgressPath,
-        builderControllerPath,
-        "components/auth/passkey/add-passkey-dialog.tsx",
-        sharedLintFile24,
-        "lib/agent/hosted-github-publication-runtime.test.ts",
-        "lib/agent/prepare-app-creation-projection.test.ts",
-        "lib/agent/review-applied-product-source.test.ts",
-        "lib/db/migrate-execution.test.ts",
-        previewActivationCli,
-        "lib/handoff/deployment.test.ts",
-        "lib/handoff/page-data.test.ts",
-        "lib/provisioning/hosted-operator-ready-delivery-replacement.test.ts",
-        productionCreatorTestPath,
-      ],
-      rules: { "unicorn/no-useless-undefined": "off" },
     },
     {
       // These files are owned by concurrent work and retain their existing findings.
@@ -552,23 +444,6 @@ export default defineConfig({
         "lib/repository/planning-overlay.test.ts",
       ],
       rules: { "eslint/require-await": "off" },
-    },
-    {
-      // Retain module namespaces required by flags, live spies, adapters and database schemas.
-      files: [
-        ".config/mise/scripts/repository/test-postgres-sandbox-leases.mts",
-        "app/.well-known/vercel/flags/route.ts",
-        "app/ui/app-builder.test.tsx",
-        sharedLintFile23,
-        "e2e/builder/builder-draft-store.spec.ts",
-        "e2e/builder/builder-handoff.spec.ts",
-        referenceLifecyclePath,
-        "lib/auth/cursor-client-setup.mts",
-        sharedLintFile25,
-        previewActivationCli,
-        "lib/integrations/preview-emulate-handler.ts",
-      ],
-      rules: { "sonarjs/no-wildcard-import": "off" },
     },
     {
       // Temporary migration baseline for existing test findings.

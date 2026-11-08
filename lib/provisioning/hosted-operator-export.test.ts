@@ -458,6 +458,7 @@ describe("existing operator transport export dispatch", () => {
       principal: { ...authority, scopes: ["autograph:send"] },
       sessionId: context.target.sessionId,
     };
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
     const unavailable = async () => {
       throw new Error("Preparation must not execute during export");
     };
@@ -575,6 +576,7 @@ describe("existing operator transport export dispatch", () => {
       const authorizeRead = vi.fn(
         async (_request: Request, selected: HostedOperatorContext) => selected,
       );
+      // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
       const unavailable = async () => {
         throw new Error("No preparation or SQL may execute");
       };

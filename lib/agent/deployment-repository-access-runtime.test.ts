@@ -139,6 +139,7 @@ function installationStore(
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     list: vi.fn(async () => bindings),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Model an installation lookup with no record.
     read: vi.fn<HostedGitHubInstallationStore["read"]>().mockResolvedValue(undefined),
   };
 }

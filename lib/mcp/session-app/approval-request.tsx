@@ -93,7 +93,10 @@ export function ApprovalRequest({
             type="button"
             className="approval-request__secondary"
             disabled={isSubmitting}
-            onClick={() => onAnswer({ kind: "deny" })}
+            onClick={() =>
+              // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+              onAnswer({ kind: "deny" })
+            }
           >
             {secondaryLabel}
           </button>
@@ -105,7 +108,10 @@ export function ApprovalRequest({
           disabled={isSubmitting}
           aria-busy={isSubmitting}
           aria-live="polite"
-          onClick={() => onAnswer({ kind: "approve" })}
+          onClick={() =>
+            // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+            onAnswer({ kind: "approve" })
+          }
         >
           {isSubmitting ? "Submitting…" : primaryLabel}
         </button>

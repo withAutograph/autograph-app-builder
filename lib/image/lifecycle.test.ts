@@ -1351,16 +1351,22 @@ wait
     const source = nodePath.join(root, "source");
     const destination = nodePath.join(root, "sanitized");
     mkdirSync(source, { mode: 0o700 });
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["init", "--quiet", source]);
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["-C", source, "config", "user.name", "Fixture"]);
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["-C", source, "config", "user.email", "fixture@example.com"]);
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["-C", source, "config", "credential.helper", "super-secret-helper"]);
     writeFileSync(nodePath.join(source, "tracked.txt"), "tracked bytes\n");
     mkdirSync(nodePath.join(source, "nested", "deeper"), { recursive: true });
     writeFileSync(nodePath.join(source, "nested", "deeper", "payload.txt"), "nested bytes\n");
     writeFileSync(nodePath.join(source, "nested", "run.sh"), "#!/bin/sh\nexit 0\n");
     chmodSync(nodePath.join(source, "nested", "run.sh"), 0o755);
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["-C", source, "add", "tracked.txt", "nested"]);
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", [
       "-C",
       source,
@@ -1371,9 +1377,11 @@ wait
       "-m",
       "fixture",
     ]);
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     const commit = execFileSync("git", ["-C", source, "rev-parse", "HEAD"], {
       encoding: "utf-8",
     }).trim();
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     const tree = execFileSync("git", ["-C", source, "rev-parse", "HEAD^{tree}"], {
       encoding: "utf-8",
     }).trim();
@@ -1381,6 +1389,7 @@ wait
     const orderedPaths = ["nested/deeper/payload.txt", "nested/run.sh", "tracked.txt"] as const;
     const modes = ["100644", "100755", "100644"] as const;
     const expectedRecords = orderedPaths.map((path, index) => {
+      // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
       const objectId = execFileSync("git", ["-C", source, "hash-object", "--", path], {
         encoding: "utf-8",
       }).trim();

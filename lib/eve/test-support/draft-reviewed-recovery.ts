@@ -337,6 +337,7 @@ const installation = (operation: "resolve-existing-source" | "publish-draft-pull
   });
 
 /** Construct real provider-bound owned-publication receipts against a controlled provider. */
+// oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep the helper scoped to its invocation and preserve its identity.
 export const freshFixture = async () => {
   const f = fixture();
   const sourceEvidence = {

@@ -102,6 +102,7 @@ function dependencies(input?: {
       publicationStores,
       readPreparedHandoff: vi
         .fn<HostedGitHubPublicationRuntimeResolverDependencies["readPreparedHandoff"]>()
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- Model a missing prepared handoff.
         .mockResolvedValue(undefined),
     },
     installationStore,

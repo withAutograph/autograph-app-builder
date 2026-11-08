@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Pass the complete database schema to Drizzle.
 import * as schema from "../../lib/db/schema";
 import { hostedEveOperationScopes } from "../../lib/eve/hosted-auth";
 import type { HostedPrincipal } from "../../lib/eve/hosted-auth";

@@ -79,6 +79,7 @@ describe("unapproved app capture continuity", () => {
       config: keyring,
       state: original,
     });
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
     const now = () => Date.parse("2026-10-20T12:00:00Z");
     const candidate = requiredFixture(
       inspectUnapprovedAppSuccessor(record, context.target, added, now()),

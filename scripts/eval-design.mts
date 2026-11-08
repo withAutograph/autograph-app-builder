@@ -204,6 +204,7 @@ async function main() {
   );
   let referenceCommit: string | null = null;
   try {
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
     referenceCommit = execFileSync("git", ["-C", referenceRoot, "rev-parse", "HEAD"], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"],

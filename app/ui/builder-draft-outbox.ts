@@ -67,6 +67,7 @@ function transactionResult(transaction: IDBTransaction): Promise<undefined> {
   transaction.addEventListener(
     "complete",
     () => {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Resolve the typed promise with its explicit undefined value.
       resolve(undefined);
     },
     { once: true },

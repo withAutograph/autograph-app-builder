@@ -10,7 +10,9 @@ import { appNameFromBrief, repositoryNameFromAppName } from "./builder-defaults"
 import { AnonymousBuilder } from "./anonymous-builder";
 import { AuthenticatedBuilder as AppBuilderComponent } from "./authenticated-builder";
 import { Header } from "./builder-shell";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on the live module export in this test.
 import * as draftOutbox from "./builder-draft-outbox";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on the live module export in this test.
 import * as draftAutosave from "./use-builder-draft-autosave";
 import styles from "./app-builder.module.css";
 import type { BuilderDraftPageData } from "../../lib/builder-drafts/contracts";
@@ -1081,6 +1083,7 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Resolve the typed delayed read with its missing value.
       delayedRead.resolve(undefined);
     });
     expect(requireElement(view.querySelector<HTMLInputElement>("#app-name")).value).toBe(

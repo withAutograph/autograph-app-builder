@@ -36,6 +36,7 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
     useAuthPlugin(passkeyPlugin);
 
   const addPasskey = useAddPasskey(authClient);
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- React requires an initial value for this optional ref.
   const pendingRequest = useRef<AddPasskeyParams<PasskeyAuthClient>>(undefined);
 
   const handleOpenChange = (nextOpen: boolean) => {

@@ -92,6 +92,7 @@ describe("owner-only handoff browser data", () => {
       user: { id: authority.ownerUserId },
     });
     mocks.cursorReady.mockReset().mockResolvedValue(false);
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Model an absent pending handoff with an undefined result.
     mocks.findLatestPending.mockReset().mockResolvedValue(undefined);
     mocks.read.mockReset().mockImplementation(
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -127,6 +128,7 @@ describe("owner-only handoff browser data", () => {
   });
 
   it("returns undefined without login before reading any handoff or checking Cursor readiness", async () => {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Exercise the missing-session input.
     mocks.session.mockResolvedValue(undefined);
     expect(await getBuilderHandoffPageData(pageInput)).toBeUndefined();
     expect(mocks.read).not.toHaveBeenCalled();
@@ -151,6 +153,7 @@ describe("owner-only handoff browser data", () => {
   });
 
   it("does not expose pending handoffs without an authenticated authority", async () => {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Exercise missing authentication for pending handoffs.
     mocks.session.mockResolvedValue(undefined);
     await expect(
       findAuthenticatedPendingBuilderHandoff({

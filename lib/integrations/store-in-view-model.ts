@@ -64,6 +64,7 @@ export interface GitHubStoreInViewModel {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function githubConnectionPrompt(repository?: string) {
+  // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty repository name uses the generic prompt.
   return `Connect GitHub so Autograph can access ${repository || "the repository for this app"}. GitHub will ask you to approve access if needed.`;
 }
 
@@ -76,6 +77,7 @@ export function githubStoreInViewModel(input: {
   const scopes = [...(input.scopes ?? [])];
   const actionLabel =
     input.action === "connect" ? ("Connect GitHub" as const) : ("Update GitHub access" as const);
+  // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- Treat an empty trimmed repository name as absent.
   const desiredRepository = input.desiredRepository?.trim() || undefined;
   let scopeSummary = "No GitHub account connected yet";
   if (scopes.length === 1) {

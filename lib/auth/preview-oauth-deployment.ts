@@ -1,5 +1,6 @@
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Pass the complete database schema to the auth adapter.
 import * as databaseSchema from "../db/schema";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { createPreviewOAuthServer, readPreviewOAuthRuntimeConfig } from "./preview-oauth-runtime";

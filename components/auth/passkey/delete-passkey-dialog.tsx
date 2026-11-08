@@ -38,11 +38,14 @@ export function DeletePasskeyDialog({ open, onOpenChange, passkey }: DeletePassk
   const { authClient, localization } = useAuth<PasskeyAuthClient>();
   const { localization: passkeyLocalization } = useAuthPlugin(passkeyPlugin);
 
+  // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty passkey name uses the localized fallback.
   const passkeyName = passkey.name || passkeyLocalization.passkey;
   const previewId = `delete-passkey-preview-${passkey.id}`;
 
   const { mutate: deletePasskey, isPending: isDeleting } = useDeletePasskey(authClient, {
-    onSuccess: () => onOpenChange(false),
+    onSuccess: () =>
+      // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+      onOpenChange(false),
   });
 
   return (
@@ -61,7 +64,12 @@ export function DeletePasskeyDialog({ open, onOpenChange, passkey }: DeletePassk
         </AlertDialogHeader>
 
         <Field>
-          <FieldLabel htmlFor={previewId}>{passkey.name || passkeyLocalization.passkey}</FieldLabel>
+          <FieldLabel htmlFor={previewId}>
+            {
+              // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty passkey name uses the localized fallback.
+              passkey.name || passkeyLocalization.passkey
+            }
+          </FieldLabel>
 
           <Input id={previewId} value={passkeyName} readOnly disabled />
         </Field>

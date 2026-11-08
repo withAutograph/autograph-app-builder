@@ -56,6 +56,7 @@ export function HandoffProvisioningProgress({
         return { status: "error" };
       }
     },
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- The action state explicitly starts without a result.
     undefined,
   );
 

@@ -743,6 +743,7 @@ export const createHostedOperatorControlPlane = async (input: {
 
   const controlPlaneClient = postgres(config.databaseUrl, hostedRuntimePostgresOptions);
   const database = drizzle(controlPlaneClient, { schema: databaseSchema });
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep the helper scoped to its invocation and preserve its identity.
   const compose = () => {
     const eve = createPostgresHostedEveStore(database);
     const handoffs = createPostgresBuilderHandoffStore(database);

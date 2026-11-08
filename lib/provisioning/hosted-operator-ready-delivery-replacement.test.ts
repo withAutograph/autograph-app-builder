@@ -622,7 +622,8 @@ describe("native externally managed policy recovery integration", () => {
       const { operator } = record;
       operator.plan =
         state === "legacy"
-          ? withExternallyManagedHostProtection(f.proposed, undefined)
+          ? // oxlint-disable-next-line unicorn/no-useless-undefined -- Exercise the legacy host-protection case with no explicit value.
+            withExternallyManagedHostProtection(f.proposed, undefined)
           : f.proposed;
       if (state === "legacy") {
         const { hostProtection, appDeliveryReplacement, ...legacy } = operator.plan;

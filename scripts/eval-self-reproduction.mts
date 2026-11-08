@@ -388,6 +388,7 @@ const readCandidateSource = async (
 };
 
 const trackedWorkspaceArchive = async (directory: string): Promise<Buffer> => {
+  // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
   const tracked = execFileSync("git", ["ls-files", "-z"], {
     cwd: directory,
     encoding: "utf-8",
@@ -445,11 +446,13 @@ const revision = (directory: string | undefined) => {
   }
   try {
     return {
+      // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
       changes: execFileSync("git", ["status", "--porcelain"], {
         cwd: directory,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "pipe"],
       }).trim(),
+      // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
       commit: execFileSync("git", ["rev-parse", "HEAD"], {
         cwd: directory,
         encoding: "utf-8",

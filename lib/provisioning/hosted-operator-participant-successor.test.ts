@@ -144,6 +144,7 @@ const requireFixture = <T>(value: T | undefined): T => {
   return value;
 };
 
+// oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
 const fixture = async (
   opaqueOrganization?: string,
   timing?: { accountExpiresAt: string; appExpiresAt: string; beforeProposal?: () => void },
@@ -889,6 +890,7 @@ describe("approved additive capture participant state", () => {
     f.row.record.leaseExpiresAt = "2030-01-01T00:00:00.000Z";
     requireFixture(f.row.record.operator).fenceGeneration = 2;
     requireFixture(f.row.record.operator).pendingEffectId = "normal-accounts";
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
     const unused = async (): Promise<never> => {
       throw new Error("unexpected resource worker effect");
     };

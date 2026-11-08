@@ -25,6 +25,7 @@ import {
 } from "./local-planning-git-base";
 import { planningSourceReconciliationProgram } from "./planning-source-reconciliation";
 
+// oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
 const fixture = () => {
   const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "owned-local-source-")));
   const source = path.join(directory, "source");
@@ -450,6 +451,7 @@ describe("retained dirty planning baseline", () => {
       }
       return resolved;
     };
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
     const unavailable = () =>
       Promise.reject(new Error("Unexpected process/stream operation in source-only fixture"));
     const sandbox: SandboxSession & { id: string } = {

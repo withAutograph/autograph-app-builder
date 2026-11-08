@@ -540,6 +540,7 @@ export async function measureStyles(
       const declared = /\/[*]#\s*sourceMappingURL=(?<url>[^\s*]+)\s*[*]\//u.exec(css)?.[1];
       // CDP may report optional URLs as empty strings. In that case the
       // stylesheet's sourceMappingURL comment is the only usable evidence.
+      // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty header falls back to the CSS source map reference.
       const url = header?.sourceMapURL || declared;
       let text: string | undefined;
       if (url?.startsWith("data:application/json") === true) {
@@ -556,6 +557,7 @@ export async function measureStyles(
         }
       } else if (url) {
         try {
+          // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty stylesheet URL falls back to the page URL.
           const target = new URL(url, header?.sourceURL || page.url());
           // Source maps are diagnostic evidence, never a reason to contact an
           // unrelated origin from a preview capture.

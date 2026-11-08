@@ -37,6 +37,7 @@ export const snapshotReferenceSource = async (
 ): Promise<void> => {
   assertExternalReferenceRoot(sourceRoot, fixtureRoot);
   const filesDeferred = Promise.withResolvers<string[]>();
+  // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
   const child = spawn("git", ["ls-files", "-z"], { cwd: sourceRoot });
   {
     const chunks: Buffer[] = [];

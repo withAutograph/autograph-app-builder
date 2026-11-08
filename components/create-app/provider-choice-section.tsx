@@ -59,7 +59,10 @@ export function ProviderChoiceSection<Provider extends string>({
               value={option.provider}
               badge={option.available ? undefined : "Coming soon"}
               icon={<Icon size={18} aria-hidden="true" />}
-              onChange={() => onChange(option.provider)}
+              onChange={() =>
+                // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+                onChange(option.provider)
+              }
             >
               {option.name}
             </ChoiceCard>

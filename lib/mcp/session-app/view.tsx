@@ -104,6 +104,7 @@ export function InputControl({
                 ) : undefined
               }
               onChange={() =>
+                // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
                 onAnswer({
                   kind: "answer",
                   optionId: option.id,
@@ -125,7 +126,10 @@ export function InputControl({
         aria-label={request.title}
         value={answer?.kind === "answer" ? answer.value : ""}
         placeholder="Enter your answer…"
-        onChange={(event) => onAnswer({ kind: "answer", value: event.target.value })}
+        onChange={(event) =>
+          // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+          onAnswer({ kind: "answer", value: event.target.value })
+        }
       />
     );
   }
@@ -150,6 +154,7 @@ export function AuthorizationControl({
     ? githubRepositoryAccessViewModel(challenge.repositoryAccess)
     : undefined;
   const isGitHub = storeIn !== undefined;
+  // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty provider display name uses the request title.
   const provider = isGitHub ? "Connect GitHub" : challenge?.displayName || request.title;
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -176,7 +181,8 @@ export function AuthorizationControl({
         <p>
           {isGitHub
             ? githubConnectionPrompt(storeIn.desiredRepository)
-            : challenge?.instructions || request.description}
+            : // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- Empty instructions use the request description.
+              challenge?.instructions || request.description}
         </p>
         {challenge?.userCode ? (
           <span role="group" aria-label="Authorization code">
@@ -275,9 +281,13 @@ function SessionRequestControl({
   }
   return (
     <SectionShell
-      section={request.presentation?.section || "connections"}
+      section={
+        // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty section uses the connections section.
+        request.presentation?.section || "connections"
+      }
       title={request.title}
       description={
+        // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty description uses the request-specific fallback.
         request.description ||
         (request.kind === "authorization"
           ? "Connect to continue."
@@ -345,8 +355,11 @@ function SessionOutcome({
         <div>
           <strong>{heading}</strong>
           <p>
-            {decisionOutcome.error ||
-              "Builder could not complete the update. Check chat for the specific diagnostic before retrying."}
+            {
+              // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty error uses the standard failure detail.
+              decisionOutcome.error ||
+                "Builder could not complete the update. Check chat for the specific diagnostic before retrying."
+            }
           </p>
         </div>
       </main>
@@ -360,7 +373,10 @@ function SessionOutcome({
         <div>
           <strong>{authorizationOpened ? "GitHub connection failed" : "Request failed"}</strong>
           <p>
-            {result.error?.message || "Autograph could not confirm repository access. Try again."}
+            {
+              // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty error message uses the standard failure detail.
+              result.error?.message || "Autograph could not confirm repository access. Try again."
+            }
           </p>
         </div>
       </main>

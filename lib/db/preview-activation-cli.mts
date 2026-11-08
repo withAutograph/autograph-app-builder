@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type { Sql } from "postgres";
 
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Pass the complete database schema to Drizzle.
 import * as databaseSchema from "./schema";
 import {
   assertRuntimeRoleReadback,
@@ -225,6 +226,7 @@ function createStore(sql: Sql): PreviewActivationStore {
         membership: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
           activeWorkspaceForUser() {
+            // oxlint-disable-next-line unicorn/no-useless-undefined -- Preserve the adapter contract for a missing active workspace.
             return Promise.resolve(undefined);
           },
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract

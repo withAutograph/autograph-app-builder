@@ -20,6 +20,7 @@ export default defineEval({
     t.succeeded();
     t.check(turn1.message, includes("canceled or rejected"));
     if (
+      // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
       execFileSync("git", ["branch", "--list", "app-builder/*"], {
         cwd: repository,
         encoding: "utf-8",

@@ -8,6 +8,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { eq } from "drizzle-orm";
 
 import { cursorClientId, setupCursorClient } from "../../lib/auth/cursor-client";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Pass the complete database schema to Drizzle.
 import * as schema from "../../lib/db/schema";
 
 import {

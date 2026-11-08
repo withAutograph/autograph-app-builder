@@ -772,6 +772,7 @@ describe("private approval delta checkpoints", () => {
   });
 });
 
+// oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
 const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold: boolean) => {
   const original = await startedStore();
   const originalId = original.sessionId;

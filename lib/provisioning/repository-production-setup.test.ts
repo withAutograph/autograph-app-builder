@@ -117,6 +117,7 @@ const fixture = () => {
     },
     withLease: async (_scope, run) => {
       const previous = lock;
+      // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
       let release = () => {};
       lock = new Promise<void>((resolve) => {
         release = resolve;

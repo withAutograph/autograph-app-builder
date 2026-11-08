@@ -235,6 +235,7 @@ describe("continueBuilderHandoff", () => {
   });
 
   it("rejects missing tenant authority before reading a draft", async () => {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Exercise missing tenant authority.
     vi.mocked(getAuthenticatedBuilderDraftContext).mockResolvedValueOnce(undefined);
     expect(await continueBuilderHandoff(undefined, input)).toEqual({ status: "error" });
     expect(drafts.read).not.toHaveBeenCalled();
@@ -242,6 +243,7 @@ describe("continueBuilderHandoff", () => {
   });
 
   it("rejects an inaccessible draft before provider work", async () => {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Exercise a missing or inaccessible draft.
     drafts.read.mockResolvedValueOnce(undefined);
     expect(await continueBuilderHandoff(undefined, input)).toEqual({ status: "error" });
     expect(calls).toEqual([]);

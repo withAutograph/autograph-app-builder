@@ -171,6 +171,7 @@ const runGitCapture = async function runGitCapture(
   args: readonly string[],
 ): Promise<GitProcessResult> {
   const diagnosticCapture = await startGitDiagnosticCapture();
+  // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
   const child = spawn("git", [...args], {
     env: fixedGitEnvironment(),
     stdio: ["ignore", "pipe", "pipe"],
@@ -201,6 +202,7 @@ const fixedGitApply = async function fixedGitApply(
 ): Promise<void> {
   const diagnosticCapture = await startGitDiagnosticCapture();
   const child = spawn(
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
     "git",
     [
       "-c",
@@ -340,6 +342,7 @@ const buildExactGitPatch = async function buildExactGitPatch(input: {
       // oxlint-disable-next-line eslint/no-await-in-loop -- keep each private diagnostic capture scoped to one streamed patch.
       const diagnosticCapture = await startGitDiagnosticCapture();
       const child = spawn(
+        // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
         "git",
         ["diff", "--no-index", "--binary", "--no-prefix", "--no-renames", "--", "old", "new"],
         { cwd: item, env: fixedGitEnvironment(), stdio: ["ignore", "pipe", "pipe"] },
