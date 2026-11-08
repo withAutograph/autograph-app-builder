@@ -673,9 +673,9 @@ export function composeGitHubPublicationRuntime(input: {
           reconciliations: request.reconciliations ?? [],
           async verifyOwnedHead(draft, appliedReconciliation) {
             const prior = await readOwnedDraftPublication({
-              receipts,
               draft,
               proposalDigest: request.priorPublishedProposalDigest,
+              receipts,
             });
             if (
               prior === undefined ||
@@ -1027,9 +1027,9 @@ export function composeGitHubPublicationRuntime(input: {
       }
       const applied = await readAppliedOwnedReconciliation({
         adapter,
+        candidates: [reconciliation],
         draft,
         prior: receipt,
-        candidates: [reconciliation],
       });
       return applied === undefined ? null : draft.headSha;
     },
@@ -1133,7 +1133,7 @@ export function composeGitHubPublicationRuntime(input: {
         pullRequestNumber: prior.pullRequestNumber,
         recovery: recoveryInput,
       });
-      await readOwnedDraftPublication({ receipts, proposalDigest: proposal.digest, draft });
+      await readOwnedDraftPublication({ draft, proposalDigest: proposal.digest, receipts });
       // verifiedBuilderOrigin.appId identifies the configured GitHub App. The generated
       // app is bound by its recorded source above and this publication's origin marker.
       if (
@@ -1235,9 +1235,9 @@ export function composeGitHubPublicationRuntime(input: {
           recovery: ownedDraftRecovery(recoveryInput),
         });
         const baseline = await ownedPublishedHead({
+          appliedReconciliation: publishedReconciliation,
           draft,
           prior,
-          appliedReconciliation: publishedReconciliation,
           readPublishedSource: recoveryInput.readPublishedSource,
         });
         diagnostic.source = baseline.source;

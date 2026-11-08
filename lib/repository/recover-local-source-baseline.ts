@@ -110,8 +110,8 @@ export const recoverLocalSourceBaseline = async (input: {
   await mkdir(gitRoot, { mode: 0o700 });
   localBaselineGit(gitRoot, ["init", "--bare", "--quiet"]);
   await writeFile(path.join(gitRoot, "shallow"), `${request.originalSourceSha}\n`, {
-    mode: 0o600,
     flag: "wx",
+    mode: 0o600,
   });
   // Transfer genuine tree/blob objects only. The new root capture commit is distinct
   // from the historical source commit; shallow missing history is never invented.
@@ -324,7 +324,7 @@ export const recoverLocalSourceBaseline = async (input: {
   const packed = localBaselineProcessExit(pack);
   pack.stdin.end(`${captured}\n`);
   const packFile = path.join(scratch, "capture.pack");
-  await pipeline(pack.stdout, createWriteStream(packFile, { mode: 0o600, flags: "wx" }));
+  await pipeline(pack.stdout, createWriteStream(packFile, { flags: "wx", mode: 0o600 }));
   const packedCode = await packed;
   if (packedCode !== 0) {
     throw new Error("source_baseline_pack_failed");
@@ -354,7 +354,7 @@ export const recoverLocalSourceBaseline = async (input: {
   await writeFile(
     path.join(scratch, "result.json"),
     `${JSON.stringify({ root: result.root, sourceSha: result.manifest.sourceSha, workspaceDigest: result.manifest.workspaceDigest })}\n`,
-    { mode: 0o600, flag: "wx" },
+    { flag: "wx", mode: 0o600 },
   );
   return result;
 };

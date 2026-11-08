@@ -489,7 +489,7 @@ export const projectResourceReadbackDiagnostic = (
 };
 
 const operatorExecutionFailure = operatorPlanningFailure
-  .omit({ stage: true, nativeStoreFailure: true })
+  .omit({ nativeStoreFailure: true, stage: true })
   .extend({
     stage: operatorExecutionStage,
     runtimeReadinessStage: operatorRuntimeReadinessStage.optional(),
@@ -1285,10 +1285,10 @@ export const reportOperatorRuntimeIdentityFailure = (
       sink,
     )({
       boundary: "operator",
-      phase: "inline",
-      stage: "operator_request",
       outcome: "setup_unavailable",
+      phase: "inline",
       runtimeIdentityFailure: projected.data,
+      stage: "operator_request",
     });
   } catch {
     /* Reporting cannot change the original runtime handoff rejection. */
@@ -1429,8 +1429,8 @@ export const reportContinuityPlanningFailure = (
   requestSignal?: AbortSignal,
 ): void => {
   const failure: z.infer<typeof continuityPlanningFailure> = {
-    stage: planStage,
     errorClass: "unexpected",
+    stage: planStage,
   };
   try {
     if (error instanceof HostedOperatorError) {
@@ -1601,10 +1601,10 @@ export const reportOperatorExecutionFailure = (
       sink,
     )({
       boundary: "operator",
+      executionFailure,
+      outcome: "setup_unavailable",
       phase: "inline",
       stage: "operator_request",
-      outcome: "setup_unavailable",
-      executionFailure,
     });
   } catch {
     /* Reporting cannot change the original rejection. */
@@ -1673,10 +1673,10 @@ export const reportOperatorInventoryReadFailure = (
       sink,
     )({
       boundary: "operator",
+      inventoryReadFailure: failure,
+      outcome: "setup_unavailable",
       phase: "inline",
       stage: "operator_request",
-      outcome: "setup_unavailable",
-      inventoryReadFailure: failure,
     });
   } catch {
     /* Hostile descriptors and diagnostics never change provider read behavior. */
@@ -1746,10 +1746,10 @@ export const reportOperatorNeonMcpFailure = (
       sink,
     )({
       boundary: "operator",
+      neonMcpFailure: failure,
+      outcome: "setup_unavailable",
       phase: "inline",
       stage: "operator_request",
-      outcome: "setup_unavailable",
-      neonMcpFailure: failure,
     });
   } catch {
     /* Diagnostics cannot change credential authorization or expose hostile exception properties. */
@@ -1765,8 +1765,8 @@ export const reportRuntimePreparationFailure = (
   sink?: HostedOperatorConsentDiagnosticSink,
 ): void => {
   const failure: z.infer<typeof runtimePreparationFailure> = {
-    stage: preparationStage,
     errorClass: "unexpected",
+    stage: preparationStage,
   };
   try {
     if (error instanceof HostedOperatorError) {
@@ -1805,8 +1805,8 @@ export const reportRuntimePreparationFailure = (
       boundary: "builder",
       outcome: "setup_unavailable",
       phase: "inline",
-      stage: "operator_request",
       preparationFailure: failure,
+      stage: "operator_request",
     });
   } catch {
     /* Failure reporting is advisory. */
@@ -1823,8 +1823,8 @@ export const reportRuntimePreparationStarted = (
       boundary: "builder",
       outcome: "started",
       phase: "inline",
-      stage: "operator_request",
       preparationStage,
+      stage: "operator_request",
     });
   } catch {
     /* Diagnostics never prevent entry into the original step. */

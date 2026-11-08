@@ -394,8 +394,8 @@ export const createNativeTargetOnboardingDeployment = (input: {
         target: context.target,
       });
     };
-    const artifactStore = createPostgresOperatorArtifactStore({ database, assertCurrentOwner });
-    const selections = createPostgresOperatorArtifactSelections({ database, assertCurrentOwner });
+    const artifactStore = createPostgresOperatorArtifactStore({ assertCurrentOwner, database });
+    const selections = createPostgresOperatorArtifactSelections({ assertCurrentOwner, database });
     const selection = await selections.read(context, appSpecDigest);
     if (
       selection === undefined ||
@@ -405,8 +405,8 @@ export const createNativeTargetOnboardingDeployment = (input: {
       throw mismatch();
     }
     const publication = createOperatorArtifactPublication({
-      store: artifactStore,
       assertCurrentOwner,
+      store: artifactStore,
     });
     const captured = await publication.readGeneratedRelease(context, selection);
     if (
@@ -576,11 +576,19 @@ export const createNativeTargetOnboardingDeployment = (input: {
     if (observation !== undefined) {
       observationState.state = observation;
     }
-    const result = await readPrivateNativeTargetApproval({
+    const approvalContext: Pick<
+      Parameters<typeof readPrivateNativeTargetApproval>[0],
+      "owner" | "record" | "historyOwner" | "callId"
+    > = {
       owner,
       record,
       historyOwner: owner.historyOwner,
-      ...(callId === undefined ? {} : { callId }),
+    };
+    if (callId !== undefined) {
+      approvalContext.callId = callId;
+    }
+    const result = await readPrivateNativeTargetApproval({
+      ...approvalContext,
       observation: { ...observationState, save: checkpoint.save },
       readHistory: async (startIndex, onEvent) =>
         (await transport.observePrivateHistory?.({

@@ -132,6 +132,22 @@ export interface RepositoryProductionWorkerDependencies {
 }
 const associatedData = (row: RepositoryProductionRow) =>
   `repository-production-credentials-v1:${repositoryProductionOperationRef(row.record.scope)}:${repositoryProductionDigest(row.record.scope)}`;
+const assertCurrent = (context: RepositoryProductionEffectContext) =>
+  observeRepositoryProductionPhase("worker_authority", "authorization_unavailable", () =>
+    context.assertCurrent(),
+  );
+
+const observe = (
+  value: Awaited<ReturnType<typeof runRepositoryProductionFileSpool>>,
+): RepositoryProductionObservation => {
+  if (value?.status === "applied") {
+    return { state: "applied", receipt: z.json().parse(value) };
+  }
+  if (value?.status === "absent" || value?.status === "retryable") {
+    return { state: "not-applied" };
+  }
+  return { state: "unknown" };
+};
 export const createRepositoryProductionWorkers = (deps: RepositoryProductionWorkerDependencies) => {
   const privateCredentials = (row: RepositoryProductionRow) => {
     try {
@@ -168,10 +184,6 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       appRuntime: url(resource.runtimeRole, credentials.runtimePassword),
     };
   };
-  const assertCurrent = (context: RepositoryProductionEffectContext) =>
-    observeRepositoryProductionPhase("worker_authority", "authorization_unavailable", () =>
-      context.assertCurrent(),
-    );
   const creator = async (context: RepositoryProductionEffectContext) => {
     await assertCurrent(context);
     const proof = await deps.readCreator(context.row);
@@ -410,17 +422,6 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       };
     }
     return await runWorker(sandbox, workerInput);
-  };
-  const observe = (
-    value: Awaited<ReturnType<typeof runRepositoryProductionFileSpool>>,
-  ): RepositoryProductionObservation => {
-    if (value?.status === "applied") {
-      return { state: "applied", receipt: z.json().parse(value) };
-    }
-    if (value?.status === "absent" || value?.status === "retryable") {
-      return { state: "not-applied" };
-    }
-    return { state: "unknown" };
   };
   const invokeAuthManagement = async (
     context: RepositoryProductionEffectContext,
