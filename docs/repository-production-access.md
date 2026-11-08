@@ -129,6 +129,8 @@ the exact retained artifact, release and manifest already saved in that setup;
 optional publication metadata is not another management gate. Live ownership,
 workspace membership, approval and physical fences remain required. New setup
 and revision planning still resolve their own reviewed publication destination.
+Exact retained-selection queries parse JSON inside the selection-path guard, so
+unrelated prototype HTML cannot break the read when PostgreSQL reorders filters.
 Frontend-only management allocates no database. A verified current published
 description in the same saved scope may supply its routing hint; without one,
 People and retry omit Open app, and invitation creation reports the existing

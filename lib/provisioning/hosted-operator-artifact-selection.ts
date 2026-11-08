@@ -438,12 +438,15 @@ export const createPostgresOperatorArtifactSelections = (input: {
         throw operatorArtifactUnavailable();
       }
       await input.assertCurrentOwner(context);
+      const ownedPath = sql`left(${prototypeArtifactChunks.path}, ${pathPrefix.length}) = ${pathPrefix}`;
+      // SQL may reorder AND terms; unrelated prototype rows can contain HTML.
+      const selectedContent = sql`case when ${ownedPath} then ${prototypeArtifactChunks.content}::jsonb end`;
       const identity =
         "artifactRef" in lookup
-          ? sql`${prototypeArtifactChunks.content}::jsonb ->> 'artifactRef' = ${lookup.artifactRef}`
+          ? sql`(${selectedContent}) ->> 'artifactRef' = ${lookup.artifactRef}`
           : and(
-              sql`${prototypeArtifactChunks.content}::jsonb ->> 'releaseId' = ${lookup.releaseId}`,
-              sql`${prototypeArtifactChunks.content}::jsonb ->> 'schemaSha256' = ${lookup.schemaSha256}`,
+              sql`(${selectedContent}) ->> 'releaseId' = ${lookup.releaseId}`,
+              sql`(${selectedContent}) ->> 'schemaSha256' = ${lookup.schemaSha256}`,
             );
       const rows = await input.database
         .select({
@@ -460,7 +463,7 @@ export const createPostgresOperatorArtifactSelections = (input: {
             eq(prototypeArtifactChunks.ownerUserId, authority.ownerUserId),
             eq(prototypeArtifactChunks.sessionId, sessionId),
             eq(prototypeArtifactChunks.chunkIndex, 0),
-            sql`left(${prototypeArtifactChunks.path}, ${pathPrefix.length}) = ${pathPrefix}`,
+            ownedPath,
             identity,
           ),
         );
