@@ -41,8 +41,8 @@ describe("sandbox preview ownership journal", () => {
         run({ attempt, kind: "claim" }),
         run({ attempt: { ...attempt, attemptId: "second" }, kind: "claim" }),
       ]);
-      expect(claims.filter((claim) => claim.claimed)).toHaveLength(1);
-      const winner = claims.find((claim) => claim.claimed)?.attempt?.attemptId;
+      expect(claims.filter((claim) => Boolean(claim.claimed))).toHaveLength(1);
+      const winner = claims.find((claim) => Boolean(claim.claimed))?.attempt?.attemptId;
       const owner = { ...identity, attemptId: winner };
       await expect(run({ kind: "assert", ...owner })).resolves.toMatchObject({
         status: "starting",
