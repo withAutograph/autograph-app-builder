@@ -117,12 +117,10 @@ const waitForEve = (url: string, signal: AbortSignal) =>
 
 const availableDistinctLoopbackPort = async (
   excludedPort: number,
-  configured: string | undefined,
+  configured?: string,
 ): Promise<number> => {
   const port = await availableLoopbackPort(configured);
-  return port === excludedPort
-    ? availableDistinctLoopbackPort(excludedPort, undefined as undefined)
-    : port;
+  return port === excludedPort ? availableDistinctLoopbackPort(excludedPort) : port;
 };
 
 const answerFor = (result: unknown, answers: Record<string, string>) => {
