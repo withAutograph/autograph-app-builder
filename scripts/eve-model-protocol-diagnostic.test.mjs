@@ -181,13 +181,13 @@ const fixture = async (options = {}) => {
     session: source,
     stepInput: { runtimeActionResults: [actualRuntimeResult] },
   });
-  const latest = {
-    ...old.session,
-    ...(options.mixedStorage === true ? { history: old.messages } : {}),
-    state: {
-      ...old.session.state,
-      "fixture.program": { phase: "latest-committed", arbitraryNestedState: { keep: true } },
-    },
+  const latest = { ...old.session };
+  if (options.mixedStorage === true) {
+    latest.history = old.messages;
+  }
+  latest.state = {
+    ...old.session.state,
+    "fixture.program": { phase: "latest-committed", arbitraryNestedState: { keep: true } },
   };
   const sourcePair = {
     serializedContext: {
@@ -297,14 +297,16 @@ const fixture = async (options = {}) => {
     ...(options.unreadableLater === true
       ? [event(9, "step_started", "unreadable"), event(10, "step_completed", "unreadable")]
       : []),
-    event(11, "hook_received", "ordinary-hook", {
-      ...(options.inboxAfterSource === true
-        ? { token: `eve:session:${logicalSessionId}:inbox` }
-        : {}),
-      payload: { untouchedNativeFact: true },
-    }),
-    event(12, "run_completed"),
   ];
+  const inboxEventData = {};
+  if (options.inboxAfterSource === true) {
+    inboxEventData.token = `eve:session:${logicalSessionId}:inbox`;
+  }
+  inboxEventData.payload = { untouchedNativeFact: true };
+  events.push(
+    event(11, "hook_received", "ordinary-hook", inboxEventData),
+    event(12, "run_completed"),
+  );
   const nativeEvents = [
     { type: "action.result", data: { ...batchEvent, result: actualRuntimeResult } },
     ...(options.uncommittedWrite === true

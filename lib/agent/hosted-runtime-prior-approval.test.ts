@@ -729,11 +729,14 @@ describe("Builder-local approval capture before execution", () => {
     "does not promote %s native input into approved authority",
     async (failure) => {
       const f = await fixture();
-      const events = await f.approve({
-        persist: false,
-        ...(failure === "cancelled" ? { outcome: "cancelled" as const } : {}),
-        ...(failure === "foreign-responder" ? { responderPrincipalId: "foreign-owner" } : {}),
-      });
+      const approvalOptions: NonNullable<Parameters<typeof f.approve>[0]> = { persist: false };
+      if (failure === "cancelled") {
+        approvalOptions.outcome = "cancelled";
+      }
+      if (failure === "foreign-responder") {
+        approvalOptions.responderPrincipalId = "foreign-owner";
+      }
+      const events = await f.approve(approvalOptions);
       const local = nativeApprovalCapture(f, failure === "orphan" ? events.slice(1) : events);
       if (failure === "orphan") {
         expect(await local.read(f.input, f.context, f.operator)).toBeNull();

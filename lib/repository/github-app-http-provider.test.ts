@@ -36,6 +36,15 @@ const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(valu
 const sourceSha = "1".repeat(40);
 const sourceTree = "2".repeat(40);
 
+interface ExpectedTokenPermissions {
+  actions_variables: "read";
+  administration?: "write";
+  contents?: "read" | "write";
+  metadata?: "read";
+  pull_requests?: "write";
+  workflows?: "write";
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function unicodeDraftMaterial(
   preserveOverlayOrder = false,
@@ -702,16 +711,19 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         throw new Error("Expected JWT expiration and issued-at claims");
       }
       expect(claims.exp - claims.iat).toBe(600);
-      expect(tokenCall?.body).toEqual({
-        permissions: {
-          actions_variables: "read",
-          ...(administration === undefined ? {} : { administration }),
-          contents,
-          metadata: "read",
-          ...(pullRequests === undefined ? {} : { pull_requests: pullRequests }),
-          ...(workflows === "write" ? { workflows } : {}),
-        },
-      });
+      const permissions: ExpectedTokenPermissions = { actions_variables: "read" };
+      if (administration !== undefined) {
+        permissions.administration = administration;
+      }
+      permissions.contents = contents;
+      permissions.metadata = "read";
+      if (pullRequests !== undefined) {
+        permissions.pull_requests = pullRequests;
+      }
+      if (workflows === "write") {
+        permissions.workflows = workflows;
+      }
+      expect(tokenCall?.body).toEqual({ permissions });
       const publicRequestSurface = mock.calls.map(({ url, body }) => ({
         body,
         url,

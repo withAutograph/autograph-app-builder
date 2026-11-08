@@ -543,14 +543,16 @@ const fixture = async (options = {}) => {
     ...(options.unreadableLater === true
       ? [event(9, "step_started", "unreadable"), event(10, "step_completed", "unreadable")]
       : []),
-    event(11, "hook_received", "ordinary-hook", {
-      ...(options.inboxAfterSource === true
-        ? { token: `eve:session:${logicalSessionId}:inbox` }
-        : {}),
-      payload: { untouchedNativeFact: true },
-    }),
-    event(12, options.runStatus === "cancelled" ? "run_cancelled" : "run_completed"),
   ];
+  const inboxEventData = {};
+  if (options.inboxAfterSource === true) {
+    inboxEventData.token = `eve:session:${logicalSessionId}:inbox`;
+  }
+  inboxEventData.payload = { untouchedNativeFact: true };
+  events.push(
+    event(11, "hook_received", "ordinary-hook", inboxEventData),
+    event(12, options.runStatus === "cancelled" ? "run_cancelled" : "run_completed"),
+  );
   await appendHistoricalInbox(events, event, output, options.inboxSuffix);
   const nativeEvents = [
     { type: "action.result", data: { ...batchEvent, result: actualRuntimeResult } },

@@ -551,12 +551,15 @@ describe("owned compiled artifact workflow hook", () => {
     "records an owned static destination without requiring SQL (initial=%s)",
     async (initial) => {
       const input = frame();
-      const result = await recordPublishedOperatorSourceForSession({
+      const publicationInput: Parameters<typeof recordPublishedOperatorSourceForSession>[0] = {
         ...input,
         backendKind: "static",
         publishedSource: historicalSource,
-        ...(initial ? { initialPublication: true as const } : {}),
-      });
+      };
+      if (initial) {
+        publicationInput.initialPublication = true;
+      }
+      const result = await recordPublishedOperatorSourceForSession(publicationInput);
       expect(result).toMatchObject({
         destination: {
           appId: input.appId,

@@ -6,6 +6,7 @@ import {
   operatorPlanDigest,
   operatorPublicResultSchema,
 } from "./hosted-operator-contract";
+import type { OperatorReceipt } from "./hosted-operator-contract";
 import type {
   HostedRuntimeJournalRecord,
   HostedRuntimeJournalRow,
@@ -454,12 +455,15 @@ describe("native externally managed policy recovery integration", () => {
               "default-gateway",
             );
           }
-          return {
+          const receipt: OperatorReceipt = {
             effectId: input.effect.id,
             observedAt: new Date(now).toISOString(),
             resourceVersion: "default-owned-readback",
-            ...(input.effect.kind === "access" ? { fenceGeneration: input.fenceGeneration } : {}),
           };
+          if (input.effect.kind === "access") {
+            receipt.fenceGeneration = input.fenceGeneration;
+          }
+          return receipt;
         },
         verify: async () => ({
           actors: 1,
@@ -993,12 +997,15 @@ describe("native externally managed policy recovery integration", () => {
               throw new Error("reconciliation required");
             }
           }
-          return {
+          const receipt: OperatorReceipt = {
             effectId: input.effect.id,
             observedAt: new Date(now).toISOString(),
             resourceVersion: "fresh-owned-observation",
-            ...(input.effect.kind === "access" ? { fenceGeneration: input.fenceGeneration } : {}),
           };
+          if (input.effect.kind === "access") {
+            receipt.fenceGeneration = input.fenceGeneration;
+          }
+          return receipt;
         },
         verify: async () => ({
           actors: 1,
