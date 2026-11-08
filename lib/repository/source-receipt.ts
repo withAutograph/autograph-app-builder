@@ -18,6 +18,7 @@ interface FixedGit {
   (path: string, args: readonly string[], encoding: "buffer"): Buffer;
 }
 
+// SAFETY: The encoding branch returns UTF-8 text for "utf-8" and the original Buffer for "buffer".
 const fixedGit = function fixedGit(
   path: string,
   args: readonly string[],
@@ -360,7 +361,7 @@ export const inspectSourceReceipt = async (
   const sourceTree = fixedGit(path, ["rev-parse", `${sourceSha}^{tree}`], "utf-8").trim();
   const observedDigest = sourceIdentityDigest(sourceSha, sourceTree);
   const evidence = {
-    adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
+    adapter: SUPPORTED_TEMPLATE_ADAPTER,
     contractDigest: observedDigest,
     eligibilityDigest: observedDigest,
     releaseEnabled: false,
@@ -391,6 +392,7 @@ export const inspectCanonicalTemplateSnapshotReceipt = (input: {
       sourceTree: input.snapshot.sourceTree,
     }),
   );
+  // SAFETY: The adapter value is the imported constant whose literal type is retained here.
   const evidence = {
     adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
     contractDigest: observedDigest,
@@ -431,6 +433,7 @@ export const inspectExistingRepositorySnapshotReceipt = (
       sourceTree: snapshot.sourceTree,
     }),
   );
+  // SAFETY: The adapter value is the imported constant whose literal type is retained here.
   const evidence = {
     adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
     contractDigest: observedDigest,

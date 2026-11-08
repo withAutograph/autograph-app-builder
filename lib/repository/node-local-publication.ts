@@ -180,6 +180,7 @@ const runGitCapture = async function runGitCapture(
     output.push(Buffer.from(chunk));
   });
   child.stderr.pipe(diagnosticCapture.writer);
+  // SAFETY: This spawned ChildProcess emits close with its exit code and termination signal.
   const [code] = (await once(child, "close")) as [number | null, NodeJS.Signals | null];
   const stderrLogPath = await finishGitDiagnosticCapture(diagnosticCapture, code !== 0);
   const initial: Pick<GitProcessResult, "stderrLogPath"> = {};
@@ -235,6 +236,7 @@ const fixedGitApply = async function fixedGitApply(
   ) {
     throw inputResult.reason;
   }
+  // SAFETY: The fulfilled promise is once(child, "close"), whose arguments are the exit code and signal.
   const [code, signal] = processResult.value as [number | null, NodeJS.Signals | null];
   const stderrLogPath = await finishGitDiagnosticCapture(diagnosticCapture, code !== 0);
   if (code !== 0) {
@@ -344,11 +346,13 @@ const buildExactGitPatch = async function buildExactGitPatch(input: {
       );
       child.stderr.pipe(diagnosticCapture.writer);
       const resultPromise = once(child, "close");
+      // SAFETY: The spawned stdout is a binary pipe and no text encoding is set.
       // oxlint-disable-next-line eslint/no-await-in-loop -- consume diff output sequentially to keep memory bounded
       for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- write each streamed diff chunk before reading more
         await patchFile.writeFile(chunk);
       }
+      // SAFETY: resultPromise observes this spawned ChildProcess's close event, carrying exit code and signal.
       // oxlint-disable-next-line eslint/no-await-in-loop -- finish each streamed diff before starting the next one
       const [code, signal] = (await resultPromise) as [number | null, NodeJS.Signals | null];
       // oxlint-disable-next-line eslint/no-await-in-loop -- finish each patch diagnostic before the next patch starts.
@@ -505,6 +509,7 @@ const fileState = async function fileState(path: string): Promise<FileState> {
     }
     const hash = createHash("sha256");
     let size = 0;
+    // SAFETY: createReadStream has no encoding option here, so its data chunks are Buffers.
     // oxlint-disable-next-line eslint/no-await-in-loop -- hash file content incrementally instead of buffering it
     for await (const chunk of createReadStream(path) as AsyncIterable<Buffer>) {
       hash.update(chunk);
@@ -1004,7 +1009,7 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
     });
     const pendingUnsigned = {
       ...proposalFields,
-      appliedPaths: [] as readonly string[],
+      appliedPaths: [],
       beforeStatusDigest,
       intentPaths: input.proposal.executionPaths,
       pathEvidence: evidence,
@@ -1084,7 +1089,7 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       afterStatusDigest: after.statusDigest,
       appliedPaths,
       beforeStatusDigest,
-      conflictedPaths: [] as readonly string[],
+      conflictedPaths: [],
       intentPaths: input.proposal.executionPaths,
       pathEvidence: evidence,
       postconditionDigest: stableDigest(
@@ -1093,9 +1098,9 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       proposalDigest,
       publishedByCallId: input.publishedByCallId,
       recoveryRequired: false,
-      rolledBackPaths: [] as readonly string[],
+      rolledBackPaths: [],
       status: "succeeded" as const,
-      uncertainPaths: [] as readonly string[],
+      uncertainPaths: [],
     };
     const receipt: LocalPublicationSuccessReceipt = {
       ...successUnsigned,

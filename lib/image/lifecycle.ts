@@ -377,7 +377,7 @@ export const parseLocalImageInspection = (
   imageId: string;
   rootFsLayers: readonly string[];
 }> => {
-  const parsed = JSON.parse(raw) as unknown;
+  const parsed: unknown = JSON.parse(raw);
   if (!Array.isArray(parsed) || parsed.length !== 1) {
     throw new Error("Local image inspection returned an unexpected image set.");
   }

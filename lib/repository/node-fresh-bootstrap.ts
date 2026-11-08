@@ -1153,6 +1153,7 @@ const exactSourceTree = async (
     files.push({
       blob,
       contentSha256: digest,
+      // SAFETY: The Git entry regex accepts only 100644 or 100755 after rejecting links and commits.
       mode: mode as FreshBootstrapFile["mode"],
       path,
       readStream: verifiedFileReader(
@@ -2563,6 +2564,7 @@ export const readFreshBootstrapJournal = async (input: {
     }
     throw error;
   }
+  // SAFETY: The canonical journal check immediately validates the parsed value before it is used.
   const parsed = JSON.parse(bytes) as FreshBootstrapJournal;
   assertCanonicalFreshBootstrapJournal(parsed);
   if (
