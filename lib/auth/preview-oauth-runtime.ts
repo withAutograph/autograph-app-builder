@@ -801,7 +801,7 @@ export function createPreviewOAuthServer(input: {
               if (localEmulation) {
                 return [genericOAuth({ config: localProviderConfigs })];
               }
-              if (!config.vercelClientId || !config.vercelClientSecret) {
+              if (config.vercelClientId === undefined || config.vercelClientSecret === undefined) {
                 return [];
               }
               return [
@@ -837,7 +837,7 @@ export function createPreviewOAuthServer(input: {
       if (localEmulation) {
         return {};
       }
-      if (!config.githubClientId || !config.githubClientSecret) {
+      if (config.githubClientId === undefined || config.githubClientSecret === undefined) {
         return {};
       }
       return {

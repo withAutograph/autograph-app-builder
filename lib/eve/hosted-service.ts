@@ -808,12 +808,13 @@ async function spoolObservedSession(input: {
     recorderInput.state = input.privateApprovalCaptureState;
   }
   const recorder = createPrivateHostedApprovalRecorder(recorderInput);
-  const capture = input.deferPrivateApprovalPersistence
-    ? createPrivateHostedApprovalCapture(
-        input.privateApprovalSessionId,
-        input.privateApprovalCaptureState,
-      )
-    : undefined;
+  const capture =
+    (input.deferPrivateApprovalPersistence ?? false)
+      ? createPrivateHostedApprovalCapture(
+          input.privateApprovalSessionId,
+          input.privateApprovalCaptureState,
+        )
+      : undefined;
   let file: Awaited<ReturnType<typeof open>> | null = null;
   try {
     file = await open(path, "wx", 0o600);
