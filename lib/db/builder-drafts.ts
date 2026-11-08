@@ -62,7 +62,7 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
       .from(builderDrafts)
       .where(rowPredicate(authority, draftId))
       .limit(1);
-    return rows[0] ? parseRow(rows[0]) : undefined;
+    return rows[0] === undefined || rows[0] === null ? undefined : parseRow(rows[0]);
   };
 
   const readActive: BuilderDraftStore["readActive"] = async ({ authority }) => {
@@ -71,7 +71,7 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
       .from(builderDrafts)
       .where(and(authorityPredicate(authority), eq(builderDrafts.status, "active")))
       .limit(1);
-    return rows[0] ? parseRow(rows[0]) : undefined;
+    return rows[0] === undefined || rows[0] === null ? undefined : parseRow(rows[0]);
   };
 
   return {
@@ -138,7 +138,7 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
               ),
             )
             .returning();
-          if (rows[0]) {
+          if (rows[0] !== undefined && rows[0] !== null) {
             return {
               concurrent: current.revision !== input.expectedRevision,
               idempotent: false,
@@ -164,7 +164,7 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
             })
             .onConflictDoNothing()
             .returning();
-          if (rows[0]) {
+          if (rows[0] !== undefined && rows[0] !== null) {
             return {
               concurrent: input.expectedRevision !== 0,
               idempotent: false,
