@@ -352,11 +352,12 @@ describe("legacy source-bound writable workspace", () => {
 
   it("rejects a foreign Sandbox even with retained source metadata", async () => {
     const { observed, receipt, sandbox } = legacySourceFixture();
+    const foreignSandbox = { ...sandbox, id: "other" };
     await expect(
       inspectSourceBoundSandboxWorkspace({
         receipt,
         expectedWorkspace: observed,
-        sandbox: { ...sandbox, id: "other" },
+        sandbox: foreignSandbox,
       }),
     ).rejects.toThrow("does not belong to this session");
   });
