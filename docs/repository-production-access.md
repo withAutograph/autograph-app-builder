@@ -119,9 +119,15 @@ schema, organization and role effects determine approval identity.
 
 For a persistent app, setup records its owned database, roles, and encrypted
 credentials in the existing provisioning journal before any provider write.
-It allocates the database, installs the checked schema, prepares creator
-membership and app roles, and binds only that app's encrypted Production
-runtime variable. Frontend-only apps use shared Auth and skip app storage. The current captured
+It allocates the database, prepares and verifies the creator's one-time Auth
+identity, installs the checked schema, grants creator membership and app roles,
+and binds only that app's encrypted Production runtime variable. Initial schema
+installation includes that verified actor in the approved tenant partition; it
+does not grant Auth assignment or database actor membership. Later schema
+revisions retain the existing runtime scope instead of replaying creator access,
+and a revoked scope remains revoked. An interrupted initial schema attempt still
+shows the saved sign-in link when identity is required, before reconciliation
+continues against the same allocated database. Frontend-only apps use shared Auth and skip app storage. The current captured
 description has no explicit anonymous-access contract, so this path defaults
 to private access; it does not infer public access from a static backend.
 The native deployment provider continues to own deployment and activation.
