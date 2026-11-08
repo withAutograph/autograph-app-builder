@@ -627,9 +627,9 @@ describe("protected hosted operator boundary", () => {
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           planningFailure: {
-            stage: "approved_plan_recovery",
-            errorClass: "operator_error",
             code: "operation_in_progress",
+            errorClass: "operator_error",
+            stage: "approved_plan_recovery",
           },
         }),
       ]);
@@ -2814,7 +2814,7 @@ describe("idle installer source successor planning", () => {
         planDigest: originalRequest.planDigest,
         callId: originalRequest.callId,
         approvalId: "durable-human-decision",
-        outcome: { status: "blocked", code: "resource_mismatch" },
+        outcome: { code: "resource_mismatch", status: "blocked" },
       },
     });
     expect(failed.record.leaseId).toBeUndefined();
@@ -3082,7 +3082,7 @@ describe("approved retention renewal planning", () => {
         expect(log.mock.calls).toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
-            planningFailure: { stage: "saved_plan_reexposure", errorClass: "type_error" },
+            planningFailure: { errorClass: "type_error", stage: "saved_plan_reexposure" },
           }),
         ]);
         expect(JSON.stringify(log.mock.calls)).not.toContain(privateError.message);
@@ -3524,9 +3524,9 @@ describe("closed prepare pre-effect diagnostics", () => {
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           executionFailure: {
-            stage: "approval_read",
-            errorClass: "operator_error",
             code: "authorization_required",
+            errorClass: "operator_error",
+            stage: "approval_read",
           },
         }),
       ]);
@@ -3556,7 +3556,7 @@ describe("closed prepare pre-effect diagnostics", () => {
     ).rejects.toBe(privateError);
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({
-        executionFailure: { stage: "approval_read", errorClass: "unexpected", sqlState: "42501" },
+        executionFailure: { errorClass: "unexpected", sqlState: "42501", stage: "approval_read" },
       }),
     );
     expect(JSON.stringify(sink.mock.calls)).not.toContain(privateError.message);
@@ -3885,7 +3885,7 @@ describe("canonical runtime proof through the production verifier and handler", 
         expect(log.mock.calls).not.toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
-            executionFailure: { stage: "final_proof_parse", errorClass: "validation_error" },
+            executionFailure: { errorClass: "validation_error", stage: "final_proof_parse" },
           }),
         ]);
         expect(result).toMatchObject({ authenticatedBehavior: "unassessed", status: "prepared" });
@@ -3991,13 +3991,13 @@ describe("closed prepare final verification diagnostics", () => {
       expect(f.row?.record.proof).toBeUndefined();
       expect(f.row?.record.leaseId).toBeUndefined();
       expect(f.row?.record.executionObservation).toMatchObject({
+        outcome: { code: "operator_unavailable", status: "blocked" },
         state: "settled",
-        outcome: { status: "blocked", code: "operator_unavailable" },
       });
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
-          executionFailure: { stage: "final_authority", errorClass: "type_error" },
+          executionFailure: { errorClass: "type_error", stage: "final_authority" },
         }),
       ]);
       expect(JSON.stringify(log.mock.calls)).not.toContain("resource_lease");
@@ -4018,13 +4018,13 @@ describe("closed prepare final verification diagnostics", () => {
       expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
       expect(f.row?.record.proof).toBeUndefined();
       expect(f.row?.record.executionObservation).toMatchObject({
+        outcome: { code: "operator_unavailable", status: "blocked" },
         state: "settled",
-        outcome: { status: "blocked", code: "operator_unavailable" },
       });
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
-          executionFailure: { stage: "final_verifier_entry", errorClass: "type_error" },
+          executionFailure: { errorClass: "type_error", stage: "final_verifier_entry" },
         }),
       ]);
       const output = JSON.stringify(log.mock.calls);
@@ -4075,7 +4075,7 @@ describe("closed prepare final verification diagnostics", () => {
         expect(log.mock.calls).toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
-            executionFailure: { stage: "final_authority", errorClass: "type_error" },
+            executionFailure: { errorClass: "type_error", stage: "final_authority" },
           }),
         ]);
         expect(log.mock.calls).toContainEqual([
@@ -4103,9 +4103,9 @@ describe("closed prepare final verification diagnostics", () => {
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           executionFailure: {
-            stage: "final_proof_parse",
-            errorClass: "operator_error",
             code: "resource_mismatch",
+            errorClass: "operator_error",
+            stage: "final_proof_parse",
           },
         }),
       ]);
@@ -4136,9 +4136,9 @@ describe("closed prepare final verification diagnostics", () => {
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           executionFailure: {
-            stage: "final_proof_publication",
             errorClass: "unexpected",
             sqlState: "42501",
+            stage: "final_proof_publication",
           },
         }),
       ]);
@@ -4184,7 +4184,7 @@ describe("closed prepare final verification diagnostics", () => {
         expect(log.mock.calls).toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
-            executionFailure: { stage: "resource_lease", errorClass: "type_error" },
+            executionFailure: { errorClass: "type_error", stage: "resource_lease" },
           }),
         ]);
         if (releaseFails) {
@@ -4192,9 +4192,9 @@ describe("closed prepare final verification diagnostics", () => {
             "[builder:hosted-neon-consent]",
             expect.objectContaining({
               executionFailure: {
-                stage: "final_lease_release",
-                errorClass: "operator_error",
                 code: "resource_mismatch",
+                errorClass: "operator_error",
+                stage: "final_lease_release",
               },
             }),
           ]);
@@ -4223,7 +4223,7 @@ describe("closed prepare final verification diagnostics", () => {
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
-          executionFailure: { stage: "final_lease_release", errorClass: "type_error" },
+          executionFailure: { errorClass: "type_error", stage: "final_lease_release" },
         }),
       ]);
       expect(JSON.stringify(log.mock.calls)).not.toContain("resource_lease");

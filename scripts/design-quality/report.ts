@@ -8,6 +8,9 @@ export function escapeHtml(value: unknown) {
       ({ '"': "&quot;", "&": "&amp;", "'": "&#39;", "<": "&lt;", ">": "&gt;" })[char] ?? char,
   );
 }
+const renderListItem = (value: string) => `<li>${escapeHtml(value)}</li>`;
+const renderCaseEvidence = (item: { repo: string; path: string; status: string }) =>
+  `<li>${escapeHtml(item.repo)}: <code>${escapeHtml(item.path)}</code> — ${escapeHtml(item.status)}</li>`;
 // Keep report rendering helpers scoped to the report artifact.
 // oxlint-disable-next-line eslint/func-style, unicorn/consistent-function-scoping -- Preserve function declaration hoisting and initialization timing.
 export function renderReport(report: {
@@ -123,10 +126,10 @@ export function renderReport(report: {
     : "";
   const measuredSummary =
     (report.case
-      ? `<section><h2>${escapeHtml(report.case.title)}</h2><p>${escapeHtml(report.case.notes)}</p><details><summary>Case evidence and review questions</summary><ul>${report.case.evidence.map((item) => `<li>${escapeHtml(item.repo)}: <code>${escapeHtml(item.path)}</code> — ${escapeHtml(item.status)}</li>`).join("")}</ul><h3>Review questions</h3><ul>${report.case.reviewQuestions.map((question) => `<li>${escapeHtml(question)}</li>`).join("")}</ul><h3>Intended outcomes, not asserted results</h3><ul>${report.case.outcomes.map((outcome) => `<li>${escapeHtml(outcome)}</li>`).join("")}</ul></details></section>`
+      ? `<section><h2>${escapeHtml(report.case.title)}</h2><p>${escapeHtml(report.case.notes)}</p><details><summary>Case evidence and review questions</summary><ul>${report.case.evidence.map(renderCaseEvidence).join("")}</ul><h3>Review questions</h3><ul>${report.case.reviewQuestions.map(renderListItem).join("")}</ul><h3>Intended outcomes, not asserted results</h3><ul>${report.case.outcomes.map(renderListItem).join("")}</ul></details></section>`
       : "") +
     (report.evaluationNotes?.length
-      ? `<details><summary>Capture context and limitations</summary><ul>${report.evaluationNotes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul></details>`
+      ? `<details><summary>Capture context and limitations</summary><ul>${report.evaluationNotes.map(renderListItem).join("")}</ul></details>`
       : "") +
     (adherence
       ? `<h2>Arrusted adherence: ${adherence.score === null ? "Not assessed" : `${adherence.score}/100`} · ${escapeHtml(adherence.status)}</h2><p>Evidence coverage: ${pct(adherence.coveragePercent)}. Evaluator ${adherence.version}. This measures inspected evidence, not all rendered UI.</p><table><thead><tr><th>Dimension</th><th>Conforming</th><th>Nonconforming</th><th>Unassessed</th><th>Adherence</th><th>Static / browser</th></tr></thead><tbody>${Object.entries(
