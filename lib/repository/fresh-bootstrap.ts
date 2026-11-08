@@ -569,7 +569,7 @@ export const freshBootstrapJournalDigest = (value: unknown) => stableDigest(valu
 export const proposalFromFreshBootstrapJournal = (
   journal: FreshBootstrapJournal,
 ): FreshBootstrapProposal => {
-  const candidate = { ...journal } as Record<string, unknown>;
+  const candidate = { ...journal };
   const digest = journal.proposalDigest;
   for (const key of [
     "proposalDigest",

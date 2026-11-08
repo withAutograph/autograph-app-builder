@@ -18,6 +18,7 @@ import type {
   GitHubRepositoryObservation,
   DraftPullRequestProposal,
   GitHubDraftPullRequestContent,
+  DraftPublicationReadBack,
 } from "./github-publication";
 import { createGitHubPrDeliveryProvider, GitHubPrEffectRejectedError } from "./github-pr-delivery";
 import type { GitHubPrDeliveryProvider } from "./github-pr-delivery";
@@ -1466,7 +1467,7 @@ export const createGitHubAppHttpProvider = (input: {
       const changedPathsSinceBase = arrayProperty(compare.body, "files")
         .map((file) => stringProperty(file, "filename"))
         .toSorted(compareOverlayPaths);
-      let branch: unknown = { status: "absent" };
+      let branch: DraftPublicationReadBack["branch"] = { status: "absent" };
       let branchSha: string | undefined;
       try {
         const branchResponse = await github({
