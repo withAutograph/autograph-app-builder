@@ -162,9 +162,9 @@ const fixture = () => {
   }));
   const observe = vi.fn<RealmContinuationPorts["observe"]>(async () => structuredClone(observed));
   const ports: RealmContinuationPorts = {
+    dispatch,
     now: () => 1_800_000_000_000,
     observe,
-    dispatch,
     reconcile,
     seal: () => "private-encrypted-authority",
     store: {
@@ -180,10 +180,10 @@ const fixture = () => {
     },
   };
   return {
-    ports,
     dispatch,
-    reconcile,
     observe,
+    ports,
+    reconcile,
     row: () => row,
     run: createHostedOperatorRealmContinuation(ports),
   };

@@ -314,7 +314,7 @@ describe("operator request transport", () => {
     mock.disableNetConnect();
     mock
       .get("https://operator.example")
-      .intercept({ path: "/v1/runtime", method: "POST" })
+      .intercept({ method: "POST", path: "/v1/runtime" })
       .reply(200, pending);
     const dispatcher = createHostedOperatorDispatcher((origin, options) => {
       expect(options).toMatchObject({ bodyTimeout: 1_800_000, headersTimeout: 1_800_000 });
@@ -322,9 +322,9 @@ describe("operator request transport", () => {
     });
     try {
       const response = await dispatcher.request({
+        method: "POST",
         origin: "https://operator.example",
         path: "/v1/runtime",
-        method: "POST",
       });
       expect(await response.body.json()).toEqual(pending);
     } finally {
@@ -515,6 +515,7 @@ describe("continuity planning failure diagnostics", () => {
     const transport = vi.fn<typeof fetch>();
     const client = createHostedOperatorClient({
       endpoint: "https://operator.example",
+      fetch: transport,
       ownerContext: {
         adapterGeneration: 1,
         adapterSessionId: "adapter",
@@ -524,7 +525,6 @@ describe("continuity planning failure diagnostics", () => {
         sessionId: selection.sessionId,
       },
       token,
-      fetch: transport,
     });
     const originalParse = continuityTransportRequestSchema.parse.bind(
       continuityTransportRequestSchema,

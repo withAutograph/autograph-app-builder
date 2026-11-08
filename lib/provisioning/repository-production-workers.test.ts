@@ -201,12 +201,12 @@ const fixture = async (staticApp = false) => {
     record.privateState = await workers.reservePrivateState(context.row);
   }
   return {
-    workers,
-    context,
     calls,
+    context,
     revoke: () => {
       valid = false;
     },
+    workers,
   };
 };
 describe("concrete protected Production worker composition", () => {

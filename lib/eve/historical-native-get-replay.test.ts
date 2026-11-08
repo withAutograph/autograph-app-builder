@@ -356,10 +356,10 @@ describe("GET recovery of historical native approval", () => {
         readCheckpointPage,
       };
       const service = createHostedEveSessionService({
+        assertSendDeliveryOwner: () => Promise.resolve(),
+        now: () => 50,
         principal,
         store,
-        now: () => 50,
-        assertSendDeliveryOwner: () => Promise.resolve(),
         transport: {
           observe,
           get: vi.fn(),
@@ -369,7 +369,7 @@ describe("GET recovery of historical native approval", () => {
           cancel: vi.fn(),
         },
       });
-      await expect(service.get({ sessionId, cursor: 0, limit: 100 })).resolves.toMatchObject({
+      await expect(service.get({ cursor: 0, limit: 100, sessionId })).resolves.toMatchObject({
         sessionId,
       });
       expect(call).toBeGreaterThanOrEqual(2);
@@ -380,7 +380,7 @@ describe("GET recovery of historical native approval", () => {
       expect(
         metadata.approvalReplayProgress?.privateApprovalCaptureState.pendingRequests,
       ).toHaveLength(1);
-      await expect(service.get({ sessionId, cursor: 7, limit: 3 })).resolves.toMatchObject({
+      await expect(service.get({ cursor: 7, limit: 3, sessionId })).resolves.toMatchObject({
         sessionId,
       });
       expect(respond).not.toHaveBeenCalled();

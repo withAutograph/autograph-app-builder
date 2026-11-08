@@ -118,10 +118,10 @@ vi.mock("./approval-receipt", async (importOriginal) => ({
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: async () =>
     await Promise.resolve({
-      publishDraftPullRequest: hooks.publish,
-      updateExistingDraft: hooks.update,
-      reconcileExistingDraft: hooks.reconcile,
       inspectAppliedExistingDraftReconciliation: hooks.applied,
+      publishDraftPullRequest: hooks.publish,
+      reconcileExistingDraft: hooks.reconcile,
+      updateExistingDraft: hooks.update,
     }),
 }));
 vi.mock("./github-publication-content-source", () => ({
@@ -266,13 +266,13 @@ describe("publication records actual source for its compiled app release", () =>
                   appId: hooks.state.appSpec.appId,
                   appSpecDigest: hooks.state.appSpec.digest,
                   backendKind: hooks.state.appBackendKind,
-                  root: hooks.state.applyReceipt.applyRoot,
                   callId: ctx.callId,
                   review: hooks.state.reviewReceipt,
+                  root: hooks.state.applyReceipt.applyRoot,
                 }),
             adapterSessionId: ctx.session.id,
-            sessionAuth: ctx.session.auth,
             publication,
+            sessionAuth: ctx.session.auth,
           }),
         );
         expect(result).not.toHaveProperty("appSourceRecording.recoveryRequired");
