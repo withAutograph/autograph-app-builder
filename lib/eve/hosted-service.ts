@@ -393,47 +393,47 @@ function checkpointInputRequest(
   }));
   const { authorization } = request;
   const repositoryAccess = authorization?.repositoryAccess;
+  const requestDetails: Partial<PublicInputRequest> = { allowFreeform: request.allowFreeform };
+  if (authorization !== undefined) {
+    const authorizationDetails: NonNullable<PublicInputRequest["authorization"]> = {};
+    if (authorization.displayName !== undefined) {
+      authorizationDetails.displayName = authorization.displayName;
+    }
+    if (authorization.expiresAt !== undefined) {
+      authorizationDetails.expiresAt = authorization.expiresAt;
+    }
+    if (profile.authorizationInstructionBytes !== 0 && authorization.instructions !== undefined) {
+      authorizationDetails.instructions = truncateUtf8(
+        authorization.instructions,
+        profile.authorizationInstructionBytes,
+      );
+    }
+    if (repositoryAccess !== undefined) {
+      authorizationDetails.repositoryAccess = {
+        ...repositoryAccess,
+        scopes: repositoryAccess.scopes.slice(0, profile.repositoryScopeCount),
+      };
+    }
+    if (authorization.url !== undefined) {
+      authorizationDetails.url = authorization.url;
+    }
+    if (authorization.userCode !== undefined) {
+      authorizationDetails.userCode = authorization.userCode;
+    }
+    requestDetails.authorization = authorizationDetails;
+  }
+  if (profile.descriptionBytes !== 0 && request.description !== undefined) {
+    requestDetails.description = truncateUtf8(request.description, profile.descriptionBytes);
+  }
+  const requestKind = { ...requestDetails, kind: request.kind };
+  if (options !== undefined && options.length !== 0) {
+    requestKind.options = options;
+  }
+  if (request.presentation !== undefined) {
+    requestKind.presentation = request.presentation;
+  }
   return publicInputRequestSchema.parse({
-    allowFreeform: request.allowFreeform,
-    ...(authorization === undefined
-      ? {}
-      : {
-          authorization: {
-            ...(authorization.displayName === undefined
-              ? {}
-              : { displayName: authorization.displayName }),
-            ...(authorization.expiresAt === undefined
-              ? {}
-              : { expiresAt: authorization.expiresAt }),
-            ...(profile.authorizationInstructionBytes === 0 ||
-            authorization.instructions === undefined
-              ? {}
-              : {
-                  instructions: truncateUtf8(
-                    authorization.instructions,
-                    profile.authorizationInstructionBytes,
-                  ),
-                }),
-            ...(repositoryAccess === undefined
-              ? {}
-              : {
-                  repositoryAccess: {
-                    ...repositoryAccess,
-                    scopes: repositoryAccess.scopes.slice(0, profile.repositoryScopeCount),
-                  },
-                }),
-            ...(authorization.url === undefined ? {} : { url: authorization.url }),
-            ...(authorization.userCode === undefined ? {} : { userCode: authorization.userCode }),
-          },
-        }),
-    ...(profile.descriptionBytes === 0 || request.description === undefined
-      ? {}
-      : {
-          description: truncateUtf8(request.description, profile.descriptionBytes),
-        }),
-    kind: request.kind,
-    ...(options === undefined || options.length === 0 ? {} : { options }),
-    ...(request.presentation === undefined ? {} : { presentation: request.presentation }),
+    ...requestKind,
     requestId: request.requestId,
     title: truncateUtf8(request.title, profile.titleBytes),
   });

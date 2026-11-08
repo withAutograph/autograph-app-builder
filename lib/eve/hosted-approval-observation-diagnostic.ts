@@ -118,7 +118,7 @@ export const createHostedApprovalObservationDiagnostic = (input: {
       const nativeResolution = nativeResolved?.find(
         (entry) => entry.requestId === request.requestId,
       );
-      return {
+      const requestSummary = {
         capturePending: capturePendingMatch !== undefined,
         captureReceipt: captureReceiptMatch !== undefined,
         inlineReceipt: inlineReceiptMatch !== undefined,
@@ -126,9 +126,12 @@ export const createHostedApprovalObservationDiagnostic = (input: {
         nativePending: nativePendingMatch,
         nativeResolved: nativeResolution !== undefined,
         requestHash: identifierHash(request.requestId),
-        ...(nativeResolution === undefined
-          ? {}
+      };
+      const resolvedSummary =
+        nativeResolution === undefined
+          ? requestSummary
           : {
+              ...requestSummary,
               resolution: {
                 approvedOptionMatch:
                   nativeResolution.optionId === undefined
@@ -140,14 +143,15 @@ export const createHostedApprovalObservationDiagnostic = (input: {
                 kind: nativeResolution.kind,
                 outcome: nativeResolution.outcome,
               },
-            }),
-        ...(approvalMatch === undefined
-          ? {}
-          : {
-              callHash: identifierHash(approvalMatch.callId),
-              operationHash: identifierHash(approvalMatch.toolInput.operationRef),
-              planDigest: approvalMatch.toolInput.planDigest,
-            }),
+            };
+      if (approvalMatch === undefined) {
+        return resolvedSummary;
+      }
+      return {
+        ...resolvedSummary,
+        callHash: identifierHash(approvalMatch.callId),
+        operationHash: identifierHash(approvalMatch.toolInput.operationRef),
+        planDigest: approvalMatch.toolInput.planDigest,
       };
     });
     return {

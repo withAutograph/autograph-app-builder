@@ -154,12 +154,15 @@ export async function inspectTargetExecutionReadiness(input: {
   const environment = input.environment ?? process.env;
   const proposal = plannedProposalForExecution(input.state, input.expectedProposalDigest);
   assertProposalExecutionBindings(input.state);
-  await inspectSourceBoundSandboxWorkspace({
+  const workspaceInput: Parameters<typeof inspectSourceBoundSandboxWorkspace>[0] = {
     expectedWorkspace: input.state.workspace,
     receipt: input.state.sourceReceipt,
     sandbox: input.sandbox,
-    ...(input.state.githubSource === undefined ? {} : { githubSource: input.state.githubSource }),
-  });
+  };
+  if (input.state.githubSource !== undefined) {
+    workspaceInput.githubSource = input.state.githubSource;
+  }
+  await inspectSourceBoundSandboxWorkspace(workspaceInput);
   const fixture = hasTestCapability("simulated-target", environment);
   const checkoutBacked = input.state.dependencyReceipt.dependencyLayout.kind === "checkout";
   const tools = fixture
@@ -189,11 +192,14 @@ export async function inspectTargetExecutionReadiness(input: {
           };
         }),
       );
-  const executionEnvironment = resolveTargetExecutionEnvironment({
+  const executionInput: Parameters<typeof resolveTargetExecutionEnvironment>[0] = {
     environment,
     fixture,
-    ...(checkoutBacked ? { checkoutImageDigest: input.state.dependencyReceipt.imageDigest } : {}),
-  });
+  };
+  if (checkoutBacked) {
+    executionInput.checkoutImageDigest = input.state.dependencyReceipt.imageDigest;
+  }
+  const executionEnvironment = resolveTargetExecutionEnvironment(executionInput);
   const cache =
     !checkoutBacked && executionEnvironment.cacheInspectable
       ? await inspectDependencyCache(
@@ -203,12 +209,15 @@ export async function inspectTargetExecutionReadiness(input: {
           shouldPreferLiveTemplateDependencies(input.state.sourceReceipt.version, environment),
         ).catch(() => globalThis.undefined)
       : undefined;
-  const resolvedExecutionEnvironment = resolveTargetExecutionEnvironment({
+  const resolvedInput: Parameters<typeof resolveTargetExecutionEnvironment>[0] = {
     cache,
     environment,
     fixture,
-    ...(checkoutBacked ? { checkoutImageDigest: input.state.dependencyReceipt.imageDigest } : {}),
-  });
+  };
+  if (checkoutBacked) {
+    resolvedInput.checkoutImageDigest = input.state.dependencyReceipt.imageDigest;
+  }
+  const resolvedExecutionEnvironment = resolveTargetExecutionEnvironment(resolvedInput);
   const image = resolvedExecutionEnvironment.imageDigest;
   const { backend } = resolvedExecutionEnvironment;
   const required = (Object.keys(requiredToolVersions) as (keyof typeof requiredToolVersions)[]).map(

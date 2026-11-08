@@ -26,6 +26,7 @@ import {
   retainDraftReconciliationCompletion,
   updateExactDraftReconciliation,
 } from "@/lib/agent/draft-reconciliation-state";
+import type { DraftReconciliationCompletion } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { recordPublishedReconciliationForSession } from "@/lib/agent/published-app-source";
 import { assertReconciliationCompletionOwnerForSession } from "@/lib/agent/compiled-operator-artifacts";
@@ -88,7 +89,7 @@ export default defineTool({
       ) {
         return missingCompletion();
       }
-      completion = {
+      const retained: DraftReconciliationCompletion = {
         preparation: "legacy-recording-only",
         proposal: candidate.proposal,
         review: candidate.review,
@@ -101,13 +102,14 @@ export default defineTool({
         root: candidate.root,
         githubSourceDigest: candidate.githubSourceDigest,
         compilation: candidate.validation.compilation,
-        ...(candidate.publishedOrigin === undefined
-          ? {}
-          : { publishedOrigin: candidate.publishedOrigin }),
-        ...(candidate.publicationScope === undefined
-          ? {}
-          : { publicationScope: candidate.publicationScope }),
       };
+      if (candidate.publishedOrigin !== undefined) {
+        retained.publishedOrigin = candidate.publishedOrigin;
+      }
+      if (candidate.publicationScope !== undefined) {
+        retained.publicationScope = candidate.publicationScope;
+      }
+      completion = retained;
     }
     const { proposal, review } = completion;
     assertApprovalReceipt({
@@ -148,13 +150,14 @@ export default defineTool({
       publication: Parameters<typeof recordPublishedReconciliationForSession>[0]["publication"],
     ) => {
       try {
-        const recording = await recordPublishedReconciliationForSession({
+        const recordingInput: Parameters<typeof recordPublishedReconciliationForSession>[0] = {
           ...session,
           publication,
-          ...(input.recordCurrentEquivalentRelease === true
-            ? { recordCurrentEquivalentRelease: true as const }
-            : {}),
-        });
+        };
+        if (input.recordCurrentEquivalentRelease === true) {
+          recordingInput.recordCurrentEquivalentRelease = true;
+        }
+        const recording = await recordPublishedReconciliationForSession(recordingInput);
         if (recording.status === "selection-changed") {
           return {
             ...publication,

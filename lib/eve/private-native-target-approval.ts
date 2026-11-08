@@ -230,27 +230,36 @@ export const readPrivateNativeTargetApproval = async (input: {
       ? undefined
       : privateNativeTargetApprovalObservationSchema.parse(input.observation.state);
   let capture: ReturnType<typeof createPrivateNativeTargetApprovalCapture> | undefined;
+  const approvalOwner: Pick<
+    Parameters<typeof readPrivateOperatorApproval>[0],
+    "owner" | "observation"
+  > = { owner: input.historyOwner };
+  if (input.observation !== undefined) {
+    const observationState: Pick<
+      NonNullable<Parameters<typeof readPrivateOperatorApproval>[0]["observation"]>,
+      "state"
+    > = {};
+    if (saved !== undefined) {
+      observationState.state = saved.native;
+    }
+    approvalOwner.observation = {
+      ...observationState,
+      save: async (native: PrivateOperatorApprovalObservation) => {
+        if (capture === undefined) {
+          throw new Error("Native target approval capture is unavailable.");
+        }
+        await input.observation?.save(
+          privateNativeTargetApprovalObservationSchema.parse({
+            version: 1,
+            native,
+            terminals: capture.terminalSnapshot(),
+          }),
+        );
+      },
+    };
+  }
   const approval = await readPrivateOperatorApproval({
-    owner: input.historyOwner,
-    ...(input.observation === undefined
-      ? {}
-      : {
-          observation: {
-            ...(saved === undefined ? {} : { state: saved.native }),
-            save: async (native: PrivateOperatorApprovalObservation) => {
-              if (capture === undefined) {
-                throw new Error("Native target approval capture is unavailable.");
-              }
-              await input.observation?.save(
-                privateNativeTargetApprovalObservationSchema.parse({
-                  version: 1,
-                  native,
-                  terminals: capture.terminalSnapshot(),
-                }),
-              );
-            },
-          },
-        }),
+    ...approvalOwner,
     capture: (state) => {
       const captureInput: Parameters<typeof createPrivateNativeTargetApprovalCapture>[0] = {
         owner: input.owner,

@@ -198,15 +198,16 @@ export const createNativeTargetOnboardingClient = (options: {
       if (state.appSpec !== undefined && state.appSpec.appId !== input.appId) {
         throw denied();
       }
+      const request: Extract<NativeTargetTransportRequest, { action: "native-target-plan" }> = {
+        ...common(ctx),
+        action: "native-target-plan",
+        input,
+      };
+      if (state.appSpec !== undefined) {
+        request.selectedApp = { appId: state.appSpec.appId, appSpecDigest: state.appSpec.digest };
+      }
       const output = await send(
-        {
-          ...common(ctx),
-          action: "native-target-plan",
-          input,
-          ...(state.appSpec === undefined
-            ? {}
-            : { selectedApp: { appId: state.appSpec.appId, appSpecDigest: state.appSpec.digest } }),
-        },
+        request,
         nativeTargetTransportResponseSchemas["native-target-plan"],
         ctx.abortSignal,
       );
@@ -263,6 +264,27 @@ export const createNativeTargetOnboardingClient = (options: {
       ) {
         throw denied();
       }
+      type CandidateResponder = Pick<
+        typeof responder,
+        "authenticator" | "principalId" | "principalType" | "issuer" | "subject"
+      >;
+      type MutableCandidateResponder = {
+        -readonly [Key in keyof CandidateResponder]: CandidateResponder[Key];
+      };
+      const candidateResponder = (): CandidateResponder => {
+        const result: MutableCandidateResponder = {
+          authenticator: responder.authenticator,
+          principalId: responder.principalId,
+          principalType: responder.principalType,
+        };
+        if (responder.issuer !== undefined) {
+          result.issuer = responder.issuer;
+        }
+        if (responder.subject !== undefined) {
+          result.subject = responder.subject;
+        }
+        return result;
+      };
       await send(
         {
           ownerContext: owner,
@@ -274,13 +296,7 @@ export const createNativeTargetOnboardingClient = (options: {
             requestId: ctx.request.requestId,
             callId: ctx.request.callId,
             toolName: ctx.request.toolName,
-            responder: {
-              authenticator: responder.authenticator,
-              principalId: responder.principalId,
-              principalType: responder.principalType,
-              ...(responder.issuer === undefined ? {} : { issuer: responder.issuer }),
-              ...(responder.subject === undefined ? {} : { subject: responder.subject }),
-            },
+            responder: candidateResponder(),
           },
         },
         nativeTargetTransportResponseSchemas["native-target-approval-candidate"],
