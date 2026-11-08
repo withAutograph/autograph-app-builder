@@ -608,6 +608,7 @@ export const inspectLocalPublicationDestination =
     const parsed = parseGitStatusV2(
       await git(canonicalPath, ["status", "--porcelain=v2", "-z", "--untracked-files=all"]),
     );
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const dirty = await Promise.all(parsed.map((entry) => dirtyEntry(canonicalPath, entry)));
     const indexPaths = [
       ...new Set(

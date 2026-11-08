@@ -40,8 +40,10 @@ const merged: GitHubPrDeliveryObservation = {
 const fixture = (initial: GitHubPrDeliveryObservation, onClaim?: () => void) => {
   const rows = new Map<string, GitHubPrEffectReceipt>();
   const store = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     read: vi.fn((key: string) => Promise.resolve(rows.get(key))),
     compareAndSet: vi.fn(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       (key: string, expected: string | undefined, receipt: GitHubPrEffectReceipt) => {
         if (rows.get(key)?.digest !== expected) {
           return Promise.resolve(false);
@@ -59,6 +61,7 @@ const fixture = (initial: GitHubPrDeliveryObservation, onClaim?: () => void) => 
     markReady: vi.fn<() => Promise<GitHubPrDeliveryObservation>>().mockResolvedValue(ready),
     merge: vi.fn<() => Promise<GitHubPrDeliveryObservation>>().mockResolvedValue(merged),
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const execute = (
     intent: GitHubPrEffectIntent,
     approvedByCallId = "original-approval",
@@ -76,6 +79,7 @@ const fixture = (initial: GitHubPrDeliveryObservation, onClaim?: () => void) => 
       store,
     });
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const reconcile = (intent: GitHubPrEffectIntent) =>
     reconcileApprovedGitHubPrEffect({ approvedByCallId: "recovery-call", intent, provider, store });
   return { execute, provider, reconcile, rows, store };
@@ -104,6 +108,7 @@ it("uses the original ready journal to confirm a lost response without a second 
 
 it("claims a single pending intent before concurrent ready calls can write", async () => {
   const { execute, provider, rows } = fixture(draft);
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   provider.markReady.mockImplementation(() => {
     expect([...rows.values()]).toMatchObject([{ status: "pending" }]);
     return Promise.resolve(ready);
@@ -136,6 +141,7 @@ it("reconciles a lost merge response by readback and preserves the original appr
 it("aborts without reserving an effect when cancellation arrives during inspection", async () => {
   const { execute, provider, store } = fixture(passed);
   const controller = new AbortController();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   provider.inspect.mockImplementationOnce(() => {
     controller.abort();
     return Promise.resolve(passed);

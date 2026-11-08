@@ -503,6 +503,7 @@ describe("isolated draft reconciliation", () => {
     let largestOutput = 0;
     const sandbox = {
       ...f.sandbox,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readTextFile() {
         return Promise.reject(
           new Error("This source reader has no whole-file text transfer capability."),
@@ -974,6 +975,7 @@ describe("isolated draft reconciliation", () => {
             },
           ],
           contentSource: {
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             readFile: () =>
               Promise.resolve({
                 bytes: Buffer.from("repaired\n"),
@@ -1038,6 +1040,7 @@ describe("isolated draft reconciliation", () => {
       }
       const headSha = git(checkout, "rev-parse", "HEAD");
       git(checkout, "push", "origin", "draft");
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const readFile = () =>
         Promise.resolve({
           bytes: Buffer.from(revised),
@@ -1121,6 +1124,7 @@ describe("isolated draft reconciliation", () => {
             },
           ],
           contentSource: {
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             readFile: () => Promise.reject(new Error("must reject before loading the repair")),
           },
         },
@@ -1892,6 +1896,7 @@ cp.spawn = (command, args, options) => {
     workspaceRoot: f.workspaceRoot,
     retainedRoots: [],
     sandbox: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       run(input) {
         const result = spawnSync("/bin/sh", ["-c", input.command], {
           cwd: f.workspaceRoot,
@@ -2052,6 +2057,7 @@ describe("unused draft worktree retirement", () => {
     controller.abort(cancellation);
     await expect(
       retireUnusedDraftWorktrees({
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         sandbox: { run: () => Promise.reject(cancellation) },
         retainedRoots: [],
         signal: controller.signal,
@@ -2408,6 +2414,7 @@ cp.spawn = (command, args, options) => {
         workspaceRoot: f.workspaceRoot,
         retainedRoots: [],
         sandbox: {
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           run(input) {
             const result = spawnSync("/bin/sh", ["-c", input.command], {
               cwd: f.workspaceRoot,
@@ -2438,6 +2445,7 @@ cp.spawn = (command, args, options) => {
     await retireUnusedDraftWorktrees({
       workspaceRoot: f.workspaceRoot,
       retainedRoots: [],
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       sandbox: { run: () => Promise.reject(new Error("unknown provider outcome")) },
     });
     expect(existsSync(f.retiredRoot)).toBe(true);

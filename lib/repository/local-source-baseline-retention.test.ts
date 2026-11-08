@@ -124,6 +124,7 @@ describe("retained first local planning baseline", () => {
       writeFileSync(path.join(source, "dirty.txt"), "actual initial dirty bytes\n");
       const initial = await inspectDevelopmentSourceGeneration(source);
       const authority = { kind: "local" as const, ownerUid: process.getuid?.() ?? -1, stateRoot };
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const readAuthority = () => Promise.resolve(authority);
       await retainPreparedLocalSourceBaseline(initial, { readAuthority });
       const manifestPath = path.join(

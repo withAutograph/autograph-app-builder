@@ -13,6 +13,7 @@ import {
 
 const roots: string[] = [];
 afterEach(async () => {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 const fixture = async () => {
@@ -111,6 +112,7 @@ describe("actual selected workspace entry program", () => {
     const directory = path.join(f.root, "many");
     await mkdir(directory);
     await Promise.all(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       Array.from({ length: 80 }, (_, index) =>
         writeFile(path.join(directory, `entry-${index}.js`), "fixture"),
       ),

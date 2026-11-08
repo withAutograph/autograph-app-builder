@@ -727,7 +727,7 @@ export const resolveAllowedRepository = async function resolveAllowedRepository(
   input: string,
 ): Promise<string> {
   const candidate = await realpath(nodePath.resolve(input));
-  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep source and filesystem observations in their established order.
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await, typescript/promise-function-async -- Keep source and filesystem observations in their established order. Preserve the returned promise and synchronous throw behavior.
   const roots = await Promise.all(allowedRoots().map((root) => realpath(root)));
   if (!roots.some((root) => within(root, candidate))) {
     throw new Error("The repository path is outside REPOSITORY_LOCAL_ROOTS.");
@@ -1780,6 +1780,7 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
 
 /** Materializes a source only after the canonical clone transport has proven it. */
 export const prepareBuilderOwnedSupportedSandboxWorkspace =
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   function prepareBuilderOwnedSupportedSandboxWorkspace(
     sourcePathInput: string,
     expectedSha: string,

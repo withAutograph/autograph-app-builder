@@ -334,6 +334,7 @@ const compactionFixture = (transportPath = "prototype/demo/app-spec.md") => {
     appSpecDigest: workflow.appSpec.digest,
     proposalAppSpec: workflow.proposal.contract.appSpec,
     retainedRoots: [workflow.applyRoot, workflow.candidateRoot],
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     readAcceptedContent: () => Promise.resolve(accepted),
   };
   return { ...f, absoluteRoot, candidate, input, otherRevision, planningRoot, staleFile, workflow };
@@ -368,6 +369,7 @@ describe("current accepted planning input compaction", () => {
     await expect(
       compactAcceptedPlanningInput({
         ...f.input,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         readAcceptedContent: () => Promise.reject(failure),
       }),
     ).rejects.toBe(failure);
@@ -375,6 +377,7 @@ describe("current accepted planning input compaction", () => {
     await expect(
       compactAcceptedPlanningInput({
         ...f.input,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         readAcceptedContent: () => Promise.resolve("different content"),
       }),
     ).rejects.toThrow("planning input was retained");
@@ -406,6 +409,7 @@ describe("current accepted planning input compaction", () => {
         const parts: Buffer[] = [];
         for await (const chunk of streamVerifiedPrototypeArtifact({
           artifact,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           readChunk: (index) => {
             expect(existsSync(f.staleFile)).toBe(true);
             return Promise.resolve(missing && index === 1 ? undefined : chunks[index]);

@@ -60,6 +60,7 @@ describe("owned previous local preview Auth origin", () => {
     }
   });
   it("binds a bounded provider read to the server-derived state path and cancellation", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const run = vi.fn<SandboxSession["run"]>(() =>
       Promise.resolve({
         exitCode: 0,

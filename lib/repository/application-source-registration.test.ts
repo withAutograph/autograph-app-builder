@@ -24,6 +24,7 @@ const digest = (value: string) => createHash("sha256").update(value).digest("hex
 describe("imported application registration planning", () => {
   it("uses only the acquired platform pure planner without executing app source", async () => {
     const proposedBytes = '{"applications":{"invoice-app":{}}}';
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const run = vi.fn<SandboxSession["run"]>(() =>
       Promise.resolve({
         exitCode: 0,
@@ -46,6 +47,7 @@ describe("imported application registration planning", () => {
     expect(run.mock.calls[0]?.[0].command).not.toContain("apps/invoice-app/");
   });
   it("rejects substituted registration output and invalid app identities", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const run = vi.fn<SandboxSession["run"]>(() =>
       Promise.resolve({
         exitCode: 0,

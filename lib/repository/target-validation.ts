@@ -592,6 +592,7 @@ exit "$status"`;
 
 export const fixtureValidationCommandExecutor =
   (): ValidationCommandExecutor =>
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   ({ appId, command }) => {
     const isBuild = command === repositoryDeliveryBuildCommand(appId);
     if (appId === "validation-interruption" && isBuild) {
@@ -636,6 +637,7 @@ const failureReceipt = (
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 };
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 export const executeProposalBoundValidation = (input: {
   sandbox: SandboxSession;
   executor: ValidationCommandExecutor;

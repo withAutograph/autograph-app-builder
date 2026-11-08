@@ -52,6 +52,7 @@ const modeOf = async (file: string) => {
 };
 const roots: string[] = [];
 afterEach(async () => {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 const fixture = async (content = LEGACY_PRIVATE_COMPUTE_CHECK_TASK, mode = 0o755) => {
@@ -62,6 +63,7 @@ const fixture = async (content = LEGACY_PRIVATE_COMPUTE_CHECK_TASK, mode = 0o755
   await writeFile(file, content, { mode });
   const calls: string[] = [];
   const sandbox = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     run: (input: { command: string; workingDirectory?: string }) => {
       calls.push(input.command);
       expect(input.workingDirectory).toBe("/workspace/repository");
@@ -155,6 +157,7 @@ describe("reviewed private check task", () => {
       applyPrivateComputeCheckPolicy({
         applyRoot: "/workspace/repository",
         profile: profile(),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         sandbox: { run: () => Promise.resolve({ exitCode: 0, stdout, stderr: "" }) },
       }),
     ).rejects.toThrow("readback");
@@ -165,6 +168,7 @@ describe("reviewed private check task", () => {
         applyRoot: "/workspace/repository",
         profile: profile(),
         sandbox: {
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           run: () => Promise.reject(new Error("owner cancelled")),
         },
       }),
@@ -178,6 +182,7 @@ describe("reviewed private check task", () => {
       profile: profile(),
       abortSignal: controller.signal,
       sandbox: {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         run: (options: { abortSignal?: AbortSignal }) => {
           calls += 1;
           expect(options.abortSignal).toBe(controller.signal);

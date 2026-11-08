@@ -173,6 +173,7 @@ export const rebuildOriginalPublicationComposition = async (input: {
   baseSha: string;
   originalPackage: string;
 }) => {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const read = (revision: string, path: string) =>
     checked(
       input.sandbox,

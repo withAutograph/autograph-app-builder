@@ -210,6 +210,7 @@ export const createGitHubTargetAccessAdapter = (
     const observed = targetAccessObservationSchema.parse(
       // eslint-disable-next-line eslint/no-use-before-define -- Function declaration is hoisted; the adapter uses the shared sanitization boundary.
       await sanitizedProviderCall(
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         () => provider.inspectTargetAccess({ operation, repositoryId, requestedPermissions }),
         "verify the selected repository's GitHub installation access",
       ),
@@ -411,6 +412,7 @@ export const createGitHubTargetSourceResolutionAdapter = (
       }
       return repositoryObservation(
         await sanitizedProviderCall(
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           () => provider.inspectRepository({ ref, repositoryId }),
           inspectSelectedRepositoryRevisionAction,
         ),
@@ -437,6 +439,7 @@ export function createGitHubAppPublicationAdapter(
     const snapshot = parseProviderResponse(
       installationSnapshotSchema,
       await sanitizedProviderCall(
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         () =>
           provider.inspectInstallation({
             operation,
@@ -478,30 +481,29 @@ export function createGitHubAppPublicationAdapter(
       return parseProviderResponse(
         acknowledgementSchema,
         await sanitizedProviderCall(
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           () => provider.createPrivateFreshHistoryRepository(proposal, content),
           "create the private repository",
         ),
       );
     },
     async inspectAppliedDraftReconciliation(proposal, observed, recovery) {
-      return z
-        .boolean()
-        .parse(
-          await sanitizedProviderCall(
-            () => provider.inspectAppliedDraftReconciliation(proposal, observed, recovery),
-            "verify whether the draft PR reconciliation was applied",
-          ),
-        );
+      return z.boolean().parse(
+        await sanitizedProviderCall(
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
+          () => provider.inspectAppliedDraftReconciliation(proposal, observed, recovery),
+          "verify whether the draft PR reconciliation was applied",
+        ),
+      );
     },
     async inspectAppliedDraftUpdate(proposal, content, observed) {
-      return z
-        .boolean()
-        .parse(
-          await sanitizedProviderCall(
-            () => provider.inspectAppliedDraftUpdate(proposal, content, observed),
-            "verify whether the draft PR update was applied",
-          ),
-        );
+      return z.boolean().parse(
+        await sanitizedProviderCall(
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
+          () => provider.inspectAppliedDraftUpdate(proposal, content, observed),
+          "verify whether the draft PR update was applied",
+        ),
+      );
     },
     async inspectAppliedDraftRepair(proposal, resolvedTree, observed) {
       const inspect = provider.inspectAppliedDraftRepair;
@@ -510,17 +512,17 @@ export function createGitHubAppPublicationAdapter(
           "The GitHub provider cannot verify an applied draft repair without source bytes.",
         );
       }
-      return z
-        .boolean()
-        .parse(
-          await sanitizedProviderCall(
-            () => inspect.call(provider, proposal, resolvedTree, observed),
-            "verify the exact published draft repair",
-          ),
-        );
+      return z.boolean().parse(
+        await sanitizedProviderCall(
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
+          () => inspect.call(provider, proposal, resolvedTree, observed),
+          "verify the exact published draft repair",
+        ),
+      );
     },
     async inspectDestination(input) {
       const raw = await sanitizedProviderCall(
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         () => provider.inspectDestination(input),
         "inspect the repository destination",
       );
@@ -534,6 +536,7 @@ export function createGitHubAppPublicationAdapter(
       const snapshot = parseProviderResponse(
         draftReadBackSchema,
         await sanitizedProviderCall(
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           () => provider.inspectDraftPublication(proposal),
           "inspect the draft PR publication result",
         ),
@@ -556,6 +559,7 @@ export function createGitHubAppPublicationAdapter(
       return parseProviderResponse(
         existingDraftSchema,
         await sanitizedProviderCall(
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           () => provider.inspectExistingDraft(input),
           "inspect the existing draft PR",
         ),
@@ -563,6 +567,7 @@ export function createGitHubAppPublicationAdapter(
     },
     async inspectFreshRepositoryOutcome(proposal) {
       const raw = await sanitizedProviderCall(
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         () => provider.inspectFreshRepositoryOutcome(proposal),
         "inspect the repository creation result",
       );
@@ -593,6 +598,7 @@ export function createGitHubAppPublicationAdapter(
       const { operation, repositoryId, ref } = input;
       return await observationFor(
         operation,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         () => provider.inspectRepository({ ref, repositoryId }),
         inspectSelectedRepositoryRevisionAction,
       );
@@ -601,6 +607,7 @@ export function createGitHubAppPublicationAdapter(
       return parseProviderResponse(
         acknowledgementSchema,
         await sanitizedProviderCall(
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           () => provider.publishDraftPullRequest(proposal, content),
           "publish the draft PR",
         ),
@@ -610,6 +617,7 @@ export function createGitHubAppPublicationAdapter(
       return parseProviderResponse(
         acknowledgementSchema,
         await sanitizedProviderCall(
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           () => provider.reconcileExistingDraft(proposal, content, recovery),
           "update the existing draft PR",
         ),
@@ -619,6 +627,7 @@ export function createGitHubAppPublicationAdapter(
       return parseProviderResponse(
         acknowledgementSchema,
         await sanitizedProviderCall(
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           () => provider.updateExistingDraft(proposal, content),
           "update the existing draft PR",
         ),
@@ -637,6 +646,7 @@ export function createGitHubAppPublicationAdapter(
       const files = parseProviderResponse(
         z.array(destinationFileSchema),
         await sanitizedProviderCall(
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           () => inspectDestinationFiles(input),
           "inspect destination files",
         ),
@@ -656,6 +666,7 @@ export function createGitHubAppPublicationAdapter(
         z
           .object({ bytes: z.instanceof(Uint8Array), digest, mode: z.enum(["644", "755"]) })
           .nullable(),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         await sanitizedProviderCall(() => readDestinationFile(input), "read the destination file"),
       );
       if (file !== null && createHash("sha256").update(file.bytes).digest("hex") !== file.digest) {
@@ -669,6 +680,7 @@ export function createGitHubAppPublicationAdapter(
     adapter.inspectHistoricalAppSource = async (input) =>
       historicalAppSourceObservationSchema.parse(
         await sanitizedProviderCall(
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           () => inspectHistoricalAppSource(input),
           "inspect the historical App source",
         ),
@@ -693,6 +705,7 @@ export function createGitHubAppSourceResolutionAdapter(
     const snapshot = parseProviderResponse(
       installationSnapshotSchema,
       await sanitizedProviderCall(
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         () =>
           provider.inspectInstallation({
             operation,
@@ -721,6 +734,7 @@ export function createGitHubAppSourceResolutionAdapter(
       const identity = await inspectInstallation(operation);
       return repositoryObservation(
         await sanitizedProviderCall(
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           () => provider.inspectRepository({ ref, repositoryId }),
           inspectSelectedRepositoryRevisionAction,
         ),

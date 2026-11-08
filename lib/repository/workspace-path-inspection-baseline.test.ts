@@ -5,6 +5,7 @@ import type { AppBaselineSelection } from "./app-baseline";
 import { inspectWorkspacePath } from "./workspace-path-inspection";
 
 vi.mock("./app-baseline", () => ({
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   readableAppBaselinePaths: (
     _sandbox: Pick<SandboxSession, "readTextFile">,
     _selection: AppBaselineSelection | undefined,
@@ -20,6 +21,7 @@ it("retains canonical baseline archive omissions when a directory is addressed t
   const path = "/workspace/repository/schema-alias";
   const sandbox = {
     readTextFile: vi.fn<() => Promise<null>>().mockResolvedValue(null),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     run: vi.fn(() =>
       Promise.resolve({
         exitCode: 0,

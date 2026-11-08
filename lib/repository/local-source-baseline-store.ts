@@ -25,7 +25,7 @@ const gitExecutable = "/usr/bin/git";
 const gitExecutablePath = "/usr/bin:/bin";
 const sourceRepositoryDirectory = "source.git";
 
-// oxlint-disable-next-line promise/avoid-new -- Convert the concrete child-process close/error callbacks into one typed completion value.
+// oxlint-disable-next-line promise/avoid-new, typescript/promise-function-async -- Convert the concrete child-process close/error callbacks into one typed completion value. Preserve the returned promise and synchronous throw behavior.
 export const localBaselineProcessExit = (child: ChildProcess): Promise<number> =>
   // oxlint-disable-next-line promise/avoid-new -- Typed adaptation of native child-process lifecycle callbacks.
   new Promise((resolve, reject) => {

@@ -146,6 +146,7 @@ export async function acquireCanonicalArrustedTemplate(input: {
   reader?: ArrustedTemplateReader;
 }): Promise<SourceReceipt> {
   const reader = input.reader ?? deploymentArrustedTemplateReader();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const access = await acquisitionStage("reader", () => reader.acquire());
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof input.sandbox === "function") {
@@ -159,7 +160,9 @@ export async function acquireCanonicalArrustedTemplate(input: {
   }
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   const sandbox = typeof input.sandbox === "function" ? await input.sandbox() : input.sandbox;
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const snapshot = await acquisitionStage("sandbox_clone", () =>
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     readSandboxGitHubSourceSnapshot(sandbox, { repository: ARRUSTED_TEMPLATE_REPOSITORY }, () =>
       materializeBuilderSandboxGitSource(sandbox, {
         token: access.token,
@@ -168,6 +171,7 @@ export async function acquireCanonicalArrustedTemplate(input: {
       }),
     ),
   );
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await acquisitionStage("sandbox_clone", () => assertNewCanonicalMain(sandbox, snapshot));
   const workspaceDigest = receiptReadinessDigest({
     sourceSha: snapshot.sourceSha,
@@ -177,6 +181,7 @@ export async function acquireCanonicalArrustedTemplate(input: {
     readinessDigest: workspaceDigest,
     snapshot,
   });
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await acquisitionStage("workspace_record", () =>
     recordPreparedSandboxWorkspace({
       callId: input.callId,
