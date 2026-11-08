@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import { TOOL_NAMES } from "../../scripts/portable-release";
 import {
@@ -77,9 +78,13 @@ describe("development Codex package", () => {
           "utf-8",
         ),
       );
-      const manifest = JSON.parse(
-        await readFile(path.join(result.pluginRoot, ".codex-plugin/plugin.json"), "utf-8"),
-      );
+      const manifest = z
+        .looseObject({ interface: z.unknown(), name: z.unknown(), version: z.unknown() })
+        .parse(
+          JSON.parse(
+            await readFile(path.join(result.pluginRoot, ".codex-plugin/plugin.json"), "utf-8"),
+          ),
+        );
       const mcp: unknown = JSON.parse(
         await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8"),
       );
@@ -142,7 +147,17 @@ describe("development Codex package", () => {
           cwd: "/private/native-client",
         },
       });
-      const mcp = JSON.parse(await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8"));
+      const mcp = z
+        .looseObject({
+          mcpServers: z.looseObject({
+            "app-builder-dev-3210-hosted": z.looseObject({
+              args: z.union([z.string(), z.array(z.unknown())]),
+              command: z.unknown(),
+              type: z.unknown(),
+            }),
+          }),
+        })
+        .parse(JSON.parse(await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8")));
       const server = mcp.mcpServers["app-builder-dev-3210-hosted"];
       expect(server.type).toBe("stdio");
       expect(server.command).toBe("/tools/node");

@@ -88,7 +88,9 @@ try {
     throw new Error("Codex marketplace archive is not reproducible.");
   }
   const firstReceipt = JSON.parse(await readFile(join(first, RELEASE_RECEIPT_FILE), "utf-8"));
-  const secondReceipt = JSON.parse(await readFile(join(second, RELEASE_RECEIPT_FILE), "utf-8"));
+  const secondReceipt: unknown = JSON.parse(
+    await readFile(join(second, RELEASE_RECEIPT_FILE), "utf-8"),
+  );
   if (JSON.stringify(firstReceipt) !== JSON.stringify(secondReceipt)) {
     throw new Error("Portable release receipt is not reproducible.");
   }

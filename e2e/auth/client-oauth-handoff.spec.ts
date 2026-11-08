@@ -7,6 +7,7 @@ import { createLocalJWKSet, jwtVerify } from "jose";
 import { expect, test } from "playwright/test";
 import type { Page } from "playwright/test";
 import postgres from "postgres";
+import { z } from "zod";
 
 import { cursorClientId, cursorRedirectUri, setupCursorClient } from "../../lib/auth/cursor-client";
 import { previewOAuthScopes } from "../../lib/auth/preview-oauth-contract";
@@ -57,15 +58,19 @@ async function exchange(page: Page, form: Record<string, string>): Promise<Token
       maxRedirects: 0,
     });
     if (response.status() !== 200) throw new Error("Token endpoint request failed.");
-    const value = await response.json();
-    if (
-      typeof value.access_token !== "string" ||
-      typeof value.refresh_token !== "string" ||
-      value.token_type !== "Bearer" ||
-      value.scope !== previewOAuthScopes.join(" ")
-    )
+    const responseData: unknown = await response.json();
+    const value = z
+      .looseObject({
+        access_token: z.string(),
+        refresh_token: z.string(),
+        scope: z.string(),
+        token_type: z.literal("Bearer"),
+      })
+      .safeParse(responseData);
+    if (!value.success || value.data.scope !== previewOAuthScopes.join(" ")) {
       throw new Error("Token response did not include the expected fields.");
-    return value as Tokens;
+    }
+    return value.data;
   } catch {
     throw new Error("Client OAuth token exchange failed; sensitive details omitted.");
   }
@@ -312,7 +317,7 @@ test("web login and both emulated connections survive Cursor consent, token refr
   expect(finalSession?.user?.id === ownerUserId).toBe(true);
   const handoff = await page.request.get(`/api/builder/handoffs/${handoffId}`);
   expect(handoff.ok()).toBe(true);
-  const handoffBody = await handoff.json();
+  const handoffBody = z.looseObject({ status: z.unknown() }).parse(await handoff.json());
   expect(handoffBody.status).toBe("prepared");
   await expect(page.getByText("Continued in your app", { exact: false })).toHaveCount(0);
 

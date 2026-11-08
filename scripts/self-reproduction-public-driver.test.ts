@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import {
   makePublicTransport,
   publicObservationReport,
@@ -19,6 +20,19 @@ interface ObservedPublicCall {
   name: Parameters<PublicTransport["call"]>[0];
   args: Parameters<PublicTransport["call"]>[1];
 }
+
+const rpcRequestSchema = z.looseObject({
+  id: z.unknown().optional(),
+  method: z.string(),
+  params: z.looseObject({ name: z.string().optional() }).optional(),
+});
+
+const transcriptEntrySchema = z.looseObject({
+  arguments: z.unknown().optional(),
+  direction: z.enum(["request", "response"]),
+  name: z.string(),
+  result: z.looseObject({ structuredContent: z.unknown() }).optional(),
+});
 
 const session = (
   status: "working" | "completed" | "input_required" | "waiting",
@@ -131,7 +145,10 @@ describe("public self-reproduction driver", () => {
         },
       }),
     ).rejects.toThrow("connection lost");
-    expect(JSON.parse(saved).pendingResponse.clientRequestId).toBeTruthy();
+    const savedResponse = z
+      .object({ pendingResponse: z.object({ clientRequestId: z.string() }) })
+      .parse(JSON.parse(saved));
+    expect(savedResponse.pendingResponse.clientRequestId).toBeTruthy();
     const original = current.pendingResponse;
     const calls: unknown[] = [];
     await runPublicSession({
@@ -334,7 +351,7 @@ describe("public self-reproduction driver", () => {
     const output = mkdtempSync(path.join(tmpdir(), "public-start-recovery-"));
     const current = state();
     globalThis.fetch = async (_url, options) => {
-      const body = JSON.parse(String(options?.body));
+      const body = rpcRequestSchema.parse(JSON.parse(String(options?.body)));
       const result =
         body.method === "initialize"
           ? {}
@@ -368,15 +385,15 @@ describe("public self-reproduction driver", () => {
       const transcript = readFileSync(path.join(output, "transcript.private.jsonl"), "utf-8")
         .trim()
         .split("\n")
-        .map((line) => JSON.parse(line));
+        .map((line) => transcriptEntrySchema.parse(JSON.parse(line)));
       expect(
         transcript.find(
           (entry) => entry.direction === "response" && entry.name === "autograph_start",
-        ).result.structuredContent,
+        )?.result?.structuredContent,
       ).toEqual(unresolvedStart());
       expect(
         transcript.find((entry) => entry.direction === "request" && entry.name === "autograph_get")
-          .arguments,
+          ?.arguments,
       ).toEqual({ clientRequestId: "stable-start" });
       expect(current.session?.sessionId).toBe("one-session");
       expect(current.unresolvedStartResult).toBeUndefined();
@@ -420,7 +437,7 @@ describe("public self-reproduction driver", () => {
     const original = globalThis.fetch;
     const messages: { method: string }[] = [];
     globalThis.fetch = async (_url, options) => {
-      const body = JSON.parse(String(options?.body));
+      const body = rpcRequestSchema.parse(JSON.parse(String(options?.body)));
       messages.push(body);
       return new Response(
         body.method === "notifications/initialized"
@@ -462,7 +479,7 @@ describe("public self-reproduction driver", () => {
     const headers: Headers[] = [];
     globalThis.fetch = async (_url, options) => {
       headers.push(new Headers(options?.headers));
-      const body = JSON.parse(String(options?.body));
+      const body = rpcRequestSchema.parse(JSON.parse(String(options?.body)));
       return new Response(
         body.method === "notifications/initialized"
           ? null
@@ -511,7 +528,7 @@ describe("public self-reproduction driver", () => {
     const records: unknown[] = [];
     const methods: string[] = [];
     globalThis.fetch = async (_url, options) => {
-      methods.push(JSON.parse(String(options?.body)).method);
+      methods.push(rpcRequestSchema.parse(JSON.parse(String(options?.body))).method);
       return new Response(`Do not record ${token}`, { status: 401 });
     };
     try {
@@ -603,7 +620,9 @@ describe("public self-reproduction driver", () => {
         },
       }),
     ).rejects.toThrow("lost response");
-    const pending = JSON.parse(saved).pendingMessage;
+    const pending = z
+      .object({ pendingMessage: z.object({ message: z.string() }) })
+      .parse(JSON.parse(saved)).pendingMessage;
     expect(pending.message).toBe(message);
     await runPublicSession({
       ...options,
@@ -867,7 +886,7 @@ describe("public self-reproduction preview reporting", () => {
       recordPublicObservation(output, { page: 1, receipt });
       recordPublicObservation(output, { page: 2, text: `Open ${receipt.url}` });
       expect(statSync(privatePath).mode % 0o1000).toBe(0o600);
-      const raw = readFileSync(privatePath, "utf-8")
+      const raw: unknown[] = readFileSync(privatePath, "utf-8")
         .trim()
         .split("\n")
         .map((line) => JSON.parse(line));
