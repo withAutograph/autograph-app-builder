@@ -204,7 +204,13 @@ export const prepareAppCreation = async (
       }
       const identityFields: Pick<
         Extract<DependencyReadyState, { phase: "identity_resolved" }>,
-        "phase" | "preparedByCallId" | "sourceReceipt" | "version" | "workspace" | "githubSource"
+        | "phase"
+        | "preparedByCallId"
+        | "sourceReceipt"
+        | "version"
+        | "workspace"
+        | "githubSource"
+        | "publishedGitHubDraftProposalDigest"
       > = {
         phase: "identity_resolved",
         preparedByCallId: current.preparedByCallId,
@@ -214,6 +220,10 @@ export const prepareAppCreation = async (
       };
       if (current.githubSource !== undefined) {
         identityFields.githubSource = current.githubSource;
+      }
+      if (current.publishedGitHubDraftProposalDigest !== undefined) {
+        identityFields.publishedGitHubDraftProposalDigest =
+          current.publishedGitHubDraftProposalDigest;
       }
       const identityState = {
         ...identityFields,
@@ -253,7 +263,13 @@ export const prepareAppCreation = async (
     transition: () => {
       const plannedFields: Pick<
         Extract<DependencyReadyState, { phase: "planned" }>,
-        "phase" | "preparedByCallId" | "sourceReceipt" | "version" | "workspace" | "githubSource"
+        | "phase"
+        | "preparedByCallId"
+        | "sourceReceipt"
+        | "version"
+        | "workspace"
+        | "githubSource"
+        | "publishedGitHubDraftProposalDigest"
       > = {
         phase: "planned",
         preparedByCallId: current.preparedByCallId,
@@ -263,6 +279,10 @@ export const prepareAppCreation = async (
       };
       if (current.githubSource !== undefined) {
         plannedFields.githubSource = current.githubSource;
+      }
+      if (current.publishedGitHubDraftProposalDigest !== undefined) {
+        plannedFields.publishedGitHubDraftProposalDigest =
+          current.publishedGitHubDraftProposalDigest;
       }
       return {
         ...plannedFields,

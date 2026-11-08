@@ -1,4 +1,5 @@
 import { completionGuidance } from "./completion-guidance";
+import { updateExactWorkflow } from "./workflow-state";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { ApprovalPolicy } from "eve/tools/approval";
@@ -80,6 +81,45 @@ describe("apply tool staged repair integration", () => {
     vi.clearAllMocks();
     mocks.execute.mockResolvedValue({ ok: true, receipt: { changes: [] } });
   });
+  it.each([true, false])(
+    "retains the publication marker after accepted apply (success: %s)",
+    async (success) => {
+      mocks.current = {
+        ...state(`publication-apply-${success}`),
+        publishedGitHubDraftProposalDigest: "verified-publication",
+        githubDraftProposal: { proposal: { digest: "old-sealed-proposal" } },
+      };
+      vi.mocked(updateExactWorkflow).mockImplementationOnce(({ expected, transition }) => {
+        mocks.current = { ...transition(expected) };
+      });
+      const context = {
+        callId: `publication-apply-${success}`,
+        getSandbox: vi.fn().mockResolvedValue({}),
+        session: { id: "session" },
+      } as never;
+      expect(await approval(context)).toBe("user-approval");
+      if (success) {
+        await applyAppCreation.execute({ implementationFiles: [page] }, context);
+      } else {
+        mocks.execute.mockResolvedValueOnce({
+          ok: false,
+          receipt: {
+            command: { exitCode: 1, name: "create" },
+            output: { stderr: "controlled apply failure" },
+          },
+        });
+        await expect(
+          applyAppCreation.execute({ implementationFiles: [page] }, context),
+        ).rejects.toThrow("controlled apply failure");
+      }
+      expect(mocks.current).toMatchObject({
+        phase: success ? "applied" : "apply_failed",
+        publishedGitHubDraftProposalDigest: "verified-publication",
+      });
+      expect(mocks.current).not.toHaveProperty("githubDraftProposal");
+    },
+  );
+
   it("accepts optional Build summaries beyond the card's presentation budget", () => {
     const schema = applyAppCreation.inputSchema;
     if (!(schema instanceof z.ZodType)) {

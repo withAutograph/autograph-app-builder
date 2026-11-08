@@ -60,3 +60,42 @@ export const draftCompletionInstallation = (completion: DraftPublicationCompleti
   publishedOriginInstallation(
     "kind" in completion ? completion.repair : completion.publishedOrigin,
   );
+
+/** Recover a publication lookup from the same accepted app, never its old review approval. */
+export const retainedPublishedDraftOriginForReview = (
+  state: Extract<AppBuilderWorkflowState, { phase: "reviewed" }>,
+  candidate: DraftReconciliationCandidate | null,
+): PublishedDraftRepairSource | undefined => {
+  const retained = candidate?.reviewedLineage;
+  if (
+    state.publishedGitHubDraftProposalDigest !== undefined ||
+    candidate === null ||
+    retained === undefined ||
+    retained.phase !== "reviewed" ||
+    state.sourceReceipt.sourceKind !== "fresh-template" ||
+    state.githubSource !== undefined
+  ) {
+    return undefined;
+  }
+  try {
+    if (reviewedDraftCandidateSource(retained, candidate) === undefined) {
+      return undefined;
+    }
+  } catch {
+    return undefined;
+  }
+  const origin =
+    candidate.kind === "published-draft-repair" ? candidate.repair : candidate.publishedOrigin;
+  const matches = [
+    state.appSpec.appId === retained.appSpec.appId,
+    state.appSpec.digest === retained.appSpec.digest,
+    state.sourceReceipt.digest === retained.sourceReceipt.digest,
+    state.workspace.workspaceId === retained.workspace.workspaceId,
+    state.workspace.workspacePath === retained.workspace.workspacePath,
+    state.workspace.workspaceDigest === retained.workspace.workspaceDigest,
+    state.workspace.sourceSha === retained.workspace.sourceSha,
+    state.workspace.sourceTree === retained.workspace.sourceTree,
+    state.applyReceipt.applyRoot === retained.applyReceipt.applyRoot,
+  ].every(Boolean);
+  return matches ? origin : undefined;
+};

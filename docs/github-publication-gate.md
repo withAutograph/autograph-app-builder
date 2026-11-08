@@ -519,6 +519,18 @@ credential, endpoint, arbitrary refspec, or provider response. Generic shell,
 local Git publication, release activation, deployment, tenant activation, and
 Production are not fallback authority for this boundary.
 
+Ordinary same-app Build planning and apply retain the explicit published-proposal marker
+while giving its new private source changes their own Build, validation and review.
+If an older planning projection lost that marker, Builder may recover only the
+lookup for the original owned publication from a canonical retained repair and
+its original reviewed lineage. The current accepted app, specification, source
+and workspace must still match, and current session-scoped repository access
+must match that origin's repository and installation. Builder re-reads the tenant's
+original successful publication, recorded app source and live owned PR through
+the normal recovery path before recording the recovered marker. It preserves the
+new private proposal, applied changes and review; the old review grants no update
+approval. A contradictory explicit marker is never replaced by this recovery.
+
 ## Reviewed pull request delivery
 
 `read_github_pr_delivery` reads the current PR from the session's owned draft
