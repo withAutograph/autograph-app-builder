@@ -9,7 +9,10 @@ import type {
   DraftPullRequestSuccessReceipt,
 } from "../repository/github-publication";
 import type { ExistingDraftReconciliationProposal } from "../repository/github-draft-reconciliation";
-import type { GitHubPrDeliveryObservation } from "../repository/github-pr-delivery";
+import type {
+  GitHubPrDeliveryObservation,
+  GitHubPrDeliveryProvider,
+} from "../repository/github-pr-delivery";
 import { composeGitHubPublicationRuntime } from "./github-publication-runtime";
 
 const mocks = vi.hoisted(() => ({
@@ -90,7 +93,7 @@ const fixture = (receiptRepositoryId = "100") => {
     headSha: receipt.branchSha,
     baseBranch: receipt.baseBranch,
   };
-  const inspect = vi.fn(() => Promise.resolve(observation));
+  const inspect = vi.fn<GitHubPrDeliveryProvider["inspect"]>().mockResolvedValue(observation);
   const unexpected = vi.fn(() => Promise.reject(new Error("Unexpected publication operation")));
   const compareAndSet = vi.fn();
   const inspectExistingDraft = vi.fn().mockImplementation(unexpected);

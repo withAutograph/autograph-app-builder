@@ -26,7 +26,7 @@ it("proves independent infrastructure operations and always stops the child", as
 });
 
 it("preserves model failure separately and cleans up after a failed child command", async () => {
-  const stop = vi.fn(() => Promise.resolve());
+  const stop = vi.fn<() => Promise<void>>().mockResolvedValue();
   const receipt = await exerciseCandidateCapabilities({
     createChild: () =>
       Promise.resolve({ run: () => Promise.reject(new Error("raw-secret")), stop }),
@@ -64,7 +64,7 @@ it("serializes a valid standalone Node module without credentials", () => {
 });
 
 it("retains failed scratch installation without attempting a product mutation", async () => {
-  const writeTextFile = vi.fn(() => Promise.resolve());
+  const writeTextFile = vi.fn<() => Promise<void>>().mockResolvedValue();
   const run = vi.fn(() =>
     Promise.resolve({ exitCode: 1, stderr: "install failed", stdout: "install output" }),
   );

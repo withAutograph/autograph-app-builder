@@ -179,7 +179,7 @@ const fixture = () => {
         },
       }),
     ),
-    resolvePlan: vi.fn(() => Promise.resolve(plan)),
+    resolvePlan: vi.fn<NativeTargetOnboardingRuntimePorts["resolvePlan"]>().mockResolvedValue(plan),
     readSettledApproval: vi.fn(async () => {
       await authorize();
       return receipt;

@@ -303,13 +303,9 @@ describe("protected native target onboarding service", () => {
       allProjectsConfigured: true,
       disabled: false,
     };
-    const inspect = vi.fn(
-      (
-        _input: Parameters<
-          NonNullable<NativeTargetOnboardingServiceDependencies["inspectProviderAuthorization"]>
-        >[0],
-      ) => Promise.resolve(observation),
-    );
+    const inspect = vi
+      .fn<NonNullable<NativeTargetOnboardingServiceDependencies["inspectProviderAuthorization"]>>()
+      .mockResolvedValue(observation);
     f.dependencies.inspectProviderAuthorization = inspect;
     expect(await f.planOnce()).toMatchObject({
       operationRef: planned.operationRef,

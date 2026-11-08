@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { builderHandoffIntentSchema } from "./contracts";
 import { validateApplicationSourceArtifact } from "./application-source-bytes";
 import { createOwnedSourceCandidateValidator } from "./source-candidate-validation";
@@ -78,7 +78,7 @@ it("denies acknowledgment when membership is revoked during artifact read", asyn
 it("does not read source for an inactive member", async () => {
   let reads = 0;
   const validate = createOwnedSourceCandidateValidator({
-    isActiveMember: () => Promise.resolve(false),
+    isActiveMember: vi.fn<() => Promise<boolean>>().mockResolvedValue(false),
     readCompleted: () => {
       reads += 1;
       return Promise.resolve(verified.artifact);

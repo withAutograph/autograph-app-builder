@@ -5,8 +5,8 @@ import { prepareReferenceCaptureFixture } from "./self-reproduction-reference-ca
 import { selfReproductionDraft } from "./self-reproduction-draft-fixture";
 
 const fixture = vi.hoisted(() => ({
-  authenticate: vi.fn(() => Promise.resolve()),
-  end: vi.fn(() => Promise.resolve()),
+  authenticate: vi.fn<() => Promise<void>>().mockResolvedValue(),
+  end: vi.fn<() => Promise<void>>().mockResolvedValue(),
   query: vi.fn(),
 }));
 vi.mock("../../e2e/support/harness", () => ({

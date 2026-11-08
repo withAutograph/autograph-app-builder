@@ -157,10 +157,10 @@ const ownedDraftFixture = (
     ...unsigned,
     digest: createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"),
   };
-  const read = vi.fn<GitHubPublicationReceiptStore["read"]>(() => Promise.resolve(receipt));
-  const findDraftByPullRequest = vi.fn<
-    NonNullable<GitHubPublicationReceiptStore["findDraftByPullRequest"]>
-  >(() => Promise.resolve(receipt));
+  const read = vi.fn<GitHubPublicationReceiptStore["read"]>().mockResolvedValue(receipt);
+  const findDraftByPullRequest = vi
+    .fn<NonNullable<GitHubPublicationReceiptStore["findDraftByPullRequest"]>>()
+    .mockResolvedValue(receipt);
   const runtime = composeGitHubPublicationRuntime({
     adapter: {
       ...adapterWithoutHistoricalLookup(),
@@ -293,7 +293,9 @@ describe("same-session owned draft repair", () => {
   it.each([true, false])(
     "uses the last approved merge as the second revision baseline only with provider proof (%s)",
     async (applied) => {
-      const inspectAppliedDraftReconciliation = vi.fn(() => Promise.resolve(applied));
+      const inspectAppliedDraftReconciliation = vi
+        .fn<NonNullable<GitHubPublicationAdapter["inspectAppliedDraftReconciliation"]>>()
+        .mockResolvedValue(applied);
       const { draft, receipt, repository, runtime } = ownedDraftFixture(
         {},
         {

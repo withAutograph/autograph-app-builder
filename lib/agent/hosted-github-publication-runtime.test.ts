@@ -12,7 +12,10 @@ import type { BuilderHandoffIntent } from "../handoff/contracts";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
 import { createGitHubTargetSourceResolutionAdapter } from "../repository/github-app-adapter";
 import { createHostedGitHubPublicationRuntimeResolver } from "./hosted-github-publication-runtime";
-import type { HostedGitHubPublicationProviderFactory } from "./hosted-github-publication-runtime";
+import type {
+  HostedGitHubPublicationProviderFactory,
+  HostedGitHubPublicationRuntimeResolverDependencies,
+} from "./hosted-github-publication-runtime";
 
 const authority = {
   audience: "https://builder.example.test/mcp",
@@ -97,7 +100,9 @@ function dependencies(input?: {
       installations,
       membership,
       publicationStores,
-      readPreparedHandoff: vi.fn(() => Promise.resolve(undefined)),
+      readPreparedHandoff: vi
+        .fn<HostedGitHubPublicationRuntimeResolverDependencies["readPreparedHandoff"]>()
+        .mockResolvedValue(undefined),
     },
     installationStore,
     installations,

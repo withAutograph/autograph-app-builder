@@ -7,7 +7,7 @@ import {
 } from "./self-reproduction-runtime";
 
 const backend = (results: { exitCode: number; stdout?: string; stderr?: string }[]) => {
-  const shutdown = vi.fn(() => Promise.resolve());
+  const shutdown = vi.fn<() => Promise<void>>().mockResolvedValue();
   const run = vi.fn(() => {
     const result = results.shift();
     if (!result) {
@@ -15,8 +15,8 @@ const backend = (results: { exitCode: number; stdout?: string; stderr?: string }
     }
     return Promise.resolve({ stderr: "", stdout: "", ...result });
   });
-  const writeTextFile = vi.fn(() => Promise.resolve());
-  const writeBinaryFile = vi.fn(() => Promise.resolve());
+  const writeTextFile = vi.fn<() => Promise<void>>().mockResolvedValue();
+  const writeBinaryFile = vi.fn<() => Promise<void>>().mockResolvedValue();
   const spawn = vi.fn(() =>
     Promise.resolve({
       kill: () => Promise.resolve(),
