@@ -179,9 +179,9 @@ it("uses the authenticated existing observation route once without session start
   const [url, init] = request.mock.calls[0];
   expect(url).toBe("https://builder.example.test/eve/v1/session");
   expect(JSON.parse(z.string().parse(init?.body))).toMatchObject({
-    recoveryPhase: "observe",
-    recovery,
     forwardedPrincipal: { current: { principalId: principal.ownerUserId } },
+    recovery,
+    recoveryPhase: "observe",
   });
   expect(init?.redirect).toBe("manual");
 });

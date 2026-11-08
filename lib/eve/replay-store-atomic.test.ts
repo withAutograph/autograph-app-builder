@@ -24,10 +24,10 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
   version: 1,
   appId: "requests-app",
   origin: {
-    publicSessionId: sessionId,
-    adapterSessionId: "adapter_1",
     adapterGeneration: 1,
+    adapterSessionId: "adapter_1",
     appSpecDigest: "a".repeat(64),
+    publicSessionId: sessionId,
     release: {
       artifactRef: "artifact",
       id: "release",

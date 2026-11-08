@@ -68,10 +68,10 @@ describe("private app integrations installation", () => {
       sandbox: hooks.sandbox,
     });
     expect(result).toMatchObject({
-      status: "installed",
       capabilityState: "source-installed",
-      readiness,
       providerReadiness: "unverified",
+      readiness,
+      status: "installed",
     });
   });
   beforeEach(() => {

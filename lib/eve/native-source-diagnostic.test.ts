@@ -16,29 +16,29 @@ const source = {
   cancellationRevision: 0,
 };
 const summary = nativeSourceDiagnosticSchema.parse({
-  version: 1,
-  collectionKind: "unavailable",
-  collectionReason: "source-not-terminal",
-  collectionBoundary: { stage: "handoff_parent", status: "running", allowParked: true },
-  collectionErrorCategory: null,
-  collectionStage: "candidate_collect",
-  reconciliation: { kind: "unassessed", reason: null, errorCategory: null },
-  lineageRead: {
-    outcome: "unassessed",
-    provenRunCount: null,
-    unsettledStepCount: null,
-    stepCounts: null,
-    errorCategory: null,
-    httpStatus: null,
-  },
   anchorRead: {
+    errorCategory: "schema",
     outcome: "failed",
     stage: "steps_list",
-    errorCategory: "schema",
     status: "completed",
-    unsettledStepCount: null,
     stepCounts: null,
+    unsettledStepCount: null,
   },
+  collectionBoundary: { allowParked: true, stage: "handoff_parent", status: "running" },
+  collectionErrorCategory: null,
+  collectionKind: "unavailable",
+  collectionReason: "source-not-terminal",
+  collectionStage: "candidate_collect",
+  lineageRead: {
+    errorCategory: null,
+    httpStatus: null,
+    outcome: "unassessed",
+    provenRunCount: null,
+    stepCounts: null,
+    unsettledStepCount: null,
+  },
+  reconciliation: { errorCategory: null, kind: "unassessed", reason: null },
+  version: 1,
 });
 
 describe("private source diagnostic transport relay", () => {

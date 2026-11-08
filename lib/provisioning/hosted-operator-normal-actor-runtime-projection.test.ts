@@ -13,17 +13,17 @@ const program = () =>
     appId: "diverse-app",
     origin: "https://actual-preview.example.test",
     actors: ["owner", "second-owner", "shared", "no-access", "unassigned"].map((actorKey) => ({
+      account: "capture-existing",
       actorKey,
       email: `${actorKey}@example.test`,
       name: actorKey,
-      account: "capture-existing",
     })),
     organizations: [
-      { organizationId: "actual-first-org", ownerActorKey: "owner", name: "First", slug: "first" },
+      { name: "First", organizationId: "actual-first-org", ownerActorKey: "owner", slug: "first" },
       {
+        name: "Second",
         organizationId: "actual-second-org",
         ownerActorKey: "second-owner",
-        name: "Second",
         slug: "second",
       },
     ],
@@ -128,8 +128,8 @@ describe("actual normal actor runtime projection", () => {
     expect(rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          actorKey: "owner",
           actorId: "verified-owner-id",
+          actorKey: "owner",
           organizationId: "actual-first-org",
           roles: ["reviewer"],
         }),

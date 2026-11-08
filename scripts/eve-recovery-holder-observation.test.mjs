@@ -53,7 +53,7 @@ const fixture = () => {
   const auth = { authenticator: "fixture", principalId: "fixture-owner" };
   const token = sessionInboxHookToken(sessionCommandHookToken(descriptor.logicalSessionId));
   const summaries = [];
-  const seen = { tokens: [], reads: [], bindings: [] };
+  const seen = { bindings: [], reads: [], tokens: [] };
   let currentRejection = null;
   let hook = {
     runId: holderOwnerRunId,
@@ -70,18 +70,18 @@ const fixture = () => {
   let onRead = () => Promise.resolve();
   let onBinding = () => Promise.resolve();
   const facts = {
-    operationFound: true,
+    committedChildMatches: false,
     descriptorMatches: true,
-    sourceBound: true,
-    operationSucceeded: false,
+    operationFound: true,
+    operationRejected: false,
     operationReserved: true,
     operationSubmissionUnknown: false,
-    operationRejected: false,
-    sourceCancelled: false,
-    sourceCancellationMatches: true,
-    receiptPresent: false,
+    operationSucceeded: false,
     receiptOwnerMatches: false,
-    committedChildMatches: false,
+    receiptPresent: false,
+    sourceBound: true,
+    sourceCancellationMatches: true,
+    sourceCancelled: false,
   };
   const ports = {
     async observeRecoveryHolderBinding(input) {

@@ -145,9 +145,9 @@ it("selects current main even when the provider default branch differs", async (
   const f = fixture();
   const receipt = await f.acquire();
   expect(f.materializeGitSource).toHaveBeenCalledWith({
+    revision: "main",
     token: "fixture-token-never-retained",
     url: remote,
-    revision: "main",
   });
   expect(receipt.sourceSha).toBe(f.mainSha);
   expect(receipt.sourceTree).toBe(f.mainTree);
