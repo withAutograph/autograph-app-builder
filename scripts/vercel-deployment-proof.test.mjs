@@ -120,11 +120,11 @@ test("same exact-source record can become successful after a duplicate cancellat
   });
   assert.equal(observed.result.status, 0, observed.result.stderr);
   assert.deepEqual(JSON.parse(observed.proof), {
+    contract: "canonical-public-contract",
+    environment: "Production",
     format: "autograph-vercel-deployment-proof-v1",
     sha,
-    environment: "Production",
     url: "https://exact-source.vercel.app",
-    contract: "canonical-public-contract",
   });
   assert.equal(
     observed.calls.filter((args) => args.includes(deploymentStatusesEndpoint)).length > 1,

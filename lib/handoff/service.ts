@@ -196,10 +196,11 @@ export function createBuilderHandoffService(input: {
         version: 1,
       });
       const reserved = await input.store.reserve(candidate);
-      const record = requireOwnedRecord(reserved.record, {
-        authority,
-        ...(reserved.disposition === "created" ? { handoffId: candidate.handoffId } : {}),
-      });
+      const expected: { authority: Authority; handoffId?: string } = { authority };
+      if (reserved.disposition === "created") {
+        expected.handoffId = candidate.handoffId;
+      }
+      const record = requireOwnedRecord(reserved.record, expected);
       if (
         record.requestDigest !== requestDigest ||
         record.creationRequestId !== creationRequestId
