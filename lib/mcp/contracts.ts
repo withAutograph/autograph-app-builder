@@ -202,11 +202,12 @@ export const publicWorkingPreviewSchema = z.strictObject({
     .max(2048)
     .superRefine((value, context) => {
       const url = new URL(value);
-      if (url.protocol !== "https:" || url.username || url.password)
+      if (url.protocol !== "https:" || url.username || url.password) {
         context.addIssue({
           code: "custom",
           message: "Working previews require HTTPS without embedded credentials.",
         });
+      }
     }),
   verifiedAt: z.iso.datetime(),
 });

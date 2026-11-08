@@ -1477,16 +1477,18 @@ export const createGitHubAppHttpProvider = (input: {
         observed.headSha === proposal.expectedHeadSha ||
         observed.headTree !== resolvedTree ||
         observed.headRepositoryId !== proposal.repositoryId
-      )
+      ) {
         return false;
+      }
       const current = await inspectExistingDraft({
         repositoryId: proposal.repositoryId,
         owner: proposal.owner,
         name: proposal.name,
         number: proposal.pullRequestNumber,
       });
-      if (current.headSha !== observed.headSha || current.headTree !== observed.headTree)
+      if (current.headSha !== observed.headSha || current.headTree !== observed.headTree) {
         return false;
+      }
       const accessToken = await token(draftPermissions, [proposal.repositoryId]);
       const response = await github({
         authorization: accessToken,
@@ -2033,8 +2035,9 @@ export const createGitHubAppHttpProvider = (input: {
           owner: proposal.owner,
           repositoryName: proposal.name,
         });
-        if (!matches)
+        if (!matches) {
           return { code: reviewedPathChangedCode, path: change.path, status: "rejected" };
+        }
       }
       const tree = await createTree({
         accessToken,
@@ -2043,8 +2046,12 @@ export const createGitHubAppHttpProvider = (input: {
           change.kind === "deleted" ? [change.path] : [],
         ),
         files: content.changes.flatMap((change) => {
-          if (change.kind === "deleted") return [];
-          if (change.bytes === undefined) throw new Error("reviewed-reconciliation-bytes-missing");
+          if (change.kind === "deleted") {
+            return [];
+          }
+          if (change.bytes === undefined) {
+            throw new Error("reviewed-reconciliation-bytes-missing");
+          }
           return [
             {
               content: change.bytes,
@@ -2086,8 +2093,9 @@ export const createGitHubAppHttpProvider = (input: {
         `refs/heads/${proposal.baseBranch}`,
         draftPermissions,
       );
-      if (baseNow.headSha !== proposal.expectedBaseSha)
+      if (baseNow.headSha !== proposal.expectedBaseSha) {
         return { code: branchMovedCode, status: "rejected" };
+      }
       const repositoryIdentity = await github({
         authorization: accessToken,
         expected: [200],

@@ -180,7 +180,9 @@ export function createBuilderHandoffService(input: {
       const creationRequestId = z.uuid().parse(value.creationRequestId);
       const intent = builderHandoffIntentSchema.parse(value.intent);
       if (intent.sourceCandidate !== undefined) {
-        if (input.validateSourceCandidate === undefined) throw new BuilderHandoffUnavailableError();
+        if (input.validateSourceCandidate === undefined) {
+          throw new BuilderHandoffUnavailableError();
+        }
         await input.validateSourceCandidate({ authority, intent });
       }
       const requestDigest = builderHandoffRequestDigest({
@@ -277,7 +279,9 @@ export function createBuilderHandoffService(input: {
     async resolve(value: { authority: Authority; handoffId: string }) {
       const record = await read(value);
       if (record.intent.sourceCandidate !== undefined) {
-        if (input.validateSourceCandidate === undefined) throw new BuilderHandoffUnavailableError();
+        if (input.validateSourceCandidate === undefined) {
+          throw new BuilderHandoffUnavailableError();
+        }
         await input.validateSourceCandidate({ authority: record.authority, intent: record.intent });
       }
       if (record.sessionId !== undefined) {

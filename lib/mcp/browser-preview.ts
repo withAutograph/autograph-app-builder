@@ -287,7 +287,9 @@ export function createServicePrototypePreviewResolver(input: {
     // navigation does not turn a valid preview into a sticky 404.
     let prototype: PublicPrototype | undefined;
     await runSequentially([0, 1, 2, 3, 4], async (attempt) => {
-      if (prototype !== undefined) return;
+      if (prototype !== undefined) {
+        return;
+      }
       const result = await service.get({ cursor: 0, limit: 1, sessionId });
       if (result.prototype !== undefined) {
         ({ prototype } = result);

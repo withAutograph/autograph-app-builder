@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   captureParity,
-  createPairedCaptureRunner,
   runPairedCaptureEvidence,
   unavailableCaptureObservations,
   writePairedCaptureManifest,
@@ -153,7 +152,7 @@ describe("paired capture orchestration", () => {
           }),
       }),
     );
-    const adapter: CaptureAdapter<CapturePage> = {
+    const adapter: CaptureAdapter = {
       exercise: async (_page, state, capture) => {
         await capture();
         const requirement = requirements.find((row) => row.id === `capture/desktop/${state}`);
@@ -165,13 +164,14 @@ describe("paired capture orchestration", () => {
       prepare: () => Promise.resolve({ ready: true }),
     };
     try {
-      const run = createPairedCaptureRunner(() =>
-        Promise.resolve({ close: closeBrowser, newContext }),
-      );
-      const result = await run({
+      launchBrowser.mockClear();
+      launchBrowser.mockResolvedValueOnce({ close: closeBrowser, newContext });
+      const result = await runPairedCaptureEvidence({
         adapters: { candidate: adapter, reference: adapter },
         outputRoot: root,
       });
+      expect(launchBrowser).toHaveBeenCalledOnce();
+      expect(launchBrowser).toHaveBeenCalledWith({ headless: true });
       expect(closeBrowser).toHaveBeenCalledOnce();
       expect(closeContext).toHaveBeenCalledTimes(30);
       expect(result.manifest.rows).toHaveLength(15);

@@ -43,15 +43,19 @@ export function parseLifecycleArguments(
   for (let index = 0; index < args.length; index += 2) {
     const flag = args[index];
     const value = args[index + 1];
-    if (flag === undefined || value === undefined || !flag.startsWith("--"))
+    if (flag === undefined || value === undefined || !flag.startsWith("--")) {
       throw new Error("Image lifecycle arguments must be exact --name value pairs.");
-    if (entries.has(flag)) throw new Error(`Duplicate image lifecycle argument ${flag}.`);
+    }
+    if (entries.has(flag)) {
+      throw new Error(`Duplicate image lifecycle argument ${flag}.`);
+    }
     entries.set(flag, value);
   }
   const required = (flag: string) => {
     const value = entries.get(flag);
-    if (value === undefined || value === "")
+    if (value === undefined || value === "") {
       throw new Error(`Missing required image lifecycle argument ${flag}.`);
+    }
     entries.delete(flag);
     return value;
   };
@@ -64,8 +68,9 @@ export function parseLifecycleArguments(
   };
   const image = action === "preload" || action === "prove" ? required("--image") : undefined;
   const username = action === "login" ? required("--username") : undefined;
-  if (entries.size !== 0)
+  if (entries.size !== 0) {
     throw new Error(`Unknown image lifecycle arguments: ${[...entries.keys()].join(", ")}.`);
+  }
   const result: LifecycleArguments = { approval };
   if (image !== undefined) {
     result.image = image;
@@ -79,22 +84,39 @@ export function parseLifecycleArguments(
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function runImageLifecycleTask(action: ImageLifecycleAction, args: readonly string[]) {
   const { approval, image, username } = parseLifecycleArguments(action, args);
-  if (action === "verify-sources") return await verifyImageSources(approval);
-  if (action === "build") return await buildImage(approval);
-  if (action === "inspect-local") return await inspectLocalImage(approval);
+  if (action === "verify-sources") {
+    return await verifyImageSources(approval);
+  }
+  if (action === "build") {
+    return await buildImage(approval);
+  }
+  if (action === "inspect-local") {
+    return await inspectLocalImage(approval);
+  }
   if (action === "login") {
-    if (username === undefined)
+    if (username === undefined) {
       throw new Error("Missing required image lifecycle argument --username.");
+    }
     return await loginGhcr(approval, username);
   }
-  if (action === "push") return await pushImage(approval);
-  if (action === "inspect-remote") return await inspectRemoteImage(approval);
+  if (action === "push") {
+    return await pushImage(approval);
+  }
+  if (action === "inspect-remote") {
+    return await inspectRemoteImage(approval);
+  }
   if (action === "preload") {
-    if (image === undefined) throw new Error("Missing required image lifecycle argument --image.");
+    if (image === undefined) {
+      throw new Error("Missing required image lifecycle argument --image.");
+    }
     return await preloadImage(approval, image);
   }
-  if (action === "prepare-proof-runtime") return await prepareProofRuntime(approval);
-  if (image === undefined) throw new Error("Missing required image lifecycle argument --image.");
+  if (action === "prepare-proof-runtime") {
+    return await prepareProofRuntime(approval);
+  }
+  if (image === undefined) {
+    throw new Error("Missing required image lifecycle argument --image.");
+  }
   return await proveSandboxImage(approval, image);
 }
 
@@ -114,9 +136,10 @@ if (entrypoint !== undefined && import.meta.url === pathToFileURL(entrypoint).hr
       "prepare-proof-runtime",
       "prove",
     ].includes(action)
-  )
+  ) {
     throw new Error(
       "Usage: image-lifecycle.ts <verify-sources|build|inspect-local|login|push|inspect-remote|preload|prepare-proof-runtime|prove> <exact arguments>",
     );
+  }
   console.log(JSON.stringify(await runImageLifecycleTask(action, process.argv.slice(3)), null, 2));
 }

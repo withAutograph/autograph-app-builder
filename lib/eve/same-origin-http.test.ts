@@ -209,8 +209,12 @@ describe("incremental canonical Eve stream", () => {
       // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
       fetchImplementation: vi.fn(async () => stream(events)),
       onEvent(event) {
-        if (event.type === "input.resolved") internalResolutions += 1;
-        if (toPublicEvent(event) !== null) projected.push({ index: event.index, type: event.type });
+        if (event.type === "input.resolved") {
+          internalResolutions += 1;
+        }
+        if (toPublicEvent(event) !== null) {
+          projected.push({ index: event.index, type: event.type });
+        }
       },
       sessionId: "wrun_1",
       workloadIdentity: identity(),
@@ -2065,7 +2069,9 @@ describe("durable native observer checkpoint", () => {
         config: { ...config, timeoutMs: 10_000 },
         fetchImplementation: http.fetchImplementation,
         onEvent: (event: InternalEveEvent) => {
-          if (toPublicEvent(event) !== null) observed.push(event.index);
+          if (toPublicEvent(event) !== null) {
+            observed.push(event.index);
+          }
         },
         readDeadline: true,
         sessionId: "wrun_1",
@@ -2189,7 +2195,9 @@ describe("explicit cold-read catch-up frontier", () => {
       ),
       allowPartialObservation: true,
       onEvent: (event) => {
-        if (toPublicEvent(event) !== null) publicEvents.push(event.index);
+        if (toPublicEvent(event) !== null) {
+          publicEvents.push(event.index);
+        }
         controller.abort();
       },
       onPrivateEvent: (event) => {
@@ -2341,7 +2349,9 @@ describe("response settlement from owner-checked complete native preflight", () 
       const next = Number(new URL(String(url)).searchParams.get("startIndex"));
       paths.push(next);
       const event = deltas[paths.length - 1];
-      if (event === undefined) throw new Error("unexpected settlement poll");
+      if (event === undefined) {
+        throw new Error("unexpected settlement poll");
+      }
       return await Promise.resolve(
         pinnedResponse(`${JSON.stringify(event)}\n`, seed.nextNativeIndex + paths.length - 1),
       );
@@ -2539,7 +2549,9 @@ it("does not treat a newer turn's waiting boundary as settlement of the original
       return Response.json({ ok: true, sessionId: "wrun_1", status: "accepted" }, { status: 202 });
     }
     starts.push(Number(url.searchParams.get("startIndex")));
-    if (!posted) return cancellationDelta([], 0);
+    if (!posted) {
+      return cancellationDelta([], 0);
+    }
     settlementReads += 1;
     return settlementReads === 1
       ? cancellationDelta([{ data: { turnId: "turn_1" }, type: "turn.cancelled" }], 1)

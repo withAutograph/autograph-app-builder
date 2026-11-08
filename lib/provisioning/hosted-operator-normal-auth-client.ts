@@ -175,10 +175,18 @@ export const projectNormalAuthClientFailure = (
       .unwrap()
       .safeParse(Object.getOwnPropertyDescriptor(error, "retryAfterMs")?.value);
     const diagnostic: NormalAuthClientFailureDiagnostic = { code: code.data };
-    if (operation.success) diagnostic.operation = operation.data;
-    if (httpStatus.success) diagnostic.httpStatus = httpStatus.data;
-    if (authCode.success) diagnostic.authCode = authCode.data;
-    if (retryAfterMs.success) diagnostic.retryAfterMs = retryAfterMs.data;
+    if (operation.success) {
+      diagnostic.operation = operation.data;
+    }
+    if (httpStatus.success) {
+      diagnostic.httpStatus = httpStatus.data;
+    }
+    if (authCode.success) {
+      diagnostic.authCode = authCode.data;
+    }
+    if (retryAfterMs.success) {
+      diagnostic.retryAfterMs = retryAfterMs.data;
+    }
     return diagnostic;
   } catch {
     return undefined;
@@ -282,7 +290,9 @@ const rejectedResponse = async (
     httpStatus: response.status,
     operation,
   };
-  if (authCode) details.authCode = authCode;
+  if (authCode) {
+    details.authCode = authCode;
+  }
   return new NormalAuthClientError("auth_rejected", details);
 };
 
@@ -404,7 +414,9 @@ export const createHostedOperatorNormalAuthClient = (options: {
           method: input === undefined ? "GET" : "POST",
           headers,
         };
-        if (body !== undefined) requestOptions.body = body;
+        if (body !== undefined) {
+          requestOptions.body = body;
+        }
         requestOptions.cache = "no-store";
         requestOptions.redirect = "error";
         requestOptions.signal = signal;

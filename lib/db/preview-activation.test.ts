@@ -56,14 +56,17 @@ const activationDatabase = async () => {
       }
       const statement = segments.join("?").replace(/\s+for update\s*$/iu, "");
       const bindings: SQLInputValue[] = parameters.map((value: unknown) => {
-        if (value instanceof Date) return value.toISOString();
+        if (value instanceof Date) {
+          return value.toISOString();
+        }
         if (
           typeof value === "string" ||
           typeof value === "number" ||
           typeof value === "bigint" ||
           value === null
-        )
+        ) {
           return value;
+        }
         throw new Error("Unexpected SQL parameter");
       });
       const query = db.prepare(statement);

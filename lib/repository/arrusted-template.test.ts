@@ -44,7 +44,7 @@ describe("canonical Arrusted source preparation", () => {
     const run = vi.fn(async ({ command }: { command: string }) => {
       await Promise.resolve();
       commands.push(command);
-      if (command.includes("canonical-main-acquisition-proof-v1"))
+      if (command.includes("canonical-main-acquisition-proof-v1")) {
         return {
           exitCode: 0,
           stderr: "",
@@ -56,6 +56,7 @@ describe("canonical Arrusted source preparation", () => {
             originMatches: true,
           }),
         };
+      }
       return {
         exitCode: command.startsWith("test -L ") ? 1 : 0,
         stderr: "",
@@ -92,7 +93,7 @@ describe("canonical Arrusted source preparation", () => {
     });
     const run = vi.fn(async ({ command }: { command: string }) => {
       await Promise.resolve();
-      if (command.includes("canonical-main-acquisition-proof-v1"))
+      if (command.includes("canonical-main-acquisition-proof-v1")) {
         return {
           exitCode: 0,
           stderr: "",
@@ -104,6 +105,7 @@ describe("canonical Arrusted source preparation", () => {
             originMatches: true,
           }),
         };
+      }
       if (command.startsWith("test -e ") || command.startsWith("test -L ")) {
         return { exitCode: 1, stderr: "", stdout: "" };
       }

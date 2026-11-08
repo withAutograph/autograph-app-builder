@@ -3514,8 +3514,12 @@ export const createHostedOperatorControlPlane = async (input: {
               request,
               principal: ownerContext.principal,
             };
-            if (callId !== undefined) captureInput.callId = callId;
-            if (state !== undefined) captureInput.state = state;
+            if (callId !== undefined) {
+              captureInput.callId = callId;
+            }
+            if (state !== undefined) {
+              captureInput.state = state;
+            }
             return createPrivateTenantExportApprovalCapture(captureInput);
           },
           readHistory: async (startIndex, onEvent) =>
@@ -3962,8 +3966,12 @@ export const createHostedOperatorControlPlane = async (input: {
               request,
               principal: canonical.principal,
             };
-            if (callId !== undefined) captureInput.callId = callId;
-            if (state !== undefined) captureInput.state = state;
+            if (callId !== undefined) {
+              captureInput.callId = callId;
+            }
+            if (state !== undefined) {
+              captureInput.state = state;
+            }
             return createPrivateContinuityApprovalCapture(captureInput);
           },
           readHistory: async (startIndex, onEvent) =>

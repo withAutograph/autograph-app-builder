@@ -26,8 +26,11 @@ const close = (server: Server): Promise<void> =>
   new Promise((resolve, reject) => {
     // oxlint-disable-next-line promise/prefer-await-to-callbacks -- Node close has a callback API.
     server.close((error) => {
-      if (error) reject(error);
-      else resolve();
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
     });
   });
 

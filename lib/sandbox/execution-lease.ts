@@ -248,8 +248,12 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
   ): Promise<readonly SandboxExecutionLease[]> {
     const claimed: SandboxExecutionLease[] = [];
     for (const [key, current] of [...this.leases.entries()].toSorted(([left], [right]) => {
-      if (left < right) return -1;
-      if (left > right) return 1;
+      if (left < right) {
+        return -1;
+      }
+      if (left > right) {
+        return 1;
+      }
       return 0;
     })) {
       if (

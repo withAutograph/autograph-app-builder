@@ -310,7 +310,9 @@ describe("target validation", () => {
         sessionId: "session-a",
       });
       expect(result.ok).toBe(false);
-      if (result.ok) throw new Error("Expected failed test validation.");
+      if (result.ok) {
+        throw new Error("Expected failed test validation.");
+      }
       expect(result.receipt.commands).toHaveLength(2);
       expect(result.receipt.commandFailure).toMatchObject({ exitCode: 1, name: "test" });
       expect(result.receipt.output?.stdout).toContain("unsupported_predecessor");
@@ -359,8 +361,9 @@ describe("target validation", () => {
       ]);
       const [, command] = result.receipt.commands;
       const reference = command?.logs?.stdout;
-      if (command === undefined || reference === undefined)
+      if (command === undefined || reference === undefined) {
         throw new Error("Expected durable failed-command log.");
+      }
       const page = await readValidationLogPage({
         digest: reference.digest,
         key: {
@@ -598,7 +601,9 @@ describe("target validation", () => {
       sandbox,
     });
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("Expected a missing task prerequisite");
+    if (result.ok) {
+      throw new Error("Expected a missing task prerequisite");
+    }
     expect(result.receipt).toMatchObject({
       commandFailure: { exitCode: 1, failureClass: "missing-app-task", name: "check-build" },
       reason: "tooling-prerequisite",
@@ -1127,7 +1132,9 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
           },
           timeout: 1000,
         });
-        if (result.error !== undefined) throw result.error;
+        if (result.error !== undefined) {
+          throw result.error;
+        }
         return { exitCode: result.status ?? -1, stderr: result.stderr, stdout: result.stdout };
       };
       expect(
@@ -1370,7 +1377,9 @@ exit 99
           encoding: "utf-8",
           env: { ...process.env, ...input.env, PATH: `${directory}:/usr/bin:/bin` },
         });
-        if (result.error) throw result.error;
+        if (result.error) {
+          throw result.error;
+        }
         return Promise.resolve({
           exitCode: result.status ?? -1,
           stdout: result.stdout,

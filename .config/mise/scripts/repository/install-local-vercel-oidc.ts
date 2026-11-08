@@ -61,7 +61,9 @@ try {
     closeSync(directory);
   }
 } finally {
-  if (temporaryExists) unlinkSync(temporaryPath);
+  if (temporaryExists) {
+    unlinkSync(temporaryPath);
+  }
 }
 
 process.stdout.write(

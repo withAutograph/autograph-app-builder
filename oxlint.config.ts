@@ -14,6 +14,30 @@ export default defineConfig({
   },
   overrides: [
     {
+      // Preserve the existing error classes at these validation boundaries.
+      files: [
+        ".config/mise/scripts/repository/build-hosted-arrusted-artifact.mts",
+        "lib/provisioning/starter-source.ts",
+      ],
+      rules: { "unicorn/prefer-type-error": "off" },
+    },
+    {
+      // These files are owned by concurrent work and retain their existing findings.
+      files: [
+        "app/ui/app-access.tsx",
+        "app/ui/app-access.test.tsx",
+        "lib/app-access/management.ts",
+        "lib/app-access/native-management.ts",
+        "lib/eve/private-repository-production-approval.test.ts",
+        "lib/provisioning/repository-production-creator.ts",
+        "lib/provisioning/repository-production-creator.test.ts",
+        "lib/provisioning/repository-production-native.ts",
+        "lib/provisioning/repository-production-setup.test.ts",
+        "scripts/eve-eval-fetch-preload.mjs",
+      ],
+      rules: { "eslint/curly": "off" },
+    },
+    {
       // Existing assertions awaiting behavior-preserving type boundaries.
       files: [
         "e2e/support/harness.ts",
@@ -172,7 +196,6 @@ export default defineConfig({
     "unicorn/consistent-function-scoping": "off",
     "unicorn/no-useless-undefined": "off",
     "eslint/complexity": "off",
-    "eslint/curly": "off",
     // Temporary migration items: re-enable after the existing findings are fixed.
     "eslint/sort-keys": "off",
   },

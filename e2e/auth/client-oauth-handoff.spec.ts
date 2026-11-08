@@ -72,7 +72,9 @@ async function exchange(page: Page, form: Record<string, string>): Promise<Token
       headers: { origin: appOrigin },
       maxRedirects: 0,
     });
-    if (response.status() !== 200) throw new Error("Token endpoint request failed.");
+    if (response.status() !== 200) {
+      throw new Error("Token endpoint request failed.");
+    }
     const responseData: unknown = await response.json();
     const value = z
       .looseObject({
@@ -96,7 +98,9 @@ async function verifyOwner(page: Page, tokens: Tokens, ownerUserId: string, work
   let stage = "JWKS readback";
   try {
     const response = await page.request.get(`${issuer}/jwks`);
-    if (!response.ok()) throw new Error("JWKS request failed.");
+    if (!response.ok()) {
+      throw new Error("JWKS request failed.");
+    }
     stage = "signature, issuer, audience, and lifetime verification";
     const jwks = z
       .looseObject({ keys: z.array(z.looseObject({ kty: z.string().optional() })) })
@@ -107,9 +111,13 @@ async function verifyOwner(page: Page, tokens: Tokens, ownerUserId: string, work
       issuer,
     });
     stage = "web owner comparison";
-    if (payload.sub !== ownerUserId) throw new Error("JWT owner does not match.");
+    if (payload.sub !== ownerUserId) {
+      throw new Error("JWT owner does not match.");
+    }
     stage = "web workspace comparison";
-    if (payload.workspace_id !== workspaceId) throw new Error("JWT workspace does not match.");
+    if (payload.workspace_id !== workspaceId) {
+      throw new Error("JWT workspace does not match.");
+    }
   } catch {
     throw new Error(`Client OAuth ${stage} failed; sensitive details omitted.`);
   }
@@ -196,8 +204,9 @@ test("web login and both emulated connections survive Cursor consent, token refr
   });
   const handoffPath = new URL(page.url()).pathname;
   const handoffId = handoffPath.split("/").at(-1);
-  if (handoffId === undefined || handoffId === "")
+  if (handoffId === undefined || handoffId === "") {
     throw new Error("OAuth handoff URL did not include an ID.");
+  }
   await page.getByText("Set up Autograph in Cursor", { exact: true }).click();
   await expect(page.getByRole("link", { name: "Add Autograph to Cursor" })).toBeVisible();
 
@@ -215,16 +224,18 @@ test("web login and both emulated connections survive Cursor consent, token refr
       ([githubEmulatorOrigin, vercelEmulatorOrigin].includes(url.origin) && !avatarRead) ||
       /^\/(?:local-oauth|local-connections)\//u.test(url.pathname) ||
       /\/api\/auth\/(?:sign-in|oauth2\/authorize-provider|oauth2\/link)/u.test(url.pathname)
-    )
+    ) {
       providerAuthorizationRequests.push(
         `${request.method()} ${url.pathname} ${request.resourceType()} prefetch=${request.headers()["next-router-prefetch"] ?? "none"}`,
       );
+    }
     if (
       url.origin === appOrigin &&
       url.pathname === "/api/auth/oauth2/consent" &&
       request.method() === "POST"
-    )
+    ) {
       consentSubmissions += 1;
+    }
   });
 
   let callback: URL | undefined;
