@@ -91,24 +91,24 @@ const sourcePlan = (branch: string) =>
     bootstrap: { endpointId: "ep-fixture", maintenanceDatabase: "neondb", role: "neondb_owner" },
     resourcesInstaller: { reference: "resource-worker", sha256: "d".repeat(64) },
     publicGateway: {
-      projectId: "prj_gateway",
       branch: selection.branch,
       origin: "https://apps-preview.example.test",
+      projectId: "prj_gateway",
     },
     deploymentBoundary: {
       authority,
       teamId: "team_fixture",
-      app: { projectId: selection.projectId, branch, environment: "preview" },
-      gateway: { projectId: "prj_gateway", branch: selection.branch, environment: "preview" },
+      app: { branch, environment: "preview", projectId: selection.projectId },
+      gateway: { branch: selection.branch, environment: "preview", projectId: "prj_gateway" },
       operator: {
-        projectId: "prj_operator",
-        environment: "preview",
         deploymentId: "operator-deployment",
+        environment: "preview",
+        projectId: "prj_operator",
       },
       verification: {
         gatewayOrigin: "https://gateway.example.test",
-        publicOrigin: "https://apps-preview.example.test",
         jwksUrl: "https://gateway.example.test/_platform/jwks.json",
+        publicOrigin: "https://apps-preview.example.test",
       },
     },
     delivery: {
@@ -119,19 +119,19 @@ const sourcePlan = (branch: string) =>
     },
     effects: [
       {
+        description: "Auth resources",
         id: "auth-resources",
         kind: "resources",
-        description: "Auth resources",
         resourceId: basePlan.authDatabase.resourceId,
       },
       {
+        description: "App resources",
         id: "app-resources",
         kind: "resources",
-        description: "App resources",
         resourceId: basePlan.appDatabase.resourceId,
       },
       ...basePlan.effects.filter((effect) => effect.kind !== "resources"),
-      { id: "delivery", kind: "delivery", description: "Actual delivery" },
+      { description: "Actual delivery", id: "delivery", kind: "delivery" },
     ],
   });
 const oldPlan = sourcePlan("codex/generated-old");

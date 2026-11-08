@@ -32,31 +32,31 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
     adapterGeneration: 1,
     appSpecDigest: "a".repeat(64),
     release: {
-      id: "release-original",
       artifactRef: "artifact-original",
+      id: "release-original",
       manifestSha256: "b".repeat(64),
       schemaSha256: "c".repeat(64),
     },
   },
   project: {
-    protection: {
-      ssoProtection: { deploymentType: "all" },
-      oidcTokenConfig: { enabled: true, issuerMode: "team" },
-    },
-    name: "requests-app",
-    teamId: "team_fixture",
     installationId: "install_fixture",
+    name: "requests-app",
     projectSettings: {
       framework: "nextjs",
       rootDirectory: "apps/requests",
       sourceFilesOutsideRootDirectory: true,
     },
+    protection: {
+      oidcTokenConfig: { enabled: true, issuerMode: "team" },
+      ssoProtection: { deploymentType: "all" },
+    },
+    teamId: "team_fixture",
   },
   branch: "main",
   appDatabase: {
-    resourceId: "requests-resource",
     database: "requests_data",
     migratorRole: "requests_migrator",
+    resourceId: "requests-resource",
     runtimeRole: "requests_runtime",
   },
   productRoles: [],
@@ -68,22 +68,22 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
       sourceProjectId: "source-project",
     },
     scope: {
-      projectId: "neon-project",
       branchId: "neon-branch",
       endpointId: "neon-endpoint",
       hostname: "ep-fixture.neon.tech",
       maintenanceDatabase: "maintenance",
       maintenanceRole: "installer",
+      projectId: "neon-project",
     },
   },
   worker: {
-    id: "generic-installer",
     executablePath: "/trusted/generic-worker",
-    sha256: "d".repeat(64),
+    id: "generic-installer",
     operationScope: "generated-app-release-install-v1",
+    sha256: "d".repeat(64),
     subcommand: "protected-generated-app-install",
   },
-  cost: { ownership: "current-owner", description: "Separate app target" },
+  cost: { description: "Separate app target", ownership: "current-owner" },
   retention: { policy: "Until approved cleanup" },
   conflictPolicy: "stop-on-conflict",
 });
@@ -151,12 +151,12 @@ describe("native target private resource approval capture", () => {
       throw new Error("Expected the native approval receipt.");
     }
     expect(receipt).toMatchObject({
-      requestId: "human-request",
       callId: "prepare-call",
-      toolName: "prepare-app-native-target",
-      responderPrincipalId: authority.ownerUserId,
       outcome: "approved",
+      requestId: "human-request",
+      responderPrincipalId: authority.ownerUserId,
       toolInput,
+      toolName: "prepare-app-native-target",
     });
     expect(privateResourceApprovalSessionId(receipt)).toBe(owner.publicSessionId);
     expect(resumed.snapshot().pendingRequests).toHaveLength(0);

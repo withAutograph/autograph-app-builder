@@ -145,8 +145,8 @@ const seed = (
   }
   const result = (observed: readonly OverlayFile[] = postTree) => ({
     exitCode: 0,
-    stdout: observed.map(({ mode, digest, path }) => `${mode}\t${digest}\t${path}\n`).join(""),
     stderr: "",
+    stdout: observed.map(({ mode, digest, path }) => `${mode}\t${digest}\t${path}\n`).join(""),
   });
   const run = vi.fn(() => Promise.resolve(result()));
   const unexpectedSandboxOperation = () => {
@@ -166,12 +166,12 @@ const seed = (
     removePath: unexpectedSandboxOperation,
   };
   return {
-    input: { appId, sessionId, sandbox, state: current },
     current,
-    prior,
     currentScope,
-    run,
+    input: { appId, sessionId, sandbox, state: current },
+    prior,
     result,
+    run,
   };
 };
 
@@ -181,8 +181,8 @@ it("selects only the denied plan's last validated private bytes without rewritin
     const retained = [readPrivateApplyAuthority(), existingAppRepairHistory.get()];
     const selected = await priorValidatedPrivateArtifact(f.input);
     expect(selected).toMatchObject({
-      root: "/workspace/repository",
       revision: f.prior.applyReceipt.digest,
+      root: "/workspace/repository",
       validationDigest: f.prior.validationReceipt.digest,
     });
     expect(f.run).toHaveBeenCalledOnce();
@@ -259,7 +259,7 @@ it("accepts mode-only changes on both workspace bins and rechecks only paths and
       "packages/microfrontends-shell/scripts/vercel-service-cli.mjs",
       "packages/microfrontends/scripts/vercel-service-cli.mjs",
     ];
-    const bins = paths.map((path) => ({ path, digest: sha256(path), mode: "755" }));
+    const bins = paths.map((path) => ({ digest: sha256(path), mode: "755", path }));
     const f = seed("denied", [sourceFile, ...bins]);
     const retained = [readPrivateApplyAuthority(), existingAppRepairHistory.get()];
     f.run.mockResolvedValue(

@@ -195,13 +195,13 @@ describe("canonical preapproval authoring", () => {
     expect(
       hostedOperationRecordSchema.safeParse({
         ...common,
-        state: "reserved",
         internalBuildContinuation: {},
+        state: "reserved",
       }).success,
     ).toBe(false);
     for (const terminal of [
-      { state: "rejected", safeErrorCode: "denied" },
-      { state: "succeeded", result },
+      { safeErrorCode: "denied", state: "rejected" },
+      { result, state: "succeeded" },
     ]) {
       expect(
         isDeliveredInternalContinuation(
@@ -213,8 +213,8 @@ describe("canonical preapproval authoring", () => {
       isDeliveredInternalContinuation(
         hostedOperationRecordSchema.parse({
           ...common,
-          state: "submission_unknown",
           safeErrorCode: "lost_ack",
+          state: "submission_unknown",
         }),
       ),
     ).toBe(true);

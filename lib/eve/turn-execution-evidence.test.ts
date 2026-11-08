@@ -64,11 +64,11 @@ const summarize = (
   selector?: Parameters<typeof summarizeNativeTurnExecution>[0]["selector"],
 ) =>
   summarizeNativeTurnExecution({
-    sessionId: "wrun_original",
-    ownerLineage: ["wrun_original", "wrun_recovered"],
-    nativeCursor: events.length,
     events,
+    nativeCursor: events.length,
+    ownerLineage: ["wrun_original", "wrun_recovered"],
     selector,
+    sessionId: "wrun_original",
   });
 const statusOnly = () => [
   start("turn_16", 16),
@@ -88,9 +88,16 @@ describe("per-turn native execution evidence", () => {
     const before = JSON.stringify(events);
     const evidence = summarize(events, { deliveryId: "delivery_current" });
     expect(evidence).toMatchObject({
-      selectedBy: "delivery-id",
+      lastHistoricalFailedExecution: {
+        callId: "call_old",
+        commandReferences: [{ commandId: "cmd_old", nativeIndex: 2 }],
+        requested: { nativeIndex: 1 },
+        result: { nativeIndex: 2, status: "failed" },
+        turnId: "turn_16",
+      },
       nativeCursor: events.length,
       ownerLineage: ["wrun_original", "wrun_recovered"],
+      selectedBy: "delivery-id",
       selectedTurn: {
         acceptedMessages: [{ deliveryIds: ["delivery_current"], nativeIndex: 5 }],
         attempts: [
@@ -99,13 +106,6 @@ describe("per-turn native execution evidence", () => {
         execution: "unexercised",
         sequence: 17,
         turnId: "turn_17",
-      },
-      lastHistoricalFailedExecution: {
-        callId: "call_old",
-        commandReferences: [{ commandId: "cmd_old", nativeIndex: 2 }],
-        requested: { nativeIndex: 1 },
-        result: { nativeIndex: 2, status: "failed" },
-        turnId: "turn_16",
       },
     });
     expect(evidence.selectedTurn.attempts).toHaveLength(1);
@@ -187,18 +187,18 @@ describe("per-turn native execution evidence", () => {
     const events = statusOnly();
     expect(() =>
       summarizeNativeTurnExecution({
-        sessionId: "wrun_original",
-        ownerLineage: ["wrun_original"],
         events,
         nativeCursor: events.length + 1,
+        ownerLineage: ["wrun_original"],
+        sessionId: "wrun_original",
       }),
     ).toThrow();
     expect(() =>
       summarizeNativeTurnExecution({
-        sessionId: "wrun_original",
-        ownerLineage: ["wrun_foreign"],
         events,
         nativeCursor: events.length,
+        ownerLineage: ["wrun_foreign"],
+        sessionId: "wrun_original",
       }),
     ).toThrow();
   });

@@ -932,11 +932,11 @@ describe("behavior evidence invalidation during validation repair", () => {
       requestPrivateApplyApproval(scope, "approve");
       recordApprovedPrivateApply(scope, "approve");
       expect(await validateAppCreation.execute(input, context)).toMatchObject({
-        status: "needs_repair",
-        reason: "reviewed-check-recipe-required",
         implementationFiles: [
-          { path: taskPath, operation: "upsert", content: PRIVATE_COMPUTE_CHECK_TASK },
+          { content: PRIVATE_COMPUTE_CHECK_TASK, operation: "upsert", path: taskPath },
         ],
+        reason: "reviewed-check-recipe-required",
+        status: "needs_repair",
       });
       expect(getSandbox).not.toHaveBeenCalled();
       expect(writeTextFile).not.toHaveBeenCalled();

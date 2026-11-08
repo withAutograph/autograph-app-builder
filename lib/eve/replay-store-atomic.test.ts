@@ -29,8 +29,8 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
     adapterGeneration: 1,
     appSpecDigest: "a".repeat(64),
     release: {
-      id: "release",
       artifactRef: "artifact",
+      id: "release",
       manifestSha256: "b".repeat(64),
       schemaSha256: "c".repeat(64),
     },
@@ -48,9 +48,9 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
   },
   branch: "preview",
   appDatabase: {
-    resourceId: "resource",
     database: "requests_data",
     migratorRole: "requests_owner",
+    resourceId: "resource",
     runtimeRole: "requests_runtime",
   },
   productRoles: [],
@@ -58,12 +58,12 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
     approvalReference: "scope",
     nativeStore: { configurationId: "config", resourceId: "store", sourceProjectId: "source" },
     scope: {
-      projectId: "project",
       branchId: "branch",
       endpointId: "endpoint",
       hostname: "ep-fixture.neon.tech",
       maintenanceDatabase: "maintenance",
       maintenanceRole: "installer",
+      projectId: "project",
     },
   },
   worker: {
