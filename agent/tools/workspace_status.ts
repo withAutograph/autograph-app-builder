@@ -31,6 +31,35 @@ const unplannedAppNextAction = (): string =>
 
 type StatusState = Exclude<ReturnType<typeof appBuilderWorkflowState.get>, { phase: "empty" }>;
 type PhaseState<P extends StatusState["phase"]> = Extract<StatusState, { phase: P }>;
+type StateWithAppSpec = StatusState & Pick<PhaseState<"app_spec_accepted">, "appSpec">;
+type StateWithDependencies = StateWithAppSpec &
+  Pick<PhaseState<"dependencies_prepared">, "dependencyReceipt">;
+type StateWithIdentity = StateWithDependencies &
+  Pick<PhaseState<"identity_resolved">, "identityReceipt">;
+type StateWithProposal = StateWithIdentity & Pick<PhaseState<"planned">, "proposal">;
+type StateWithApply = StateWithProposal & Pick<PhaseState<"applied">, "applyReceipt">;
+
+const hasValidationOrReview = (state: StatusState): state is StateWithApply =>
+  state.phase === "validation_pending" ||
+  state.phase === "validation_failed" ||
+  state.phase === "validated" ||
+  isReviewedPhase(state);
+
+const hasAppliedOrLater = (state: StatusState): state is StateWithApply =>
+  state.phase === "applied" || hasValidationOrReview(state);
+
+const hasProposalOrLater = (state: StatusState): state is StateWithProposal =>
+  state.phase === "planned" || state.phase === "apply_failed" || hasAppliedOrLater(state);
+
+const hasIdentityOrLater = (state: StatusState): state is StateWithIdentity =>
+  state.phase === "identity_resolved" || hasProposalOrLater(state);
+
+const hasDependenciesOrLater = (state: StatusState): state is StateWithDependencies =>
+  state.phase === "dependencies_prepared" || hasIdentityOrLater(state);
+
+const hasAppSpecOrLater = (state: StatusState): state is StateWithAppSpec =>
+  state.phase === "app_spec_accepted" || hasDependenciesOrLater(state);
+
 interface StatusReceipt {
   artifacts: ReturnType<typeof prototypeArtifactReceipt>[];
   phase: StatusState["phase"];
@@ -84,18 +113,7 @@ const statusReceipt = (state: StatusState, recovered: boolean) => {
   ) {
     receipt.nextAction = unplannedAppNextAction();
   }
-  if (
-    state.phase === "app_spec_accepted" ||
-    state.phase === "dependencies_prepared" ||
-    state.phase === "identity_resolved" ||
-    state.phase === "planned" ||
-    state.phase === "apply_failed" ||
-    state.phase === "applied" ||
-    state.phase === "validation_pending" ||
-    state.phase === "validation_failed" ||
-    state.phase === "validated" ||
-    isReviewedPhase(state)
-  ) {
+  if (hasAppSpecOrLater(state)) {
     const appSpec: NonNullable<StatusReceipt["appSpec"]> = {
       acceptedByCallId: state.appSpec.acceptedByCallId,
       appId: state.appSpec.appId,
@@ -108,40 +126,13 @@ const statusReceipt = (state: StatusState, recovered: boolean) => {
     }
     receipt.appSpec = appSpec;
   }
-  if (
-    state.phase === "dependencies_prepared" ||
-    state.phase === "identity_resolved" ||
-    state.phase === "planned" ||
-    state.phase === "apply_failed" ||
-    state.phase === "applied" ||
-    state.phase === "validation_pending" ||
-    state.phase === "validation_failed" ||
-    state.phase === "validated" ||
-    isReviewedPhase(state)
-  ) {
+  if (hasDependenciesOrLater(state)) {
     receipt.dependencies = { digest: state.dependencyReceipt.digest };
   }
-  if (
-    state.phase === "identity_resolved" ||
-    state.phase === "planned" ||
-    state.phase === "apply_failed" ||
-    state.phase === "applied" ||
-    state.phase === "validation_pending" ||
-    state.phase === "validation_failed" ||
-    state.phase === "validated" ||
-    isReviewedPhase(state)
-  ) {
+  if (hasIdentityOrLater(state)) {
     receipt.identity = { digest: state.identityReceipt.digest };
   }
-  if (
-    state.phase === "planned" ||
-    state.phase === "apply_failed" ||
-    state.phase === "applied" ||
-    state.phase === "validation_pending" ||
-    state.phase === "validation_failed" ||
-    state.phase === "validated" ||
-    isReviewedPhase(state)
-  ) {
+  if (hasProposalOrLater(state)) {
     receipt.proposal = { digest: state.proposal.digest };
   }
   if (state.phase === "apply_failed") {
@@ -152,13 +143,7 @@ const statusReceipt = (state: StatusState, recovered: boolean) => {
       status: state.applyFailure.status,
     };
   }
-  if (
-    state.phase === "applied" ||
-    state.phase === "validation_pending" ||
-    state.phase === "validation_failed" ||
-    state.phase === "validated" ||
-    isReviewedPhase(state)
-  ) {
+  if (hasAppliedOrLater(state)) {
     receipt.apply = {
       changedContentDigest: state.applyReceipt.changedContentDigest,
       digest: state.applyReceipt.digest,
