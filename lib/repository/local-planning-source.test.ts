@@ -454,9 +454,32 @@ describe("retained dirty planning baseline", () => {
       Promise.reject(new Error("Unexpected process/stream operation in source-only fixture"));
     const sandbox: SandboxSession & { id: string } = {
       id: "saved-workspace",
-      resolvePath: localPath,
-      spawn: unavailable,
+      readBinaryFile: ({ path: name }) => {
+        try {
+          return Promise.resolve(readFileSync(localPath(name)));
+        } catch (error) {
+          if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+            return Promise.resolve(null);
+          }
+          throw error;
+        }
+      },
       readFile: unavailable,
+      readTextFile: ({ path: name }) => {
+        try {
+          return Promise.resolve(readFileSync(localPath(name), "utf-8"));
+        } catch (error) {
+          if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+            return Promise.resolve(null);
+          }
+          throw error;
+        }
+      },
+      removePath: ({ path: name, recursive, force }) => {
+        rmSync(localPath(name), { force, recursive });
+        return Promise.resolve();
+      },
+      resolvePath: localPath,
       run: ({ command, workingDirectory }) => {
         const mapped = command
           .replaceAll("/workspace/repository", f.candidate)
@@ -471,36 +494,11 @@ describe("retained dirty planning baseline", () => {
         }
         return Promise.resolve({
           exitCode: result.status,
-          stdout: result.stdout,
           stderr: result.stderr,
+          stdout: result.stdout,
         });
       },
-      readTextFile: ({ path: name }) => {
-        try {
-          return Promise.resolve(readFileSync(localPath(name), "utf-8"));
-        } catch (error) {
-          if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-            return Promise.resolve(null);
-          }
-          throw error;
-        }
-      },
-      readBinaryFile: ({ path: name }) => {
-        try {
-          return Promise.resolve(readFileSync(localPath(name)));
-        } catch (error) {
-          if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-            return Promise.resolve(null);
-          }
-          throw error;
-        }
-      },
-      writeTextFile: ({ path: name, content }) => {
-        const file = localPath(name);
-        mkdirSync(path.dirname(file), { recursive: true });
-        writeFileSync(file, content);
-        return Promise.resolve();
-      },
+      spawn: unavailable,
       writeBinaryFile: ({ path: name, content }) => {
         const file = localPath(name);
         mkdirSync(path.dirname(file), { recursive: true });
@@ -512,8 +510,10 @@ describe("retained dirty planning baseline", () => {
         mkdirSync(path.dirname(file), { recursive: true });
         writeFileSync(file, Buffer.from(await new Response(content).arrayBuffer()));
       },
-      removePath: ({ path: name, recursive, force }) => {
-        rmSync(localPath(name), { force, recursive });
+      writeTextFile: ({ path: name, content }) => {
+        const file = localPath(name);
+        mkdirSync(path.dirname(file), { recursive: true });
+        writeFileSync(file, content);
         return Promise.resolve();
       },
     };
