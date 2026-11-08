@@ -209,10 +209,9 @@ export const evaluateCandidateRuntime = async (input: {
   const commands: RuntimeCommandReceipt[] = [];
   let handle: CandidateRuntimeSandbox | undefined;
   const controller = new AbortController();
-  const timer = setTimeout(
-    () => controller.abort(new Error("Candidate runtime deadline exceeded.")),
-    input.timeoutMs ?? 600_000,
-  );
+  const timer = setTimeout(() => {
+    controller.abort(new Error("Candidate runtime deadline exceeded."));
+  }, input.timeoutMs ?? 600_000);
   try {
     if (input.backend === undefined) {
       const native = await Sandbox.create({
