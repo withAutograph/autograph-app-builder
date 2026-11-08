@@ -118,10 +118,10 @@ describe("planning from the current checkout", () => {
           before: change.before?.mode,
           after: change.after?.mode,
         })),
-      ).toEqual(files.map((path) => ({ path, before: "755", after: "755" })));
+      ).toEqual(files.map((path) => ({ after: "755", before: "755", path })));
       expect(readFileSync(nodePath.join(root, collider), "utf-8")).toBe(`original ${collider}`);
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      rmSync(root, { force: true, recursive: true });
     }
   });
   it("plans with checkout execution despite an irrelevant hosted image setting", () => {

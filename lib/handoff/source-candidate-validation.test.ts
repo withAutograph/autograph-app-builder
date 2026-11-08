@@ -34,14 +34,14 @@ const intent = builderHandoffIntentSchema.parse({
   appId: "supplier-spend",
   appName: "Supplier Spend",
   brief: "Continue this app",
-  modelId: "openai/gpt-6-luna",
   connections: [],
+  modelId: "openai/gpt-6-luna",
   repository: { private: true, requestedName: "supplier-spend" },
   sourceCandidate: {
-    kind: "application-source-candidate-v1",
-    uploadId: "123e4567-e89b-42d3-a456-426614174000",
     appId: "supplier-spend",
+    kind: "application-source-candidate-v1",
     manifestDigest: verified.manifestDigest,
+    uploadId: "123e4567-e89b-42d3-a456-426614174000",
   },
 });
 

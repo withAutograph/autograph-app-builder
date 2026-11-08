@@ -111,10 +111,10 @@ const fixture = () => {
   return {
     binding,
     operations,
-    sessions,
     revoke: () => {
       allowed = false;
     },
+    sessions,
     setSource: (next: HostedSessionRecord) => {
       currentSource = next;
     },
@@ -278,13 +278,13 @@ describe("native recovery holder facts", () => {
           holderDescriptor: retainedDescriptor,
         }),
       ).toMatchObject({
-        operationFound: true,
-        descriptorMatches: true,
-        sourceBound: false,
-        sourceCancelled: kind === "cancelled" ? true : null,
-        sourceCancellationMatches: kind === "cancelled" ? false : null,
-        receiptPresent: false,
         committedChildMatches: null,
+        descriptorMatches: true,
+        operationFound: true,
+        receiptPresent: false,
+        sourceBound: false,
+        sourceCancellationMatches: kind === "cancelled" ? false : null,
+        sourceCancelled: kind === "cancelled" ? true : null,
       });
     },
   );

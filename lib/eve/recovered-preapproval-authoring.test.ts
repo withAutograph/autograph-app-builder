@@ -210,8 +210,8 @@ describe("recovered accepted authoring continuation", () => {
     });
     // SAFETY: The controller exercises only this transport port; all persistence uses the real store.
     const transport = {
-      sendAccepted,
       observe: async () => ({ status: "waiting", pendingRequests: [] }),
+      sendAccepted,
     } as unknown as HostedEveTransport;
     const controller = {
       assertCurrentOwner: vi.fn(async () => {

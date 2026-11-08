@@ -57,9 +57,9 @@ describe("genuine private Build denial lifecycle", () => {
       expect(readPrivateApplyAuthority().terminalDecisions).toMatchObject([
         {
           callId: "denied-call",
-          scope,
-          outcome: "denied-not-run",
           eventIds: ["request-event", "resolution-event", "result-event"],
+          outcome: "denied-not-run",
+          scope,
         },
       ]);
     });

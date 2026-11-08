@@ -84,21 +84,21 @@ const fixture = () => {
     sessionId: "actual-session",
   };
   return {
-    input,
-    ports,
-    native,
     effects,
-    get record() {
-      return record;
+    input,
+    native,
+    observeConfigured: () => {
+      vcpus = 8;
     },
     observeStatus: (value: PrivateComputeNative["status"]) => {
       status = value;
     },
+    ports,
+    get record() {
+      return record;
+    },
     uncertain: () => {
       uncertainUpdate = true;
-    },
-    observeConfigured: () => {
-      vcpus = 8;
     },
   };
 };

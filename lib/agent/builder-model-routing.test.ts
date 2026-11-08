@@ -348,8 +348,8 @@ describe("native Gateway reporting metadata", () => {
     };
     expect(await handler({ type: "step.started" }, unavailableContext)).toMatchObject({
       model: activeBuilderModelId,
-      reasoning: "low",
       modelOptions: { providerOptions: { gateway: { only: ["openai"], order: ["openai"] } } },
+      reasoning: "low",
     });
     expect(console.info).not.toHaveBeenCalled();
   });

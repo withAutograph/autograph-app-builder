@@ -70,14 +70,14 @@ const fixture = (initial: GitHubPrDeliveryObservation, onClaim?: () => void) => 
     }
     return executeApprovedGitHubPrEffect({
       ...signal,
-      intent,
       approvedByCallId,
-      store,
+      intent,
       provider,
+      store,
     });
   };
   const reconcile = (intent: GitHubPrEffectIntent) =>
-    reconcileApprovedGitHubPrEffect({ intent, approvedByCallId: "recovery-call", store, provider });
+    reconcileApprovedGitHubPrEffect({ approvedByCallId: "recovery-call", intent, provider, store });
   return { execute, provider, reconcile, rows, store };
 };
 
