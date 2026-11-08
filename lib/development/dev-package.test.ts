@@ -71,7 +71,7 @@ describe("development Codex package", () => {
         port: 3210,
         repositoryRoot: path.resolve("."),
       });
-      const marketplace = JSON.parse(
+      const marketplace: unknown = JSON.parse(
         await readFile(
           path.join(result.marketplaceRoot, ".agents/plugins/marketplace.json"),
           "utf-8",
@@ -80,8 +80,10 @@ describe("development Codex package", () => {
       const manifest = JSON.parse(
         await readFile(path.join(result.pluginRoot, ".codex-plugin/plugin.json"), "utf-8"),
       );
-      const mcp = JSON.parse(await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8"));
-      const tools = JSON.parse(
+      const mcp: unknown = JSON.parse(
+        await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8"),
+      );
+      const tools: unknown = JSON.parse(
         await readFile(path.join(result.pluginRoot, "tools-list.json"), "utf-8"),
       );
       expect(result.marketplaceRoot).toBe(path.join(root, "marketplace"));

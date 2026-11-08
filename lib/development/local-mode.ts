@@ -689,7 +689,7 @@ export const developmentDependencyKey = async (input: {
   }
   const lockfiles = Object.fromEntries(
     await Promise.all(
-      dependencyInputs.map(async (path) => [
+      dependencyInputs.map(async (path): Promise<[string, string]> => [
         path,
         await digestFileOrAbsent(join(sourceRoot, path)),
       ]),
