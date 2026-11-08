@@ -133,7 +133,6 @@ export default defineConfig({
         sharedLintFile26,
         "lib/eve/postgres-hosted-store.ts",
         sharedLintFile27,
-        sharedLintFile28,
         "lib/image/lifecycle.ts",
         "lib/mcp/request-handler.ts",
         "lib/provisioning/hosted-operator-contract.ts",

@@ -1487,15 +1487,19 @@ async function readRespondSettlementIncremental(input: {
       ({ nativeObservationState } = observed);
     }
     const outstanding = new Set(observed.pendingRequests.map((request) => request.requestId));
-    if (
-      input.internalSessionLimitResponse?.decision === "stop"
-        ? observed.nativeObservationState.privateInputState !== undefined &&
-          provesSessionLimitResponse(
-            input.internalSessionLimitResponse,
-            observed.nativeObservationState.privateInputState,
-          )
-        : (!seeded && observed.status !== "input_required") ||
-          input.requestIds.every((requestId) => !outstanding.has(requestId))
+    if (input.internalSessionLimitResponse?.decision === "stop") {
+      if (
+        observed.nativeObservationState.privateInputState !== undefined &&
+        provesSessionLimitResponse(
+          input.internalSessionLimitResponse,
+          observed.nativeObservationState.privateInputState,
+        )
+      ) {
+        return;
+      }
+    } else if (
+      (!seeded && observed.status !== "input_required") ||
+      input.requestIds.every((requestId) => !outstanding.has(requestId))
     ) {
       return;
     }
