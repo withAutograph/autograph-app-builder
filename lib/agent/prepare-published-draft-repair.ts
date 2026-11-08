@@ -94,7 +94,6 @@ export const draftInspectionRecoveryForSession = (input: {
   const published = sameApp ? candidate.publishedReconciliation : undefined;
   return {
     priorPublishedProposalDigest: input.priorPublishedProposalDigest,
-    reconciliations: published === undefined ? [] : [published],
     readPublishedSource: async (draft) =>
       await readPublishedOperatorSourceForSession({
         appId: input.appId,
@@ -112,6 +111,7 @@ export const draftInspectionRecoveryForSession = (input: {
           gitTree: draft.headTree,
         },
       }),
+    reconciliations: published === undefined ? [] : [published],
   };
 };
 
@@ -227,11 +227,6 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
         repository: repair.source.repository,
         sessionId: ctx.session.id,
       }),
-    sandbox: {
-      setNetworkPolicy: async (policy) => {
-        await setBuilderSandboxNetworkPolicy(sandbox, policy);
-      },
-    },
     prepare: async () => {
       assertCurrentOrigin(state, previous);
       const candidateInput: Parameters<typeof preparePublishedDraftRepairCandidate>[0] = {
@@ -249,6 +244,11 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
         candidateInput.replayPreviousCandidate = true;
       }
       return await preparePublishedDraftRepairCandidate(candidateInput);
+    },
+    sandbox: {
+      setNetworkPolicy: async (policy) => {
+        await setBuilderSandboxNetworkPolicy(sandbox, policy);
+      },
     },
   });
   assertCurrentOrigin(state, previous);
@@ -351,8 +351,8 @@ const preservedDraftWorkspaces = (
       : [
           {
             kind: "draft-candidate" as const,
-            root: preservedCandidateRoot,
             reviewDigest: state.reviewReceipt.digest,
+            root: preservedCandidateRoot,
           },
         ]),
     {
@@ -440,9 +440,9 @@ const retainedInitialAppSource = async (input: {
     throw new Error("The retained app source has no package manifest to restore.");
   }
   const before = original.map(({ path, sha256: digest, mode }) => ({
-    path,
     digest,
     mode: mode.slice(3),
+    path,
   }));
   const delta = overlayChanges(
     { files: before, treeDigest: state.workspace.workspaceDigest },
@@ -593,11 +593,6 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
         repository: repair.source.repository,
         sessionId: ctx.session.id,
       }),
-    sandbox: {
-      setNetworkPolicy: async (policy) => {
-        await setBuilderSandboxNetworkPolicy(sandbox, policy);
-      },
-    },
     prepare: async () => {
       assertCurrentOrigin(state, previous);
       const candidateInput: DraftReconciliationInput = {
@@ -620,6 +615,11 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
         ...candidateInput,
         ...previousInput,
       });
+    },
+    sandbox: {
+      setNetworkPolicy: async (policy) => {
+        await setBuilderSandboxNetworkPolicy(sandbox, policy);
+      },
     },
   });
   assertCurrentOrigin(state, previous);

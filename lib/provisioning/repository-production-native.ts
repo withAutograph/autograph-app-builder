@@ -275,7 +275,7 @@ export const createRepositoryProductionNativeHandler =
                   databaseEnvironment: description.backend.runtime.databaseEnvironment,
                 },
         };
-        const result = { scope, intent, profile, owner, description, capture, assertCurrentOwner };
+        const result = { assertCurrentOwner, capture, description, intent, owner, profile, scope };
         records.set(key(scope), result);
         return result;
       };

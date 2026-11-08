@@ -373,7 +373,7 @@ const parseRow = (
     nativeTargetOnboardingRecordSchema.parse(raw.record),
   );
   if (
-    raw.requestId !== identity({ authority, appId: record.appId }) ||
+    raw.requestId !== identity({ appId: record.appId, authority }) ||
     raw.requestDigest !== record.planDigest ||
     raw.state !== nativeTargetOnboardingTableState(record)
   ) {
@@ -516,7 +516,7 @@ export const createNativeTargetOnboardingRegistry = <Invocation>(
   const current = async (invocation: Invocation, appId: string) => {
     const owner = await ports.authorize(invocation, builderAppIdSchema.parse(appId));
     const authority = hostedTenantAuthoritySchema.parse(owner.authority);
-    return { owner: { ...owner, authority }, key: { authority, appId } };
+    return { key: { appId, authority }, owner: { ...owner, authority } };
   };
   const load = async (invocation: Invocation, appId: string) => {
     const result = await current(invocation, appId);

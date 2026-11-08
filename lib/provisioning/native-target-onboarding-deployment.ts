@@ -640,7 +640,7 @@ export const createNativeTargetOnboardingDeployment = (input: {
         );
       } catch {
         // This failure precedes the provider dispatch and is a definite non-creation.
-        return { status: "rejected", reason: "authorization_denied" };
+        return { reason: "authorization_denied", status: "rejected" };
       }
       const projectInput: Parameters<typeof createNativeTargetVercelProject>[0] = {
         installation: credential.binding,
