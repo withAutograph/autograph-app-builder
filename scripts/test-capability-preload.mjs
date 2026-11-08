@@ -84,6 +84,7 @@ function workerEnvironment(source, eveProfile, eveEnvelope) {
   environment.EVE_DEV_WORKER_APP_ROOT = hasEveEnvelope ? undefined : repositoryRoot;
   // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   environment.EVE_DEV = undefined;
+  // oxlint-disable-next-line typescript/strict-boolean-expressions -- Preserve the worker profile truthiness check.
   if (!hasEveEnvelope && eveProfile) {
     environment.EVE_DEV = "1";
   }
@@ -306,18 +307,23 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
         typeof options.workerData === "object" && options.workerData !== null
           ? options.workerData
           : {};
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
       const eveEnvelope =
         eveProfile && exactFilename === eveWorker
           ? // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing worker and capability data boundary.
             captureEveWorkerEnvelope(options.env, repositoryRoot)
           : undefined;
+      /* oxlint-enable typescript/strict-boolean-expressions */
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
       const nestedGateAEvalProfile =
         eveProfile && exactFilename === eveWorker
           ? validateGateAEvalProfile(gateAEvalProfile, repositoryRoot)
           : null;
+      /* oxlint-enable typescript/strict-boolean-expressions */
       const isTimeoutFixture = exactFilename?.endsWith(
         "/scripts/test-capability-worker-timeout-fixture.mjs",
       );
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
       // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing worker and capability data boundary.
       super(filename, {
         ...options,
@@ -343,6 +349,7 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
           [gateAEvalProfileKey]: nestedGateAEvalProfile,
         },
       });
+      /* oxlint-enable typescript/strict-boolean-expressions */
       let settled = false;
       /** @type {{ timeout: ReturnType<typeof setTimeout> | undefined }} */
       // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.

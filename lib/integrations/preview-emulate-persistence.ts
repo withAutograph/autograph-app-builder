@@ -31,9 +31,11 @@ function validateState(state: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function pendingVercelCodeCount(state: string | undefined) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!state) {
     return 0;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   try {
     const snapshot = JSON.parse(state) as {
       store?: { data?: Record<string, { entries?: unknown[] }> };

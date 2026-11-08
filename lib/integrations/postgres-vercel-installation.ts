@@ -142,9 +142,11 @@ export function createPostgresVercelAuthorizationStateStore(
       const returnState: Parameters<typeof parseProviderConnectionReturn>[0] = {
         returnTo: row.returnTo,
       };
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (row.resumeKey) {
         returnState.resumeKey = row.resumeKey;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       // oxlint-disable-next-line typescript/consistent-return -- Preserve absent installation and continuation results.
       return parseProviderConnectionReturn(returnState);
     },
@@ -186,9 +188,11 @@ export function createPostgresVercelAuthorizationStateStore(
       const returnState: Parameters<typeof parseProviderConnectionReturn>[0] = {
         returnTo: rows[0].returnTo,
       };
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (rows[0].resumeKey) {
         returnState.resumeKey = rows[0].resumeKey;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       // oxlint-disable-next-line typescript/consistent-return -- Preserve absent installation and continuation results.
       return parseProviderConnectionReturn(returnState);
     },

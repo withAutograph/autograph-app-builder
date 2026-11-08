@@ -62,8 +62,10 @@ export function developmentChildExit(child: DevelopmentChild) {
   if (child.signalCode !== null) {
     return Promise.resolve(1);
   }
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
   return once(child, "exit").then(([code, signal]) => (code as number | null) ?? (signal ? 1 : 0));
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

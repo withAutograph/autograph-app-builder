@@ -160,6 +160,7 @@ export const createPostgresPhysicalResourceLease =
             : await leaseInput.readCurrentFence();
           const lockParts: AdvisoryLockParts[] = [];
           for (const key of [...new Set(leaseInput.lockKeys)].toSorted()) {
+            /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
             if (leaseInput.tryAcquire) {
               const [rawAcquired] = await connection`
                 select pg_try_advisory_xact_lock(hashtextextended(${key}, 0)) as held
@@ -170,6 +171,7 @@ export const createPostgresPhysicalResourceLease =
             } else {
               await connection`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
             }
+            /* oxlint-enable typescript/strict-boolean-expressions */
             const [rawParts] = await connection`
               select
                 ((hashtextextended(${key}, 0) >> 32) & 4294967295)::text as class_id,

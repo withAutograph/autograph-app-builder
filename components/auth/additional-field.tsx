@@ -152,6 +152,7 @@ const DateInput = function DateInput({ name, field, isPending }: AdditionalField
     }
   }
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
   return (
     <Field data-invalid={error !== undefined && error !== null && error !== ""}>
       <FieldLabel htmlFor={`${name}-date`}>{field.label}</FieldLabel>
@@ -244,13 +245,16 @@ const DateInput = function DateInput({ name, field, isPending }: AdditionalField
       <FieldError>{error}</FieldError>
     </Field>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 };
 
 const SliderField = function SliderField({ name, field, isPending }: AdditionalFieldProps) {
   const maxFractionDigits = field.formatOptions?.maximumFractionDigits;
   const min = field.min ?? 0;
   const max = field.max ?? 100;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
   const step = field.step ?? (maxFractionDigits ? 1 / 10 ** maxFractionDigits : 1);
+  /* oxlint-enable typescript/strict-boolean-expressions */
   let initial = min;
   if (typeof field.defaultValue === "number") {
     initial = field.defaultValue;
@@ -269,6 +273,7 @@ const SliderField = function SliderField({ name, field, isPending }: AdditionalF
     [field.formatOptions],
   );
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
   return (
     <Field>
       <div className="flex items-center justify-between gap-2">
@@ -298,6 +303,7 @@ const SliderField = function SliderField({ name, field, isPending }: AdditionalF
       <FieldError />
     </Field>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 };
 
 const InputField = function InputField({ name, field, isPending }: AdditionalFieldProps) {
@@ -311,10 +317,15 @@ const InputField = function InputField({ name, field, isPending }: AdditionalFie
   const nativeInputType = isNumeric ? "number" : undefined;
   let nativeInputMode: "decimal" | "numeric" | undefined;
   if (isNumeric) {
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
     nativeInputMode = maxFractionDigits ? "decimal" : "numeric";
+    /* oxlint-enable typescript/strict-boolean-expressions */
   }
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
   const nativeStep = maxFractionDigits ? 1 / 10 ** maxFractionDigits : undefined;
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
   if (hasPrefix || hasSuffix) {
     return (
       <Field>
@@ -357,6 +368,7 @@ const InputField = function InputField({ name, field, isPending }: AdditionalFie
       </Field>
     );
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   return (
     <Field>
@@ -390,6 +402,7 @@ export const AdditionalField = function AdditionalField({
   isPending,
   optionalLabel,
 }: AdditionalFieldProps) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   const field =
     optionalLabel && !configuredField.required
       ? {
@@ -402,6 +415,7 @@ export const AdditionalField = function AdditionalField({
           ),
         }
       : configuredField;
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const inputType = resolveInputType(field);
 
   if (field.render) {
@@ -460,6 +474,7 @@ export const AdditionalField = function AdditionalField({
         typeof field.defaultValue === "number" ? field.defaultValue : String(field.defaultValue);
     }
 
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
     return (
       <Field>
         <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
@@ -482,6 +497,7 @@ export const AdditionalField = function AdditionalField({
         <FieldError />
       </Field>
     );
+    /* oxlint-enable typescript/strict-boolean-expressions */
   }
 
   if (inputType === "slider") {
@@ -489,6 +505,7 @@ export const AdditionalField = function AdditionalField({
   }
 
   if (inputType === "switch") {
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
     return (
       <Field orientation="horizontal">
         <Switch
@@ -506,9 +523,11 @@ export const AdditionalField = function AdditionalField({
         </FieldContent>
       </Field>
     );
+    /* oxlint-enable typescript/strict-boolean-expressions */
   }
 
   if (inputType === "checkbox") {
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
     return (
       <Field orientation="horizontal">
         <Checkbox
@@ -527,9 +546,11 @@ export const AdditionalField = function AdditionalField({
         </FieldContent>
       </Field>
     );
+    /* oxlint-enable typescript/strict-boolean-expressions */
   }
 
   if (inputType === "select") {
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
     return (
       <Field>
         <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
@@ -563,9 +584,11 @@ export const AdditionalField = function AdditionalField({
         <FieldError />
       </Field>
     );
+    /* oxlint-enable typescript/strict-boolean-expressions */
   }
 
   if (inputType === "combobox") {
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
     return (
       <Field>
         <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
@@ -602,6 +625,7 @@ export const AdditionalField = function AdditionalField({
         <FieldError />
       </Field>
     );
+    /* oxlint-enable typescript/strict-boolean-expressions */
   }
 
   if (inputType === "date" || inputType === "datetime") {

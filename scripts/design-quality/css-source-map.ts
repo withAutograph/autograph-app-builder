@@ -120,6 +120,7 @@ export function originalCssSource(
       if (typeof path !== "string" || !path) {
         return;
       }
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       // oxlint-disable-next-line typescript/consistent-return -- Preserve absent or decoded source-map results.
       return {
         column: candidate.originalColumn + 1,
@@ -129,6 +130,7 @@ export function originalCssSource(
           : path,
         sourceIndex: candidate.source,
       };
+      /* oxlint-enable typescript/strict-boolean-expressions */
     }
   }
 }

@@ -67,20 +67,26 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
   });
   const consent = useOAuthConsent(oauthClient);
   const client = publicClient.data;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty client name uses the localized application name.
   const clientName = client?.client_name || localization.application;
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const logoUrl = sanitizeOAuthClientUrl(client?.logo_uri);
   const policyUrl = sanitizeOAuthClientUrl(client?.policy_uri);
   const termsUrl = sanitizeOAuthClientUrl(client?.tos_uri);
   const requestResolved = request !== undefined;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   let invalidRequest = requestResolved && !request.clientId;
+  /* oxlint-enable typescript/strict-boolean-expressions */
   if (requestResolved && !invalidRequest) {
     invalidRequest = (!isSessionPending && !session) || publicClient.isError;
     if (!invalidRequest && !publicClient.isPending) {
       invalidRequest = Boolean(session && !client);
     }
   }
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const canRespond = Boolean(request?.clientId && session && client && !consent.isPending);
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   if (invalidRequest) {
     return (
@@ -93,6 +99,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
     );
   }
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <Card className={cn("w-full max-w-md", className)}>
       <CardHeader className="gap-4">
@@ -239,4 +246,5 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
       </CardFooter>
     </Card>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

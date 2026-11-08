@@ -293,11 +293,13 @@ const waitForPreview = async (input: {
           }
           return missingRuntimeFile(error);
         });
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (failure) {
         throw new Error(
           `The application server failed to start. ${workingPreviewDiagnosticExcerpt(failure) || "No safe process diagnostic was available."}`,
         );
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       // oxlint-disable-next-line eslint/no-await-in-loop -- Wait for this startup, never launch a replacement.
       await delay(500, undefined, { signal: input.signal });
     }

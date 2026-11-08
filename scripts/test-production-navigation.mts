@@ -107,7 +107,7 @@ const freePort = async () => {
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof, typescript/strict-boolean-expressions -- Preserve the runtime type check and truthiness behavior.
   if (!address || typeof address === "string") {
     throw new Error("Missing loopback port.");
   }
@@ -284,7 +284,7 @@ try {
   tls.listen(0, "127.0.0.1");
   await once(tls, "listening");
   const address = tls.address();
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof, typescript/strict-boolean-expressions -- Preserve the runtime type check and truthiness behavior.
   if (!address || typeof address === "string") {
     throw new Error("Missing TLS port.");
   }

@@ -493,11 +493,15 @@ const referenceAdapter = (
 
 export const createWorkflowAdapters = (input: WorkflowAdapterFactoryInput): WorkflowAdapters => {
   const adapters: WorkflowAdapters = {};
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (input.referenceUrl) {
     adapters.reference = referenceAdapter(input.referenceUrl, input.referenceFixtureRoot);
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (input.candidateUrl) {
     adapters.candidate = semanticCandidateAdapter(input.candidateUrl);
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return adapters;
 };

@@ -341,9 +341,11 @@ export function createRepositoryAccessRuntime(input: {
               requestId: value.requestId,
               sessionId: value.sessionId,
             };
+            /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
             if (value.selectedInstallationId) {
               continuationInput.selectedInstallationId = value.selectedInstallationId;
             }
+            /* oxlint-enable typescript/strict-boolean-expressions */
             return continuationInput;
           };
           const continuation = await input.continuations.consume(consumeRequest());
@@ -403,9 +405,11 @@ export function createRepositoryAccessRuntime(input: {
               requestId: value.requestId,
               sessionId: value.sessionId,
             };
+            /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
             if (value.selectedInstallationId) {
               continuationInput.selectedInstallationId = value.selectedInstallationId;
             }
+            /* oxlint-enable typescript/strict-boolean-expressions */
             return { ...continuationInput, callbackUrl };
           };
           const continuation = await input.continuations.create(createRequest());
@@ -619,9 +623,11 @@ export function createRepositoryAccessRuntime(input: {
         const accessRequest: Parameters<typeof classify>[0] = {
           repository: candidate.record.repository.fullName,
         };
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
         if (candidate.record.selectedInstallationId) {
           accessRequest.selectedInstallationId = candidate.record.selectedInstallationId;
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
         // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Classify candidates in order before choosing access.
         const access = await classify(accessRequest);
         if (access.status !== "ready") {

@@ -157,11 +157,13 @@ describe("GitHub starter repository provisioning", () => {
         const parsedUrl = new URL(String(url));
         const path = `${parsedUrl.pathname}${parsedUrl.search}`;
         const method = init?.method ?? "GET";
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
         const body: unknown =
           init?.body && parsedUrl.origin === "https://api.github.com"
             ? // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
               JSON.parse(String(init.body))
             : undefined;
+        /* oxlint-enable typescript/strict-boolean-expressions */
         methods.push({ body, method, path });
         if (parsedUrl.origin === "https://github.com" && path === "/login/oauth/access_token") {
           return Response.json(

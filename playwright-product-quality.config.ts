@@ -1,5 +1,6 @@
 import { defineConfig } from "playwright/test";
 
+/* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
 export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   outputDir: ".artifacts/product-quality/playwright",
@@ -14,3 +15,4 @@ export default defineConfig({
     trace: "on",
   },
 });
+/* oxlint-enable typescript/strict-boolean-expressions */

@@ -29,9 +29,11 @@ function heartbeat() {
 export async function GET(request: Request) {
   const source = new URL(request.url);
   const requestId = source.searchParams.get("requestId");
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!requestId) {
     return Response.json({ error: "request_invalid" }, { status: 400 });
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   const handler = getBuilderProvisioningDeploymentHandler(process.env);
   const headers = new Headers(request.headers);

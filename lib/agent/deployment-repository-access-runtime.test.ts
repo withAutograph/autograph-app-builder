@@ -334,9 +334,11 @@ describe("deployment repository access authorization", () => {
       principal,
     });
     const challengeUrl = started.challenge.url;
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (!challengeUrl) {
       throw new Error("Expected authorization challenge URL");
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     expect(new URL(challengeUrl).searchParams.get("returnTo")).toBe(`/handoff/${continuationId}`);
   });
 

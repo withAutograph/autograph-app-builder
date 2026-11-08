@@ -39,9 +39,11 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
   const submit = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     const email = session.data?.user.email;
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (!email) {
       return;
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     signIn.mutate({ email, password });
   };
 

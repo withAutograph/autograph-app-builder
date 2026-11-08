@@ -78,9 +78,11 @@ function record(
     },
     requestId: row.requestId,
   };
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (row.selectedInstallationId) {
     details.selectedInstallationId = row.selectedInstallationId;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return parse({
     ...details,
     sessionId: row.sessionId,

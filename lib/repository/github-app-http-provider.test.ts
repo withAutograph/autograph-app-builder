@@ -282,9 +282,11 @@ function providerFetch(input?: {
       const repositoryIds = input?.repositoryPages?.[page - 1] ?? [100, 200];
       return json({ repositories: repositoryIds.map((id) => ({ id })) });
     }
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (url.endsWith("/repositories/100") && input?.targetRepositoryId) {
       return json({ id: Number(input.targetRepositoryId), private: true });
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     throw new Error(`Unexpected URL: ${url}`);
   };
   return { calls, implementation };

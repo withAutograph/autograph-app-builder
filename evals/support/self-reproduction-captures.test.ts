@@ -101,9 +101,11 @@ describe("paired capture orchestration", () => {
       expect(receipt.assertions.every((item) => !item.passed)).toBe(true);
       const [referenceCapture] = result.reference;
       const [candidateCapture] = result.candidate;
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
       if (!referenceCapture || !candidateCapture) {
         throw new Error("Expected reference and candidate captures");
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       expect(referenceCapture.artifacts).not.toEqual(candidateCapture.artifacts);
     } finally {
       await rm(root, { force: true, recursive: true });
@@ -226,9 +228,11 @@ describe("paired capture orchestration", () => {
         reference: { disposition: "infrastructure-unavailable" },
       });
       const [firstRow] = manifest.rows;
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
       if (!firstRow) {
         throw new Error("Expected a capture manifest row.");
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       expect(firstRow.reference).not.toHaveProperty("png");
       expect(firstRow.reference).not.toHaveProperty("receipt");
     } finally {

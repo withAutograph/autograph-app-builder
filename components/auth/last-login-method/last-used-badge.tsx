@@ -22,9 +22,11 @@ export function LastUsedBadge({ method, compact, floating }: LastUsedBadgeProps)
   const { method: lastLoginMethod, localization } = useLastLoginMethod();
   const methods = Array.isArray(method) ? method : [method];
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!lastLoginMethod || !methods.includes(lastLoginMethod)) {
     return null;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   const shortLabel = (compact ?? false) || (floating ?? false);
 

@@ -30,8 +30,10 @@ export function Passkey({ passkey }: PasskeyProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty passkey name uses the localized fallback.
   const passkeyName = passkey.name || passkeyLocalization.passkey;
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   return (
     <Item>

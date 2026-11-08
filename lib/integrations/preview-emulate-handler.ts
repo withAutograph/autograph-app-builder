@@ -20,9 +20,11 @@ let active: { namespace: string; handler: Handler } | undefined;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function required(value: string | undefined, name: string) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!value) {
     throw new Error(`${name} is required for Preview emulation.`);
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return value;
 }
 

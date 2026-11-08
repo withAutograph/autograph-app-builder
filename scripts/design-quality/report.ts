@@ -134,6 +134,7 @@ export function renderReport(report: {
         })
         .join("")}</details>`
     : "";
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
   const measuredSummary =
     (report.case
       ? `<section><h2>${escapeHtml(report.case.title)}</h2><p>${escapeHtml(report.case.notes)}</p><details><summary>Case evidence and review questions</summary><ul>${report.case.evidence.map(renderCaseEvidence).join("")}</ul><h3>Review questions</h3><ul>${report.case.reviewQuestions.map(renderListItem).join("")}</ul><h3>Intended outcomes, not asserted results</h3><ul>${report.case.outcomes.map(renderListItem).join("")}</ul></details></section>`
@@ -154,6 +155,7 @@ export function renderReport(report: {
           )}</tbody></table><p>${escapeHtml(adherence.method)}</p><ul>${adherence.limitations.map(renderListItem).join("")}</ul>${groups}<details><summary>All adherence observations</summary><p><a href="report.json" download>Download all counts, declarations, locations, and observations as JSON</a>.</p></details>`
       : "<p>Historical report: this evaluation predates measured adherence scoring.</p>") +
     implementationFindings;
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const judge = report.judge as {
     status?: string;
     subjectiveScore?: number;
@@ -170,6 +172,7 @@ export function renderReport(report: {
     limitations?: string[];
   };
   const annotated = (c: { name: string; state: string; width?: number; height?: number }) => {
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
     const overlays = observations
       .map((o, index) => ({ index, o }))
       .filter(({ o }) => o.capture === c.name && o.region && o.verdict === "nonconforming")
@@ -191,14 +194,17 @@ export function renderReport(report: {
         return `<a class="region" href="#finding-${index}" title="${escapeHtml(o.summary)}" aria-label="${escapeHtml(o.summary)}" style="left:${(100 * r.x) / c.width}%;top:${(100 * r.y) / c.height}%;width:${(100 * r.width) / c.width}%;height:${(100 * r.height) / c.height}%"></a>`;
       })
       .join("");
+    /* oxlint-enable typescript/strict-boolean-expressions */
     const aiOverlays = (judge.findings ?? [])
       .map((f, index) => ({ f, index }))
       .filter(({ f }) => f.image === c.name)
       .map(({ f, index }) => {
         const r = f.region;
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
         if (!c.width || !c.height || !Object.values(r).every(Number.isFinite)) {
           return "";
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
         return `<a class="region" href="#design-${index}" title="${escapeHtml(f.explanation)}" aria-label="${escapeHtml(f.explanation)}" style="left:${(100 * r.x) / c.width}%;top:${(100 * r.y) / c.height}%;width:${(100 * r.width) / c.width}%;height:${(100 * r.height) / c.height}%"></a>`;
       })
       .join("");
@@ -213,6 +219,7 @@ export function renderReport(report: {
     `<h3>Recommended improvements</h3>${findings.map(renderDesignFinding).join("")}`;
   const renderCapture = (c: (typeof report.captures)[number]) =>
     `<section id="${escapeHtml(c.name)}"><h2>${escapeHtml(c.name)} — ${escapeHtml(c.state)}</h2>${annotated(c)}<details><summary>Browser findings and interactions</summary>${pretty({ interaction: c.interaction, measurements: c.measurements })}</details><details><summary>Token evidence and coverage</summary>${pretty(c.styles ?? "See initial state for style evidence")}</details></section>`;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
   const summary = `<p><strong>${judge.status === "complete" ? renderScore() : escapeHtml(judge.reason ?? "AI scoring not run")}</strong></p><p>One model assessment; not an objective rating. Token adherence is reported separately below.</p>${
     judge.ratings
       ? `<table><thead><tr><th>Dimension</th><th>Rating</th><th>Reason</th></tr></thead><tbody>${Object.entries(
@@ -225,5 +232,6 @@ export function renderReport(report: {
           .join("")}</tbody></table>`
       : ""
   }${judge.strengths?.length ? renderStrengths(judge.strengths) : ""}${judge.findings?.length ? renderDesignFindings(judge.findings) : ""}`;
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Generated UI design report</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1100px;color:#222}h1,h2{line-height:1.2}img{max-width:100%;height:auto;display:block}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f4f4;padding:16px;border-radius:8px}section,article{margin:32px 0}summary{cursor:pointer}a{color:#334ba0}table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:12px;border-bottom:1px solid #ddd;vertical-align:top}.capture{position:relative}.region{position:absolute;border:2px dashed #a94700;box-sizing:border-box}.region:focus{outline:3px solid blue}</style><main><h1>Generated UI design report</h1><p>Advisory evaluation of an existing preview. Not a release gate or proof of backend behavior.</p><p>${escapeHtml(report.createdAt)} · <a href="report.json" download>Download full evidence JSON</a></p>${measuredSummary}<h2>AI design review</h2>${summary}<details><summary>Full scoring metadata and limitations</summary>${pretty(report.judge)}</details><details><summary>Generated-source evidence and reference diagnostics</summary>${pretty({ reference: report.reference, source: report.source })}</details>${report.captures.map(renderCapture).join("")}</main></html>`;
 }

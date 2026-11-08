@@ -38,9 +38,11 @@ export function ProviderButtons({ socialLayout = "auto", view = "signIn" }: Prov
 
   const resolvedSocialLayout = useMemo(() => {
     if (socialLayout === "auto") {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
       if (socialProviders?.length && socialProviders.length >= 4) {
         return "horizontal";
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
 
       return "vertical";
     }

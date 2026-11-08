@@ -18,7 +18,6 @@ export default defineConfig({
     "anti-slop/require-safety-comment-for-type-assertion": "off",
     "sonarjs/cognitive-complexity": "off",
     "typescript/no-unsafe-type-assertion": "off",
-    "typescript/strict-boolean-expressions": "off",
     "eslint/complexity": "off",
     // Temporary migration items: re-enable after the existing findings are fixed.
     "eslint/sort-keys": "off",

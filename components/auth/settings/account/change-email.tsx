@@ -52,6 +52,7 @@ export function ChangeEmail({ className }: ChangeEmailProps) {
     });
   }
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <div>
       <h2 className="text-sm font-semibold mb-3">{localization.settings.changeEmail}</h2>
@@ -109,4 +110,5 @@ export function ChangeEmail({ className }: ChangeEmailProps) {
       </form>
     </div>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

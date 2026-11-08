@@ -94,9 +94,11 @@ try {
                 AND member.user_id = auth_session.user_id
             )) AS "orphanedActiveSessionCount"
     `;
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
     if (!counts) {
       throw new Error("Better Auth membership counts were not readable.");
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     return {
       activeLegacyRows,
       migratedRows,

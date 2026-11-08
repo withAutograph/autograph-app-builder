@@ -75,7 +75,9 @@ export function withPreparedGitHubSelection(
     (intent.provisioning?.github.status === "succeeded"
       ? intent.provisioning.github.installationId
       : undefined);
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return selectedInstallationId ? { ...input, selectedInstallationId } : input;
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }
 
 interface VercelCredential {
@@ -386,9 +388,11 @@ export async function readPreparedVercelAccess(input: {
       ? input.intent.provisioning.vercel
       : undefined;
   const installationId = input.intent.providers?.vercelInstallationId ?? project?.installationId;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!installationId) {
     return { status: "not-selected" };
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   if (project !== undefined) {
     if (project.installationId !== installationId) {
       return { action: REVIEW_SELECTION, status: RESOURCE_UNAVAILABLE };
@@ -511,6 +515,7 @@ export function createPreparedAppContextReader(input: {
       return { status: "not-prepared" as const };
     }
     const repository = preparedGitHubRepository(intent);
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     const [github, vercel] = await Promise.all([
       repository
         ? input
@@ -524,6 +529,7 @@ export function createPreparedAppContextReader(input: {
       // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       input.vercel(sessionAuth, intent).catch(unavailable),
     ]);
+    /* oxlint-enable typescript/strict-boolean-expressions */
     const returnTo = preparedHandoffReturnPath(sessionAuth);
     const reconnectUrl = (provider: "github" | "vercel") =>
       returnTo === undefined
@@ -536,6 +542,7 @@ export function createPreparedAppContextReader(input: {
           ).toString();
     // Explicit projection: never spread auth, credentials, raw provider payloads,
     // or the provisioning journal into durable model-visible output.
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     return {
       access: {
         github: github
@@ -613,6 +620,7 @@ export function createPreparedAppContextReader(input: {
       },
       status: "prepared" as const,
     };
+    /* oxlint-enable typescript/strict-boolean-expressions */
   };
 }
 

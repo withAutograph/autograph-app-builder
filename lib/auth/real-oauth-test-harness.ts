@@ -171,6 +171,7 @@ export const registerTestCursorClient = async (harness: RealOAuthHarness) => {
     model: "oauthResource",
     where: [{ field: "identifier", value: resource }],
   });
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   if (!target) {
     await harness.db.create({
       data: {
@@ -185,6 +186,7 @@ export const registerTestCursorClient = async (harness: RealOAuthHarness) => {
       model: "oauthResource",
     });
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   await harness.db.create({
     data: cursorClientRegistration(),
     model: "oauthClient",
@@ -254,9 +256,11 @@ export const grantRealOAuth = async (
       url?: string;
     };
     const consentRedirect = body.redirect_uri ?? body.url;
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (!consentRedirect) {
       throw new Error("OAuth consent did not return a redirect.");
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     callback = new URL(consentRedirect);
   }
   const code = callback.searchParams.get("code");

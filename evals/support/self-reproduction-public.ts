@@ -318,6 +318,7 @@ export const makePublicTransport = async (
     } else {
       envelope = (await response.json()) as typeof envelope;
     }
+    // oxlint-disable-next-line typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values.
     if (envelope.error) {
       throw new Error(
         `Public MCP error: ${JSON.stringify(redactTransportToken(envelope.error, bearerToken))}`,
@@ -460,11 +461,13 @@ const sendPendingMessage = async (options: SessionOptions, accept: AcceptSession
     if (!options.message.trim() || options.message.length > 32_000) {
       throw new Error("Message must contain 1 to 32000 characters");
     }
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
     if (state.session?.status !== "waiting" || state.session.inputRequests?.length) {
       throw new Error(
         "Ordinary messages require a waiting public conversation without structured input requests",
       );
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     state.pendingMessage = { clientRequestId: randomUUID(), message: options.message };
     save();
   }
@@ -515,13 +518,17 @@ const validateResponses = (session: EveSessionResult, responses: Responses) => {
     }
     const { response } = item;
     if (response.kind === "answer") {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       const missingRequiredOption = !request.allowFreeform && !response.optionId;
+      /* oxlint-enable typescript/strict-boolean-expressions */
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
       if (
         missingRequiredOption ||
         (response.optionId && !request.options?.some((option) => option.id === response.optionId))
       ) {
         throw new Error("Answer must use a supported option");
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
     }
   }
 };

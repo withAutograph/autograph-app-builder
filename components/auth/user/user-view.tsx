@@ -55,6 +55,7 @@ export function UserView({ className, isPending, hideSubtitle = false, user }: U
     );
   }
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <div className={cn("flex items-center gap-2 min-w-0", className)}>
       <UserAvatar user={resolvedUser as User | undefined} />
@@ -76,4 +77,5 @@ export function UserView({ className, isPending, hideSubtitle = false, user }: U
       </div>
     </div>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

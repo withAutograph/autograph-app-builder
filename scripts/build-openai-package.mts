@@ -60,6 +60,7 @@ if (portableServerNames.length !== 1 || portableServerNames[0] !== AUTOGRAPH_MCP
 }
 // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing parsed JSON boundary.; Preserve the existing dynamic value boundary.
 const portableServer = portableMcp.mcpServers[AUTOGRAPH_MCP_SERVER_NAME];
+/* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
 if (
   !portableServer ||
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -69,6 +70,7 @@ if (
 ) {
   throw new Error(`${AUTOGRAPH_MCP_SERVER_NAME} must use the streamable-http transport.`);
 }
+/* oxlint-enable typescript/strict-boolean-expressions */
 // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
 assertAutographMcpEndpoint(portableServer.url, { release: false });
 

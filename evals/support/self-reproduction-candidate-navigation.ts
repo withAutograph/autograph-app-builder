@@ -29,6 +29,7 @@ export interface CandidateNavigationPage {
   url: () => string;
 }
 
+/* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
 /** Browser history behavior only: this does not award instant-navigation credit. */
 export const exerciseCandidateNavigation = async (
   page: CandidateNavigationPage,
@@ -162,6 +163,7 @@ export const exerciseCandidateNavigation = async (
     };
   }
 };
+/* oxlint-enable typescript/strict-boolean-expressions */
 
 export const sandboxCandidateNavigation = () => ({
   artifactPaths: ["documentation.png", "back.png", "forward.png"],

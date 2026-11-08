@@ -127,9 +127,11 @@ export function generatedCssRule(
   value: string | undefined,
   declarations: { name: string; value: string; important?: boolean }[],
 ) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!selector || value === undefined) {
     return;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const tuple = key(selector, property, value);
   const matchingGenerated = generated.filter(
     (rule) => key(rule.selector, rule.property, rule.value) === tuple,

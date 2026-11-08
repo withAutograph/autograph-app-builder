@@ -193,6 +193,7 @@ export const writePreviewObservationReport = async (
         )}</td></tr>`,
     )
     .join("");
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const figures = sanitized.viewports
     .flatMap((item) =>
       item.screenshot
@@ -204,6 +205,7 @@ export const writePreviewObservationReport = async (
         : [],
     )
     .join("");
+  /* oxlint-enable typescript/strict-boolean-expressions */
   await writeFile(
     path.join(output, "index.html"),
     `<!doctype html><meta charset="utf-8"><title>Working-preview observation</title><style>body{font:15px/1.5 system-ui;margin:32px auto;max-width:1440px;padding:0 24px}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #ddd;padding:10px;text-align:left}img{max-width:100%}</style><h1>Working-preview observation</h1><p>${escapeHtml(
@@ -220,7 +222,9 @@ export const summarizePreviewRows = (
   viewports: PreviewViewportObservation[],
   briefRequested: boolean,
 ): PreviewObservationReport["rows"] => {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const screenshots = viewports.flatMap((item) => (item.screenshot ? [item.screenshot] : []));
+  /* oxlint-enable typescript/strict-boolean-expressions */
   let browserStatus: ObservationStatus = "unassessed";
   if (viewports.some((item) => item.status === "failed")) {
     browserStatus = "failed";

@@ -53,9 +53,11 @@ export function UserProfile({ className }: UserProfileProps) {
     const additionalFieldValues: Record<string, unknown> = {};
 
     for (const field of additionalFields ?? []) {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
       if (field.profile === false || field.readOnly) {
         continue;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       const value = parseAdditionalFieldValue(field, formData.get(field.name) as string | null);
 
       if (field.validate) {
@@ -88,6 +90,7 @@ export function UserProfile({ className }: UserProfileProps) {
     }
   };
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <div>
       <h2 className="text-sm font-semibold mb-3">{localization.settings.userProfile}</h2>
@@ -193,4 +196,5 @@ export function UserProfile({ className }: UserProfileProps) {
       </form>
     </div>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

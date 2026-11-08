@@ -4067,9 +4067,11 @@ export function createHostedEveSessionService(input: {
           responseDetails.nativeObservationState = preflight.nativeObservationState;
         }
         const responseInput = { ...responseDetails, operationId, principal, responses };
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
         if (session.version === 2 && session.sourceHandoffId) {
           responseInput.sourceHandoffId = session.sourceHandoffId;
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
         if (nativePreflight) {
           await input.transport.respondAccepted?.(responseInput);
           const result = await readAcceptedMutation(
@@ -4257,6 +4259,7 @@ export function createHostedEveSessionService(input: {
               limit: 100,
               sessionId,
             });
+            /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
             return settledCount
               ? eveSessionResultSchema.parse({
                   ...result,
@@ -4266,6 +4269,7 @@ export function createHostedEveSessionService(input: {
                   },
                 })
               : result;
+            /* oxlint-enable typescript/strict-boolean-expressions */
           }
           const { transport } = input;
           const { cancelAccepted } = transport;
@@ -4662,9 +4666,11 @@ export function createHostedEveSessionService(input: {
             operationId,
             principal,
           };
+          /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
           if (session.version === 2 && session.sourceHandoffId) {
             sendInput.sourceHandoffId = session.sourceHandoffId;
           }
+          /* oxlint-enable typescript/strict-boolean-expressions */
           if (nativePreflight) {
             await input.transport.sendAccepted?.(sendInput);
             if (sendDelivery === undefined) {
@@ -4902,9 +4908,11 @@ export function createHostedEveSessionService(input: {
               if (recovery !== undefined) {
                 startInput.recovery = recovery;
               }
+              /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
               if (existing.sourceHandoffId) {
                 startInput.sourceHandoffId = existing.sourceHandoffId;
               }
+              /* oxlint-enable typescript/strict-boolean-expressions */
               const response = await start.call(transport, startInput);
               let recoveryBinding: NativeRecoveryBinding | undefined;
               if (recovery !== undefined) {
@@ -4952,9 +4960,11 @@ export function createHostedEveSessionService(input: {
                   : ("live" as const),
                 sessionId,
               };
+              /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
               if (existing.sourceHandoffId) {
                 sessionParent.sourceHandoffId = existing.sourceHandoffId;
               }
+              /* oxlint-enable typescript/strict-boolean-expressions */
               const sessionBase: HostedPagedSessionBase = {
                 ...sessionParent,
                 stage: stageForResult(result),
@@ -5079,9 +5089,11 @@ export function createHostedEveSessionService(input: {
               principal,
               prompt: await recoveryPrompt({ principal, record: existing, store: input.store }),
             };
+            /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
             if (existing.sourceHandoffId) {
               startInput.sourceHandoffId = existing.sourceHandoffId;
             }
+            /* oxlint-enable typescript/strict-boolean-expressions */
             const response = await start.call(transport, startInput);
             if (
               input.transport.observeStarted !== undefined &&
@@ -5296,9 +5308,11 @@ export function createHostedEveSessionService(input: {
             principal,
             prompt,
           };
+          /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
           if (request.sourceHandoffId) {
             startInput.sourceHandoffId = request.sourceHandoffId;
           }
+          /* oxlint-enable typescript/strict-boolean-expressions */
           const response = await start.call(transport, startInput);
           const sessionId = stableId(
             "ses",
@@ -5342,9 +5356,11 @@ export function createHostedEveSessionService(input: {
               : "live",
             sessionId,
           };
+          /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
           if (request.sourceHandoffId) {
             sessionDetails.sourceHandoffId = request.sourceHandoffId;
           }
+          /* oxlint-enable typescript/strict-boolean-expressions */
           const sessionBase: HostedPagedSessionBase = {
             ...sessionDetails,
             stage: stageForResult(result),

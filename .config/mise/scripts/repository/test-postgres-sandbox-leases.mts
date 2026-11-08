@@ -177,7 +177,9 @@ try {
 
   await expire(heartbeat);
   const [claimed] = await store.claimExpired({ limit: 1, nowEpochMs: 0 });
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   assert.ok(claimed);
+  /* oxlint-enable typescript/strict-boolean-expressions */
   assert.equal(claimed.state, "orphaned");
   const stopFailed = await store.settleRecovery({
     lease: claimed,
@@ -208,7 +210,9 @@ try {
     ],
   );
   const [reclaimed] = await store.claimExpired({ limit: 1, nowEpochMs: 0 });
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   assert.ok(reclaimed);
+  /* oxlint-enable typescript/strict-boolean-expressions */
   assert.equal(reclaimed.epoch, claimed.epoch + 1);
   assert.deepEqual(
     await store.acquire({

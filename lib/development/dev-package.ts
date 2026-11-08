@@ -316,10 +316,12 @@ export const registerDevelopmentPackage = async (input: {
         });
         return { stderr: result.stderr, stdout: result.stdout };
       } catch (error) {
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
         if (options.allowFailure) {
           const failed = error as { stdout?: string; stderr?: string };
           return { stderr: failed.stderr ?? "", stdout: failed.stdout ?? "" };
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
         throw error;
       }
     });

@@ -18,7 +18,7 @@ export function passkeyErrorCode(value: unknown): string | undefined {
   if (typeof envelope.code === "string") {
     return envelope.code;
   }
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof, typescript/strict-boolean-expressions -- Preserve the runtime type check and truthiness behavior.
   if (!envelope.error || typeof envelope.error !== "object") {
     return undefined;
   }

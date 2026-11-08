@@ -59,6 +59,7 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
   const forwarded = authorizing
     ? ["client_id", "redirect_uri", "code_challenge", "code_challenge_method"]
     : [];
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <EmulationApproval
       provider={typedProvider}
@@ -91,6 +92,7 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
       }
     />
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }
 
 export default function LocalConnectionBridge(props: Props) {

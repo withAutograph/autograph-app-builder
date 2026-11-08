@@ -154,6 +154,7 @@ export function waitForDevelopmentRuntimeChange(input: {
         void check();
       }, input.debounceMs ?? 150);
     };
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
     if (input.signal?.aborted) {
       finish(false);
     } else {
@@ -167,6 +168,7 @@ export function waitForDevelopmentRuntimeChange(input: {
       audit = setInterval(schedule, input.auditMs ?? 30_000);
       schedule();
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
   }
   return promise;
 }

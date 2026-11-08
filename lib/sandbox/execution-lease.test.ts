@@ -164,9 +164,11 @@ describe("sandbox execution lease", () => {
       nowEpochMs: 1 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
     });
     expect(claim).toBeDefined();
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
     if (!claim) {
       throw new Error("expected an expired lease claim");
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     await expect(
       acquire(store, "user_1", "session_1", 2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs),
     ).resolves.toEqual({

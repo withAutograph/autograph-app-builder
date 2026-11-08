@@ -1875,6 +1875,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
         : null;
     }
     case assistantMessageEvent: {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       return event.turnId && event.text !== undefined
         ? {
             index: event.index,
@@ -1883,11 +1884,14 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
             type: "assistant_message",
           }
         : null;
+      /* oxlint-enable typescript/strict-boolean-expressions */
     }
     case "progress": {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (!(event.label && event.state && isProgressState(event.state))) {
         return null;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       const progress: Pick<
         Extract<PublicEveEvent, { type: "progress" }>,
         "index" | "label" | "state" | "turnId"
@@ -1910,6 +1914,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
       return event.status ? { index: event.index, status: event.status, type: "status" } : null;
     }
     case publicErrorEvent: {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       return event.code && event.message
         ? {
             code: event.code,
@@ -1918,6 +1923,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
             type: "error",
           }
         : null;
+      /* oxlint-enable typescript/strict-boolean-expressions */
     }
     default: {
       return null;

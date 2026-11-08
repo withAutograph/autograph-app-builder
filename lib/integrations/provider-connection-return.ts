@@ -71,12 +71,16 @@ export function providerConnectionRedirect(input: {
     input.origin,
   );
   url.searchParams.set(input.provider, input.status);
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (input.status === "failed" && input.reason) {
     url.searchParams.set(`${input.provider}Reason`, input.reason);
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (input.returnState?.resumeKey) {
     url.searchParams.set("resume", input.returnState.resumeKey);
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return url.toString();
 }
 

@@ -18,9 +18,11 @@ const argument = (name: string) => {
 };
 const releaseValue = argument("--release");
 const installValue = argument("--install-root");
+/* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
 if (!releaseValue || !installValue) {
   throw new Error("Usage: --release RELEASE_ROOT --install-root DIRECTORY");
 }
+/* oxlint-enable typescript/strict-boolean-expressions */
 const releaseRoot = path.resolve(releaseValue);
 const installRoot = path.resolve(installValue);
 // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.

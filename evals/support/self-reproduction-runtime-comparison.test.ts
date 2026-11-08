@@ -68,9 +68,11 @@ describe("live sandbox comparison", () => {
           throw new Error("second probe failed before writing");
         }
         const outputPath = command.split(" ").at(-1);
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
         if (!outputPath) {
           throw new Error("Comparison output path is missing.");
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
         files.set(outputPath, JSON.stringify({ probe: invocation }));
         artifacts.set(outputPath.replace("output.json", "capture.png"), Buffer.from([1]));
         return { exitCode: 0, stderr: "", stdout: "" };

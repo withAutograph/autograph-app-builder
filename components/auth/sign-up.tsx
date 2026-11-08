@@ -77,6 +77,7 @@ interface SignUpFormProps {
   submitWithFeedback: (event: SyntheticEvent<HTMLFormElement>) => Promise<void>;
 }
 
+/* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
 const SignUpForm = ({
   additionalFields,
   emailAndPassword,
@@ -341,6 +342,7 @@ const SignUpForm = ({
     </FieldGroup>
   </form>
 );
+/* oxlint-enable typescript/strict-boolean-expressions */
 
 /**
  * Renders a sign-up form with name, email, and password fields, optional social provider buttons, and submission handling.
@@ -452,9 +454,11 @@ export function SignUp({
     const additionalFieldValues: Record<string, unknown> = {};
 
     for (const field of additionalFields ?? []) {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
       if (!field.signUp || field.readOnly === true) {
         continue;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       const value = parseAdditionalFieldValue(field, formData.get(field.name) as string | null);
 
       if (field.validate) {

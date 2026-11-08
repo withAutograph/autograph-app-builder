@@ -115,10 +115,12 @@ export function BuilderContinuation({
   // The request-fresh server draft is authoritative after provider return.
   const resumedDraft = initialDurableDraft;
   let builderKey = savedBrief || "new";
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (providerResumeKey) {
     const resumeStatus = resumedDraft ? "restored" : "missing";
     builderKey = `${providerResumeKey}:${resumeStatus}`;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   return (
     <>
@@ -153,9 +155,11 @@ export function BuilderContinuation({
             };
           }
           const request = continuationRequest.current;
+          /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
           if (!request) {
             return;
           }
+          /* oxlint-enable typescript/strict-boolean-expressions */
           savedContinuation.current = {
             creationRequestId: request.creationRequestId,
             draftCheckpoint,
@@ -164,11 +168,13 @@ export function BuilderContinuation({
             version: 1,
           };
           const input = savedContinuation.current;
+          /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
           if (input) {
             startTransition(() => {
               dispatchContinuation(input);
             });
           }
+          /* oxlint-enable typescript/strict-boolean-expressions */
         }}
       >
         {children}

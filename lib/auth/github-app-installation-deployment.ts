@@ -138,7 +138,9 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         authority,
         draftId: continuationId,
       });
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
       return { kind: builderDraft ? "none" : AUTHORIZATION_EXPIRED } as const;
+      /* oxlint-enable typescript/strict-boolean-expressions */
     }
     const access = await input.repositoryAccess.classify({
       authority,
@@ -474,9 +476,11 @@ export function getGitHubAppInstallationDeploymentHandlers(
     authorization,
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async onConnected({ authority, returnState }) {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (!returnState.resumeKey) {
         return;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       // oxlint-disable-next-line typescript/consistent-return -- Preserve optional connection authority and target outcomes.
       return await repositoryAccessContinuations.authorize({
         authority,

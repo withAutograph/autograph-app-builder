@@ -220,9 +220,11 @@ function AppBuilder(
     ...authenticatedProps
   } = props;
   void user;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
   if (!authenticated) {
     return <AnonymousBuilder />;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return (
     <div className={styles.appShell}>
       <Header />

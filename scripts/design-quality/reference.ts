@@ -91,6 +91,7 @@ const packageEntryPoints = (pkg: PackageJson): { suffix: string; target: string 
   if (typeof pkg.exports === "string") {
     return [{ suffix: "", target: pkg.exports }];
   }
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (pkg.exports && typeof pkg.exports === "object") {
     const exported: [string, unknown][] = Object.entries(pkg.exports);
@@ -110,8 +111,11 @@ const packageEntryPoints = (pkg: PackageJson): { suffix: string; target: string 
       return root.map((target) => ({ suffix: "", target }));
     }
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const target = pkg.types ?? pkg.main;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return target ? [{ suffix: "", target }] : [];
+  /* oxlint-enable typescript/strict-boolean-expressions */
 };
 
 const sourcePath = (packageRoot: string, target: string): string | undefined => {
@@ -150,6 +154,7 @@ const aliasEntryPoints = (root: string, limitations: string[]): EntryPoint[] => 
   ]) {
     const target = paths[moduleName]?.[0];
     const path = target && sourcePath(root, target);
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (path) {
       entries.push({ module: moduleName, path });
     } else if (target) {
@@ -157,6 +162,7 @@ const aliasEntryPoints = (root: string, limitations: string[]): EntryPoint[] => 
         `Could not resolve tsconfig path for ${moduleName}; its public types are unassessed.`,
       );
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
   }
   return entries;
 };
@@ -267,6 +273,7 @@ export const readReference = async (arrustedRoot: string): Promise<Reference> =>
       // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       pkg = undefined;
     }
+    // oxlint-disable-next-line typescript/strict-boolean-expressions -- Preserve empty and nullish package name behavior.
     if (pkg === undefined || !pkg.name || !relevantModule.test(pkg.name)) {
       continue;
     }
@@ -550,9 +557,11 @@ const finiteLiteralEvidence = (
       return undefined;
     }
     for (const property of expression.properties) {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
       if (!ts.isPropertyAssignment(property) || !property.name) {
         return undefined;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       let name: string | undefined;
       if (
         ts.isIdentifier(property.name) ||

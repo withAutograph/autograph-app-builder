@@ -85,6 +85,7 @@ export function SearchCombobox({
     setFiltering(false);
     setOpen(false);
   };
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   return (
     <div
       className={styles.combobox}
@@ -208,4 +209,5 @@ export function SearchCombobox({
       </dialog>
     </div>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

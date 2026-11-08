@@ -328,12 +328,15 @@ export async function provisionGitHubRepository(input: {
       if (credential === undefined || credential === null || !credential.active) {
         throw new Error(CREDENTIAL_UNAVAILABLE);
       }
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       const expires = credential.tokens.accessTokenExpiresAt
         ? Date.parse(credential.tokens.accessTokenExpiresAt)
         : undefined;
+      /* oxlint-enable typescript/strict-boolean-expressions */
       if (expires === undefined || expires > now() + 60_000) {
         return credential.tokens.accessToken;
       }
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (
         !credential.tokens.refreshToken ||
         !credential.tokens.refreshTokenExpiresAt ||
@@ -341,6 +344,7 @@ export async function provisionGitHubRepository(input: {
       ) {
         throw new Error(CREDENTIAL_UNAVAILABLE);
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       let authentication: unknown;
       try {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow

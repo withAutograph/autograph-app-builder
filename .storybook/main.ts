@@ -12,9 +12,11 @@ import {
 async function resolveFlagForStorybook(flag: {
   run: (context: { identify: Record<string, never>; request: Request }) => Promise<boolean>;
 }) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!process.env.FLAGS) {
     return false;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   try {
     return (
       // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Enable a Storybook feature only when the flag returns explicit true.

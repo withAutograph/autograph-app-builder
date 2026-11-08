@@ -69,9 +69,11 @@ for (const file of files) {
       expected = promotion.package.receiptSha256;
     }
   }
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (expected && sha256(bytes) !== expected) {
     throw new Error(`Release asset bytes drifted: ${file}`);
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }
 const tag = `v${promotion.package.version}`;
 const gh = process.env.APP_BUILDER_RELEASE_GH_BIN;

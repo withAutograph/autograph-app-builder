@@ -102,6 +102,7 @@ export async function executeBuilderProvisioning(input: {
     store: input.dependencies.journal,
     update(current) {
       const operation = current.operations[request.operation];
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (
         !(
           operation.leaseId &&
@@ -112,6 +113,7 @@ export async function executeBuilderProvisioning(input: {
         operation.leaseId = leaseId;
         operation.leaseExpiresAt = new Date(now() + LEASE_MS).toISOString();
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       return current;
     },
   });
@@ -364,12 +366,14 @@ export function projectBuilderProvisioning(row: BuilderProvisionJournalRow) {
   for (const operation of ["github", "vercel"] as const) {
     const state = row.record.operations[operation];
     const result = row.record.response[operation];
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     const expiredLease = Boolean(
       state.leaseId &&
       state.leaseExpiresAt &&
       Date.parse(state.leaseExpiresAt) <= Date.now() &&
       !state.attempted,
     );
+    /* oxlint-enable typescript/strict-boolean-expressions */
     if ((!state.attempted || result.status !== "failed") && !expiredLease) {
       continue;
     }
@@ -381,11 +385,13 @@ export function projectBuilderProvisioning(row: BuilderProvisionJournalRow) {
     if (expiredLease) {
       recoveryAction =
         "The worker stopped during provisioning. Verify the provider resource and its Builder marker before retrying this operation.";
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     } else if (state.nextRetryAt) {
       recoveryAction = "Builder will retry after the provider delay.";
     } else if (code === "reconciliation_uncertain") {
       recoveryAction = `Builder found an existing ${operation === "github" ? "repository" : "project"} at a previously attempted name but cannot prove that this request created it. Verify provider ownership and the requested source, then resume with a reviewed recovery action; Builder will not create another resource automatically.`;
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     const diagnostic: (typeof diagnostics)[number] = {
       code,
       operation,
@@ -396,9 +402,11 @@ export function projectBuilderProvisioning(row: BuilderProvisionJournalRow) {
     if (state.lastProviderDiagnostic !== undefined) {
       diagnostic.lastProviderDiagnostic = state.lastProviderDiagnostic;
     }
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (state.nextRetryAt) {
       diagnostic.nextRetryAt = state.nextRetryAt;
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     diagnostics.push(diagnostic);
   }
   return builderProvisionResponseSchema.parse({ ...row.record.response, diagnostics });

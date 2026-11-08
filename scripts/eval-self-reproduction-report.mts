@@ -11,11 +11,13 @@ const { values } = parseArgs({
     "source-review-dir": { type: "string" },
   },
 });
+/* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
 if (!values["run-dir"] || !values["source-review-dir"] || !values["output-dir"]) {
   throw new Error(
     "Required: --run-dir PATH --source-review-dir PATH --output-dir NEW_EXTERNAL_PATH",
   );
 }
+/* oxlint-enable typescript/strict-boolean-expressions */
 const report = await writeSupplementaryAssessment({
   candidateNavigationRunDirectory: values["candidate-navigation-run-dir"],
   outputDirectory: values["output-dir"],

@@ -45,7 +45,7 @@ export const redactCandidateEvidence = <T>(value: T, secrets: readonly string[])
     if (Array.isArray(item)) {
       return item.map(redact);
     }
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof, typescript/strict-boolean-expressions -- Preserve the runtime type check and truthiness behavior.
     if (item && typeof item === "object") {
       return Object.fromEntries(Object.entries(item).map(([key, entry]) => [key, redact(entry)]));
     }

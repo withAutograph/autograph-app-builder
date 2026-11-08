@@ -32,6 +32,7 @@ async function mcpRequest(input: {
 }) {
   const requestTimeout = AbortSignal.timeout(5000);
   const signal = input.signal ? AbortSignal.any([input.signal, requestTimeout]) : requestTimeout;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const response = await input.fetcher(input.endpoint, {
     body: JSON.stringify(input.body),
     headers: {
@@ -43,6 +44,7 @@ async function mcpRequest(input: {
     method: "POST",
     signal,
   });
+  /* oxlint-enable typescript/strict-boolean-expressions */
   if (!response.ok) {
     throw new Error(`Development MCP returned HTTP ${response.status}.`);
   }

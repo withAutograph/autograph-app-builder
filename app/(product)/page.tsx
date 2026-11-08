@@ -131,6 +131,7 @@ async function HomeContent({ searchParams }: PageProps) {
     builderResourceProvisioningFlag(),
   ]);
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!resumeKey) {
     const pendingHandoff = await findAuthenticatedPendingBuilderHandoff({
       environment: process.env,
@@ -140,6 +141,8 @@ async function HomeContent({ searchParams }: PageProps) {
       redirect(`/handoff/${encodeURIComponent(pendingHandoff.handoffId)}`);
     }
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const durableDraft = resumeKey
     ? await readAuthenticatedBuilderDraft({
         draftId: resumeKey,
@@ -150,6 +153,7 @@ async function HomeContent({ searchParams }: PageProps) {
         environment: process.env,
         headers: await headers(),
       });
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const integrations = await loadBuilderIntegrationState(
     {
       authenticated: true as const,

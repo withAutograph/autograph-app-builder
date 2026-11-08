@@ -145,6 +145,7 @@ export function SignIn({
       ? resolvePasskeyRedirectTo(redirectTo, currentSearch, currentOrigin)
       : redirectTo);
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <div className="relative w-full max-w-sm">
       <Card className={cn("w-full", className)}>
@@ -354,4 +355,5 @@ export function SignIn({
       </FieldDescription>
     </div>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

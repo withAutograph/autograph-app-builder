@@ -96,6 +96,7 @@ export function evidenceSink(
         JSON.parse(raw.slice(start + evidencePrefix.length)),
         // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       ) as Record<string, unknown>;
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
       if (
         !record ||
         Array.isArray(record) ||
@@ -106,6 +107,7 @@ export function evidenceSink(
       ) {
         return;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       records.push(record);
       appendFileSync(transcriptPath, `${JSON.stringify(record)}\n`, { mode: 0o600 });
     } catch {

@@ -256,9 +256,11 @@ export const evaluateCandidateRuntime = async (input: {
       };
     }
     const activeHandle = handle;
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
     if (!activeHandle) {
       throw new Error("Candidate runtime handle was lost during reconstruction.");
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     await Promise.all([
       ...input.files.map((file) =>
         activeHandle.session.writeTextFile({
@@ -349,6 +351,7 @@ export const evaluateCandidateRuntime = async (input: {
     );
     commands.push(build);
     if (build.exitCode !== 0) {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
       if (input.debugPrerender) {
         commands.push(
           await command(
@@ -358,6 +361,7 @@ export const evaluateCandidateRuntime = async (input: {
           ),
         );
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       return {
         commands,
         probes: [],

@@ -128,9 +128,11 @@ export function createRepositoryAccessContinuationService(input: {
         return;
       }
       const callback = new URL(record.callbackUrl);
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (input.protectionBypassSecret) {
         callback.searchParams.set(VERCEL_PROTECTION_BYPASS_QUERY, input.protectionBypassSecret);
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       callback.searchParams.set("provider", "github");
       callback.searchParams.set("status", "connected");
       // oxlint-disable-next-line typescript/consistent-return -- Preserve optional continuation authorization and inspection results.
@@ -154,9 +156,11 @@ export function createRepositoryAccessContinuationService(input: {
           issuer: authority.issuer,
           protectionBypassSecret: input.protectionBypassSecret,
         });
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
         if (input.protectionBypassSecret) {
           callback.searchParams.set(VERCEL_PROTECTION_BYPASS_QUERY, input.protectionBypassSecret);
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
         return {
           callbackUrl: callback.toString(),
           record: repositoryAccessContinuationSchema.parse(candidate),
@@ -185,9 +189,11 @@ export function createRepositoryAccessContinuationService(input: {
           repository: parseRepositoryReference(value.repository),
           requestId: opaqueRuntimeId.parse(value.requestId),
         };
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
         if (value.selectedInstallationId) {
           selection.selectedInstallationId = decimal.parse(value.selectedInstallationId);
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
         return { ...selection, sessionId: opaqueRuntimeId.parse(value.sessionId) };
       };
       return await input.store.consume(consumeInput());
@@ -223,9 +229,11 @@ export function createRepositoryAccessContinuationService(input: {
           repository,
           requestId: value.requestId,
         };
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
         if (value.selectedInstallationId) {
           selection.selectedInstallationId = decimal.parse(value.selectedInstallationId);
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
         return { ...selection, sessionId: value.sessionId };
       };
       const record = repositoryAccessContinuationSchema.parse(recordInput());
@@ -248,9 +256,11 @@ export function createRepositoryAccessContinuationService(input: {
       }
       const response: Pick<RepositoryAccessContinuation, "repository" | "selectedInstallationId"> =
         { repository: record.repository };
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (record.selectedInstallationId) {
         response.selectedInstallationId = record.selectedInstallationId;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       // oxlint-disable-next-line typescript/consistent-return -- Preserve optional continuation authorization and inspection results.
       return response;
     },

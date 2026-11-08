@@ -45,6 +45,7 @@ const harness = (
   } = {},
 ) => {
   const targetScope = options.scope ?? scope;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
   let row: RepositoryProductionRow = {
     operationRef: repositoryProductionOperationRef(targetScope),
     revision: 0,
@@ -65,6 +66,7 @@ const harness = (
         : { kind: "none" },
     }),
   };
+  /* oxlint-enable typescript/strict-boolean-expressions */
   let invitation: Record<string, z.infer<ReturnType<typeof z.json>>> | null = null;
   const requests: { action: string; operationRef: string; frameCount: number }[] = [];
   const resumes: string[] = [];

@@ -401,6 +401,7 @@ export async function continueHandoffProvisioning(
     });
     const requestId = data?.intent.provisioningRequestId;
     const providers = data?.intent.providers;
+    // oxlint-disable-next-line typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness.
     if (!data || !requestId || !providers) {
       return { status: "error" };
     }
@@ -408,6 +409,7 @@ export async function continueHandoffProvisioning(
     const run = async (operation: "github" | "vercel") => {
       const selected =
         operation === "github" ? providers.githubInstallationId : providers.vercelInstallationId;
+      // oxlint-disable-next-line typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness.
       if (!selected) {
         return;
       }
@@ -431,15 +433,19 @@ export async function continueHandoffProvisioning(
     if (parsed.data.retryProvider) {
       await run(parsed.data.retryProvider);
     } else {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (providers.githubInstallationId) {
         await run("github");
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       // The Vercel operation durably records `github_required` when GitHub
       // has not succeeded, so the journal settles instead of leaving an
       // indefinite pending handoff. A later GitHub retry safely re-runs it.
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (providers.vercelInstallationId) {
         await run("vercel");
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
     }
     refresh();
     return { status: "updated" };

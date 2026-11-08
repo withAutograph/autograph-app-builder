@@ -74,6 +74,7 @@ const run = async (
   child.stdout.on("data", (chunk: Buffer) => (stdout += String(chunk)));
   // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   child.stderr.on("data", (chunk: Buffer) => (stderr += String(chunk)));
+  // oxlint-disable-next-line typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness.
   if (options.input) {
     child.stdin.end(options.input);
   } else {

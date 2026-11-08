@@ -174,6 +174,7 @@ export function buildRequirements(
     }
     return workflowEvidence?.[id]?.status ?? (has(expression) ? "unassessed" : "failed");
   };
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const workflow = (id: string, title: string, expression: RegExp, expected: string) => ({
     evidence: candidateAvailable
       ? [
@@ -189,6 +190,7 @@ export function buildRequirements(
     status: sourceStatus(id, expression),
     title,
   });
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return [
     workflow(
       "anonymous-entry",

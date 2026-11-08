@@ -83,9 +83,11 @@ class TestEventSource {
 
 const streamAt = (index: number): TestEventSource => {
   const stream = TestEventSource.instances[index];
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   if (!stream) {
     throw new Error(`Expected EventSource instance at index ${index}`);
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return stream;
 };
 

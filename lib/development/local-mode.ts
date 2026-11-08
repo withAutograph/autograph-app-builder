@@ -513,6 +513,7 @@ export const waitForDevelopmentSourceChange = (input: {
       void check();
     }, delay);
   };
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
   if (input.signal?.aborted) {
     finish(false);
   } else {
@@ -532,6 +533,7 @@ export const waitForDevelopmentSourceChange = (input: {
       schedule();
     }
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return promise;
 };
 

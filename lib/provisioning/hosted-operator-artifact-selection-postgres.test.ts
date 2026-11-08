@@ -65,9 +65,11 @@ describe.skipIf(tools === undefined)(
   "exact retained selections with mixed prototype content in PostgreSQL",
   () => {
     beforeAll(async () => {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (!tools) {
         throw new Error("Owned PostgreSQL tools are unavailable.");
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       const port = await new Promise<number>((resolve, reject) => {
         const server = createServer();
         server.once("error", reject);

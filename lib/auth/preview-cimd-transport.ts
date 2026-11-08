@@ -68,7 +68,9 @@ export function createPinnedPreviewLookup(addresses: readonly LookupAddress[]): 
   return (hostname, options, callback) => {
     const eligible = addressesForOptions(pinnedAddresses, options);
     if (eligible.length === 0) {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
       callback(lookupError(hostname), options.all ? [] : "");
+      /* oxlint-enable typescript/strict-boolean-expressions */
       return;
     }
     if (options.all === true) {

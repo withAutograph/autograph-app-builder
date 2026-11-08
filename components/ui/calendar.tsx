@@ -65,6 +65,7 @@ const Calendar = ({
 }) => {
   const defaultClassNames = getDefaultClassNames();
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
@@ -187,6 +188,7 @@ const Calendar = ({
       {...props}
     />
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 };
 
 export { Calendar, CalendarDayButton };

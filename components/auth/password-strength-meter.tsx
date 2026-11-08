@@ -35,9 +35,11 @@ export interface PasswordStrengthMeterProps {
 export function PasswordStrengthMeter({ password, className }: PasswordStrengthMeterProps) {
   const { emailAndPassword, localization } = useAuth();
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
   if (!emailAndPassword?.strengthMeter) {
     return null;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   const { score, level } = evaluatePasswordStrength(password, {
     minLength: emailAndPassword.minPasswordLength,

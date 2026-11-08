@@ -230,6 +230,7 @@ export const writeSupplementaryAssessment = async (input: {
     candidate: string;
     qualification: string;
   }[] = [];
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (input.referenceCapturesDirectory) {
     const captureRoot = await realpath(input.referenceCapturesDirectory);
     await copy(captureRoot, "capture-provenance.json", "reference-captures");
@@ -263,6 +264,7 @@ export const writeSupplementaryAssessment = async (input: {
       }
     }
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const assessment = await assessParity(evidence, (path) => Promise.resolve(copied.has(path)));
   // Source failures still need their retained source evidence to count as assessed.
@@ -338,11 +340,13 @@ export const writeSupplementaryAssessment = async (input: {
       .join("");
   const formatImages = () =>
     images.map((path) => `<li><a href="${escapeHtml(path)}">${escapeHtml(path)}</a></li>`).join("");
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   await writeFile(
     nodePath.join(output, "index.html"),
     `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Supplementary self-reproduction assessment</title><style>
 body{font:15px/1.5 system-ui,sans-serif;margin:32px auto;padding:0 24px;max-width:1500px;color:#202124;background:#fafafa}h1{font-size:28px;margin-bottom:8px}h2{margin-top:32px}a{color:#1555a3}table{border-collapse:collapse;width:100%;background:white}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #ddd;vertical-align:top}thead{background:#eee}.summary{max-width:650px}.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}figure{margin:0;background:white;border:1px solid #ddd}figcaption{padding:10px;font-weight:600}img{display:block;width:100%;height:auto}.qualification{color:#555}.failed{color:#a12622;font-weight:600}.passed{color:#256029}.findings{overflow-x:auto}.provenance{display:flex;flex-wrap:wrap;gap:16px}.note{max-width:1000px}li{margin:6px 0}
 </style></head><body><h1>How close did the generated app get?</h1><p class="note">Supplementary assessment of <strong>${escapeHtml(evidence.runId)}</strong>. Existing runtime evidence plus evaluator source review; no generation or runtime rerun. Counts describe requirement evidence, not a numerical similarity score. Anonymous entry is excluded from cleanup priority.</p><table class="summary"><thead><tr><th>Application</th><th>Passed</th><th>Failed</th><th>Blocked</th><th>Unassessed</th></tr></thead><tbody>${counts}</tbody></table><p class="provenance"><a href="original/report.json">Original runtime report</a><a href="original/revisions.json">Original revisions</a><a href="source-review/source-evidence.json">Source review provenance</a>${input.referenceCapturesDirectory ? '<a href="reference-captures/capture-provenance.json">Capture provenance</a>' : ""}<a href="report.json">Assessment JSON</a><a href="report.md">Markdown report</a></p><h2>Initial screen comparison</h2>${pairMarkup || "<p>No paired captures retained.</p>"}<h2>Confirmed candidate gaps</h2><p>Workflow failures appear before framework and capture findings. These are separate requirements, not necessarily independent root causes.</p><ul>${formatPriorities()}</ul><h2>All requirement outcomes</h2><div class="findings"><table><thead><tr><th>Side</th><th>Requirement</th><th>Status</th><th>Finding</th><th>Artifacts</th></tr></thead><tbody>${findings}</tbody></table></div><details><summary>Other retained screenshots (${images.length})</summary><ul>${formatImages()}</ul></details></body></html>`,
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return report;
 };

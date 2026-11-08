@@ -96,9 +96,11 @@ describe("destination adapters", () => {
       const match = /autograph_start with (?<payload>\{[^\n]+\})\./u.exec(prompt);
       const serializedPayload = match?.groups?.payload;
       expect(serializedPayload).toBeDefined();
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (!serializedPayload) {
         throw new Error("Handoff prompt payload not found");
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
       const payload = JSON.parse(serializedPayload);
       expect(payload).toEqual({
@@ -116,17 +118,21 @@ describe("destination adapters", () => {
     expect(buildCursorInstallUrl(initial.mcpUrl, false)).toBeUndefined();
     const installUrl = buildCursorInstallUrl(initial.mcpUrl, true);
     expect(installUrl).toBeDefined();
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (!installUrl) {
       throw new Error("Cursor install URL not found");
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     const url = new URL(installUrl);
     expect(url.protocol).toBe("cursor:");
     expect(url.pathname).toBe("/mcp/install");
     const config = url.searchParams.get("config");
     expect(config).toBeDefined();
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (!config) {
       throw new Error("Cursor install config not found");
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     expect(JSON.parse(atob(config))).toEqual({
       auth: { CLIENT_ID: "autograph-cursor-desktop" },
       url: initial.mcpUrl,

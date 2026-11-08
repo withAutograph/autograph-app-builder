@@ -887,9 +887,11 @@ export const createGitHubAppInstallationAuthorization = (input: {
         approvalUrl.searchParams.append(key, value);
       }
       approvalUrl.searchParams.set("phase", "authorize");
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (details.returnState.resumeKey) {
         approvalUrl.searchParams.set("resume", details.returnState.resumeKey);
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
     }
     return {
       action: "github-app.installation.authorize" as const,
@@ -932,9 +934,11 @@ export const createGitHubAppInstallationAuthorization = (input: {
         ? new URL("/local-connections/github", config.issuer)
         : new URL(`/apps/${config.appSlug}/installations/new`, GITHUB_ORIGIN);
       redirect.searchParams.set("state", state.state);
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (input.emulation && returnState.resumeKey) {
         redirect.searchParams.set("resume", returnState.resumeKey);
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       return {
         action: "github-app.installation.begin" as const,
         authorityDigest: state.authorityDigest,
@@ -967,12 +971,16 @@ export const createGitHubAppInstallationAuthorization = (input: {
           setupAction: "update",
           via: "existing",
         };
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
         if (target?.accountLogin) {
           authorization.targetAccountLogin = githubLoginSchema.parse(target.accountLogin);
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
         if (target?.installationId) {
           authorization.installationId = decimalSchema.parse(target.installationId);
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
         return await beginUserAuthorization(authorization);
       } catch {
         throw new Error(FAILURE_MESSAGE);

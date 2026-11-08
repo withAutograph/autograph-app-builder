@@ -689,10 +689,12 @@ export function useBuilderController({
         }
         // A recovery outbox is only useful when it is newer than the server
         // snapshot rendered for this visit. Server revisions remain canonical.
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
         if (draftUpdatedAt.current && entry.createdAt <= Date.parse(draftUpdatedAt.current)) {
           void discardPendingDraft();
           return;
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
         const { snapshot } = entry;
         formSnapshot.current = snapshot.form;
         builderForm.reset(snapshot.form);
@@ -826,9 +828,11 @@ export function useBuilderController({
     if (durableDraftRevision <= draftRevision.current) {
       return;
     }
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (!initialDraft || !durableDraftId || !durableDraftUpdatedAt) {
       return;
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     const actionMutationVersion = localActionMutationVersions.current.get(durableDraftRevision);
     if (pendingActionExpectedRevisions.current.has(durableDraftRevision - 1)) {
       activeDraftId.current = durableDraftId;

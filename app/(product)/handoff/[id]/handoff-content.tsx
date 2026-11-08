@@ -86,6 +86,7 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
   const { intent, ...controls } = data;
   const vercel = intent.provisioning?.vercel;
   const returnTo = encodeURIComponent(`/handoff/${encodeURIComponent(data.handoffId)}`);
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
   return (
     <div className={styles.appShell}>
       <Header />
@@ -144,4 +145,5 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
       </main>
     </div>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

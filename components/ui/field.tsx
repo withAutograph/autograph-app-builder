@@ -151,6 +151,7 @@ function FieldSeparator({
 }: React.ComponentProps<"div"> & {
   children?: React.ReactNode;
 }) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   return (
     <div
       data-slot="field-separator"
@@ -172,6 +173,7 @@ function FieldSeparator({
       )}
     </div>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -185,6 +187,7 @@ function FieldError({
 }) {
   // oxlint-disable-next-line typescript/promise-function-async -- Preserve the React node returned by this memoized render calculation.
   const content = useMemo(() => {
+    // oxlint-disable-next-line typescript/strict-boolean-expressions -- Preserve existing React child truthiness.
     if (children) {
       return children;
     }
@@ -199,6 +202,7 @@ function FieldError({
       return uniqueErrors[0]?.message;
     }
 
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     return (
       <ul className="ml-4 flex list-disc flex-col gap-1">
         {uniqueErrors.map(
@@ -206,11 +210,14 @@ function FieldError({
         )}
       </ul>
     );
+    /* oxlint-enable typescript/strict-boolean-expressions */
   }, [children, errors]);
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   if (!content) {
     return null;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   return (
     <div

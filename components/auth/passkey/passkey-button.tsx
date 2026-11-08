@@ -164,10 +164,12 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
       }
       navigate({ to: resolvedRedirectTo });
     } catch (error) {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (authenticatedRedirectTo && isPasskeyOnboardingAlreadyAuthenticated(error)) {
         navigate({ replace: true, to: authenticatedRedirectTo });
         return;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       setFailed(true);
     } finally {
       setPending(false);

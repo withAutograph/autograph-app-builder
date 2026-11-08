@@ -37,9 +37,11 @@ const binaryDecisionOptions = (request: PublicInputRequest) => {
   const positive = /^(?:accept|approve|confirm|publish|update|yes)\b/iu;
   const negative = /^(?:cancel|decline|deny|no|do not|don't)\b/iu;
   const [first, second] = request.options;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   if (!first || !second) {
     return null;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   if (positive.test(first.label) && negative.test(second.label)) {
     return [first, second] as const;
   }
@@ -84,6 +86,7 @@ export function InputControl({
     );
   }
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
   if (request.options?.length) {
     return (
       <div className="choices" role="radiogroup" aria-label={request.title}>
@@ -119,6 +122,7 @@ export function InputControl({
       </div>
     );
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   if (request.allowFreeform) {
     return (
@@ -154,14 +158,18 @@ export function AuthorizationControl({
     ? githubRepositoryAccessViewModel(challenge.repositoryAccess)
     : undefined;
   const isGitHub = storeIn !== undefined;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty provider display name uses the request title.
   const provider = isGitHub ? "Connect GitHub" : challenge?.displayName || request.title;
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function connect() {
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (!challenge?.url || !canOpen) {
       return;
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     setError("");
     try {
       await onOpenLink(challenge.url);
@@ -171,6 +179,7 @@ export function AuthorizationControl({
     }
   }
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <div className="authorization-card">
       <span className="provider-icon" aria-hidden="true">
@@ -218,6 +227,7 @@ export function AuthorizationControl({
       ) : null}
     </div>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -279,6 +289,7 @@ function SessionRequestControl({
       />
     );
   }
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <SectionShell
       section={
@@ -305,6 +316,7 @@ function SessionRequestControl({
       )}
     </SectionShell>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -349,6 +361,7 @@ function SessionOutcome({
       (pullRequestNumber ?? "") === ""
         ? "Your response could not be submitted"
         : `Draft PR ${pullRequestNumber} could not be updated`;
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     return (
       <main className="mcpApp shell outcome outcome--failure" role="alert">
         <span aria-hidden="true">!</span>
@@ -364,9 +377,11 @@ function SessionOutcome({
         </div>
       </main>
     );
+    /* oxlint-enable typescript/strict-boolean-expressions */
   }
 
   if (result.status === "failed") {
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     return (
       <main className="mcpApp shell outcome outcome--failure" role="alert">
         <span aria-hidden="true">!</span>
@@ -381,6 +396,7 @@ function SessionOutcome({
         </div>
       </main>
     );
+    /* oxlint-enable typescript/strict-boolean-expressions */
   }
 
   if (

@@ -204,9 +204,11 @@ export async function classifyGitHubRepositoryAccess(input: {
 }): Promise<RepositoryAccessResult> {
   const authority = hostedTenantAuthoritySchema.parse(input.authority);
   const repository = parseRepositoryReference(input.repository);
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const selectedInstallationId = input.selectedInstallationId
     ? decimal.parse(input.selectedInstallationId)
     : undefined;
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const listed = (await input.installations.list?.(authority)) ?? [];
   const legacy = await input.installations.read(authority);
   const active = mergeHostedGitHubInstallationBindings(listed, legacy).filter(
@@ -322,9 +324,11 @@ export async function classifyGitHubRepositoryAccessWithTargetProof(input: {
 }): Promise<RepositoryAccessResult> {
   const authority = hostedTenantAuthoritySchema.parse(input.authority);
   const repository = parseRepositoryReference(input.repository);
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const selectedInstallationId = input.selectedInstallationId
     ? decimal.parse(input.selectedInstallationId)
     : undefined;
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const listed = (await input.installations.list?.(authority)) ?? [];
   const legacy = await input.installations.read(authority);
   const allActive = mergeHostedGitHubInstallationBindings(listed, legacy).filter(

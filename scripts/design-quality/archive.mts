@@ -87,6 +87,7 @@ lines.push(
   "| Dimension | Score | Reason |",
   "| --- | --- | --- |",
 );
+/* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
 if (report.adherence) {
   // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const a = report.adherence;
@@ -115,6 +116,7 @@ if (report.adherence) {
     "",
   );
 }
+/* oxlint-enable typescript/strict-boolean-expressions */
 // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing archived report JSON boundary.
 for (const [axis, rating] of Object.entries(report.judge.ratings ?? {})) {
   const r = rating as { score: number; reason: string };

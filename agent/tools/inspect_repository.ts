@@ -217,7 +217,9 @@ const inspectionNamespace = (input: {
   mode?: "repository" | "workspace";
   directoryOffset?: number;
 }) => {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
   const files = input.paths?.length ? input.paths : undefined;
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const virtualChild = isWorkspaceDescendant(input.path);
   const explicitWorkspaceRoot =
     input.mode === "workspace" && input.path === developmentWorkspacePath;

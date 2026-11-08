@@ -123,9 +123,11 @@ export async function fetchVerifiedGitHubUserInfo(
   tokens: GitHubOAuthTokens,
   fetchImplementation: typeof fetch = fetch,
 ) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!tokens.accessToken) {
     return null;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const headers = {
     Accept: "application/vnd.github+json",
     Authorization: `Bearer ${tokens.accessToken}`,
@@ -194,6 +196,7 @@ async function exchangeLocalEmulatedOAuthCode(input: {
   codeVerifier?: string;
   emulation: ProviderEmulation;
 }) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const response = await providerEmulationFetch(
     input.tokenUrl,
     {
@@ -215,6 +218,7 @@ async function exchangeLocalEmulatedOAuthCode(input: {
     },
     input.emulation,
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
   if (!response.ok) {
     throw new Error("Emulated OAuth token exchange failed.");
   }
@@ -251,9 +255,11 @@ export async function fetchVerifiedVercelUserInfo(
   tokens: VercelOAuthTokens,
   fetchImplementation: typeof fetch = fetch,
 ) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!tokens.accessToken || !tokens.idToken) {
     return null;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   let tokenClaims: ReturnType<typeof decodeJwt>;
   try {
@@ -568,14 +574,17 @@ export function readPreviewOAuthRuntimeConfig(
   const deploymentEnvironment = localDevelopment
     ? "development"
     : readHostedDeploymentEnvironment(environment);
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const issuer =
     environment.BETTER_AUTH_URL ??
     (environment.VERCEL_ENV === "preview" && environment.VERCEL_URL
       ? `https://${environment.VERCEL_URL}/api/auth`
       : undefined);
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const resource =
     environment.MCP_RESOURCE_URL ??
     (issuer !== undefined && issuer !== "" ? `${new URL(issuer).origin}/mcp` : undefined);
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return previewOAuthRuntimeConfigSchema.parse({
     databaseUrl: environment.DATABASE_URL,
     environment: deploymentEnvironment,
@@ -590,6 +599,7 @@ export function readPreviewOAuthRuntimeConfig(
     vercelClientId: environment.VERCEL_AUTH_CLIENT_ID,
     vercelClientSecret: environment.VERCEL_AUTH_CLIENT_SECRET,
   });
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -667,9 +677,11 @@ export function createPreviewOAuthServer(input: {
               name?: string;
               avatar_url?: string;
             };
+            /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
             if (!profile.id || !profile.email) {
               return null;
             }
+            /* oxlint-enable typescript/strict-boolean-expressions */
             return {
               email: profile.email,
               emailVerified: true,

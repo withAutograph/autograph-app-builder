@@ -183,6 +183,7 @@ export const startSelfReproductionReferenceRuntime = async (input: {
     }
   };
   const stop = async (): Promise<void> => {
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
     if (server?.pid && server.exitCode === null) {
       try {
         process.kill(-server.pid, "SIGTERM");
@@ -190,6 +191,7 @@ export const startSelfReproductionReferenceRuntime = async (input: {
         // Already stopped.
       }
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     if (server) {
       // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       await run(["run", "auth-e2e:reset"], "reference-cleanup").catch(() => {

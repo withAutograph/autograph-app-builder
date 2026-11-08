@@ -131,6 +131,7 @@ state.startRequestSha256 = createHash("sha256")
 if (state.originalStart.prompt !== undefined) {
   state.promptSha256 = createHash("sha256").update(state.originalStart.prompt).digest("hex");
 }
+/* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
 if (!state.sourceRevision) {
   try {
     // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
@@ -142,6 +143,7 @@ if (!state.sourceRevision) {
     state.sourceRevision = "unavailable";
   }
 }
+/* oxlint-enable typescript/strict-boolean-expressions */
 state.driverRevision ??= state.sourceRevision;
 if (state.endpoint !== values.endpoint) {
   throw new Error("Resume must use the original endpoint");

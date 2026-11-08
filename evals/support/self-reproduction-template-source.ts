@@ -27,10 +27,15 @@ export const prepareSelfReproductionTemplateSource = async (input: {
   runGit?: Git;
 }): Promise<TemplateSourceEvidence> => {
   const run = input.runGit ?? git;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const sourcePath = input.providedCheckout
     ? path.resolve(input.providedCheckout)
     : path.resolve(input.outputDirectory, "runtime-source", "arrusted-development");
+  /* oxlint-enable typescript/strict-boolean-expressions */
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const acquisition = input.providedCheckout ? "provided-checkout" : "canonical-clone";
+  /* oxlint-enable typescript/strict-boolean-expressions */
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!input.providedCheckout) {
     await mkdir(path.resolve(input.outputDirectory, "runtime-source"), { recursive: true });
     // Git's configured credential helper supplies access; no credentials enter arguments.
@@ -43,6 +48,7 @@ export const prepareSelfReproductionTemplateSource = async (input: {
       sourcePath,
     ]);
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const revision = await run(["rev-parse", "HEAD"], sourcePath);
   let remote: string | null = null;
   try {

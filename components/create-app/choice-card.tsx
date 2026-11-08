@@ -33,6 +33,7 @@ export function ChoiceCard({
   onChange: () => void;
   value: string;
 }) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <label className={className} data-disabled={disabled || undefined} data-provider={dataProvider}>
       {icon}
@@ -50,6 +51,7 @@ export function ChoiceCard({
       />
     </label>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

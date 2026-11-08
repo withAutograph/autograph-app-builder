@@ -49,7 +49,9 @@ const connectionIcons = {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const Icon = kind ? connectionIcons[kind as keyof typeof connectionIcons] : undefined;
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const hasBrandAsset = kind === "ramp" || kind === "netsuite";
   return (
     <span className={styles.connectionIcon} data-kind={kind} data-name={name} aria-hidden="true">

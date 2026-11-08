@@ -26,7 +26,7 @@ test("an unavailable preview is not captured or scored as an empty design", asyn
   await once(server, "listening");
   try {
     const address = server.address();
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof, typescript/strict-boolean-expressions -- Preserve the runtime type check and truthiness behavior.
     if (!address || typeof address === "string") {
       throw new Error("No listener");
     }

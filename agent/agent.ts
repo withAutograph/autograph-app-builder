@@ -1378,6 +1378,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (publicationState.recoveryAllowed === true && !retry) {
       return "The durable terminal local-publication journal awaits an explicit recovery request and was not redispatched automatically.";
     }
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
     if (
       durableStatus === "pending" ||
       publicationState.transactionWindow === "before-journal" ||
@@ -1385,6 +1386,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     ) {
       return "The prior local-publication attempt is recovery-required and was not redispatched automatically.";
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     const publicationProposal = {
       // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       ...(proposal.output as Record<string, unknown>),

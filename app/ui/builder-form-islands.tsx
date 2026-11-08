@@ -272,6 +272,7 @@ export function BuilderConnections() {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BuilderSubmit() {
   const { canSubmit, submitGuidance } = useBuilderControllerContext();
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <div className={styles.submitArea}>
       <button
@@ -289,4 +290,5 @@ export function BuilderSubmit() {
       ) : null}
     </div>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }
