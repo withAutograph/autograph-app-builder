@@ -28,10 +28,14 @@ export default defineConfig({
     {
       // These callbacks must reject on synchronous failures while returning promises.
       files: [
+        "app/ui/app-access.test.tsx",
+        "e2e/auth/client-oauth-handoff.spec.ts",
         "lib/agent/local-source-transport-history.test.ts",
         "lib/agent/product-behavior-validation.test.ts",
         "lib/eve/hosted-service.test.ts",
         "lib/eve/native-live-quiescence.test.ts",
+        "lib/db/hosted-github-installation.test.ts",
+        "lib/handoff/page-data.test.ts",
         "lib/provisioning/hosted-operator-execution-observation.test.ts",
         "lib/provisioning/hosted-operator-ready-delivery-replacement.test.ts",
         "lib/provisioning/native-target-onboarding-service.test.ts",
@@ -143,7 +147,6 @@ export default defineConfig({
     "eslint/complexity": "off",
     "eslint/curly": "off",
     // Temporary migration items: re-enable after the existing findings are fixed.
-    "eslint/require-await": "off",
     "eslint/sort-keys": "off",
   },
   settings: jsPluginSettings,
