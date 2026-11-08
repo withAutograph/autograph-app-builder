@@ -121,6 +121,19 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
     signal: new AbortController().signal,
   };
   const store: CentralHostServicePorts["store"] = {
+    compareAndSet: async (before, raw): Promise<CentralHostRow | undefined> => {
+      if (conflict) {
+        conflict = false;
+        return undefined;
+      }
+      if (row?.revision !== before.revision) {
+        return undefined;
+      }
+      const record = centralHostRecordSchema.parse(raw);
+      assertCentralHostTransition(before.record, record);
+      row = { operationRef: before.operationRef, revision: before.revision + 1, record };
+      return structuredClone(row);
+    },
     read: async (authority, operationRef) =>
       row !== undefined &&
       isDeepStrictEqual(authority, row.record.plan.authority) &&
@@ -144,46 +157,8 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
       }
       return structuredClone(row);
     },
-    compareAndSet: async (before, raw): Promise<CentralHostRow | undefined> => {
-      if (conflict) {
-        conflict = false;
-        return undefined;
-      }
-      if (row?.revision !== before.revision) {
-        return undefined;
-      }
-      const record = centralHostRecordSchema.parse(raw);
-      assertCentralHostTransition(before.record, record);
-      row = { operationRef: before.operationRef, revision: before.revision + 1, record };
-      return structuredClone(row);
-    },
   };
   const ports: CentralHostServicePorts = {
-    store,
-    resolvePlan: async () => plan,
-    assertAuthorized: async () => {
-      if (!authorized) {
-        throw new Error("owner revoked");
-      }
-    },
-    readApproval: async (_inv, _plan, callId) => {
-      if (revoked.has(callId)) {
-        throw new Error("consent revoked");
-      }
-      return approval(callId);
-    },
-    withTargetLease: async (_inv, _plan, run) => {
-      generation += 1;
-      return await run({
-        leaseId: id,
-        fenceGeneration: generation,
-        assertCurrent: async () => {
-          if (!authorized) {
-            throw new Error("lease revoked");
-          }
-        },
-      });
-    },
     applyEffect: async (context) => {
       expect(row?.record.effects[context.effect]).toBe("pending");
       expect(row?.record.attempts?.[context.effect]?.attemptGeneration).toBe(
@@ -196,11 +171,11 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
         throw new Error("lost acknowledgement");
       }
     },
-    reconcileEffect: async (context) => {
-      reconciled.push({ effect: context.effect, generation: context.attemptGeneration });
-      return unknown ? { status: "unknown" } : { status: "applied", receipt: receiptFor(context) };
+    assertAuthorized: async () => {
+      if (!authorized) {
+        throw new Error("owner revoked");
+      }
     },
-    observeSetup: async () => providerReady,
     observeCaller: async () =>
       plan.kind === "central-integration-host-caller-v1"
         ? centralHostReadyReceiptSchema.parse({
@@ -218,6 +193,31 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
             },
           })
         : undefined,
+    observeSetup: async () => providerReady,
+    readApproval: async (_inv, _plan, callId) => {
+      if (revoked.has(callId)) {
+        throw new Error("consent revoked");
+      }
+      return approval(callId);
+    },
+    reconcileEffect: async (context) => {
+      reconciled.push({ effect: context.effect, generation: context.attemptGeneration });
+      return unknown ? { status: "unknown" } : { status: "applied", receipt: receiptFor(context) };
+    },
+    resolvePlan: async () => plan,
+    store,
+    withTargetLease: async (_inv, _plan, run) => {
+      generation += 1;
+      return await run({
+        leaseId: id,
+        fenceGeneration: generation,
+        assertCurrent: async () => {
+          if (!authorized) {
+            throw new Error("lease revoked");
+          }
+        },
+      });
+    },
   };
   const service = createCentralHostService(ports);
   const select = {
@@ -247,16 +247,23 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
     row = await store.compareAndSet(row, next);
   };
   return {
-    service,
-    store,
-    ports,
-    invocation,
-    select,
     applied,
-    reconciled,
-    native,
+    conflict: () => {
+      conflict = true;
+    },
+    invocation,
+    lose: () => {
+      lost = true;
+    },
     markProviderReady: () => {
       providerReady = true;
+    },
+    native,
+    ports,
+    reconciled,
+    revokeCall: (callId: string) => revoked.add(callId),
+    revokeOwner: () => {
+      authorized = false;
     },
     row: () => {
       if (row === undefined) {
@@ -264,19 +271,12 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
       }
       return structuredClone(row);
     },
-    lose: () => {
-      lost = true;
-    },
+    select,
+    service,
     setUnknown: () => {
       unknown = true;
     },
-    revokeOwner: () => {
-      authorized = false;
-    },
-    revokeCall: (callId: string) => revoked.add(callId),
-    conflict: () => {
-      conflict = true;
-    },
+    store,
   };
 };
 test("normal planning reserves no effects; global prepare performs exactly six ordered effects and waits for signed ready identity", async () => {
@@ -458,8 +458,8 @@ test("provider grant and per-key accepted IDs stay in the same row and cannot be
   await f.service.prepare(f.invocation, f.select);
   const before = f.row().record;
   expect(before.attempts?.["authorize-central-inspector"]?.grantAttempt).toEqual({
-    beforeSha256: "a".repeat(64),
     afterSha256: "b".repeat(64),
+    beforeSha256: "a".repeat(64),
   });
   expect(before.runtimeBindings?.[original.environment[0].key]).toMatchObject({
     acceptedEnvId: "accepted-env-id",

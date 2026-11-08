@@ -161,14 +161,14 @@ const fixture = () => {
     effect: "bind-production-runtime",
     priorPhase: "idle",
     bindings: {
-      async read() {
-        return structuredClone(states);
-      },
       async claim(key) {
         if (states[key].state === "idle") {
           states[key] = { ...states[key], state: "pending" };
         }
         return states[key];
+      },
+      async read() {
+        return structuredClone(states);
       },
       async recordAccepted(key, acceptedEnvId) {
         expect(states[key].state).toBe("pending");
@@ -402,8 +402,8 @@ it.each([
     const f = fixture();
     f.fetcher.mockResolvedValue(
       new Response(body, {
-        status: 403,
         headers: { "x-vercel-id": requestRef },
+        status: 403,
       }),
     );
     await expect(f.provider.observe(f.invocation, f.plan)).rejects.toMatchObject({
@@ -427,8 +427,8 @@ it("persists the actual adapter rejection with the pending key and never retries
       return Response.json(
         { error: { code: "forbidden", message: "private-provider-payload" } },
         {
-          status: 403,
           headers: { "x-vercel-id": "iad1::denial_123" },
+          status: 403,
         },
       );
     }
@@ -517,8 +517,8 @@ it("reads only bounded prior binding facts for new plan construction, without re
     assertCurrent: async () => {
       await f.deps.assertCurrent(f.invocation, f.plan, false);
     },
-    readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
     fetch: f.fetcher,
+    readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
   });
   const snapshot = await read({
     ...f.plan.project,
@@ -549,8 +549,8 @@ it("refuses foreign production binding scope while planning before decrypting or
     assertCurrent: async () => {
       await f.deps.assertCurrent(f.invocation, f.plan, false);
     },
-    readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
     fetch: f.fetcher,
+    readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
   });
   await expect(
     read({ ...f.plan.project, keys: ["INVOICE_APP_DATABASE_URL"], signal: f.invocation.signal }),

@@ -407,8 +407,6 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     Parameters<typeof createHostedOperatorDeploymentDelivery>[0],
     "observeAlias" | "wait" | "assertAuthorized" | "assertEnvironment" | "fetch" | "target"
   > = {
-    observeAlias,
-    wait,
     assertAuthorized: vi.fn(async () => {
       await Promise.resolve();
     }),
@@ -416,6 +414,8 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
       await Promise.resolve();
     }),
     fetch: fetcher,
+    observeAlias,
+    wait,
   };
   if (gateway) {
     initial.target = "gateway";
@@ -509,8 +509,8 @@ it("requests standard Preview delivery from approved Git source and observes rea
   f.setReady("READY");
   const result = await f.writer.reconcile(f.input);
   expect(result).toMatchObject({
-    status: "applied",
     selected: { projectName: f.project.name, scopeSlug: f.team.slug },
+    status: "applied",
   });
   expect(f.input.deliveryCandidates?.[0]).toMatchObject({
     projectName: f.project.name,
@@ -1017,8 +1017,8 @@ it.each([
   async ({ gateway, addAppGrant }) => {
     const f = renewedDelivery(gateway, addAppGrant);
     expect(await f.writer.deliver(f.input)).toMatchObject({
-      status: "applied",
       selected: { deploymentId: "dpl_new", operationRef: f.input.operationRef },
+      status: "applied",
     });
     expect(f.calls.every((call) => call.method === "GET")).toBe(true);
     expect(f.calls.some((call) => call.path === "/v13/deployments/dpl_new")).toBe(true);
@@ -1100,8 +1100,8 @@ it.each([false, true])(
       gatewayCandidate,
     ]);
     expect(await f.writer.deliver(f.input)).toMatchObject({
-      status: "applied",
       selected: { deploymentId: "dpl_new", operationRef: f.input.operationRef },
+      status: "applied",
     });
     expect(f.calls.every((call) => call.method === "GET")).toBe(true);
     expect(f.calls.some((call) => call.path.includes("older-gateway-"))).toBe(false);
@@ -2017,7 +2017,7 @@ it.each([
         })
         .parse(rawDiagnostic);
       expect(diagnostic).toMatchObject({
-        gatewayDelivery: { stage, errorClass, result: "unknown" },
+        gatewayDelivery: { errorClass, result: "unknown", stage },
       });
       expect(diagnostic.gatewayDelivery.phase).toBe(phase);
       expect(diagnostic.gatewayDelivery.publicCode).toBe(publicCode);

@@ -187,8 +187,8 @@ const fixture = () => {
     digest: operatorPlanDigest,
     isOperatorError: (error: unknown): error is HostedOperatorError =>
       error instanceof HostedOperatorError,
-    sameSelection: sameOperatorSelection,
     isTransportUnknown: isHostedOperatorTransportUnknown,
+    sameSelection: sameOperatorSelection,
   };
   const retain = vi.fn<(selection: PreparedRuntimeSelection) => void>();
   const prepare = vi.fn(
@@ -196,8 +196,6 @@ const fixture = () => {
       await prepareHostedRuntimeWithOperator(approved, context, operator, retain, contract),
   );
   const read = createHostedRuntimeExecutionObserver({
-    now: () => 1000,
-    isTransportUnknown: isHostedOperatorTransportUnknown,
     assertAuthority: async (_input, ctx, expected) => {
       await assertHostedRuntimeExecutionObservationAuthority({
         approved,
@@ -207,13 +205,15 @@ const fixture = () => {
         store,
       });
     },
+    isTransportUnknown: isHostedOperatorTransportUnknown,
+    now: () => 1000,
+    prepareObserved: async (_input, ctx, result) =>
+      await prepareHostedRuntimeWithOperator(approved, ctx, operator, retain, contract, result),
     readStatus: async () =>
       await operator.request(
         { action: "status", operationRef: approved.operationRef, selection },
         abort.signal,
       ),
-    prepareObserved: async (_input, ctx, result) =>
-      await prepareHostedRuntimeWithOperator(approved, ctx, operator, retain, contract, result),
   });
   return {
     approved,
@@ -242,7 +242,6 @@ describe("automatic observation of one approved execution", () => {
     const readReceivers: boolean[] = [];
     const sleepReceivers: boolean[] = [];
     const ports: HostedRuntimeExecutionWaitPorts = {
-      snapshot: f.snapshot,
       read: function read(this: undefined, input, ctx, snapshot, delayMs) {
         readReceivers.push(this === undefined);
         expect(snapshot).toBe(f.snapshot);
@@ -257,6 +256,7 @@ describe("automatic observation of one approved execution", () => {
         });
         return Promise.resolve();
       },
+      snapshot: f.snapshot,
     };
     const prepared = await f.prepare();
     const generator = continueHostedRuntimeExecutionObservation(
@@ -284,9 +284,9 @@ describe("automatic observation of one approved execution", () => {
     });
     const sleepUntil = vi.fn<(deadline: Date) => Promise<void>>().mockResolvedValue();
     const generator = continueHostedRuntimeExecutionObservation(f.approved, f.context, prepared, {
-      snapshot: f.snapshot,
       read: f.read,
       sleepUntil,
+      snapshot: f.snapshot,
     });
     expect(await generator.next()).toMatchObject({ done: false, value: { status: "pending" } });
     expect(await generator.next()).toMatchObject({
@@ -408,8 +408,6 @@ describe("automatic observation of one approved execution", () => {
     const f = fixture();
     const publish = vi.fn<() => void>();
     const read = createHostedRuntimeExecutionObserver({
-      now: () => 1000,
-      isTransportUnknown: isHostedOperatorTransportUnknown,
       assertAuthority: async (_input, ctx, expected) => {
         await assertHostedRuntimeExecutionObservationAuthority({
           approved: f.approved,
@@ -419,12 +417,9 @@ describe("automatic observation of one approved execution", () => {
           store: f.store,
         });
       },
-      readStatus: () =>
-        Promise.resolve({
-          ...f.observed,
-          status: "prepared",
-          execution: { state: "settled", outcome: { status: "prepared" } },
-        }),
+      commitObserved: publish,
+      isTransportUnknown: isHostedOperatorTransportUnknown,
+      now: () => 1000,
       prepareObserved: () => {
         f.session.cancellationRevision = 4;
         return Promise.resolve({
@@ -432,7 +427,12 @@ describe("automatic observation of one approved execution", () => {
           result: { ...f.observed, status: "prepared" },
         });
       },
-      commitObserved: publish,
+      readStatus: () =>
+        Promise.resolve({
+          ...f.observed,
+          status: "prepared",
+          execution: { state: "settled", outcome: { status: "prepared" } },
+        }),
     });
     await expect(read(f.approved, f.context, f.snapshot, 1000)).rejects.toMatchObject({
       code: "authorization_required",
@@ -479,8 +479,6 @@ describe("automatic observation of one approved execution", () => {
     const f = fixture();
     let reads = 0;
     const read = createHostedRuntimeExecutionObserver({
-      now: () => 1000,
-      isTransportUnknown: isHostedOperatorTransportUnknown,
       assertAuthority: async (_input, ctx, snapshot) => {
         await assertHostedRuntimeExecutionObservationAuthority({
           approved: f.approved,
@@ -490,13 +488,15 @@ describe("automatic observation of one approved execution", () => {
           store: f.store,
         });
       },
+      isTransportUnknown: isHostedOperatorTransportUnknown,
+      now: () => 1000,
+      prepareObserved: () => Promise.reject(new Error("No terminal evidence")),
       readStatus: () => {
         reads += 1;
         return Promise.reject(
           new HostedOperatorTransportUnknown(new TypeError("lost STATUS transport")),
         );
       },
-      prepareObserved: () => Promise.reject(new Error("No terminal evidence")),
     });
     expect(await read(f.approved, f.context, f.snapshot, 1000)).toEqual({
       checkAfter: new Date(2000).toISOString(),
