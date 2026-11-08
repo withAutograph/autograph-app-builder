@@ -54,10 +54,10 @@ const fixture = () => {
   let currentError = null;
   let status = "running";
   const commandHook = {
-    runId: holderOwnerRunId,
     hookId: holderHookId,
-    specVersion: 1,
     metadata: Promise.resolve({ sessionId: descriptor.logicalSessionId }),
+    runId: holderOwnerRunId,
+    specVersion: 1,
   };
   const hooksByToken = new Map([[token, commandHook]]);
   const hooksById = new Map([[holderHookId, commandHook]]);
@@ -134,7 +134,7 @@ const fixture = () => {
     readRunEntry(runId) {
       reads.push({ kind: "entry", runId });
       assert.equal(runId, holderOwnerRunId);
-      return Promise.resolve({ runId, status, entry });
+      return Promise.resolve({ entry, runId, status });
     },
   };
   return {
@@ -281,17 +281,17 @@ it("closes only same-holder continuation aliases and preserves a foreign alias",
     const hookId = `${alias}-${f.holderHookId}`;
     sameHookIds.push(hookId);
     f.addHook(sessionInboxHookToken(alias), {
-      runId: f.holderOwnerRunId,
       hookId,
-      specVersion: 1,
       metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
+      runId: f.holderOwnerRunId,
+      specVersion: 1,
     });
   }
   const foreignHookId = `foreign-${f.holderHookId}`;
   f.addHook(sessionInboxHookToken(foreignAlias), {
-    runId: "foreign-physical-owner",
     hookId: foreignHookId,
     metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
+    runId: "foreign-physical-owner",
   });
   await f.close();
   const disposedIds = new Set(
@@ -346,9 +346,9 @@ it("refuses an unproved or canonical holder", async () => {
 it("never reads a foreign logical holder entry or closes it", async () => {
   const f = fixture();
   f.setHook({
-    runId: f.holderOwnerRunId,
     hookId: f.holderHookId,
     metadata: Promise.resolve({ sessionId: "foreign-logical" }),
+    runId: f.holderOwnerRunId,
   });
   await assert.rejects(f.close());
   assert.equal(
@@ -402,12 +402,12 @@ it("refuses a changed hook ID or owner without targeting its new holder", async 
       const f = fixture();
       f.setOnProof(() => {
         if (change === "id") {
-          f.setById({ runId: f.holderOwnerRunId, hookId: REPLACEMENT_HOOK_ID });
+          f.setById({ hookId: REPLACEMENT_HOOK_ID, runId: f.holderOwnerRunId });
         } else {
           f.setHook({
-            runId: REPLACEMENT_OWNER_ID,
             hookId: REPLACEMENT_HOOK_ID,
             metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
+            runId: REPLACEMENT_OWNER_ID,
           });
         }
       });
@@ -460,9 +460,9 @@ it("rechecks current authority before each captured alias release", async () => 
   const aliasHookId = `alias-${f.holderHookId}`;
   f.setCheckpointAliases([alias]);
   f.addHook(aliasToken, {
-    runId: f.holderOwnerRunId,
     hookId: aliasHookId,
     metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
+    runId: f.holderOwnerRunId,
   });
   f.setStatus("completed");
   f.setOnDispose((request) => {
@@ -483,9 +483,9 @@ it("preserves a replacement hook after the exact loser is cancelled", async () =
   const f = fixture();
   f.setOnCancel(() => {
     f.setHook({
-      runId: REPLACEMENT_OWNER_ID,
       hookId: REPLACEMENT_HOOK_ID,
       metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
+      runId: REPLACEMENT_OWNER_ID,
     });
   });
   await f.close();
@@ -509,17 +509,17 @@ it("does not retarget a continuation alias reassigned during cancellation", asyn
   const newAliasHookId = `new-alias-${f.holderHookId}`;
   f.setCheckpointAliases([alias]);
   f.addHook(aliasToken, {
-    runId: f.holderOwnerRunId,
     hookId: oldAliasHookId,
-    specVersion: 1,
     metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
+    runId: f.holderOwnerRunId,
+    specVersion: 1,
   });
   f.setOnCancel(() => {
     f.setHook(
       {
-        runId: "replacement-physical-owner",
         hookId: newAliasHookId,
         metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
+        runId: "replacement-physical-owner",
       },
       aliasToken,
     );

@@ -43,7 +43,7 @@ test("embedded Eve service routes only session creation to its real 1800-second 
     const handler = path.join(root, "handler.mjs");
     await mkdir(host, { recursive: true });
     await writeFile(handler, 'export default () => "local artifact fixture";\n');
-    const options = createEveVercelOptions({ enabled: true, agentName: "duration-fixture" });
+    const options = createEveVercelOptions({ agentName: "duration-fixture", enabled: true });
     nitro = await createNitro({
       rootDir: root,
       serverDir: false,
@@ -178,11 +178,11 @@ test("embedded Eve service routes only session creation to its real 1800-second 
 
 test("only the exact session function destination survives protocol normalization", () => {
   const routes = normalizeEveVercelRoutes([
-    { src: EVE_SESSION_PATH, dest: EVE_SESSION_PATH },
-    { src: EVE_SESSION_PATH, dest: "/__server" },
-    { src: "/eve/v1/session/extra", dest: EVE_SESSION_PATH },
-    { src: "/eve/v1/session/(.*)", dest: EVE_SESSION_PATH },
-    { src: EVE_HEALTH_PATH, dest: EVE_HEALTH_PATH },
+    { dest: EVE_SESSION_PATH, src: EVE_SESSION_PATH },
+    { dest: "/__server", src: EVE_SESSION_PATH },
+    { dest: EVE_SESSION_PATH, src: "/eve/v1/session/extra" },
+    { dest: EVE_SESSION_PATH, src: "/eve/v1/session/(.*)" },
+    { dest: EVE_HEALTH_PATH, src: EVE_HEALTH_PATH },
   ]);
   assert.equal(routes[0].dest, EVE_SESSION_PATH);
   for (const route of routes.slice(1)) {

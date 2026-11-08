@@ -69,7 +69,9 @@ const fixture = () => {
           );
         const offset = Number(pagination.cursor ?? 0);
         const data = items.slice(offset, offset + 1);
-        return { data, hasMore: offset + 1 < items.length, cursor: String(offset + 1) };
+        const hasMore = offset + 1 < items.length;
+        const cursor = String(offset + 1);
+        return { cursor, data, hasMore };
       },
       listByCorrelationId: async ({ runId: id, correlationId, pagination }) => {
         reads.push(["correlation", id]);
@@ -78,7 +80,9 @@ const fixture = () => {
           .toSorted((a, b) => a.eventId.localeCompare(b.eventId));
         const offset = Number(pagination.cursor ?? 0);
         const data = items.slice(offset, offset + 1);
-        return { data, hasMore: offset + 1 < items.length, cursor: String(offset + 1) };
+        const hasMore = offset + 1 < items.length;
+        const cursor = String(offset + 1);
+        return { cursor, data, hasMore };
       },
     },
     runs: {
@@ -127,28 +131,28 @@ const fixture = () => {
     checkpointVersion: 1,
   };
   const options = {
+    authorizeCurrent: authorizeRead,
+    contextKey: key,
     descriptor: { logicalSessionId: logical },
     payload: { handoffChain: [] },
-    contextKey: key,
-    authorizeCurrent: authorizeRead,
     visitPredecessors: async (visit) => {
-      await visit({ ownerRunId: runId, logicalSessionId: logical, cutoff, authorizeRead });
+      await visit({ authorizeRead, cutoff, logicalSessionId: logical, ownerRunId: runId });
     },
   };
   return {
-    runId,
-    events,
-    steps,
-    options,
-    deps,
     cutoff,
+    deps,
+    events,
+    onList: (callback) => {
+      onList = callback;
+    },
+    options,
     reads,
     revoke: () => {
       revoked = true;
     },
-    onList: (callback) => {
-      onList = callback;
-    },
+    runId,
+    steps,
   };
 };
 const run = async (f) => {

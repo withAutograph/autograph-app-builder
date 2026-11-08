@@ -190,19 +190,22 @@ const fixture = async function fixture(change = () => {}) {
     },
   };
   let authorized = true;
+  const { hydrateWorkflowArguments, hydrateStepArguments, hydrateStepReturnValue } = serialization;
+  const { hydrateWorkflowArguments: hydrateHookPayload } = serialization;
+  const { now } = Date;
   const collect = createTerminalRecoveryCandidateCollector({
     getWorld: async () => world,
-    resolveRunEncryptionKey: async () => {},
-    hydrateWorkflowArguments: serialization.hydrateWorkflowArguments,
-    hydrateStepArguments: serialization.hydrateStepArguments,
-    hydrateStepReturnValue: serialization.hydrateStepReturnValue,
-    hydrateHookPayload: serialization.hydrateWorkflowArguments,
+    hydrateHookPayload,
+    hydrateStepArguments,
+    hydrateStepReturnValue,
+    hydrateWorkflowArguments,
+    now,
     readDurableSession,
-    requireEventSlot,
-    now: Date.now,
     async *readNativeEvents() {
       yield* nativeEvents;
     },
+    requireEventSlot,
+    resolveRunEncryptionKey: async () => {},
   });
   const input = {
     authorizeOwner: async (value) => {
@@ -223,9 +226,9 @@ const fixture = async function fixture(change = () => {}) {
     },
     status: (tail = -1) =>
       readFailedRecoveryBootStatus(ownerRunId, tail, {
-        readEntry: async () => ({ run, entry }),
         collect,
         readCandidate: readTerminalRecoveryCandidate,
+        readEntry: async () => ({ entry, run }),
       }),
   };
 };
@@ -235,15 +238,6 @@ test("failed waiting boot retains the validated original app, owner, unapproved 
   // Reproduce failure after real boot validation/activation, before the first authored turn.
   await assert.rejects(
     bootTerminalRecoveryOwnerWithPorts(f.entry, {
-      validateCheckpoint: async () => {},
-      getWorkflowMetadata: () => ({ workflowRunId: ownerRunId }),
-      createSessionInbox: () => ({
-        claimSessionHooks: async () => {},
-        onInterrupt: () => () => {},
-        drain: () => [],
-        restore() {},
-        dispose: async () => {},
-      }),
       createHook: () =>
         Object.assign(
           Promise.resolve({
@@ -251,12 +245,21 @@ test("failed waiting boot retains the validated original app, owner, unapproved 
             operationId: descriptor.operationId,
             ownerRunId,
           }),
-          { getConflict: async () => null, dispose() {} },
+          { dispose() {}, getConflict: async () => null },
         ),
-      getWritable: () => "native-stream",
+      createSessionInbox: () => ({
+        claimSessionHooks: async () => {},
+        dispose: async () => {},
+        drain: () => [],
+        onInterrupt: () => () => {},
+        restore() {},
+      }),
       emitIdleWaiting: async () => {
         throw new Error("step argument serialization failed");
       },
+      getWorkflowMetadata: () => ({ workflowRunId: ownerRunId }),
+      getWritable: () => "native-stream",
+      validateCheckpoint: async () => {},
     }),
     /step argument serialization failed/u,
   );

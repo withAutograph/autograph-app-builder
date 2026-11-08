@@ -34,8 +34,8 @@ setLogRecordSubscriber((record) => {
   if (record.message.startsWith(prefix) === true) {
     records.push({
       ...record,
-      message: "terminal-recovery-observation",
       fields: JSON.parse(record.message.slice(prefix.length)),
+      message: "terminal-recovery-observation",
     });
   }
 });
@@ -65,12 +65,12 @@ const setup = () => {
     },
   };
   const state = {
-    receipt,
     authorized: 0,
-    denied: false,
     collects: 0,
+    denied: false,
     effects: 0,
     now: 0,
+    receipt,
     reports: [],
   };
   const effect = () => {
@@ -102,7 +102,7 @@ const setup = () => {
     collect: async ({ binding, authorizeOwner }) => {
       state.collects += 1;
       await authorizeOwner(binding);
-      return { kind: "candidate", candidate: { ...payload, binding } };
+      return { candidate: { ...payload, binding }, kind: "candidate" };
     },
     getHook: effect,
     now: () => state.now,
@@ -121,7 +121,7 @@ const setup = () => {
     payload,
     deps,
     input: {
-      auth: { authenticator: "test", principalType: "user", principalId: "owner" },
+      auth: { authenticator: "test", principalId: "owner", principalType: "user" },
       descriptor,
       ports,
     },
