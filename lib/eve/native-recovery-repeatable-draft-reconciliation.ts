@@ -166,7 +166,7 @@ const nativeHumanApproval = (events: Event[], call: Part, expectedPrincipalId: s
         return [];
       }
       const request = requestSchema.safeParse(entry).data;
-      return [{ request, index }];
+      return [{ index, request }];
     });
   });
   if (requests.length !== 1 || requests[0].request === undefined) {
@@ -201,7 +201,7 @@ const nativeHumanApproval = (events: Event[], call: Part, expectedPrincipalId: s
       return [];
     }
     const settlement = settlementSchema.safeParse(value.data).data;
-    return [{ settlement, settledIndex }];
+    return [{ settledIndex, settlement }];
   });
   if (settlements.length !== 1 || settlements[0].settlement === undefined) {
     return false;

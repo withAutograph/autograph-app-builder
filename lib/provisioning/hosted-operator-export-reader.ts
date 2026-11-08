@@ -45,7 +45,7 @@ const privateHeaders = {
   "x-content-type-options": "nosniff",
 };
 const unavailable = () =>
-  new Response("Export is unavailable.", { status: 404, headers: privateHeaders });
+  new Response("Export is unavailable.", { headers: privateHeaders, status: 404 });
 const workerFor = (record: TenantExportJournalRecord): TenantExportWorkerInput => {
   const { completion } = record;
   if (!completion) {
@@ -97,8 +97,8 @@ export const createTenantExportReader =
       const authority = await ports.authenticate(request);
       if (!authority) {
         return new Response("Sign in to download this export.", {
-          status: 401,
           headers: privateHeaders,
+          status: 401,
         });
       }
       const rawRecord = await ports.readCompletion({ exportId, authority });

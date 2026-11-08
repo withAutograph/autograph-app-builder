@@ -337,7 +337,7 @@ export const createHostedManagedRuntimeProjection = (deps: {
         values.set(row.id, value);
       }
       await guard();
-      return { rows: selected, values, gitBranch };
+      return { gitBranch, rows: selected, values };
     };
     const references = (
       observed: Awaited<ReturnType<typeof inspect>>,

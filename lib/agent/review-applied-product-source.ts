@@ -217,7 +217,7 @@ export const reviewApplicationWithJournal = async (
   const { invocation, ...durableAssessment } = assessment;
   if (
     !completedReviewForInput(
-      { kind: applicationCompletedKind, assessment: durableAssessment },
+      { assessment: durableAssessment, kind: applicationCompletedKind },
       input.reviewInput,
     )
   ) {
@@ -598,7 +598,7 @@ export const finalizeAppliedProductSourceReview = async (
     }
     if (
       !completedReviewForInput(
-        { kind: applicationCompletedKind, assessment: outcome.assessment },
+        { assessment: outcome.assessment, kind: applicationCompletedKind },
         current,
       )
     ) {
