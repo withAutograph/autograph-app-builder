@@ -72,27 +72,9 @@ const harness = (
     },
   });
   const bridge = createRepositoryProductionCreator({
-    builderOrigin: "https://builder.example",
-    realmDigest: () => options.realmDigest ?? "e".repeat(64),
-    async *linkedCreatorCandidates() {
-      for (const candidate of options.candidates ?? []) {
-        yield candidate.row;
-      }
-    },
-    now: () => clock,
-    readOwner: async () => ({ email: "Creator@Example.com" }),
-    readCurrent: async () => row,
-    findInvitation: async (id) => (id === row.operationRef ? row : undefined),
-    readInvitation: async (saved) =>
-      saved.operationRef === row.operationRef
-        ? invitation
-        : options.candidates?.find((candidate) => candidate.row.operationRef === saved.operationRef)
-            ?.invitation,
     assertAuthorized,
-    resume: async (_row, sessionId) => {
-      resumes.push(sessionId);
-      return { state: "ready" };
-    },
+    builderOrigin: "https://builder.example",
+    findInvitation: async (id) => (id === row.operationRef ? row : undefined),
     invokeAuth: async (current, request) => {
       const parsed = z
         .object({
@@ -144,6 +126,24 @@ const harness = (
         }
       }
       return invitation;
+    },
+    async *linkedCreatorCandidates() {
+      for (const candidate of options.candidates ?? []) {
+        yield candidate.row;
+      }
+    },
+    now: () => clock,
+    readCurrent: async () => row,
+    readInvitation: async (saved) =>
+      saved.operationRef === row.operationRef
+        ? invitation
+        : options.candidates?.find((candidate) => candidate.row.operationRef === saved.operationRef)
+            ?.invitation,
+    readOwner: async () => ({ email: "Creator@Example.com" }),
+    realmDigest: () => options.realmDigest ?? "e".repeat(64),
+    resume: async (_row, sessionId) => {
+      resumes.push(sessionId);
+      return { state: "ready" };
     },
   });
   return {

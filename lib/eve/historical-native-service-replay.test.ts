@@ -335,6 +335,8 @@ describe("service recovery of historical native approval", () => {
       const store: HostedEveStore = {
         getSession,
         listSessions: base.listSessions.bind(base),
+        observeSessionPaged,
+        readCheckpointPage,
         reserveOperation: vi.fn(() =>
           Promise.resolve({ disposition: "existing" as const, operation }),
         ),
@@ -348,14 +350,12 @@ describe("service recovery of historical native approval", () => {
           ),
         ),
         settleUnsuccessful: vi.fn(),
-        observeSessionPaged,
-        readCheckpointPage,
       };
       const service = createHostedEveSessionService({
+        assertSendDeliveryOwner: () => Promise.resolve(),
+        now: () => 50,
         principal,
         store,
-        now: () => 50,
-        assertSendDeliveryOwner: () => Promise.resolve(),
         transport: {
           observe,
           get: vi.fn(),

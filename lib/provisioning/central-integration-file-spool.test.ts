@@ -238,8 +238,8 @@ it("records the fixed global schema checkpoint before acknowledging its write", 
     {
       ...f.input,
       readOnly: false,
-      worker: { ...worker, subcommand: "central-integration-schema" },
       recordCheckpoint,
+      worker: { ...worker, subcommand: "central-integration-schema" },
     },
     {
       createSandbox: f.createSandbox as NonNullable<

@@ -247,12 +247,12 @@ const fixture = async () => {
   );
   const readCurrentRecord = vi.fn(async () => await Promise.resolve(structuredClone(record)));
   return {
-    input: { context, prepared, assertCurrent, readApproval, verifyProof, readCurrentRecord },
-    record,
-    historical,
-    proof,
-    getKey,
     claims,
+    getKey,
+    historical,
+    input: { assertCurrent, context, prepared, readApproval, readCurrentRecord, verifyProof },
+    proof,
+    record,
   };
 };
 

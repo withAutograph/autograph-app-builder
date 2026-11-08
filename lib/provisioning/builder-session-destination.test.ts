@@ -180,10 +180,10 @@ describe("saved-session destination selection", () => {
     await f.service.select({ expected, principal, request, sessionId });
     await expect(
       f.service.select({
-        principal,
-        sessionId,
         expected,
+        principal,
         request: { ...request, requestId: "be05a1b9-92d0-4a16-832b-3309a5594245" },
+        sessionId,
       }),
     ).rejects.toThrow("already selected");
     expect(f.execute).toHaveBeenCalledOnce();
@@ -200,10 +200,10 @@ describe("saved-session destination selection", () => {
       }
       await expect(
         f.service.select({
-          principal: who,
-          sessionId,
           expected: epoch,
+          principal: who,
           request: kind === "app" ? { ...request, appName: "foreign-app" } : request,
+          sessionId,
         }),
       ).rejects.toThrow();
       expect(f.execute).not.toHaveBeenCalled();
@@ -238,8 +238,8 @@ describe("saved-session destination selection", () => {
 
   it("inherits the selected reference through recovery without changing creation authority", () => {
     const source = attachBuilderDestinationRecord(session(), {
-      expected,
       destination,
+      expected,
       nowEpochMs: 2,
     });
     const child = {

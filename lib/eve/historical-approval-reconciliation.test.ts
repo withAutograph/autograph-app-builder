@@ -86,13 +86,13 @@ const toolInput = {
   planDigest: nativeTargetOnboardingPlanDigest(nativePlan),
 };
 const binding = {
-  issuer: principal.issuer,
+  adapterGeneration: 1,
+  adapterSessionId: "adapter_1",
   audience: principal.audience,
-  workspaceId: principal.workspaceId,
+  issuer: principal.issuer,
   ownerUserId: principal.ownerUserId,
   sessionId,
-  adapterSessionId: "adapter_1",
-  adapterGeneration: 1,
+  workspaceId: principal.workspaceId,
 };
 const publicEvents: PublicEveEvent[] = [
   { type: "status", index: 0, status: "working" },
@@ -180,7 +180,7 @@ const verify = (replayBinding = binding, replayEvents = publicEvents, complete =
     trustedEventCount: 2,
     trustedEvents: stream(publicEvents),
     replayEvents: stream(replayEvents),
-    nativeTail: { complete, nextNativeIndex: 10, nativeTailIndex: 9 },
+    nativeTail: { complete, nativeTailIndex: 9, nextNativeIndex: 10 },
   });
 const response = {
   clientRequestId: "response",
@@ -208,12 +208,12 @@ const batch = {
   turnId: "turn",
 };
 const proof = {
-  adapterSessionId: "adapter_1",
   adapterGeneration: 1,
+  adapterSessionId: "adapter_1",
   checkpointDigest: `sha256:${"f".repeat(64)}`,
   request: response,
 };
-const marker = { adapterSessionId: "adapter_1", adapterGeneration: 1, approvals, batches: [batch] };
+const marker = { adapterGeneration: 1, adapterSessionId: "adapter_1", approvals, batches: [batch] };
 const resolved = (ids: string[]) => ({
   version: 1 as const,
   pending: [],
