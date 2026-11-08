@@ -888,7 +888,7 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
         events.push(event);
       }
       expect(events).toEqual([]);
-      metadata = input.metadata;
+      ({ metadata } = input);
       return storedChild;
     },
     // oxlint-disable-next-line eslint/require-await -- Match the asynchronous checkpoint store port.

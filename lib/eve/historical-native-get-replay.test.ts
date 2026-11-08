@@ -294,7 +294,7 @@ describe("GET recovery of historical native approval", () => {
             eventCount += 1;
           }
           expect(eventCount).toBe(0);
-          metadata = input.metadata;
+          ({ metadata } = input);
           revision += 1;
           const next = `sha256:${revision.toString(16).padStart(64, "0")}`;
           current = durableHostedSessionRecordSchema.parse({

@@ -24,6 +24,11 @@ import { z } from "zod";
 const repositoryWorkspacePath = "/workspace/repository";
 const workspacePath = "/workspace";
 
+interface ManagedOverlayFields {
+  managedOverlayWorkspaceDigest?: string;
+  managedOverlayManifestPath?: string;
+}
+
 export { captureLocalPlanningSource } from "./local-planning-source-capture";
 
 const objectId = z.string().regex(/^[a-f0-9]{40}$/u);
@@ -202,21 +207,24 @@ export const reconcileLocalPlanningSource = async (
       `Builder could not read the original private source base or import current local planning objects. The candidate is retained. ${sanitizeValidationDiagnosticText(imported.stderr || imported.stdout)}`,
     );
   }
-  const request = {
+  const requestPrefix = {
     appId: input.appId,
     branchRef: "refs/app-builder/local-source",
     fetchRemote: false,
     localSource: true,
     ...currentManifest,
-    ...(input.sourceOverlay === undefined
-      ? {}
-      : {
-          managedOverlayWorkspaceDigest: z
-            .string()
-            .regex(/^[a-f0-9]{64}$/u)
-            .parse(input.sourceOverlay.workspaceDigest),
-          managedOverlayManifestPath: "/workspace/.app-builder/source-files.json",
-        }),
+  };
+  const managedOverlay: ManagedOverlayFields = {};
+  if (input.sourceOverlay !== undefined) {
+    managedOverlay.managedOverlayWorkspaceDigest = z
+      .string()
+      .regex(/^[a-f0-9]{64}$/u)
+      .parse(input.sourceOverlay.workspaceDigest);
+    managedOverlay.managedOverlayManifestPath = "/workspace/.app-builder/source-files.json";
+  }
+  const request = {
+    ...requestPrefix,
+    ...managedOverlay,
     originalSourceSha: objectId.parse(input.originalSourceSha),
     root: repositoryWorkspacePath,
     sessionId: input.sessionId,

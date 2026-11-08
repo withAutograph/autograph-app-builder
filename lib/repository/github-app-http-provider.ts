@@ -334,15 +334,10 @@ const normalizedPermissions = (value: unknown): PermissionSnapshot => {
   ) {
     throw new Error(invalidResponseMessage);
   }
-  return {
-    ...(actions === "read" ? { actions } : {}),
-    administration,
-    contents,
-    metadata,
-    pullRequests,
-    variables,
-    workflows,
-  };
+  if (actions === "read") {
+    return { actions, administration, contents, metadata, pullRequests, variables, workflows };
+  }
+  return { administration, contents, metadata, pullRequests, variables, workflows };
 };
 
 const requestId = (value: string): string =>

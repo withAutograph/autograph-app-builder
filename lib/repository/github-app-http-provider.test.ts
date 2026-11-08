@@ -246,12 +246,13 @@ function providerFetch(input?: {
     }
     if (url.endsWith("/app/installations/456/access_tokens")) {
       const requested = (body as { permissions: Record<string, string> }).permissions;
+      const permissions = { ...requested };
+      if (input?.extraPermission ?? false) {
+        permissions.issues = "write";
+      }
       return json(
         {
-          permissions: {
-            ...requested,
-            ...((input?.extraPermission ?? false) ? { issues: "write" } : {}),
-          },
+          permissions,
           token: "ghs_operation_scoped_installation_token",
         },
         201,
