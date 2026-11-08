@@ -46,6 +46,7 @@ const needsBrowserDependencies = async (
   const probe = await input.sandbox.run({
     command: browserDependencyProbe,
     workingDirectory: input.root,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
   });
   return probe.exitCode === 42;
@@ -118,8 +119,10 @@ export const runAppBrowserTests = async (input: {
         return await runtime.runTask({
           signal: input.signal,
           task: "test-e2e",
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(selection === undefined ? {} : { browserSelection: selection }),
           ...input.continuation,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(Object.keys(browserEnvironment).length === 0
             ? {}
             : { environment: browserEnvironment }),

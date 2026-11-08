@@ -155,6 +155,7 @@ const pinnedTransport = (pinMatches = true) => {
     },
     wait: vi.fn(async () => ({ exitCode: 0 })),
   };
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
   const sandbox = {
     delete: vi.fn(async () => {}),
     extendTimeout: vi.fn(async () => {}),
@@ -177,6 +178,7 @@ const pinnedTransport = (pinMatches = true) => {
     ),
     writeFiles: vi.fn(async () => {}),
   };
+  /* oxlint-enable typescript/strict-boolean-expressions */
   // SAFETY: The real transport consumes only these controlled SDK filesystem/process ports.
   const createSandbox = vi.fn(async () => sandbox as never);
   return { catalogRead: () => catalogRead, command, createSandbox, request, sandbox };

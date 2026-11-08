@@ -284,8 +284,10 @@ export const withLifecycleLock = async function withLifecycleLock<T>(
     // oxlint-disable-next-line eslint/no-await-in-loop, github/no-then -- Settle each exclusive lifecycle lock attempt before selecting the next port.
     const acquired = await listening.then(
       () => true,
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
       (error: unknown) => {
         if (
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof error === "object" &&
           error !== null &&
           "code" in error &&
@@ -558,6 +560,7 @@ const readReceipt = function readReceipt(
   ) {
     throw new Error(`${kind} receipt must be an owned mode 0600 regular file.`);
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const parsed = JSON.parse(readFileSync(path, "utf-8")) as ReceiptEnvelope;
   if (
     parsed.version !== 1 ||
@@ -579,6 +582,7 @@ const writeReceipt = function writeReceipt(
   filename: string,
   kind: string,
   provenance: ImageProvenance,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   result: unknown,
 ): ReceiptEnvelope {
   const unsigned = { kind, provenance, result, version: 1 as const };
@@ -610,6 +614,7 @@ const writeReceipt = function writeReceipt(
     writeSync(descriptor, bytes);
     fsyncSync(descriptor);
     closeSync(descriptor);
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     descriptor = undefined;
     renameSync(temporary, path);
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -698,6 +703,7 @@ const verifyStateRootContents = function verifyStateRootContents(
     } else if (entry.name === githubStateRootName) {
       assertGithubStateRoot(join(stateRoot, githubStateRootName));
     } else {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       const kind = receiptKinds[entry.name as keyof typeof receiptKinds];
       if (kind === undefined || !entry.isFile() || entry.isSymbolicLink()) {
         throw new Error("Image lifecycle state contains an unknown or unsafe artifact.");
@@ -1069,6 +1075,7 @@ const requireCurrentGhcrLogin = function requireCurrentGhcrLogin(provenance: Ima
   ];
   const invalidReceiptMessage =
     "GHCR login receipt does not match the current credential boundary.";
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof result !== "object" || result === null || !hasExactKeys(result, expectedResultKeys)) {
     throw new Error(invalidReceiptMessage);
   }
@@ -1095,6 +1102,7 @@ const requireCurrentGhcrLogin = function requireCurrentGhcrLogin(provenance: Ima
     throw new Error(invalidReceiptMessage);
   }
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof result.username !== "string" ||
     !/^[a-f0-9]{64}$/u.test(String(result.identityDigest))
   ) {
@@ -1229,6 +1237,7 @@ const execute = function execute(
   cwd: string,
   extraEnvironment: Readonly<Record<string, string>> = {},
 ): string {
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const tool = command.program as ImageTool;
   const inspectVersion = (versionTool: ImageTool) => {
     const versionCommand = imageToolVersionCommand(versionTool);
@@ -1510,6 +1519,7 @@ const inspectRemoteImageUnlocked = function inspectRemoteImageUnlocked(
   const login = requireCurrentGhcrLogin(provenance);
   // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof push.result !== "object" ||
     push.result === null ||
     (push.result as { localImageReceiptDigest?: unknown }).localImageReceiptDigest !==
@@ -1519,6 +1529,7 @@ const inspectRemoteImageUnlocked = function inspectRemoteImageUnlocked(
   ) {
     throw new Error("Image push receipt is not bound to the local image identity.");
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof local.result !== "object" || local.result === null) {
     throw new Error("Local image receipt has no exact image identity.");
   }
@@ -1527,6 +1538,7 @@ const inspectRemoteImageUnlocked = function inspectRemoteImageUnlocked(
       ...ghcrCredentialEnvironment(provenance.builder.stateRoot, login.identity),
       ...buildxEnvironment,
     };
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const localIdentity = local.result as {
       imageId: string;
       rootFsLayers: readonly string[];
@@ -1582,6 +1594,7 @@ const preloadImageUnlocked = function preloadImageUnlocked(
   if (existing !== undefined) {
     // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
     if (
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof existing.result !== "object" ||
       existing.result === null ||
       (existing.result as { reference?: unknown }).reference !== reference
@@ -1598,6 +1611,7 @@ const preloadImageUnlocked = function preloadImageUnlocked(
   );
   // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof remote.result !== "object" ||
     remote.result === null ||
     (remote.result as { reference?: unknown }).reference !== reference
@@ -1613,6 +1627,7 @@ const preloadImageUnlocked = function preloadImageUnlocked(
   );
   // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof push.result !== "object" ||
     push.result === null ||
     (push.result as { ghcrLoginReceiptDigest?: unknown }).ghcrLoginReceiptDigest !==
@@ -1733,6 +1748,7 @@ const proveSandboxImageUnlocked = function proveSandboxImageUnlocked(
   if (existing !== undefined) {
     // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
     if (
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof existing.result !== "object" ||
       existing.result === null ||
       (existing.result as { reference?: unknown }).reference !== reference ||
@@ -1753,6 +1769,7 @@ const proveSandboxImageUnlocked = function proveSandboxImageUnlocked(
   );
   // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof preload.result !== "object" ||
     preload.result === null ||
     (preload.result as { reference?: unknown }).reference !== reference

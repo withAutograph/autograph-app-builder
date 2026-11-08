@@ -68,7 +68,9 @@ export function createPinnedPreviewLookup(addresses: readonly LookupAddress[]): 
   return (hostname, options, callback) => {
     const eligible = addressesForOptions(pinnedAddresses, options);
     if (eligible.length === 0) {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
       callback(lookupError(hostname), options.all ? [] : "");
+      /* oxlint-enable typescript/strict-boolean-expressions */
       return;
     }
     if (options.all === true) {
@@ -171,7 +173,7 @@ export function createPreviewCimdTransport(
         const body =
           webRequest.method === "HEAD" || BODY_FORBIDDEN_RESPONSE_STATUSES.has(status)
             ? null
-            : // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The Node web stream crosses differing Node and DOM BodyInit type declarations.
+            : // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The Node web stream crosses differing Node and DOM BodyInit type declarations.; Preserve the existing type assertion at this boundary.
               (Readable.toWeb(response) as unknown as BodyInit);
         resolve(
           new Response(body, {

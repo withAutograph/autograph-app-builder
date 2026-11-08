@@ -34,6 +34,7 @@ vi.mock("./hosted-prototype-chunk-store", () => ({
   createHostedPrototypeChunkStore: () => ports.store(),
 }));
 vi.mock("./postgres-prototype-chunks", () => ({
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   assertPrototypeChunkSchemaReady: () => Promise.resolve(),
 }));
 vi.mock("../mcp/hosted-route", () => ({ openHostedPostgresDatabase: () => ({}) }));
@@ -105,6 +106,7 @@ beforeEach(() => {
   vi.unstubAllEnvs();
   const chunks = new Map<string, string>();
   ports.store.mockReturnValue({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     put: (input) => {
       chunks.set(
         JSON.stringify([input.path, input.transferDigest, input.chunkIndex]),
@@ -112,6 +114,7 @@ beforeEach(() => {
       );
       return Promise.resolve(sha256(input.content));
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     get: (input) =>
       Promise.resolve(
         chunks.get(JSON.stringify([input.path, input.transferDigest, input.chunkIndex])),

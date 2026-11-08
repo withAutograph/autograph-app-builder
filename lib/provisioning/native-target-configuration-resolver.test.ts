@@ -390,6 +390,7 @@ describe("production native target configuration resolver", () => {
               : `private-plan/${id}`,
             planDigest: "a".repeat(64),
             idempotencyKey: "same-operation",
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(action.endsWith("approval") ? {} : { callId: "approved-call" }),
           }),
     };
@@ -862,7 +863,9 @@ describe("fresh normal same-project runtime assembly", () => {
         appId: "new-app",
         destination: {
           ...f.destination,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           githubInstallationId: undefined,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           productionBranch: undefined,
         },
         captured: { selection: release, description: f.description },
@@ -907,7 +910,9 @@ describe("fresh normal same-project runtime assembly", () => {
         appId: "new-app",
         destination: {
           ...f.destination,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           githubInstallationId: undefined,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           productionBranch: undefined,
         },
         captured: { selection: f.selected, description: f.description },
@@ -975,6 +980,7 @@ describe("fresh normal same-project runtime assembly", () => {
       if (failure === "private-delivery") {
         f.readStandardDestination.mockResolvedValue({
           ...f.destination,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           deploymentAccess: undefined,
         });
       }
@@ -1253,6 +1259,7 @@ describe("fresh normal same-project runtime assembly", () => {
       if (failure === "private-delivery") {
         f.readStandardDestination.mockResolvedValue({
           ...f.destination,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           deploymentAccess: undefined,
         });
       }

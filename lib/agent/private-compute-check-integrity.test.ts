@@ -53,6 +53,7 @@ describe("frozen private check policy", () => {
       await verifyPrivateComputeCheckIntegrity({
         appId: "example",
         root: "/workspace/repository",
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         profile: undefined,
         sandbox: { run },
       }),
@@ -108,6 +109,7 @@ describe("frozen private check policy", () => {
         return { stdout: observed.data.stdout, stderr: "", exitCode: 1 };
       }
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const check = () =>
       verifyPrivateComputeCheckIntegrity({
         appId: "example",

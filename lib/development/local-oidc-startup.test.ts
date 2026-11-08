@@ -208,6 +208,7 @@ describe("local Development OIDC startup", () => {
           ...input,
           environment: {
             ...input.environment,
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(dataHome === undefined ? {} : { XDG_DATA_HOME: dataHome }),
             XDG_CONFIG_HOME: "/owner/unneeded-config",
             XDG_CACHE_HOME: "/owner/unneeded-cache",

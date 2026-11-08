@@ -85,6 +85,7 @@ const fixture = (configurationId?: string) => {
         row = {
           id: "env-id",
           ...parsed,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(configurationId === undefined ? {} : { configurationId }),
         };
       } else {
@@ -92,6 +93,7 @@ const fixture = (configurationId?: string) => {
         boundary = {
           id: "boundary-id",
           ...parsed,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(configurationId === undefined ? {} : { configurationId }),
         };
         if (loseBoundaryResponse) {
@@ -131,6 +133,7 @@ const fixture = (configurationId?: string) => {
       loseBoundaryResponse = true;
     },
     boundaryWrites: () => boundaryWrites,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     detail: (value: unknown) => {
       detail = value;
     },
@@ -359,6 +362,7 @@ describe("Production runtime credential binding", () => {
         type: "encrypted",
         value: runtimeUrl,
         decrypted: true,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(target === undefined ? {} : { target }),
       });
       expect((await f.service.reconcile(f.context, runtimeUrl)).state).toBe("applied");
@@ -390,6 +394,7 @@ describe("Production runtime credential binding", () => {
   });
   it.each([
     { decrypted: false },
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     { value: undefined },
     { value: runtimeUrl.replace("app_role", "wrong_role") },
   ])("requires an available exact runtime value %j", async (patch) => {

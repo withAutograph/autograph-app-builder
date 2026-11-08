@@ -159,6 +159,7 @@ const publicImports = new Set([
 ]);
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function digest(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }

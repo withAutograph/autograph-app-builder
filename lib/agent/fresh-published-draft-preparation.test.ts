@@ -232,9 +232,11 @@ describe("owned fresh-template draft preparation after review recovery", () => {
       proposal: scope.proposal,
       publication: scope.publication,
     };
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     mocks.onOwnedRead = undefined;
     mocks.classify.mockReset().mockResolvedValue("unrecorded");
     mocks.ownedProposalDigests = [];
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     mocks.onSourceRead = undefined;
     mocks.prepare.mockReset();
     mocks.prepare.mockImplementation(async (request) => ({
@@ -897,6 +899,7 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     mocks.onSourceRead = () => {
       mocks.candidate = {
         ...Object.fromEntries(Object.entries(mocks.candidate).toReversed()),
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         review: undefined,
       } as Candidate;
     };

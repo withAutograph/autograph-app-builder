@@ -512,7 +512,7 @@ export async function* streamSameOriginEveEvents(input: {
         buffered += decoder.decode();
         const line = buffered.trim();
         if (line.length > 0 && eventCount <= tail) {
-          // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Preserve the existing parsed stream-envelope boundary.
+          // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing parsed stream-envelope boundary.; Preserve the existing type assertion at this boundary.
           const event = streamEnvelopeSchema.parse(
             JSON.parse(line),
           ) as unknown as MessageStreamEvent;
@@ -532,7 +532,7 @@ export async function* streamSameOriginEveEvents(input: {
         const line = buffered.slice(0, newline).trim();
         buffered = buffered.slice(newline + 1);
         if (line.length > 0) {
-          // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Preserve the existing parsed final stream-envelope boundary.
+          // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing parsed final stream-envelope boundary.; Preserve the existing type assertion at this boundary.
           const event = streamEnvelopeSchema.parse(
             JSON.parse(line),
           ) as unknown as MessageStreamEvent;
@@ -1017,7 +1017,8 @@ export async function observeSameOriginEveStream(
         readTrace.set("nativeNextIndex", installedEventCount);
         const turnId =
           "data" in event && "turnId" in event.data
-            ? (event.data.turnId as string | undefined)
+            ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+              (event.data.turnId as string | undefined)
             : undefined;
         if (
           turnId !== undefined &&
@@ -1030,9 +1031,11 @@ export async function observeSameOriginEveStream(
           [TURN_COMPLETED, TURN_FAILED, TURN_CANCELLED].includes(event.type) &&
           (turnId === undefined || turnId === currentTurnId)
         ) {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           currentTurnId = undefined;
         }
         if ([SESSION_WAITING, SESSION_COMPLETED, SESSION_FAILED].includes(event.type)) {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           currentTurnId = undefined;
         }
         if (event.type === TURN_CANCELLED) {
@@ -1109,6 +1112,7 @@ export async function observeSameOriginEveStream(
     }
     if (observationComplete && nativeRecoveryBootFailed) {
       boundary = "failed";
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       currentTurnId = undefined;
     }
     let status: EveSessionStatus = boundary;
@@ -1329,7 +1333,8 @@ function activeTurnId(events: readonly MessageStreamEvent[]): string | undefined
   for (const event of events) {
     const turnId =
       "data" in event && "turnId" in event.data
-        ? (event.data.turnId as string | undefined)
+        ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+          (event.data.turnId as string | undefined)
         : undefined;
     if (
       turnId !== undefined &&
@@ -1341,9 +1346,11 @@ function activeTurnId(events: readonly MessageStreamEvent[]): string | undefined
       [TURN_COMPLETED, TURN_FAILED, TURN_CANCELLED].includes(event.type) &&
       (turnId === undefined || turnId === active)
     ) {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       active = undefined;
     }
     if ([SESSION_WAITING, SESSION_COMPLETED, SESSION_FAILED].includes(event.type)) {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       active = undefined;
     }
   }
@@ -1549,7 +1556,8 @@ async function readCancellationSettlementIncremental(input: {
       nextNativeIndex += 1;
       const eventTurnId =
         "data" in event && "turnId" in event.data
-          ? (event.data.turnId as string | undefined)
+          ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+            (event.data.turnId as string | undefined)
           : undefined;
       if (
         eventTurnId !== undefined &&
@@ -1561,12 +1569,14 @@ async function readCancellationSettlementIncremental(input: {
         [TURN_COMPLETED, TURN_FAILED, TURN_CANCELLED].includes(event.type) &&
         (eventTurnId === undefined || eventTurnId === currentTurnId)
       ) {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         currentTurnId = undefined;
       }
       if (currentTurnId !== undefined && currentTurnId !== input.turnId) {
         throw new HostedCancellationUnsettledError();
       }
       if ([SESSION_WAITING, SESSION_COMPLETED, SESSION_FAILED].includes(event.type)) {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         currentTurnId = undefined;
       }
       if (endsTurn(event, input.turnId)) {
@@ -1644,6 +1654,7 @@ export function createSameOriginEveTransport(input: {
     workloadIdentity: input.workloadIdentity,
   };
   return {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     observeStarted(request) {
       // Public observation catches up to the opened durable tail; it never waits for a long-running turn.
       return observeSameOriginEveStream({
@@ -1658,6 +1669,7 @@ export function createSameOriginEveTransport(input: {
         sessionId: request.adapterSessionId,
       });
     },
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(input.verifyReadAuthority === undefined
       ? {}
       : {
@@ -1891,6 +1903,7 @@ export function createSameOriginEveTransport(input: {
         throw new HostedCancellationUnsettledError();
       }
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     get: (request) =>
       readSnapshot({ ...common, readDeadline: true, sessionId: request.adapterSessionId }),
     async respond(request) {

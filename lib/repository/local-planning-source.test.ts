@@ -296,6 +296,7 @@ describe("retained dirty planning baseline", () => {
       f.write(snapshot, "dirty-initial.txt", "later mutable snapshot file\n");
       f.write(f.source, "dirty-initial.txt", "new platform bytes\n");
       capture = await captureLocalPlanningSource(f.source, f.originalSha, {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         readAuthority: () =>
           Promise.resolve({ kind: "local", ownerUid: process.getuid?.() ?? -1, stateRoot }),
       });
@@ -397,6 +398,7 @@ describe("retained dirty planning baseline", () => {
       const snapshotSha = f.git(snapshot, "rev-parse", "HEAD");
       f.write(f.source, "shared.txt", "new platform source\n");
       capture = await captureLocalPlanningSource(f.source, originalSha, {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         readAuthority: () =>
           Promise.resolve({ kind: "local", ownerUid: process.getuid?.() ?? -1, stateRoot }),
       });
@@ -441,6 +443,7 @@ describe("retained dirty planning baseline", () => {
     const stateRoot = path.join(directory, "baseline-custody");
     mkdirSync(stateRoot, { mode: 0o700 });
     const authority = { kind: "local" as const, ownerUid: process.getuid?.() ?? -1, stateRoot };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const readAuthority = () => Promise.resolve(authority);
     const localPath = (name: string) => {
       const mapped = name
@@ -452,11 +455,12 @@ describe("retained dirty planning baseline", () => {
       }
       return resolved;
     };
-    // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
+    // oxlint-disable-next-line unicorn/consistent-function-scoping, typescript/promise-function-async -- Keep fixture helpers scoped to their test or fixture instance. Preserve the returned promise and synchronous throw behavior.
     const unavailable = () =>
       Promise.reject(new Error("Unexpected process/stream operation in source-only fixture"));
     const sandbox: SandboxSession & { id: string } = {
       id: "saved-workspace",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readBinaryFile: ({ path: name }) => {
         try {
           return Promise.resolve(readFileSync(localPath(name)));
@@ -468,6 +472,7 @@ describe("retained dirty planning baseline", () => {
         }
       },
       readFile: unavailable,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readTextFile: ({ path: name }) => {
         try {
           return Promise.resolve(readFileSync(localPath(name), "utf-8"));
@@ -478,11 +483,13 @@ describe("retained dirty planning baseline", () => {
           throw error;
         }
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       removePath: ({ path: name, recursive, force }) => {
         rmSync(localPath(name), { force, recursive });
         return Promise.resolve();
       },
       resolvePath: localPath,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       run: ({ command, workingDirectory }) => {
         const mapped = command
           .replaceAll("/workspace/repository", f.candidate)
@@ -502,6 +509,7 @@ describe("retained dirty planning baseline", () => {
         });
       },
       spawn: unavailable,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       writeBinaryFile: ({ path: name, content }) => {
         const file = localPath(name);
         mkdirSync(path.dirname(file), { recursive: true });
@@ -513,6 +521,7 @@ describe("retained dirty planning baseline", () => {
         mkdirSync(path.dirname(file), { recursive: true });
         writeFileSync(file, Buffer.from(await new Response(content).arrayBuffer()));
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       writeTextFile: ({ path: name, content }) => {
         const file = localPath(name);
         mkdirSync(path.dirname(file), { recursive: true });
@@ -543,6 +552,7 @@ describe("retained dirty planning baseline", () => {
             capture,
           },
           {
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             retainBaseline: (generation, dependencies) =>
               retainPreparedLocalSourceBaseline(generation, { ...dependencies, readAuthority }),
           },

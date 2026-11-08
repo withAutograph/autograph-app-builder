@@ -7,6 +7,7 @@ if (process.argv.length !== 2 && !resume) {
   throw new Error("The local development Eve entrypoint accepts only explicit --resume.");
 }
 
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing assignment while its type remains unresolved.
 process.exitCode = await runLocalEve({
   resume,
 

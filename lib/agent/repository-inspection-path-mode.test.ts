@@ -43,11 +43,16 @@ const ctx = {
   session: { auth: {}, id: "logical", turn: { id: "turn" } },
 } as unknown as ToolContext;
 const input = (path: string) => ({
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   directoryOffset: undefined,
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   mode: undefined,
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   offsetBytes: undefined,
   path,
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   pathIndex: undefined,
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   paths: undefined,
 });
 beforeEach(() => {

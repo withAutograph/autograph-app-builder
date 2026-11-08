@@ -55,7 +55,7 @@ function databaseFixture(rows: unknown[]) {
     query[key].mockReturnValue(query);
   }
   return {
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The SQL fixture implements only the authorization-store operations under test.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The SQL fixture implements only the authorization-store operations under test.; Preserve the existing type assertion at this boundary.
     database: query as unknown as Parameters<typeof createPostgresVercelAuthorizationStateStore>[0],
     query,
   };

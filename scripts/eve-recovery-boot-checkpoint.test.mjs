@@ -10,6 +10,7 @@ import { test } from "vitest";
 
 const require = createRequire(import.meta.url);
 const sdk = pathToFileURL(`${path.dirname(require.resolve("eve/package.json"))}/dist/src/`).href;
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const load = (file) => import(`${sdk}${file}`);
 const { createTerminalRecoveryCandidateCollector, readTerminalRecoveryCandidate } = await load(
   "execution/session/recovery-candidate.js",
@@ -186,6 +187,7 @@ const fixture = async function fixture(change = () => {}) {
     runs: { get: async () => run },
     steps: {
       get: async (_runId, id, options) =>
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         options.resolveData === "none" ? { ...steps.get(id), input: undefined } : steps.get(id),
     },
   };
@@ -238,6 +240,7 @@ test("failed waiting boot retains the validated original app, owner, unapproved 
   // Reproduce failure after real boot validation/activation, before the first authored turn.
   await assert.rejects(
     bootTerminalRecoveryOwnerWithPorts(f.entry, {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       createHook: () =>
         Object.assign(
           Promise.resolve({
@@ -470,6 +473,7 @@ test("same recovery request adopts once, preserves original authority, and activ
     resumeHook: async (_token, input) => {
       assert.equal(input.ownerRunId, receipt.ownerRunId);
       activations += 1;
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       hook = undefined;
     },
     start: async (input) => {

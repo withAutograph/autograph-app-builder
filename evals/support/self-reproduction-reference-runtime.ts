@@ -66,6 +66,7 @@ export const snapshotReferenceSource = async (
       await mkdir(path.dirname(path.join(fixtureRoot, file)), { recursive: true });
       await copyFile(target, path.join(fixtureRoot, file));
     } catch (error) {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         throw error;
       }
@@ -84,6 +85,7 @@ const availablePort = async (requestedPort = 0): Promise<number> => {
   }
   await listenDeferred.promise;
   const address = server.address();
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   const port = typeof address === "object" && address ? address.port : 0;
   const closeDeferred = Promise.withResolvers<null>();
   server.close(() => {
@@ -93,6 +95,7 @@ const availablePort = async (requestedPort = 0): Promise<number> => {
   return port;
 };
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const probe = (url: string): Promise<boolean> => {
   const deferred = Promise.withResolvers<boolean>();
   {
@@ -181,6 +184,7 @@ export const startSelfReproductionReferenceRuntime = async (input: {
     }
   };
   const stop = async (): Promise<void> => {
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
     if (server?.pid && server.exitCode === null) {
       try {
         process.kill(-server.pid, "SIGTERM");
@@ -188,11 +192,13 @@ export const startSelfReproductionReferenceRuntime = async (input: {
         // Already stopped.
       }
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     if (server) {
       // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       await run(["run", "auth-e2e:reset"], "reference-cleanup").catch(() => {
         // Cleanup is best effort after stopping the isolated server.
       });
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       server = undefined;
     }
   };

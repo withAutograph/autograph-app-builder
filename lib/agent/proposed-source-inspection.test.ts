@@ -29,6 +29,7 @@ const context = {
   session: { id: "owner-session" },
   abortSignal: new AbortController().signal,
 } as Pick<ToolContext, "session" | "abortSignal">;
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const run = (operation: () => void | Promise<void>) =>
   contextStorage.run(new ContextContainer(), operation);
 const fixture = (content = "proposed bytes", extra = true) => {
@@ -84,6 +85,7 @@ const scope = (state: ReturnType<typeof fixture>, sessionId = context.session.id
 });
 
 describe("current frozen proposal inspection", () => {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   it("reads exact unapplied bytes and explicit deletion without Sandbox fallback or state changes", () =>
     run(() => {
       const state = fixture();
@@ -128,6 +130,7 @@ describe("current frozen proposal inspection", () => {
         ),
       ).toThrow();
     }));
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   it("allows inspecting the owner's pending plan without granting or retiring approval", () =>
     run(() => {
       const state = fixture();
@@ -138,6 +141,7 @@ describe("current frozen proposal inspection", () => {
     }));
   it.each(["digest", "app", "phase", "file-hash", "iteration-hash", "owner", "approved"])(
     "rejects %s drift",
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     (kind) =>
       run(() => {
         const state = fixture();
@@ -198,12 +202,14 @@ describe("current frozen proposal inspection", () => {
     "apps/foreign/file.ts",
     "/workspace/repository/apps/example/file.ts",
     "app//file.ts",
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   ])("rejects unsafe path %s", (path) =>
     run(() => {
       const state = fixture();
       expect(() => inspectCurrentProposalSource(input(state, [path]), context)).toThrow();
     }),
   );
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   it("round-trips bounded Unicode pages with exact proposal and file digests", () =>
     run(() => {
       const content = '🙂é"\\\n'.repeat(EVE_NATIVE_RESULT_PAGE_BYTES / 4);
@@ -251,6 +257,7 @@ describe("current frozen proposal inspection", () => {
         ),
       ).toThrow();
     }));
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   it("paginates the exact current path inventory without skipping or duplicating paths", () =>
     run(() => {
       const state = fixture();
@@ -292,6 +299,7 @@ describe("current frozen proposal inspection", () => {
       } while (pathIndex < paths.length);
       expect(observed).toEqual(paths.toSorted());
     }));
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   it("handles empty proposed files and cancellation before exposing bytes", () =>
     run(() => {
       const state = fixture("", false);

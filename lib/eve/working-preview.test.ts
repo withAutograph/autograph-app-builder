@@ -129,6 +129,7 @@ describe("public working app preview", () => {
   });
   it.each(["turn.cancelled", "turn.failed", "session.failed"])("invalidates after %s", (type) => {
     expect(
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       latestInstalledWorkingPreview([resultEvent(), { data: {}, type } as MessageStreamEvent]),
     ).toBeNull();
   });

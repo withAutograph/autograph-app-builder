@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/no-undefined-assignment -- Preserve explicit undefined values in existing JSX or generated-source expressions. */
 "use client";
 
 import { authMutationKeys, getAuthLinkURL } from "@better-auth-ui/core";
@@ -125,12 +126,14 @@ export function SignIn({
     e.preventDefault();
 
     const formData = new FormData(e.currentTarget);
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const email = formData.get("email") as string;
     const rememberMe = formData.get("rememberMe") === "on";
 
     signInEmail({
       email,
       password,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(emailAndPassword?.rememberMe === true ? { rememberMe } : {}),
       fetchOptions,
     });
@@ -143,6 +146,7 @@ export function SignIn({
       ? resolvePasskeyRedirectTo(redirectTo, currentSearch, currentOrigin)
       : redirectTo);
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <div className="relative w-full max-w-sm">
       <Card className={cn("w-full", className)}>
@@ -195,6 +199,7 @@ export function SignIn({
                       }}
                       onInvalid={(e) => {
                         e.preventDefault();
+                        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
                         const el = e.target as HTMLInputElement;
                         const msg = el.validity.valueMissing
                           ? localization.auth.fieldRequired
@@ -236,6 +241,7 @@ export function SignIn({
                         disabled={isPending}
                         onInvalid={(e) => {
                           e.preventDefault();
+                          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
                           const el = e.target as HTMLInputElement;
                           const min = emailAndPassword?.minPasswordLength;
                           const max = emailAndPassword?.maxPasswordLength;
@@ -352,4 +358,5 @@ export function SignIn({
       </FieldDescription>
     </div>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

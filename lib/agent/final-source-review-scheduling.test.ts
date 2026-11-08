@@ -138,6 +138,7 @@ const context = (callId: string) =>
     getSandbox: async () =>
       await Promise.resolve({
         id: "local-fixture",
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         readTextFile: () => Promise.resolve(JSON.stringify({ scripts: { test: "vitest run" } })),
       }),
     session: { auth: null, id: "local-session", turn: { id: "turn" } },

@@ -90,6 +90,7 @@ export type BranchWorktreePublicationJournal =
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalProposal(proposal: BranchWorktreePublicationProposal) {
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const unsigned = {
     ...proposal,
   } as Partial<BranchWorktreePublicationProposal>;
@@ -244,6 +245,7 @@ export function proposalFromBranchJournal(
     Reflect.deleteProperty(proposalOnly, key);
   }
   return {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     ...(proposalOnly as Omit<BranchWorktreePublicationProposal, "digest">),
     digest: proposalDigest,
   };

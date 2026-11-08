@@ -396,11 +396,13 @@ const fixture = async (publicRelease?: {
     resolveRealmBinding: async () => ({
       authResourceId: plan.authDatabase.resourceId,
       bootstrapPlanDigest: operatorPlanDigest(plan),
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(publicRelease === undefined ? {} : { publicRelease }),
 
       issuer: program.origin,
       audience: "https://operator.example.com",
       endpointOrigin,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(bootstrapSnapshot === undefined
         ? {}
         : {

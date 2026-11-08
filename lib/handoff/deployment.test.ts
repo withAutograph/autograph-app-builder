@@ -49,10 +49,12 @@ function route(input: { authenticated?: boolean } = {}) {
           return;
         }
         if (record.sessionId !== undefined || record.expiresAt > renewalInput.now) {
+          // oxlint-disable-next-line typescript/consistent-return -- Preserve optional renewal fixture outcomes.
           return { disposition: "existing", record };
         }
         const updated = { ...record, expiresAt: renewalInput.expiresAt };
         rows.set(record.handoffId, updated);
+        // oxlint-disable-next-line typescript/consistent-return -- Preserve optional renewal fixture outcomes.
         return { disposition: "renewed", record: updated };
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -100,6 +102,7 @@ function route(input: { authenticated?: boolean } = {}) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function request(body: unknown, input: { origin?: string } = {}) {
   return new Request(`${origin}/api/builder/handoffs`, {
     body: JSON.stringify(body),
@@ -359,6 +362,7 @@ describe("builder handoff deployment", () => {
       },
     });
     const oversizedResponse = await route().handler(
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       new Request(`${origin}/api/builder/handoffs`, {
         body: oversized,
         duplex: "half",

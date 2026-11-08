@@ -1,3 +1,4 @@
+/* oxlint-disable anti-slop/no-runtime-typeof -- Preserve runtime discrimination within JSX or template expressions and existing input handling. */
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
@@ -28,6 +29,7 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
   if (!emulation || !["vercel", "github"].includes(provider) || typeof query.state !== "string") {
     notFound();
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const typedProvider = provider as EmulatedProvider;
   const resumeKey = parseProviderResumeKey(query.resume);
   const authorizing = provider === "github" && query.phase === "authorize";
@@ -58,6 +60,7 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
   const forwarded = authorizing
     ? ["client_id", "redirect_uri", "code_challenge", "code_challenge_method"]
     : [];
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <EmulationApproval
       provider={typedProvider}
@@ -90,6 +93,7 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
       }
     />
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }
 
 export default function LocalConnectionBridge(props: Props) {

@@ -29,6 +29,7 @@ describe("live sandbox comparison", () => {
     expect(result.artifacts[0]?.content).toEqual(new Uint8Array([1, 2]));
     expect(session.writeTextFile).toHaveBeenCalledWith({
       content: JSON.stringify(payload),
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       path: expect.stringMatching(/^\.self-reproduction-comparison\/[^/]+\/input\.json$/u),
     });
     expect(session.run.mock.calls[0]).not.toContain(payload.text);
@@ -67,9 +68,11 @@ describe("live sandbox comparison", () => {
           throw new Error("second probe failed before writing");
         }
         const outputPath = command.split(" ").at(-1);
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
         if (!outputPath) {
           throw new Error("Comparison output path is missing.");
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
         files.set(outputPath, JSON.stringify({ probe: invocation }));
         artifacts.set(outputPath.replace("output.json", "capture.png"), Buffer.from([1]));
         return { exitCode: 0, stderr: "", stdout: "" };

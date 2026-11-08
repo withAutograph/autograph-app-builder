@@ -50,7 +50,9 @@ const summary = nativeSourceDiagnosticSchema.parse({
 
 describe("private source diagnostic transport relay", () => {
   it.each([
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     { diagnostic: summary, label: "valid", outcome: "available", reason: undefined },
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     { diagnostic: undefined, label: "missing", outcome: "unavailable", reason: "missing_summary" },
     {
       diagnostic: { ...summary, privateContent: "private-canary-secret" },
@@ -70,6 +72,7 @@ describe("private source diagnostic transport relay", () => {
   ])(
     "parses actual postMutation response without exposing $label data",
     async ({ diagnostic, outcome, reason }) => {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const request = vi.fn<typeof fetch>(() => {
         const response: SourceDiagnosticResponse<typeof diagnostic> = {
           ok: true,
@@ -83,6 +86,7 @@ describe("private source diagnostic transport relay", () => {
       });
       const adapter = createSameOriginEveTransport({
         config: { baseUrl: "https://builder.example.test" },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         workloadIdentity: { token: () => Promise.resolve("synthetic-token") },
         fetchImplementation: request,
       });
@@ -106,7 +110,9 @@ describe("private source diagnostic transport relay", () => {
   it("checks exact source identity before relaying a valid private summary", async () => {
     const adapter = createSameOriginEveTransport({
       config: { baseUrl: "https://builder.example.test" },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       workloadIdentity: { token: () => Promise.resolve("synthetic-token") },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       fetchImplementation: () =>
         Promise.resolve(
           Response.json(

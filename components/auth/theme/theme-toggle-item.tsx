@@ -15,6 +15,7 @@ const handleTabsKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     return;
   }
 
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const target = event.target as HTMLElement;
   if (target.getAttribute("role") !== "tab") {
     return;
@@ -32,9 +33,11 @@ const handleTabsKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
   const currentIndex = items.indexOf(wrapper);
   const nextIndex = event.key === "ArrowDown" ? currentIndex + 1 : currentIndex - 1;
   const next = items[nextIndex];
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   if (!next) {
     return;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   event.preventDefault();
   next.focus();

@@ -73,6 +73,7 @@ const response = (state: "reserved" | "submission_unknown", operationId = "respo
     sessionId: source.sessionId,
     principal,
     state,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(state === "submission_unknown" ? { safeErrorCode: "submission_unknown" } : {}),
     requestDigest: `sha256:${"c".repeat(64)}`,
     createdAtEpochMs: 1,
@@ -81,7 +82,9 @@ const response = (state: "reserved" | "submission_unknown", operationId = "respo
 const seed = async (store: InMemoryHostedEveStore, session: typeof source) => {
   const operation = hostedOperationRecordSchema.parse({
     ...transfer,
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     nativeRecovery: undefined,
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     resumeSessionId: undefined,
     operationId: `initial-${session.sessionId}`,
     clientRequestId: `initial-${session.sessionId}`,

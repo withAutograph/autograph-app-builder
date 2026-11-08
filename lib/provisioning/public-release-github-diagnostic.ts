@@ -46,7 +46,9 @@ export const githubReleaseFailure = (error: unknown): PublicReleaseProviderError
     githubReleaseDiagnosticSchema.parse({
       provider: "github",
       statusCode: status.data.status,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(code === undefined ? {} : { code }),
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(metadata.success ? requestRef(metadata.data.response.headers) : {}),
     }),
   );

@@ -407,6 +407,7 @@ export const createHostedManagedRuntimeProjection = (deps: {
             value,
             type: "encrypted",
             target: ["preview"],
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(observed.gitBranch === null ? {} : { gitBranch: observed.gitBranch }),
             comment: io.comment,
           },

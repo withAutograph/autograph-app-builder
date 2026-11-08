@@ -7,6 +7,7 @@ import { isIP } from "node:net";
 /** @typedef {{ [key: string]: unknown }} UnknownRecord */
 
 /** @param {unknown} value @returns {value is UnknownRecord} */
+// oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
 const isRecord = (value) => typeof value === "object" && value !== null;
 
 export const eveWorkerEnvelopeKey = "__appBuilderAuthorizedEveWorkerEnvironmentV1";
@@ -33,6 +34,7 @@ const validLoopbackHostname = (hostname) => {
 
 /** @param {unknown} value - Candidate local workflow URL. */
 const validateBaseUrl = (value) => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value !== "string") {
     fail("base URL");
   }
@@ -80,6 +82,7 @@ const validateBaseUrl = (value) => {
 const validateUuid = (value, field, optional = false) => {
   if (
     !(value === undefined && optional) &&
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     (typeof value !== "string" || !uuidPattern.test(value))
   ) {
     fail(field);
@@ -90,6 +93,7 @@ const validateUuid = (value, field, optional = false) => {
 /** @param {unknown} value - Candidate transport secret. */
 const validateTransportSecret = (value) => {
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof value !== "string" ||
     !transportSecretPattern.test(value) ||
     Buffer.from(value, "base64url").byteLength !== 32 ||

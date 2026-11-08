@@ -8,8 +8,10 @@ import {
   getBuilderHandoffPageData,
 } from "@/lib/handoff/deployment";
 
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
 const providerInputs = vi.hoisted(() => [] as { deploymentAccess?: string; operation: string }[]);
 const sourceRead = vi.hoisted(() => vi.fn());
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
 const calls = vi.hoisted(() => [] as string[]);
 const drafts = vi.hoisted(() => ({ archive: vi.fn(), read: vi.fn() }));
 const draftId = "123e4567-e89b-42d3-a456-426614174003";
@@ -47,6 +49,7 @@ vi.mock("@/lib/builder-drafts/deployment", () => ({
 }));
 beforeEach(() => {
   providerInputs.length = 0;
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   vi.mocked(getAuthenticatedBuilderDraftContext).mockResolvedValue({
     authority: {
       audience: "https://app.test/mcp",
@@ -80,6 +83,7 @@ vi.mock("@/lib/auth/preview-oauth-runtime", () => ({
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/lib/provisioning/deployment dependency used by this test.
 vi.mock("@/lib/provisioning/deployment", () => ({
   getBuilderProvisioningDeploymentHandler: vi.fn(() => async (request: Request) => {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const requestInput = (await request.json()) as { deploymentAccess?: string; operation: string };
     providerInputs.push(requestInput);
     calls.push(
@@ -119,6 +123,7 @@ vi.mock("@/lib/provisioning/deployment", () => ({
     };
     return Response.json({
       appId: "server-action-app",
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(requestInput.deploymentAccess === undefined
         ? {}
         : { deploymentAccess: requestInput.deploymentAccess }),
@@ -179,6 +184,7 @@ describe("continueBuilderHandoff", () => {
       throw new Error("Expected signed-in draft context");
     }
     sourceRead.mockResolvedValue({ manifest: { appId: "supplier-spend" } });
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     vi.mocked(readAuthenticatedSourceUploadContext).mockResolvedValue({
       authority: current.authority,
       store: { readCompleted: sourceRead },
@@ -205,6 +211,7 @@ describe("continueBuilderHandoff", () => {
   });
   it("accepts only an opaque checkpoint, never a second client form payload", async () => {
     expect(
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       await continueBuilderHandoff(undefined, { ...input, form: storedForm } as never),
     ).toEqual({ status: "error" });
     expect(drafts.read).not.toHaveBeenCalled();
@@ -271,6 +278,7 @@ describe("continueBuilderHandoff", () => {
   });
 
   it("rejects malformed input before it reaches a deployment handler", async () => {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const result = await continueBuilderHandoff(undefined, {
       creationRequestId: "123e4567-e89b-42d3-a456-426614174002",
       form: {
@@ -296,6 +304,7 @@ describe("saved provisioning access policy", () => {
   it.each([undefined, "public-app"] as const)(
     "preserves %s through handoff continuation",
     async (deploymentAccess) => {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       vi.mocked(getBuilderHandoffPageData).mockResolvedValueOnce({
         intent: {
           appName: storedForm.appName,

@@ -37,6 +37,7 @@ describe("Storybook feature flags", () => {
     for (const run of Object.values(runs)) {
       expect(run).toHaveBeenCalledWith({
         identify: {},
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         request: expect.any(Request),
       });
     }

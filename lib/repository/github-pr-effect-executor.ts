@@ -153,6 +153,7 @@ export const executeApprovedGitHubPrEffect = async ({
     return await reconcile(concurrent);
   }
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const rejectEffect = (code: "provider-rejected" | "cancelled") =>
     finish(
       pending,

@@ -31,6 +31,7 @@ afterEach(async () => {
       await Promise.resolve();
     });
   }
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   root = undefined;
   container?.remove();
   sessionStorage.clear();

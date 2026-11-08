@@ -788,6 +788,7 @@ describe("normal actor operations", () => {
     expect(signupEmails).toHaveLength(7);
     expect(new Set(signupEmails).size).toBe(7);
     expect(saved.state.actors[0]).toEqual(captureState.actors[0]);
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     expect(f.captures).toEqual([{ actorKey: "owner", organizationId: undefined }]);
     settle();
     expect(createParticipantSuccessorPlan(f.row.record, combined, now)).toBeUndefined();
@@ -1177,6 +1178,7 @@ describe("normal actor operations", () => {
       "fixture_capture_required",
     );
     expect(f.row.record.accountPreparation?.accountApprovalId).toBe("initial-approval");
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     expect(f.captures).toEqual([{ actorKey: "owner", organizationId: undefined }]);
     expect(f.requests).toHaveLength(0);
   });
@@ -1230,6 +1232,7 @@ describe("normal actor operations", () => {
           "fixture_capture_required",
         );
         expect(f.captures.slice(beforeCaptures)).toEqual([
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           { actorKey: "owner", organizationId: undefined },
         ]);
         expect(f.requests).toHaveLength(beforeRequests);

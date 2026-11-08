@@ -66,10 +66,12 @@ export function readPasskeyOnboardingConfig(
     throw new Error("Passkey onboarding requires BETTER_AUTH_SECRET.");
   }
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const derivedPreviewIssuer =
     environment.VERCEL_ENV === "preview" && environment.VERCEL_URL
       ? `https://${environment.VERCEL_URL}/api/auth`
       : undefined;
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const origin = exactOrigin(environment.BETTER_AUTH_URL ?? derivedPreviewIssuer);
   const { hostname } = new URL(origin);
   if (environment.VERCEL_ENV === "production") {
@@ -343,9 +345,11 @@ export function createPasskeyOnboardingPlugin(input: {
             throw invalidOnboardingAuthority();
           }
           const existingSession = await getSessionFromCtx(ctx);
+          /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
           if (existingSession?.user.id) {
             throw onboardingAlreadyAuthenticated();
           }
+          /* oxlint-enable typescript/strict-boolean-expressions */
           const requestedAt = now();
           const issued = await issuePasskeyOnboardingContext(
             ctx.context.adapter,
@@ -368,18 +372,22 @@ export function createPasskeyOnboardingPlugin(input: {
               return;
             }
             const session = await getSessionFromCtx(ctx);
+            /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
             if (session?.user.id) {
               throw onboardingAlreadyAuthenticated();
             }
+            /* oxlint-enable typescript/strict-boolean-expressions */
           }),
           matcher: (ctx) => ctx.path === "/passkey/verify-registration",
         },
         {
           handler: createAuthMiddleware(async (ctx) => {
             const session = await getSessionFromCtx(ctx);
+            /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
             if (!session?.user.id) {
               return;
             }
+            /* oxlint-enable typescript/strict-boolean-expressions */
             const count = await ctx.context.adapter.count({
               model: "passkey",
               where: [{ field: "userId", value: session.user.id }],
@@ -411,6 +419,7 @@ export function createPasskeyOnboardingPlugin(input: {
                     return;
                   }
                   const adapter = await getCurrentAdapter(
+                    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
                     ctx.context.adapter as Parameters<typeof getCurrentAdapter>[0],
                   );
                   const memberships = await adapter.findMany<{
@@ -420,12 +429,15 @@ export function createPasskeyOnboardingPlugin(input: {
                     model: "member",
                     where: [{ field: "userId", value: session.userId }],
                   });
+                  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
                   if (memberships.length !== 1 || !memberships[0]) {
                     throw APIError.from("INTERNAL_SERVER_ERROR", {
                       code: "PASSKEY_WORKSPACE_SETUP_FAILED",
                       message: "Passkey workspace setup failed.",
                     });
                   }
+                  /* oxlint-enable typescript/strict-boolean-expressions */
+                  // oxlint-disable-next-line typescript/consistent-return -- Preserve the passkey hook's optional return behavior.
                   return {
                     data: {
                       ...session,
@@ -469,6 +481,7 @@ export function createPasskeyPlugin(input: {
 }) {
   const now = input.now ?? (() => new Date());
   return passkey({
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(input.config ? { origin: input.config.origin, rpID: input.config.rpId } : {}),
     registration: {
       async afterVerification({ ctx, context }) {

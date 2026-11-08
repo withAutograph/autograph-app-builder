@@ -213,6 +213,7 @@ const fixture = (image = false) => {
       exists = true;
       state = { sourceCreationAttempted: true, sourceSandboxId: name, disposed: false };
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     dispose: () =>
       helper.dispose({
         attemptId,
@@ -225,6 +226,7 @@ const fixture = (image = false) => {
           checkpoints.push(structuredClone(state));
         },
       }),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     install: () =>
       helper.install({
         target,

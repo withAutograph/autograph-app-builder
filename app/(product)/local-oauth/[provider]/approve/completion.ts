@@ -28,12 +28,14 @@ export async function completeAuthorization(
       parsed.provider === "github"
         ? new URL(`${emulation.githubOrigin}/login/oauth/callback`)
         : new URL(`${emulation.vercelOrigin}/oauth/authorize/callback`);
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     const body = new URLSearchParams({
       client_id: parsed.authorization.client_id,
       [parsed.provider === "github" ? "login" : "username"]: "autograph-dev",
       redirect_uri: parsed.authorization.redirect_uri,
       scope: parsed.authorization.scope,
       state: parsed.authorization.state,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(parsed.authorization.code_challenge && parsed.authorization.code_challenge_method
         ? {
             code_challenge: parsed.authorization.code_challenge,
@@ -41,6 +43,7 @@ export async function completeAuthorization(
           }
         : {}),
     });
+    /* oxlint-enable typescript/strict-boolean-expressions */
     const response = await providerEmulationFetch(
       callback,
       {
@@ -53,9 +56,11 @@ export async function completeAuthorization(
       emulation,
     );
     const location = response.headers.get("location");
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (!location || response.status < 300 || response.status >= 400) {
       throw new Error("Emulated OAuth approval failed.");
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     const destination = new URL(location);
     const callbackValidation = {
       codeCount: destination.searchParams.getAll("code").length,

@@ -7,6 +7,8 @@ export const sameRepositoryProductionSetupEffects = (
   right: RepositoryProductionIntent,
 ) =>
   isDeepStrictEqual(
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     { ...left, sourceSha: undefined, creatorEmail: undefined },
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     { ...right, sourceSha: undefined, creatorEmail: undefined },
   );

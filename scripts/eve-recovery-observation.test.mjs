@@ -13,6 +13,7 @@ const privateResult = "private-result";
 
 const require = createRequire(import.meta.url);
 const eve = path.dirname(require.resolve("eve/package.json"));
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
 const { observeTerminalSession, handleTerminalRecoveryRequest } = await load(
   "execution/session/terminal-recovery.js",
@@ -87,6 +88,7 @@ const setup = () => {
     frontier: [],
   };
   const ports = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     authorize: () => {
       state.authorized += 1;
       if (state.denied) {
@@ -96,6 +98,7 @@ const setup = () => {
     },
     authorizeActivation: effect,
     commitReceipt: effect,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     readReceipt: () => Promise.resolve(state.receipt),
   };
   const deps = {
@@ -146,6 +149,7 @@ test("receipt observation selects failed physical child and cannot activate, rec
 
 test("without receipt observes only canonical original physical owner", async () => {
   const { state, deps, input, payload } = setup();
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   state.receipt = undefined;
   payload.binding.ownerRunId = input.descriptor.sourceOwnerRunId;
   const observed = await observeTerminalSession(input, deps);
@@ -324,15 +328,18 @@ test("actual native collector and serialization retain mixed orphan history and 
   const readOwners = [];
   const world = {
     events: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       list: ({ runId }) => Promise.resolve({ data: [{ ...event, runId }], hasMore: false }),
     },
     runs: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       get: (id) => {
         assert.ok([owner, sourceOwner].includes(id));
         readOwners.push(id);
         return Promise.resolve({ runId: id, status: "failed" });
       },
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     steps: { get: (runId) => Promise.resolve(runId === sourceOwner ? sourceStep : step) },
   };
   const realResult = {
@@ -347,7 +354,9 @@ test("actual native collector and serialization retain mixed orphan history and 
     },
   };
   deps.collect = createTerminalRecoveryCandidateCollector({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     getWorld: () => Promise.resolve(world),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     resolveRunEncryptionKey: () => Promise.resolve(),
     hydrateStepArguments: (value, runId, key) =>
       serialization.hydrateStepArguments(value, runId, key, []),

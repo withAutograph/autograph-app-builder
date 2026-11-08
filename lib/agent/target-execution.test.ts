@@ -106,6 +106,7 @@ const state = {
     sourceReceiptDigest: "f".repeat(64),
     sourceSha: "a".repeat(40),
     sourceTree: "b".repeat(40),
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     target: {} as PreparedAppCreation["target"],
     version: 1,
     workspaceDigest: "c".repeat(64),
@@ -152,6 +153,7 @@ describe("target command readiness", () => {
     expect(resolveTargetExecutionEnvironment({ environment, fixture: false })).toMatchObject({
       backend: { blockers: [], kind: "vercel-preview" },
       cacheInspectable: true,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       imageDigest: undefined,
     });
     expect(
@@ -196,6 +198,7 @@ describe("target command readiness", () => {
     ).toMatchObject({
       backend: { kind: "unsupported-vercel" },
       cacheInspectable: false,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       imageDigest: undefined,
     });
   });

@@ -32,6 +32,7 @@ describe("sandbox diagnostic browser captures", () => {
       }),
     };
     const body = script.replaceAll(/^import .*;\n/gmu, "");
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const execute = compileFunction(`return (async () => {${body}})()`, [
       "readFile",
       "writeFile",

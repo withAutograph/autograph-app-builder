@@ -357,7 +357,9 @@ describe("approved retention renewal", () => {
           approvalId: "renewed-approval",
           plan: firstPlan,
           planDigest: operatorPlanDigest(firstPlan),
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           pendingEffectId: undefined,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           pendingEffectAttempt: undefined,
           retainedRenewalOperations: [
             { approvedByCallId: original.approvedByCallId, operator: originalOperator },
@@ -515,13 +517,17 @@ describe("approved retention renewal", () => {
       approvedByCallId: "operator:unapproved-plan",
       operator: {
         ...previousOperator,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         approvalId: undefined,
         plan: renewedPlan,
         planDigest: operatorPlanDigest(renewedPlan),
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         pendingEffectId: undefined,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         pendingEffectAttempt: undefined,
         deliveryCandidates: [],
         gatewayDeliveryCandidates: [],
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         deliveredGatewayDeploymentId: undefined,
         receipts: previousOperator.receipts.filter((receipt) =>
           immutableEffectIds.has(receipt.effectId),
@@ -680,10 +686,13 @@ describe("approved retention renewal", () => {
       approvedByCallId: "operator:unapproved-plan",
       operator: {
         ...prior.operator,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         approvalId: undefined,
         plan: renewedPlan,
         planDigest: operatorPlanDigest(renewedPlan),
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         pendingEffectId: undefined,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         pendingEffectAttempt: undefined,
         deliveryCandidates: [],
         gatewayDeliveryCandidates: [],

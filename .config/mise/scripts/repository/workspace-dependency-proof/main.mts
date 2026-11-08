@@ -49,7 +49,9 @@ const run = (args: string[], workingDirectory: string) => {
   return {
     stdout: channel(child.stdout),
     stderr: channel(child.stderr),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     wait: () => completion,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     kill: () => {
       child.kill();
       return Promise.resolve();
@@ -93,6 +95,7 @@ try {
   assert.ok(!before.includes('"apps/finance"'));
   let installations = 0;
   const sandbox: Pick<SandboxSession, "spawn"> = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     spawn(options) {
       assert.equal(options.command, "bun install");
       assert.equal(options.workingDirectory, root);

@@ -85,6 +85,7 @@ export const calculateCompensation = (input: CompensationAssumptions) => {
   const proposedTax = Math.round(proposedBase * input.employerTaxRate);
   const currentTotal = input.baseSalary + input.targetBonus + input.annualBenefits + currentTax;
   const proposedTotal = proposedBase + input.targetBonus + input.annualBenefits + proposedTax;
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absent or calculated compensation results.
   return {
     currentTax,
     currentTotal,

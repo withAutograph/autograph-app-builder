@@ -516,10 +516,12 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
           branch: record.plan.target.branch,
           environment: material.environment,
           files: { "environment.json": JSON.stringify(material.environment) },
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           persistFiles: () => Promise.resolve(),
           projectId: record.plan.target.projectId,
           stateDirectory: `${locator.rootDirectory}/suite`,
         },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         observeInstallation: () => Promise.resolve(material.proof),
         resumeCommand: async (commandId) => await provider.getCommand(commandId),
         signal: deps.signal(context),
@@ -551,6 +553,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
         appId: record.plan.target.appId,
         root: record.plan.runtime.root,
         sandbox: {
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           run: () => Promise.reject(unavailable()),
         },
         runtime: managed,

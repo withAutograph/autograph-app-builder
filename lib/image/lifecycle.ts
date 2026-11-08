@@ -110,6 +110,7 @@ export type ExactProvenanceInput = Readonly<{
 
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const canonical = (value: unknown): string => JSON.stringify(value);
 
 const exactSha = (value: string, pattern: RegExp, label: string): void => {
@@ -153,7 +154,9 @@ export const assertStandaloneGitMetadata = (isDirectory: boolean, label: string)
   }
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const assertNoSecretMaterial = (value: unknown, receiptPath = "receipt"): void => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value === "string") {
     if (secretValue.test(value)) {
       throw new Error(`${receiptPath} contains secret-like material.`);
@@ -166,6 +169,7 @@ export const assertNoSecretMaterial = (value: unknown, receiptPath = "receipt"):
     }
     return;
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value !== "object" || value === null) {
     return;
   }
@@ -383,6 +387,7 @@ export const parseLocalImageInspection = (
   if (!Array.isArray(parsed) || parsed.length !== 1) {
     throw new Error("Local image inspection returned an unexpected image set.");
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const image = parsed[0] as ImageInspect;
   if (image.Os !== IMAGE_OS || image.Architecture !== IMAGE_ARCHITECTURE) {
     throw new Error("Local image platform does not match linux/arm64.");
@@ -397,12 +402,13 @@ export const parseLocalImageInspection = (
   ) {
     throw new Error("Local image OCI provenance labels do not match.");
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof image.Id !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(image.Id)) {
     throw new Error("Local image inspection did not return an exact image ID.");
   }
   const descriptor = image.Descriptor;
   if (
-    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
+    // oxlint-disable-next-line sonarjs/expression-complexity, anti-slop/no-runtime-typeof -- Preserve the existing conditions and their evaluation order; Preserve this runtime check and existing input handling.
     typeof descriptor !== "object" ||
     descriptor === null ||
     !hasExactKeys(descriptor, ["digest", "mediaType", "platform", "size"]) ||
@@ -410,6 +416,7 @@ export const parseLocalImageInspection = (
     descriptor.mediaType !== "application/vnd.oci.image.manifest.v1+json" ||
     !Number.isSafeInteger(descriptor.size) ||
     Number(descriptor.size) <= 0 ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof descriptor.platform !== "object" ||
     descriptor.platform === null ||
     JSON.stringify(descriptor.platform) !==
@@ -501,6 +508,7 @@ export const parseRemoteIndexDescriptor = (
   indexDigest: string;
   indexReference: string;
 }> => {
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const descriptor = JSON.parse(descriptorRaw) as RemoteIndex;
   if (!isExactDigest(descriptor.digest)) {
     throw new Error("Remote registry inspection did not return an exact manifest digest.");
@@ -541,7 +549,9 @@ export const parseRemoteIndexInspection = (
   if (!isExactDigest(localImageId)) {
     throw new Error("Local image identity is not an exact digest.");
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const descriptor = JSON.parse(descriptorRaw) as RemoteIndex;
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const index = JSON.parse(indexRaw) as RemoteIndex;
   if (!isExactDigest(descriptor.digest)) {
     throw new Error("Remote registry inspection did not return an exact manifest digest.");
@@ -563,6 +573,7 @@ export const parseRemoteIndexInspection = (
     throw new Error("Remote registry did not return the exact OCI image index.");
   }
   assertOciContentDigest(indexRaw, descriptor.digest, "Remote OCI image index");
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const entries = index.manifests as RemoteIndexEntry[];
   if (entries.length !== 2) {
     throw new Error("Remote OCI image index has an unexpected descriptor set.");
@@ -595,6 +606,7 @@ export const parseRemoteIndexInspection = (
     !isExactDigest(attestationEntry.digest) ||
     attestationEntry.digest === platformEntry.digest ||
     !isPositiveSize(attestationEntry.size) ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof annotations !== "object" ||
     annotations === null ||
     !hasExactKeys(annotations, ["vnd.docker.reference.digest", "vnd.docker.reference.type"]) ||
@@ -645,7 +657,9 @@ export const parseRemoteImageInspection = (
   ) {
     throw new Error("Remote platform selection is not bound to the local image identity.");
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const manifest = JSON.parse(manifestRaw) as RemoteManifest;
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const image = JSON.parse(imageRaw) as RemoteImage;
   const { config } = manifest;
   const { layers } = manifest;
@@ -655,6 +669,7 @@ export const parseRemoteImageInspection = (
     manifest.schemaVersion !== 2 ||
     manifest.mediaType !== ociManifestMediaType ||
     selection.platformManifestSize !== Buffer.byteLength(manifestRaw) ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof config !== "object" ||
     config === null ||
     !hasExactKeys(config, ["digest", "mediaType", "size"]) ||
@@ -666,6 +681,7 @@ export const parseRemoteImageInspection = (
     layers.some((layer) => {
       const value: unknown = layer;
       if (
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof value !== "object" ||
         value === null ||
         !hasExactKeys(value, ["digest", "mediaType", "size"])

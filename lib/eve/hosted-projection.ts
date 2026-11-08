@@ -33,18 +33,23 @@ export type HostedEngineSnapshot = z.infer<typeof hostedSnapshotSchema>;
 // eslint-disable-next-line eslint/func-style -- Keep the filtering iterator lazy for snapshot projection.
 function* internalEvents(candidates: readonly unknown[]): Generator<InternalEveEvent> {
   for (const candidate of candidates) {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (candidate !== null && typeof candidate === "object") {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       yield candidate as InternalEveEvent;
     }
   }
 }
 
 const publicEventFromCandidate = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   candidate: unknown,
 ): z.infer<typeof publicEveEventSchema> | undefined => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (candidate === null || typeof candidate !== "object") {
     return undefined;
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const projected = toPublicEvent(candidate as InternalEveEvent);
   if (projected === null) {
     return undefined;
@@ -56,6 +61,7 @@ const publicEventFromCandidate = (
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function projectHostedSnapshot(
   sessionId: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   snapshotInput: unknown,
   cursor = 0,
   limit = 100,

@@ -13,6 +13,7 @@ import {
 } from "./app-spec-validation";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function completeAppSpec(handoff: unknown = BUILD_READY_HANDOFF_EXAMPLE): string {
   return `${REQUIRED_APP_SPEC_HEADINGS.filter((heading) => heading !== "Build handoff")
     .map((heading) => `## ${heading}\n\nProduct decision.`)
@@ -144,6 +145,7 @@ describe("build-ready AppSpec validation", () => {
     expect(diagnostic).toMatchObject({
       buildHandoffExample: BUILD_READY_HANDOFF_EXAMPLE,
       code: "app_spec_invalid",
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       instruction: expect.stringContaining("without asking the user"),
     });
     expect(diagnostic).not.toHaveProperty("requiredHeadings");

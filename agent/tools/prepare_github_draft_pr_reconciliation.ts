@@ -257,6 +257,7 @@ export default defineTool({
       );
     }
     let acceptedContent: Promise<string> | undefined;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const readAcceptedContent = () =>
       (acceptedContent ??= resolveAcceptedAppSpecContent({
         accepted: state.appSpec,

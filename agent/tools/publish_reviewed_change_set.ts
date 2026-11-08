@@ -95,7 +95,8 @@ export default defineTool({
       const stored: LocalPublicationSuccessReceipt =
         workflow.phase === "published_local"
           ? workflow.publicationReceipt
-          : (durable as LocalPublicationSuccessReceipt);
+          : // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+            (durable as LocalPublicationSuccessReceipt);
       if (!matches(proposalFromJournal(stored))) {
         throw new Error(
           "The local-publication retry does not exactly match the durable success proposal.",
@@ -258,6 +259,7 @@ export default defineTool({
     const result = await publishReviewedChangeSet({
       proposal,
       publishedByCallId,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readOverlayFile: (path) =>
         hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
         workflow.appSpec.appId === "publication-precondition-failure"

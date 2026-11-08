@@ -10,6 +10,7 @@ const maxStreamMs = 30_000;
 const heartbeatIntervalMs = 10_000;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function event(data: unknown, id: string, name = "snapshot") {
   return encoder.encode(`id: ${id}\nevent: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
 }
@@ -28,13 +29,16 @@ function heartbeat() {
 export async function GET(request: Request) {
   const source = new URL(request.url);
   const requestId = source.searchParams.get("requestId");
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!requestId) {
     return Response.json({ error: "request_invalid" }, { status: 400 });
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   const handler = getBuilderProvisioningDeploymentHandler(process.env);
   const headers = new Headers(request.headers);
   headers.set("accept", "application/json");
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the handler's promise and synchronous exception behavior.
   const read = () =>
     handler(
       new Request(

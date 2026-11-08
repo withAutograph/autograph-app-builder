@@ -93,6 +93,7 @@ describe("private public-release consent", () => {
   });
   it("requires complete authenticated history and rechecks owner after reading", async () => {
     const assertOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const readHistory = vi.fn((_start, observe: (event: MessageStreamEvent) => void) => {
       observe(request());
       observe(settlement());
@@ -108,6 +109,7 @@ describe("private public-release consent", () => {
       }),
     ).rejects.toThrow();
     expect(assertOwner).toHaveBeenCalledTimes(1);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const complete = (_start: number, observe: (event: MessageStreamEvent) => void) => {
       observe(request());
       observe(settlement());
@@ -124,6 +126,7 @@ describe("private public-release consent", () => {
     ).toEqual({ approvalId: "request", approvedByCallId: "current-call" });
     await expect(
       readPrivatePublicReleaseApproval({
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         assertOwner: () => Promise.reject(new Error("revoked")),
         callId: "current-call",
         owner,

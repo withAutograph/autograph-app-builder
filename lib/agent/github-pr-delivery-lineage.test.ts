@@ -33,6 +33,7 @@ const session = { id: "same-logical-session", auth: { current: { principalId: "c
 // SAFETY: The read tool only consumes authenticated session fields from this controlled context.
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Tool fixture omits unused execution ports.
 const context = { session } as ToolContext;
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const approve = (toolInput: GitHubPrDeliveryApproval) =>
   // SAFETY: The approval callback consumes only this exact session and tool input.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Approval fixture omits unused execution ports.

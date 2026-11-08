@@ -29,6 +29,7 @@ describe("existing-app sequencing", () => {
       }),
     ).toBe(false);
     expect(
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       canInspectExistingApplication({
         phase: "prepared",
         version: 17,

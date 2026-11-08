@@ -7,6 +7,7 @@ function jsonRpcBody(text: string) {
     .filter((line) => line.startsWith("data:"))
     .map((line) => line.slice("data:".length).trim())
     .find((line) => line.length > 0);
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   return JSON.parse(data ?? text) as {
     error?: { message?: string };
     result?: { tools?: { name?: string }[] };
@@ -32,16 +33,19 @@ async function mcpRequest(input: {
 }) {
   const requestTimeout = AbortSignal.timeout(5000);
   const signal = input.signal ? AbortSignal.any([input.signal, requestTimeout]) : requestTimeout;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const response = await input.fetcher(input.endpoint, {
     body: JSON.stringify(input.body),
     headers: {
       accept: "application/json, text/event-stream",
       "content-type": "application/json",
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(input.sessionId ? { "mcp-session-id": input.sessionId } : {}),
     },
     method: "POST",
     signal,
   });
+  /* oxlint-enable typescript/strict-boolean-expressions */
   if (!response.ok) {
     throw new Error(`Development MCP returned HTTP ${response.status}.`);
   }

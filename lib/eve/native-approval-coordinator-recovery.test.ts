@@ -59,6 +59,7 @@ beforeAll(async () => {
     path.join(fixtureDirectory, "dist/src/harness/approval-delivery-coordinator.js"),
     added.map((line) => line.slice(1)).join("\n"),
   );
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const internal = <Module>(name: string) =>
     vi.importActual<Module>(pathToFileURL(path.join(fixtureDirectory, `dist/src/${name}.js`)).href);
   [coordinator, batches, approvals, contexts, keys] = await Promise.all([
@@ -131,7 +132,9 @@ const setup = async (
       },
     ],
   ]);
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const run = (input: CoordinatorInput) =>
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     contexts.contextStorage.run(context, () => coordinator.coordinateApprovalDelivery(input));
   const ingested = await run({
     now: 1,
@@ -147,6 +150,7 @@ const setup = async (
   expect(ingested.kind).toBe("continue-coordination");
   return {
     authorizer,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     run: (prepareTools?: CoordinatorInput["prepareTools"]) =>
       run({ abortSignal, now: 2, prepareTools, session: ingested.session, tools }),
     session: ingested.session,
@@ -157,6 +161,7 @@ const setup = async (
 describe("native approval coordinator recovery", () => {
   it("waits for the owner authorizer beyond ten seconds and settles its actual success", async () => {
     const authorization = Promise.withResolvers<ApprovalResponseDecision>();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const f = await setup(() => authorization.promise);
     vi.useFakeTimers();
     try {
@@ -173,6 +178,7 @@ describe("native approval coordinator recovery", () => {
     }
   });
   it.each(["denied", "failure"])("keeps %s authorization fail-closed", async (mode) => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const f = await setup(() => {
       if (mode === "failure") {
         return Promise.reject(new Error("owner verification unavailable"));
@@ -184,9 +190,11 @@ describe("native approval coordinator recovery", () => {
   });
   it("does not invoke the authorizer when tool preparation cancels the turn", async () => {
     const controller = new AbortController();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const f = await setup(() => Promise.resolve({ status: "allowed" }), controller.signal);
     const cancelled = new Error("cancelled during preparation");
     await expect(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       f.run(() => {
         controller.abort(cancelled);
         return Promise.resolve(f.tools);
@@ -198,6 +206,7 @@ describe("native approval coordinator recovery", () => {
   it("interrupts on actual cancellation and cannot settle a late authorizer success", async () => {
     const controller = new AbortController();
     const authorization = Promise.withResolvers<ApprovalResponseDecision>();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const f = await setup(() => authorization.promise, controller.signal);
     const pending = f.run();
     await Promise.resolve();

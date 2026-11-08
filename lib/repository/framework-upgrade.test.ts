@@ -120,6 +120,7 @@ const fixtureCommandExit = (command: string, existing: boolean) => {
   }
   return command.startsWith("test -f") ? 1 : 0;
 };
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const unexpectedSandboxOperation = () =>
   Promise.reject(new Error("Unexpected sandbox operation in framework upgrade fixture"));
 const sandboxFixture = (ports: FixtureSandboxPorts): SandboxSession => ({
@@ -323,6 +324,7 @@ describe("framework upgrade planning and apply", () => {
       }),
     ).rejects.toThrow("does not belong");
     await expect(
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       executeTargetIdentityAndPlanning({ ...input, localSourceReconciliation: undefined }),
     ).rejects.toThrow();
     expect(
@@ -391,6 +393,7 @@ describe("framework upgrade planning and apply", () => {
       },
       setNetworkPolicy: async () => {},
     });
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const apply = () =>
       sandboxApplyCommandExecutor()({
         sandbox,

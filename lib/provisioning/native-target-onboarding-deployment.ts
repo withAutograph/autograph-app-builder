@@ -479,6 +479,7 @@ export const createNativeTargetOnboardingDeployment = (input: {
     return nativeTargetOnboardingPlanSchema.parse({
       version: 1,
       appId: proposal.appId,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(proposal.resourceProfileId === undefined
         ? {}
         : {
@@ -507,6 +508,7 @@ export const createNativeTargetOnboardingDeployment = (input: {
           ? source.captured.description.backend.roles
           : [],
       nativeNeon: {
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(nativeNeon.configuration.syntheticEnrollment === undefined
           ? {}
           : {

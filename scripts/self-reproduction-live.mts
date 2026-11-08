@@ -45,6 +45,7 @@ const availableLoopbackPort = async (configured: string | undefined): Promise<nu
   const closed = once(server, "close");
   server.close();
   await closed;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (address === null || typeof address === "string") {
     throw new Error("A loopback port was unavailable.");
   }
@@ -73,13 +74,14 @@ const run = async (
   child.stdout.on("data", (chunk: Buffer) => (stdout += String(chunk)));
   // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   child.stderr.on("data", (chunk: Buffer) => (stderr += String(chunk)));
+  // oxlint-disable-next-line typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness.
   if (options.input) {
     child.stdin.end(options.input);
   } else {
     child.stdin.end();
   }
   const closed = once(child, "close");
-  // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+  // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
   const [code] = await closed.catch((error: unknown) => {
     spawnError = error instanceof Error ? error : new Error(String(error));
     return [null];
@@ -116,6 +118,7 @@ const waitForEveAttempt = async (
   await waitForEveAttempt(url, signal, deadline);
 };
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const waitForEve = (url: string, signal: AbortSignal) =>
   waitForEveAttempt(url, signal, Date.now() + 120_000);
 
@@ -127,6 +130,7 @@ const availableDistinctLoopbackPort = async (
   return port === excludedPort ? await availableDistinctLoopbackPort(excludedPort) : port;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const answerFor = (result: unknown, answers: Record<string, string>) => {
   const serialized = JSON.stringify(result).toLowerCase();
   if (serialized.includes("approve")) {

@@ -341,6 +341,7 @@ export const createNativeTargetOnboardingService =
           output = await observeNativePlan(isPlan, "native_plan_dispatch", () =>
             runtime.plan(input.input, context, {
               phase: "planned",
+              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
               ...(input.selectedApp === undefined
                 ? {}
                 : {

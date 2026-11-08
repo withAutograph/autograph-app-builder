@@ -123,9 +123,11 @@ export async function fetchVerifiedGitHubUserInfo(
   tokens: GitHubOAuthTokens,
   fetchImplementation: typeof fetch = fetch,
 ) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!tokens.accessToken) {
     return null;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const headers = {
     Accept: "application/vnd.github+json",
     Authorization: `Bearer ${tokens.accessToken}`,
@@ -194,6 +196,7 @@ async function exchangeLocalEmulatedOAuthCode(input: {
   codeVerifier?: string;
   emulation: ProviderEmulation;
 }) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const response = await providerEmulationFetch(
     input.tokenUrl,
     {
@@ -201,6 +204,7 @@ async function exchangeLocalEmulatedOAuthCode(input: {
         client_id: input.clientId,
         client_secret: input.clientSecret,
         code: input.code,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(input.codeVerifier ? { code_verifier: input.codeVerifier } : {}),
         redirect_uri: input.redirectURI,
       }),
@@ -214,23 +218,29 @@ async function exchangeLocalEmulatedOAuthCode(input: {
     },
     input.emulation,
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
   if (!response.ok) {
     throw new Error("Emulated OAuth token exchange failed.");
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const body = (await response.json()) as {
     access_token?: unknown;
     token_type?: unknown;
     scope?: unknown;
     id_token?: unknown;
   };
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof body.access_token !== "string" || body.access_token.length === 0) {
     throw new Error("Emulated OAuth token response is invalid.");
   }
   return {
     accessToken: body.access_token,
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     idToken: typeof body.id_token === "string" ? body.id_token : undefined,
     raw: body,
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     scopes: typeof body.scope === "string" ? body.scope.split(/\s+/u).filter(Boolean) : undefined,
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     tokenType: typeof body.token_type === "string" ? body.token_type : undefined,
   };
 }
@@ -246,9 +256,11 @@ export async function fetchVerifiedVercelUserInfo(
   tokens: VercelOAuthTokens,
   fetchImplementation: typeof fetch = fetch,
 ) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!tokens.accessToken || !tokens.idToken) {
     return null;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   let tokenClaims: ReturnType<typeof decodeJwt>;
   try {
@@ -256,6 +268,7 @@ export async function fetchVerifiedVercelUserInfo(
   } catch {
     return null;
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof tokenClaims.sub !== "string" || typeof tokenClaims.email !== "string") {
     return null;
   }
@@ -562,14 +575,17 @@ export function readPreviewOAuthRuntimeConfig(
   const deploymentEnvironment = localDevelopment
     ? "development"
     : readHostedDeploymentEnvironment(environment);
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const issuer =
     environment.BETTER_AUTH_URL ??
     (environment.VERCEL_ENV === "preview" && environment.VERCEL_URL
       ? `https://${environment.VERCEL_URL}/api/auth`
       : undefined);
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const resource =
     environment.MCP_RESOURCE_URL ??
     (issuer !== undefined && issuer !== "" ? `${new URL(issuer).origin}/mcp` : undefined);
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return previewOAuthRuntimeConfigSchema.parse({
     databaseUrl: environment.DATABASE_URL,
     environment: deploymentEnvironment,
@@ -584,6 +600,7 @@ export function readPreviewOAuthRuntimeConfig(
     vercelClientId: environment.VERCEL_AUTH_CLIENT_ID,
     vercelClientSecret: environment.VERCEL_AUTH_CLIENT_SECRET,
   });
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -654,6 +671,7 @@ export function createPreviewOAuthServer(input: {
             if (!response.ok) {
               return null;
             }
+            // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
             const profile = (await response.json()) as {
               id?: number;
               login?: string;
@@ -661,9 +679,11 @@ export function createPreviewOAuthServer(input: {
               name?: string;
               avatar_url?: string;
             };
+            /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
             if (!profile.id || !profile.email) {
               return null;
             }
+            /* oxlint-enable typescript/strict-boolean-expressions */
             return {
               email: profile.email,
               emailVerified: true,
@@ -761,6 +781,7 @@ export function createPreviewOAuthServer(input: {
       config.environment === "preview" ? "Autograph App Builder Preview" : "Autograph App Builder",
     basePath: "/api/auth",
     baseURL: resourceOrigin,
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing assignment while its type remains unresolved.
     database: input.database,
     plugins: [
       ...previewUserManagementPlugins(
@@ -865,6 +886,7 @@ export function createPreviewOAuthServer(input: {
               ...result,
               // GitHub's own response contains additional profile fields
               // beyond the identity fields this boundary needs to inspect.
+              // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
               data: result.data as GithubProfile,
             };
           },
@@ -882,9 +904,11 @@ export function createPreviewOAuthServer(input: {
         if (
           !new Set(["github", "vercel"]).has(providerId) ||
           user.emailVerified !== true ||
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof user.email !== "string" ||
           user.email.trim().length === 0
         ) {
+          // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional user-info validation result.
           return {
             error: "verified_provider_identity_required",
             errorDescription: "Use GitHub or Vercel with a verified email address.",

@@ -45,11 +45,13 @@ const harness = (
   } = {},
 ) => {
   const targetScope = options.scope ?? scope;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
   let row: RepositoryProductionRow = {
     operationRef: repositoryProductionOperationRef(targetScope),
     revision: 0,
     record: initialRepositoryProductionRecord(targetScope, {
       creatorRoles: ["editor"],
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(options.creatorEmail === undefined ? {} : { creatorEmail: options.creatorEmail }),
       sessionId: "original-session",
       sourceSha: "a".repeat(40),
@@ -64,6 +66,7 @@ const harness = (
         : { kind: "none" },
     }),
   };
+  /* oxlint-enable typescript/strict-boolean-expressions */
   let invitation: Record<string, z.infer<ReturnType<typeof z.json>>> | null = null;
   const requests: { action: string; operationRef: string; frameCount: number }[] = [];
   const resumes: string[] = [];
@@ -223,6 +226,7 @@ const harness = (
         return;
       }
       row = { ...row, revision: row.revision + 1, record: structuredClone(record) };
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional creator journal fixture results.
       return structuredClone(row);
     },
     approveAllocated: () => {
@@ -432,6 +436,7 @@ describe("Production creator continuation", () => {
           }
           const saved = { record, revision: before.revision + 1 };
           rows.set(id, saved);
+          // oxlint-disable-next-line typescript/consistent-return -- Preserve optional creator journal fixture results.
           return saved;
         },
         // oxlint-disable-next-line unicorn/no-useless-undefined -- Model an invitation lookup with no result.

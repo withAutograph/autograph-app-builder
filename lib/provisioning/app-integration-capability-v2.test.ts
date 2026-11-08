@@ -35,6 +35,7 @@ it("freezes the actual resource worker and installed app ingress in new consent"
     }),
   ).not.toBe(appIntegrationCapabilityPlanDigest(plan));
   expect(
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     appIntegrationCapabilityPlanSchema.safeParse({ ...candidate(), resourceWorker: undefined })
       .success,
   ).toBe(false);

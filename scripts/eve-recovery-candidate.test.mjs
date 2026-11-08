@@ -15,6 +15,7 @@ const eve = path.resolve(
   process.env.EVE_RECOVERY_NATIVE_ROOT ?? path.dirname(require.resolve("eve/package.json")),
 );
 const nativePath = "dist/src/execution/session/recovery-candidate.js";
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const load = (file) => import(pathToFileURL(path.resolve(eve, file)).href);
 const {
   collectTerminalRecoveryCandidate,
@@ -258,7 +259,8 @@ const fixture = async function fixture(options = {}) {
         calls.push(["step", runId, stepId, params]);
         const step = steps.get(stepId);
         return params.resolveData === "none"
-          ? { ...step, input: undefined, output: undefined }
+          ? // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
+            { ...step, input: undefined, output: undefined }
           : step;
       },
     },
@@ -511,6 +513,7 @@ test("foreign logical checkpoints fail before the native stream is read", async 
     f.collect({
       ...f.input,
       binding: { ...binding, logicalSessionId: "foreign" },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       authorizeOwner: () => Promise.resolve(),
     }),
     /logical identity differs/u,
@@ -1233,6 +1236,7 @@ test("unsupported branded, cyclic and non-JSON-safe history values stay unchange
     cyclic,
     new Branded(),
     { role: "tool", content: new Map() },
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     { role: "tool", content: undefined },
     { role: "tool", content: new Uint8Array([1]) },
     { role: "tool", content: { kind: "native-recovery-transport-reference", value: "private" } },

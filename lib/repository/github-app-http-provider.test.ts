@@ -32,6 +32,7 @@ import type {
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" });
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 const sourceSha = "1".repeat(40);
@@ -67,6 +68,7 @@ function unicodeDraftMaterial(
     .map((path) => {
       const change = {
         after: { digest, mode: "644" },
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(includePreimages
           ? {
               before: {
@@ -219,6 +221,7 @@ function freshProposal(): FreshRepositoryProposal {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function json(value: unknown, status = 200, requestId = "REQUEST_1") {
   return Response.json(value, {
     headers: {
@@ -243,6 +246,7 @@ function providerFetch(input?: {
     // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     const url = String(request);
     let body: unknown;
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (typeof init.body === "string") {
       body = JSON.parse(init.body);
     }
@@ -278,9 +282,11 @@ function providerFetch(input?: {
       const repositoryIds = input?.repositoryPages?.[page - 1] ?? [100, 200];
       return json({ repositories: repositoryIds.map((id) => ({ id })) });
     }
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (url.endsWith("/repositories/100") && input?.targetRepositoryId) {
       return json({ id: Number(input.targetRepositoryId), private: true });
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     throw new Error(`Unexpected URL: ${url}`);
   };
   return { calls, implementation };
@@ -324,6 +330,7 @@ function historicalProviderFetch(input?: {
     // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     const url = String(request);
     const method = init.method ?? "GET";
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
     calls.push({ body, method, url });
     if (url.endsWith("/app/installations/456/access_tokens")) {
@@ -391,6 +398,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const provider = createProvider(async (request, init = {}) => {
       // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(request);
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, method: init.method ?? "GET", url });
       if (url.endsWith("/access_tokens")) {
@@ -1030,6 +1038,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const { content } = unicodeDraftMaterial();
     let message = "unexpected success";
     try {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       await adapter.updateExistingDraft({} as ExistingDraftUpdateProposal, content);
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
@@ -1384,6 +1393,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(request);
       const method = init.method ?? "GET";
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, method, url });
       if (url.endsWith("/app/installations/456/access_tokens")) {
@@ -1738,6 +1748,7 @@ describe("existing draft update provider", () => {
       // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(request);
       const method = init.method ?? "GET";
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, url });
       if (url.endsWith("/app")) {
@@ -1918,6 +1929,7 @@ describe("existing draft reconciliation provider", () => {
       // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(request);
       const method = init.method ?? "GET";
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, url });
       if (url.endsWith("/app")) {

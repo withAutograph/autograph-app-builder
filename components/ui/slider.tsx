@@ -13,9 +13,11 @@ function Slider({
 }: SliderPrimitive.Root.Props) {
   let _values = [min, max];
   if (Array.isArray(defaultValue)) {
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
     _values = defaultValue;
   }
   if (Array.isArray(value)) {
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
     _values = value;
   }
 

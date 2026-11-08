@@ -506,10 +506,15 @@ export const createHostedOperatorGatewayBindings = (deps: {
       at(next: OperatorGatewayBindingsDiagnostic["stage"], preserveRequest = false) {
         stage = next;
         if (!preserveRequest) {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           method = undefined;
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           requestTarget = undefined;
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           statusCategory = undefined;
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           httpStatus = undefined;
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           providerFailure = undefined;
         }
       },
@@ -1402,6 +1407,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
           )
         : request(`/v10/projects/${encodeURIComponent(projectId)}/env`, "POST", {
             comment,
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(gitBranch === null ? {} : { gitBranch }),
             key,
             target: ["preview"],

@@ -39,7 +39,7 @@ const mocks = vi.hoisted(() => {
     workflowState,
   };
 });
-// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/tools dependency used by this test.
+// oxlint-disable-next-line anti-slop/no-module-mocking, anti-slop/no-unknown-parameters -- Keep the controlled eve/tools dependency used by this test. Preserve the existing unknown input contract.
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./product-behavior-state dependency used by this test.
 vi.mock("./product-behavior-state", () => ({
@@ -132,6 +132,7 @@ describe("preview command working directory", () => {
         callId: "hosted-preview",
         getSandbox: vi.fn().mockResolvedValue({
           id: "sandbox_replacement",
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           readTextFile: () => Promise.resolve("{}"),
         }),
         getToken: vi.fn(),
@@ -164,6 +165,7 @@ describe("preview command working directory", () => {
       sourceReceipt: { sourceKind: "existing-repository" },
       workspace: { workspacePath: "/workspace/repository" },
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const readTextFile = vi.fn(({ path }: { path: string }) =>
       Promise.resolve(path.endsWith("package.json") ? "{}" : null),
     );
@@ -301,6 +303,7 @@ describe("preview command working directory", () => {
       callId: "call",
       getSandbox: vi
         .fn()
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         .mockResolvedValue({ id: "sandbox", readTextFile: () => Promise.resolve(null) }),
       getToken: vi.fn(),
       requireAuth: (): never => {
@@ -333,6 +336,7 @@ describe("preview command working directory", () => {
     };
     const sandbox = {
       id: "sandbox",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       readTextFile: vi.fn(({ path }: { path: string }) => {
         if (path.endsWith("package.json")) {
           return Promise.resolve(JSON.stringify({ dependencies: { next: "16" } }));
@@ -455,6 +459,7 @@ describe("preview command working directory", () => {
           callId: "call",
           getSandbox: vi.fn().mockResolvedValue({
             id: "sandbox",
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
             readTextFile: ({ path }: { path: string }) => {
               if (path.endsWith("package.json")) {
                 return Promise.resolve(JSON.stringify({ dependencies: { next: "16" } }));
@@ -510,6 +515,7 @@ describe("protected native preview early branch", () => {
           port: 3000,
           workingDirectory: ".",
         },
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         { getSandbox, session: { auth: {}, id: "session-native" } } as never,
       );
       expect(result).toEqual(receipt);
@@ -544,6 +550,7 @@ describe("protected native preview early branch", () => {
             port: 3000,
             workingDirectory: ".",
           },
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
           { getSandbox, session: { auth: {}, id: "session-native" } } as never,
         ),
       ).rejects.toThrow("resource_mismatch");
@@ -563,6 +570,7 @@ describe("protected native preview early branch", () => {
           port: 3000,
           workingDirectory: ".",
         },
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         { getSandbox, session: { auth: {}, id: "session-native" } } as never,
       ),
     ).rejects.toThrow("resource_mismatch");

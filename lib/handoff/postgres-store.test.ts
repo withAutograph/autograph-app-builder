@@ -59,10 +59,11 @@ function store(input: {
   const select = vi.fn(() => ({
     from: () => ({ where: selectWhere }),
   }));
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The database fixture implements only the query operations used by this test.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The database fixture implements only the query operations used by this test.; Preserve the existing type assertion at this boundary.
   const database = {
     select,
     update: () => ({
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
       set: (values: unknown) => {
         set(values);
         return { where: updateCondition };
@@ -75,6 +76,7 @@ function store(input: {
     throw new Error("PostgreSQL handoff store must support renewal");
   }
   return {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     handoffs: {
       ...handoffs,
       renewExpired,

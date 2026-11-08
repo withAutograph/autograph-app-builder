@@ -592,6 +592,7 @@ export const writeSandboxGitHubSourceManifest = async function writeSandboxGitHu
   }
   let observation: unknown;
   try {
+    // SAFETY: JSON.parse returns any; unknown makes no claim about the parsed shape.
     observation = JSON.parse(result.stdout) as unknown;
   } catch (error) {
     throw new Error(
@@ -653,6 +654,7 @@ const reinspectGitHubSourceWorkspace = async function reinspectGitHubSourceWorks
   if (result.exitCode !== 0) {
     throw new Error("The GitHub source workspace could not be verified.");
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const inspection = JSON.parse(result.stdout) as {
     remote?: unknown;
     resolvedRef?: unknown;

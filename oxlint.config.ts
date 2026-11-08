@@ -15,16 +15,9 @@ export default defineConfig({
   rules: {
     // Temporary migration baseline; remove these as findings are fixed.
     "typescript/promise-function-async": "off",
-    "anti-slop/no-conditional-empty-object-spread": "off",
-    "anti-slop/no-runtime-typeof": "off",
-    "anti-slop/no-unknown-parameters": "off",
     "anti-slop/require-safety-comment-for-type-assertion": "off",
     "sonarjs/cognitive-complexity": "off",
-    "sonarjs/no-undefined-assignment": "off",
-    "typescript/consistent-return": "off",
-    "typescript/no-unsafe-assignment": "off",
     "typescript/no-unsafe-type-assertion": "off",
-    "typescript/strict-boolean-expressions": "off",
     "eslint/complexity": "off",
     // Temporary migration items: re-enable after the existing findings are fixed.
     "eslint/sort-keys": "off",

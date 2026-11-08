@@ -37,6 +37,7 @@ describe("session-bound repository access receipt", () => {
     const first = recordRepositoryAccessReceipt({
       access,
       confirmedByCallId: "call_one",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       current: undefined,
       sessionId: "ses_one",
     });
@@ -50,6 +51,7 @@ describe("session-bound repository access receipt", () => {
     expect(retried).toEqual(first);
     expect(first).toMatchObject({
       confirmedByCallId: "call_one",
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       digest: expect.stringMatching(/^[0-9a-f]{64}$/u),
       providerAccessDigest: accessDigest,
       repository: {
@@ -71,6 +73,7 @@ describe("session-bound repository access receipt", () => {
     const first = recordRepositoryAccessReceipt({
       access,
       confirmedByCallId: "call_one",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       current: undefined,
       sessionId: "ses_one",
     });
@@ -101,6 +104,7 @@ describe("session-bound repository access receipt", () => {
     const receipt = recordRepositoryAccessReceipt({
       access,
       confirmedByCallId: "call_one",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       current: undefined,
       sessionId: "ses_one",
     });
@@ -162,6 +166,7 @@ describe("session-bound repository access receipt", () => {
     const receipt = recordRepositoryAccessReceipt({
       access,
       confirmedByCallId: "call_one",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       current: undefined,
       sessionId: "ses_one",
     });

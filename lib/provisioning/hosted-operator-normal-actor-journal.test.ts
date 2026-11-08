@@ -360,6 +360,7 @@ const currentBootstrapFixture = async () => {
     revision: value.row.revision + 1,
     record: hostedRuntimeJournalRecordSchema.parse({
       ...value.row.record,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       leaseId: undefined,
       approvedByCallId: "bootstrap-call",
       operator: {
@@ -809,6 +810,7 @@ describe("retained actual normal actor journal", () => {
       revision: value.row.revision + 1,
       record: hostedRuntimeJournalRecordSchema.parse({
         ...value.row.record,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         leaseId: undefined,
         operator: { ...value.row.record.operator, identityLink: link },
       }),
@@ -1024,9 +1026,11 @@ describe("retained actual normal actor journal", () => {
     const { writes } = value;
     let selected: Parameters<typeof value.journal.prepareOrganizationProof>[1] = nextInput;
     if (change === "missing-guard") {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       selected = { ...nextInput, assertBootstrapCurrent: undefined };
     }
     if (change === "missing-bootstrap") {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       selected = { ...nextInput, bootstrap: undefined };
     }
     await expect(value.journal.prepareOrganizationProof(context, selected)).rejects.toThrow();

@@ -32,9 +32,12 @@ const context: WorkflowToolContext = {
   callId: "approved-call",
   toolName: "prepare-app-hosted-runtime",
   abortSignal: new AbortController().signal,
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   ask: () => Promise.reject(new Error("No confirmation is expected")),
   agents: {},
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   agent: () => Promise.reject(new Error("No agent call is expected")),
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   getToken: () => Promise.reject(new Error("No provider token is expected")),
   requireAuth: () => {
     throw new Error("No provider authorization is expected");
@@ -54,10 +57,12 @@ const fixture = (conflict = false) => {
   const dispose = vi.fn(() => {
     events.push("dispose");
   });
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const register = vi.fn<HostedRuntimeIdentityWaitPorts["register"]>(() => {
     events.push("register");
     return Promise.resolve({ status: "waiting" });
   });
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const acknowledge = vi.fn<HostedRuntimeIdentityWaitPorts["acknowledge"]>(() => {
     events.push("acknowledge");
     return Promise.resolve({ eventId: "canonical-event", status: "consumed" });
@@ -65,6 +70,7 @@ const fixture = (conflict = false) => {
   const prepare = vi
     .fn<typeof prepareHostedRuntimeStep>()
     .mockResolvedValueOnce({ identityInput, result })
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     .mockImplementationOnce(() => {
       events.push("readback");
       return Promise.resolve({ identityInput: null, result: { ...result, status: "prepared" } });
@@ -74,6 +80,7 @@ const fixture = (conflict = false) => {
       token: "private-hook-token",
       // oxlint-disable-next-line unicorn/no-thenable, github/no-then -- Model the documented Workflow Hook thenable without invoking its VM runtime.
       then: callback.promise.then.bind(callback.promise),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       getConflict: () => {
         events.push("committed");
         return Promise.resolve(conflict ? {} : null);
@@ -119,6 +126,7 @@ describe("owner identity continuation", () => {
     const registerReceivers: boolean[] = [];
     const acknowledgeReceivers: boolean[] = [];
     let registrations = 0;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     f.ports.register = function register(this: undefined) {
       registerReceivers.push(this === undefined);
       registrations += 1;
@@ -128,6 +136,7 @@ describe("owner identity continuation", () => {
           : { eventId: "canonical-event", status: "consumed" as const },
       );
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     f.ports.acknowledge = function acknowledge(this: undefined) {
       acknowledgeReceivers.push(this === undefined);
       return Promise.resolve({ eventId: "canonical-event", status: "consumed" });

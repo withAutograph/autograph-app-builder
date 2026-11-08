@@ -73,6 +73,7 @@ type Pending<T> = BuilderDraftOutboxEntry<T>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createMutationId() {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
@@ -142,6 +143,7 @@ export function useBuilderDraftAutosave<T>(
     async (reason: BuilderDraftAutosaveReason): Promise<boolean> => {
       if (timer.current) {
         clearTimeout(timer.current);
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         timer.current = undefined;
       }
 
@@ -156,6 +158,7 @@ export function useBuilderDraftAutosave<T>(
           }
 
           const { current } = queued;
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           queued.current = undefined;
           updateStatus("saving");
           try {
@@ -202,6 +205,7 @@ export function useBuilderDraftAutosave<T>(
         return await pending;
       } finally {
         if (draining.current === pending) {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           draining.current = undefined;
         }
       }
@@ -243,6 +247,7 @@ export function useBuilderDraftAutosave<T>(
         clearTimeout(timer.current);
       }
       timer.current = setTimeout(() => {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         timer.current = undefined;
         void dispatch("debounce");
       }, options.debounceMs ?? 500);
@@ -279,6 +284,7 @@ export function useBuilderDraftAutosave<T>(
     schedule,
   ]);
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   const restorePending = useCallback(() => options.outbox.read(), [options.outbox]);
 
   const resumePending = useCallback(async () => {
@@ -291,13 +297,16 @@ export function useBuilderDraftAutosave<T>(
     await flush("flush");
   }, [flush, online, options.outbox, updateStatus]);
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   const retry = useCallback(() => flush("flush"), [flush]);
 
   const discardPending = useCallback(async () => {
     if (timer.current) {
       clearTimeout(timer.current);
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       timer.current = undefined;
     }
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     queued.current = undefined;
     await options.outbox.clear();
     updateStatus("saved");
@@ -310,6 +319,7 @@ export function useBuilderDraftAutosave<T>(
       }
       acknowledgedRevision.current = revision;
       if (queued.current && (queued.current.baseRevision ?? 0) < revision) {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         queued.current = undefined;
       }
       const pending = await options.outbox.read();

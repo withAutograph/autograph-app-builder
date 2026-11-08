@@ -33,6 +33,7 @@ function cookieValue(request: Request, name: string) {
   for (const part of cookie.split(";")) {
     const [key, ...value] = part.trim().split("=");
     if (key === name) {
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve an absent cookie result.
       return decodeURIComponent(value.join("="));
     }
   }
@@ -57,6 +58,7 @@ export function applyLocalGitHubCallbackFixture(request: Request, environment: N
     return { applied: false, request };
   }
 
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   for (const [key, value] of fixtures[fixture as LocalGitHubCallbackFixture]) {
     url.searchParams.append(key, value);
   }

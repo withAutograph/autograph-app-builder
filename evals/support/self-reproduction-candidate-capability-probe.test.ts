@@ -12,11 +12,14 @@ it("proves independent infrastructure operations and always stops the child", as
     await Promise.resolve();
   });
   const receipt = await exerciseCandidateCapabilities({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     createChild: () =>
       Promise.resolve({
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         run: () => Promise.resolve({ exitCode: 0, stdout: "candidate-capability-ok" }),
         stop,
       }),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     model: () => Promise.resolve("ready"),
   });
   expect(receipt.model.status).toBe("passed");
@@ -28,8 +31,11 @@ it("proves independent infrastructure operations and always stops the child", as
 it("preserves model failure separately and cleans up after a failed child command", async () => {
   const stop = vi.fn<() => Promise<void>>().mockResolvedValue();
   const receipt = await exerciseCandidateCapabilities({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     createChild: () =>
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       Promise.resolve({ run: () => Promise.reject(new Error("raw-secret")), stop }),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     model: () => Promise.reject(new Error("raw-secret")),
   });
   expect(receipt.model.status).toBe("blocked");
@@ -40,11 +46,15 @@ it("preserves model failure separately and cleans up after a failed child comman
 
 it("fails incorrect command output and records cleanup failure", async () => {
   const receipt = await exerciseCandidateCapabilities({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     createChild: () =>
       Promise.resolve({
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         run: () => Promise.resolve({ exitCode: 0, stdout: "wrong" }),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         stop: () => Promise.reject(new Error("failure")),
       }),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     model: () => Promise.resolve(""),
   });
   expect(receipt.model.status).toBe("failed");
@@ -65,6 +75,7 @@ it("serializes a valid standalone Node module without credentials", () => {
 
 it("retains failed scratch installation without attempting a product mutation", async () => {
   const writeTextFile = vi.fn<() => Promise<void>>().mockResolvedValue();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const run = vi.fn(() =>
     Promise.resolve({ exitCode: 1, stderr: "install failed", stdout: "install output" }),
   );
@@ -85,14 +96,17 @@ it("retains failed scratch installation without attempting a product mutation", 
 
 it("runs the standalone probe only after scratch tooling setup", async () => {
   const writes: string[] = [];
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const run = vi.fn(() => Promise.resolve({ exitCode: 0, stderr: "", stdout: "" }));
   const receipt = await runCandidateCapabilityProbe({
     abortSignal: new AbortController().signal,
     model: activeBuilderModelId,
     session: {
       readBinaryFile: vi.fn(),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readTextFile: () => Promise.resolve(JSON.stringify({ applicationFunctionalCredit: false })),
       run,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       writeTextFile: ({ path }: { path: string }) => {
         writes.push(path);
         return Promise.resolve();

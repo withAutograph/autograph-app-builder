@@ -98,7 +98,9 @@ test("actual source-preparation service retains old validation workflow while Na
       },
       {
         environment,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         readAuthority: () => Promise.resolve({ kind: "local", ownerUid: 1, stateRoot }),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         snapshot: () =>
           Promise.resolve({
             events,
@@ -264,7 +266,9 @@ test("actual source-preparation service retains old validation workflow while Na
         { expected: compatibility, sessionId: "saved-session" },
         {
           environment,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           readAuthority: () => Promise.resolve({ kind: "local", ownerUid: 1, stateRoot }),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           snapshot: () =>
             Promise.resolve({
               events: noOpHistory,
@@ -386,6 +390,7 @@ test("actual source-preparation service retains old validation workflow while Na
       f.write(f.source, "shared.txt", "next current shared source\n");
       const next = await captureLocalPlanningSource(f.source, frozen.sourceSha);
       try {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         const refresh = () =>
           reconcileLocalPlanningSource({
             sandbox: f.sandbox,
@@ -490,6 +495,7 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
         { expected, sessionId: "saved-session" },
         {
           environment,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           readAuthority: () => Promise.resolve({ kind: "local", ownerUid: 1, stateRoot }),
           // oxlint-disable-next-line eslint/require-await -- Preserve asynchronous source snapshot fixture behavior.
           snapshot: async () => ({
@@ -518,7 +524,9 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
         { expected, ownerRunId: "foreign-child", sessionId: "saved-session" },
         {
           environment,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           readAuthority: () => Promise.resolve({ kind: "local", ownerUid: 1, stateRoot }),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           snapshot: () =>
             Promise.reject(new Error("Snapshot must not be read under a foreign owner")),
         },
@@ -530,6 +538,7 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
         { expected, sessionId: "saved-session" },
         {
           environment,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           readAuthority: () => {
             reads += 1;
             return Promise.resolve({ kind: "local", ownerUid: reads, stateRoot });
@@ -575,6 +584,7 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
   const overlay = await prepareDevelopmentSandboxWorkspace(f.source, f.sandbox, "overlay");
   const snapshot = vi
     .spyOn(ClientSession.prototype, "snapshot")
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     .mockImplementation(function read(this: ClientSession) {
       const events: MessageStreamEvent[] =
         this.state.sessionId === "saved-session"
@@ -624,6 +634,7 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
     );
     const dependencies = {
       environment,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       readAuthority: () =>
         Promise.resolve({ kind: "local" as const, ownerUid: process.getuid?.() ?? 0, stateRoot }),
     };

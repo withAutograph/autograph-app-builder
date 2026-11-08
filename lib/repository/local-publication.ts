@@ -19,6 +19,7 @@ export const executionOrder = (paths: readonly string[]): readonly string[] => [
   ...paths.filter((path) => path === topologyPath),
 ];
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const stableDigest = (value: unknown): string =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
@@ -176,6 +177,7 @@ export const unrelatedProjectionDigest = (
 };
 
 const validMode = (mode: string): boolean =>
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   (LOCAL_PUBLICATION_ALLOWED_MODES as readonly string[]).includes(mode);
 
 const canonicalChanges = (review: ReviewedChangeSetReceipt): readonly OverlayChange[] => {

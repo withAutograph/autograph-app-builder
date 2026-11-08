@@ -234,6 +234,7 @@ export const createRepositoryProductionCreator = (
     return {
       ...base,
       email: choice.email,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(linked?.email === choice.email ? { linkedCreator: linked } : {}),
     };
   };
@@ -296,9 +297,11 @@ export const createRepositoryProductionCreator = (
       scopeDigest: repositoryProductionDigest(row.record.scope),
       requestId,
       email: selectedEmail,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(row.record.approval === undefined
         ? {}
         : { setupApprovalId: row.record.approval.approvalId }),
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(original === undefined
         ? {}
         : { baseFrameDigest: repositoryProductionDigest({ ...original, renewal: null }) }),

@@ -68,6 +68,7 @@ export async function fingerprintDevelopmentRuntime(repositoryRoot: string): Pro
     } catch (error) {
       // A file may disappear between Git's listing and the read while a live
       // edit is being saved. The next watcher pass observes the settled tree.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         continue;
       }
@@ -107,6 +108,7 @@ export function waitForDevelopmentRuntimeChange(input: {
       }
       if (audit !== undefined) {
         clearInterval(audit);
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         audit = undefined;
       }
       watcher?.close();
@@ -153,6 +155,7 @@ export function waitForDevelopmentRuntimeChange(input: {
         void check();
       }, input.debounceMs ?? 150);
     };
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
     if (input.signal?.aborted) {
       finish(false);
     } else {
@@ -166,6 +169,7 @@ export function waitForDevelopmentRuntimeChange(input: {
       audit = setInterval(schedule, input.auditMs ?? 30_000);
       schedule();
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
   }
   return promise;
 }

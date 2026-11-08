@@ -273,7 +273,9 @@ const runCandidateCommandWithLogs = async <
       }
     }
   } catch {
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     store = undefined;
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     writers = undefined;
   }
   const logs: CandidateValidationAttempt["logs"] = {};
@@ -592,6 +594,7 @@ const runIncrementalValidation = async (
         ...completed.filter((entry) => entry.kind !== "schema" && entry.kind !== "install"),
         ...run.steps.slice(run.nextIndex),
       ],
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       compilation: undefined,
     };
   }
@@ -762,6 +765,7 @@ const runIncrementalValidation = async (
         resolvedTree: before.resolvedTree,
         sessionAuth: ctx.session.auth,
         sessionId: ctx.session.id,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         run: () =>
           prepareAppLocalPreview({
             appId: candidate.appId,
@@ -819,6 +823,7 @@ const runIncrementalValidation = async (
               sessionAuth: ctx.session.auth,
               sessionId: ctx.session.id,
               // Preserve the executor's detached command lifecycle and capture its returned output.
+              // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
               run: () =>
                 sandboxValidationCommandExecutor({
                   alreadyCompiled,
@@ -839,6 +844,7 @@ const runIncrementalValidation = async (
               resolvedTree: before.resolvedTree,
               sessionAuth: ctx.session.auth,
               sessionId: ctx.session.id,
+              // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
               run: (onChunk) =>
                 runAdditionalCandidateCheck({
                   sandbox,
@@ -923,6 +929,7 @@ const runIncrementalValidation = async (
         resolvedTree: changed.resolvedTree,
         steps,
         nextIndex: completedRecovery.length,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         compilation: undefined,
         schemaTaskCompleted: recovery.kind === "schema" ? undefined : run.schemaTaskCompleted,
       };

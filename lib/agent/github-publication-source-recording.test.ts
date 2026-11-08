@@ -104,6 +104,7 @@ const hooks = vi.hoisted(() => {
       originalReviewDigest: digest,
       root: "/workspace/resolved",
       workspaceRoot: "/workspace",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       publishedReconciliation: undefined,
     },
   };
@@ -244,6 +245,7 @@ describe("publication records actual source for its compiled app release", () =>
     hooks.state = structuredClone(originalState);
     hooks.completions = [completionFixture()];
     hooks.inspect.mockResolvedValue({ resolvedTree: "tree", unresolvedConflicts: [] });
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     hooks.candidate.publishedReconciliation = undefined;
   });
 
@@ -528,6 +530,7 @@ describe("publication records actual source for its compiled app release", () =>
     expect(hooks.sandbox).not.toHaveBeenCalled();
   });
   it("returns selection-changed if the accepted specification moves during discovery", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     hooks.assertOwner.mockImplementation(() => {
       hooks.state.appSpec.digest = "f".repeat(64);
       return Promise.resolve();

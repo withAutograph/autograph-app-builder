@@ -151,10 +151,12 @@ const metadata = {
 const fixture = () => {
   let current = { ...row };
   const update = vi.fn();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const rows = () => Promise.resolve([current]);
   const limit = () => ({ for: rows });
   const selectWhere = () => ({ limit });
   const selectFrom = () => ({ where: selectWhere });
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const returning = (values: typeof row) => () => {
     update(values);
     current = { ...current, ...values };
@@ -209,6 +211,7 @@ const fixture = () => {
   if (observe === undefined) {
     throw new Error("Paged observation unavailable");
   }
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const submit = (override: Partial<Parameters<typeof observe>[0]> = {}) =>
     observe({
       principal,
@@ -247,6 +250,7 @@ describe("atomic verified replay publication", () => {
     ["adapter", { replayBinding: { ...replayBinding, adapterSessionId: "other" } }],
     ["generation", { replayBinding: { ...replayBinding, adapterGeneration: 2 } }],
     ["cancellation", { replayBinding: { ...replayBinding, cancellationRevision: 1 } }],
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     ["missing binding", { replayBinding: undefined }],
     [
       "receipt absent from capture",

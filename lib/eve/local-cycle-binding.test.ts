@@ -9,6 +9,7 @@ import { readLocalEveCycleBinding, rotateLocalEveCycleBinding } from "./local-cy
 const roots: string[] = [];
 
 afterEach(async () => {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true })));
 });
 

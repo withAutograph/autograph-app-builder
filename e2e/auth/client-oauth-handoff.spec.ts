@@ -35,6 +35,7 @@ let callbackServer: Server | undefined;
 // oxlint-disable-next-line eslint/require-await -- Keep teardown failures as asynchronous rejections.
 test.afterEach(async () => {
   const server = callbackServer;
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   callbackServer = undefined;
   if (server?.listening === true) {
     server.closeAllConnections();
@@ -143,7 +144,9 @@ test("web login and both emulated connections survive Cursor consent, token refr
         observedSession.current = await readSession(page);
         return (
           observedSession.current?.user?.email === "dev@autograph.local" &&
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof observedSession.current?.user?.id === "string" &&
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof observedSession.current?.session?.activeOrganizationId === "string"
         );
       },
@@ -152,7 +155,9 @@ test("web login and both emulated connections survive Cursor consent, token refr
     .toBe(true);
   const ownerIdValue = observedSession.current?.user?.id;
   const organizationIdValue = observedSession.current?.session?.activeOrganizationId;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   expect(typeof ownerIdValue).toBe("string");
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   expect(typeof organizationIdValue).toBe("string");
   const ownerUserId = z.string().parse(ownerIdValue);
   const organizationId = z.string().parse(organizationIdValue);
@@ -192,6 +197,7 @@ test("web login and both emulated connections survive Cursor consent, token refr
     `;
     expect(memberships.length).toBe(1);
     workspaceId = memberships[0].workspace_id;
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     expect(typeof workspaceId).toBe("string");
     await setupCursorClient(drizzle(sql, { schema }), resource);
   } finally {
@@ -268,6 +274,7 @@ test("web login and both emulated connections survive Cursor consent, token refr
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function grant(first: boolean) {
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     callback = undefined;
     const verifier = randomBytes(48).toString("base64url");
     const state = randomBytes(24).toString("base64url");

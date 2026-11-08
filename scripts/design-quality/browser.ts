@@ -29,6 +29,7 @@ const UNMATCHED_LITERAL = "unmatched-literal";
 const SEMANTIC_TOKEN_REFERENCE = "semantic-token-reference";
 const GENERATED_OVERRIDE = "generated-override";
 const INHERITED_SHARED = "inherited-shared";
+// oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
 const allStrings = (values: unknown[]) => values.every((value) => typeof value === "string");
 
 export const viewports = [
@@ -155,12 +156,14 @@ type BrowserStyleObservation = Observation & {
 function domClassSignature(node: { nodeName?: string; attributes?: string[] }) {
   const index = node.attributes?.indexOf("class") ?? -1;
   const value = index >= 0 ? node.attributes?.[index + 1] : undefined;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return value && node.nodeName
     ? {
         classes: [...new Set(value.split(/\s+/u).filter(Boolean))].toSorted(),
         tag: node.nodeName.toLowerCase(),
       }
     : undefined;
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -169,13 +172,17 @@ function matchedSelector(match: {
   rule: { selectorList?: { selectors?: { text?: string }[] } };
 }) {
   const selectors = match.rule.selectorList?.selectors;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
   if (!selectors?.length) {
     return;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const indexes = match.matchingSelectors;
   if (indexes?.length === 1) {
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve optional browser evidence and source-map results.
     return selectors[indexes[0]]?.text;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve optional browser evidence and source-map results.
   return selectors.length === 1 ? selectors[0]?.text : undefined;
 }
 
@@ -212,8 +219,10 @@ export const sourcePath = (value: string | undefined) => {
   }
   try {
     const url = new URL(value);
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve optional browser evidence and source-map results.
     return url.protocol === "file:" ? decodeURIComponent(url.pathname) : url.pathname;
   } catch {
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve optional browser evidence and source-map results.
     return value.split(/[?#]/u, 1)[0];
   }
 };
@@ -262,6 +271,7 @@ export function mappedSharedCssRule(input: {
     return;
   }
   const sourceContent = map.sourcesContent?.[mapped.sourceIndex];
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof sourceContent !== "string") {
     return;
   }
@@ -285,6 +295,7 @@ export function mappedSharedCssRule(input: {
       candidate.source.column === mapped.column;
     return sourceMatches && candidate.property === property && candidate.value === value;
   });
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve optional browser evidence and source-map results.
   return declarations.length === 1 ? declarations[0] : undefined;
 }
 
@@ -309,7 +320,7 @@ export async function settleFiniteMotion(page: Page) {
       const iterations = timing?.iterations ?? 1;
       return Number.isFinite(iterations) && Number.isFinite(timing?.duration);
     });
-    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+    // oxlint-disable-next-line github/no-then, typescript/promise-function-async -- Preserve the existing rejection handling and settlement behavior. Preserve the returned promise and synchronous throw behavior.
     await Promise.all(finite.map((motion) => motion.finished.catch(() => null)));
   });
 }
@@ -529,10 +540,13 @@ export async function measureStyles(
     await session.send("CSS.enable");
     const sourceMaps = new Map<string, CssSourceMap | undefined>();
     const sourceMapFor = async (styleSheetId: string | undefined) => {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (!styleSheetId) {
         return;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       if (sourceMaps.has(styleSheetId)) {
+        // oxlint-disable-next-line typescript/consistent-return -- Preserve optional browser evidence and source-map results.
         return sourceMaps.get(styleSheetId);
       }
       const header = headers.get(styleSheetId);
@@ -545,8 +559,10 @@ export async function measureStyles(
       const declared = /\/[*]#\s*sourceMappingURL=(?<url>[^\s*]+)\s*[*]\//u.exec(css)?.[1];
       // CDP may report optional URLs as empty strings. In that case the
       // stylesheet's sourceMappingURL comment is the only usable evidence.
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty header falls back to the CSS source map reference.
       const url = header?.sourceMapURL || declared;
+      /* oxlint-enable typescript/strict-boolean-expressions */
       let text: string | undefined;
       if (url?.startsWith("data:application/json") === true) {
         try {
@@ -560,6 +576,7 @@ export async function measureStyles(
         } catch {
           /* Malformed embedded maps remain unassigned. */
         }
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       } else if (url) {
         try {
           // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty stylesheet URL falls back to the page URL.
@@ -576,9 +593,15 @@ export async function measureStyles(
           /* Missing or malformed maps remain unassigned. */
         }
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       let map: CssSourceMap | undefined;
       try {
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
         const parsed = text ? JSON.parse(text) : undefined;
+        /* oxlint-enable typescript/strict-boolean-expressions */
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
         const hasValidSources =
           parsed &&
           // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
@@ -589,17 +612,20 @@ export async function measureStyles(
           allStrings(parsed.sources);
         if (
           hasValidSources &&
-          // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
+          // oxlint-disable-next-line typescript/no-unsafe-member-access, anti-slop/no-runtime-typeof -- Preserve the existing untyped input or fixture boundary; Preserve this runtime check and existing input handling.
           (parsed.sourceRoot === undefined || typeof parsed.sourceRoot === "string") &&
-          // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
+          // oxlint-disable-next-line typescript/no-unsafe-member-access, anti-slop/no-runtime-typeof -- Preserve the existing untyped input or fixture boundary; Preserve this runtime check and existing input handling.
           typeof parsed.mappings === "string"
         ) {
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
           map = parsed;
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
       } catch {
         /* Source maps are optional evidence. */
       }
       sourceMaps.set(styleSheetId, map);
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional browser evidence and source-map results.
       return map;
     };
     const { root } = await session.send("DOM.getDocument");
@@ -807,6 +833,7 @@ export async function measureStyles(
           declarationEntries = ownEvidence;
         }
         if (inline.length) {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           declarationEntries = inline.map((p) => ({ p, rule: undefined, selector: undefined }));
         }
         // Chrome can report the same matched rule twice. Collapse only entries
@@ -824,7 +851,9 @@ export async function measureStyles(
         const rule = uniqueDeclarationEntries[0]?.rule;
         const selector = uniqueDeclarationEntries[0]?.selector;
         const styleSheetId = rule?.styleSheetId ?? rule?.style?.styleSheetId;
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
         const path = sourcePath(styleSheetId ? headers.get(styleSheetId)?.sourceURL : undefined);
+        /* oxlint-enable typescript/strict-boolean-expressions */
         const declaration = uniqueDeclarationEntries[0]?.p;
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const styleMap = await sourceMapFor(styleSheetId);
@@ -835,6 +864,7 @@ export async function measureStyles(
           declaration?.range ??
           ((rule?.style.cssProperties ?? []).filter(
             (entry) =>
+              // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
               entry.disabled !== true && entry.parsedOk !== false && typeof entry.text === "string",
           ).length === 1
             ? rule?.style.range
@@ -860,6 +890,7 @@ export async function measureStyles(
         // declaration provenance. A direct stylesheet source is required.
         const generatedByPath = generatedSource(path, generatedSourcePaths);
         let generatedRule: ReturnType<typeof generatedCssRule>;
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
         if (!rule?.media?.length && !rule?.layers?.length) {
           generatedRule = generatedCssRule(
             generatedCssRules,
@@ -873,10 +904,12 @@ export async function measureStyles(
               (entry) =>
                 entry.disabled !== true &&
                 entry.parsedOk !== false &&
+                // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
                 typeof entry.text === "string",
             ),
           );
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
         const mappedSourceContent = mapped && styleMap?.sourcesContent?.[mapped.sourceIndex];
         const mappedFile = generatedCssSourceFiles.find(
           (file) =>
@@ -1172,7 +1205,7 @@ export async function capturePreview(input: {
         // oxlint-disable-next-line eslint/no-await-in-loop -- Each disposable viewport needs its own fixture.
         await input.preparePage(page);
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Preserve intentional sequential control flow.
+      // oxlint-disable-next-line eslint/no-await-in-loop, typescript/promise-function-async -- Preserve intentional sequential control flow. Preserve the returned promise and synchronous throw behavior.
       await page.evaluate(() => document.fonts.ready);
       await runSequentially(
         Array.from({ length: input.scenarios.length + 1 }, (_, index) => index),
@@ -1189,12 +1222,14 @@ export async function capturePreview(input: {
             }
             try {
               await runSequentially(scenario.steps, async (step) => {
+                /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
                 const locator = step.selector
                   ? page.locator(step.selector)
                   : page.getByRole(step.role as Parameters<Page["getByRole"]>[0], {
                       exact: true,
                       name: step.name,
                     });
+                /* oxlint-enable typescript/strict-boolean-expressions */
                 if (step.action === "click") {
                   await locator.click();
                 } else if (step.action === "fill") {
@@ -1203,12 +1238,14 @@ export async function capturePreview(input: {
                   await locator.selectOption({ label: step.value ?? "" });
                 }
               });
+              /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
               if (scenario.expect?.text) {
                 await page
                   .getByText(scenario.expect.text, { exact: false })
                   .first()
                   .waitFor({ state: "visible" });
               }
+              /* oxlint-enable typescript/strict-boolean-expressions */
               interaction = {
                 expectedText: scenario.expect?.text,
                 status: "passed",

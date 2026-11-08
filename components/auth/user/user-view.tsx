@@ -1,3 +1,4 @@
+/* oxlint-disable anti-slop/require-safety-comment-for-type-assertion -- Preserve existing assertions in JSX props. */
 "use client";
 
 import type { UsernameAuthClient } from "@better-auth-ui/core/plugins/username";
@@ -55,6 +56,7 @@ export function UserView({ className, isPending, hideSubtitle = false, user }: U
     );
   }
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <div className={cn("flex items-center gap-2 min-w-0", className)}>
       <UserAvatar user={resolvedUser as User | undefined} />
@@ -76,4 +78,5 @@ export function UserView({ className, isPending, hideSubtitle = false, user }: U
       </div>
     </div>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

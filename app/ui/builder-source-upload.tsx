@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/no-undefined-assignment -- Preserve explicit undefined values in existing JSX or generated-source expressions. */
 "use client";
 import { sourceCandidateReferenceSchema } from "@/lib/handoff/application-source-contract";
 import { startTransition, useActionState, useState, useRef } from "react";

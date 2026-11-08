@@ -43,6 +43,7 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
       addPasskey.reset();
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       pendingRequest.current = undefined;
     }
     onOpenChange(nextOpen);
@@ -60,11 +61,15 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
 
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const formData = new FormData(e.target as HTMLFormElement);
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const name = (formData.get("name") as string)?.trim();
 
     submitRequest({
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(name ? { name } : {}),
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(authenticatorAttachment ? { authenticatorAttachment } : {}),
     });
   };

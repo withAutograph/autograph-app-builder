@@ -229,6 +229,7 @@ it("refuses an altered original sealed checkpoint before returning new ciphertex
   const { source, target } = fixture();
   source.record.privateState = prepareHostedOperatorResourceCredentials({
     ...source,
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     record: { ...source.record, privateState: undefined },
     database: "authDatabase",
   }).privateState;

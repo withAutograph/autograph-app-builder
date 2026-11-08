@@ -52,17 +52,22 @@ const activationDatabase = async () => {
     },
     apply(_target, _receiver, rawArguments: unknown[]) {
       const [segments, ...parameters] = rawArguments;
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (!Array.isArray(segments) || !segments.every((part) => typeof part === "string")) {
         throw new Error("Expected a parameterized SQL query");
       }
       const statement = segments.join("?").replace(/\s+for update\s*$/iu, "");
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
       const bindings: SQLInputValue[] = parameters.map((value: unknown) => {
         if (value instanceof Date) {
           return value.toISOString();
         }
         if (
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof value === "string" ||
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof value === "number" ||
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof value === "bigint" ||
           value === null
         ) {
@@ -78,7 +83,9 @@ const activationDatabase = async () => {
       return Promise.resolve(
         query.all(...bindings).map((row) => ({
           ...row,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...("email_verified" in row ? { email_verified: row.email_verified === 1 } : {}),
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...("active" in row ? { active: row.active === 1 } : {}),
         })),
       );

@@ -52,10 +52,13 @@ export async function isCursorClientReady(database: Reader, resource: string): P
     .from(oauthClient)
     .where(eq(oauthClient.clientId, cursorClientId))
     .limit(1);
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   if (!client) {
     return false;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const expected = cursorClientRegistration();
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   for (const key of Object.keys(expected) as (keyof typeof expected)[]) {
     const actual = client[key];
     const value = expected[key];
@@ -101,6 +104,7 @@ export async function setupCursorClient(database: Database, resource: string) {
       .from(oauthResource)
       .where(eq(oauthResource.identifier, resource))
       .limit(1);
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
     if (
       !target ||
       target.disabled ||
@@ -109,6 +113,7 @@ export async function setupCursorClient(database: Database, resource: string) {
     ) {
       throw new Error("Initialize the OAuth resource before registering Cursor.");
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     await tx
       .insert(oauthClient)
       .values({

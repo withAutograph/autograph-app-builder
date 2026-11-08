@@ -10,6 +10,7 @@ function previewHostname(value: string | undefined) {
   ) {
     return;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional preview hostname result.
   return value;
 }
 

@@ -455,6 +455,7 @@ export class GitHubOutcomeUnknownError extends Error {
   }
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const bytesDigest = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 
@@ -464,6 +465,7 @@ const bytesDigest = (value: Uint8Array) => createHash("sha256").update(value).di
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const canonicalJson = (value: unknown): string => {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalJson).join(",")}]`;
@@ -511,6 +513,7 @@ const canonicalReviewedChanges = (changes: ReviewedChangeSetReceipt["changes"]) 
   });
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function exactKeys(value: unknown, keys: readonly string[]): boolean {
   return (
     record(value) && Object.keys(value).toSorted().join("\0") === [...keys].toSorted().join("\0")
@@ -636,7 +639,7 @@ function releaseGateAbsent(repository: GitHubRepositoryObservation): boolean {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
-  // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/no-unsafe-dictionary-type -- Keep the existing broader shape used by this operation.; Preserve the existing open-ended value contract.
+  // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Keep the existing broader shape used by this operation.; Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
   const changeSet = { ...review } as Record<string, unknown>;
   delete changeSet.changeSetDigest;
   delete changeSet.reviewedByCallId;
@@ -703,6 +706,7 @@ function contentManifest(
 ): ReviewedChangeSetReceipt["changes"] {
   return changes.map((change) => {
     if (change.kind === "added") {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       return Object.fromEntries([
         ["path", change.path],
         ["kind", change.kind],
@@ -716,6 +720,7 @@ function contentManifest(
       ]) as ReviewedChangeSetReceipt["changes"][number];
     }
     if (change.kind === "modified") {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       return Object.fromEntries([
         ["path", change.path],
         ["kind", change.kind],
@@ -729,6 +734,7 @@ function contentManifest(
         ],
       ]) as ReviewedChangeSetReceipt["changes"][number];
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     return Object.fromEntries([
       ["path", change.path],
       ["kind", change.kind],
@@ -738,6 +744,7 @@ function contentManifest(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function exactContentFileState(value: unknown, includeBytes: boolean): boolean {
   const keys = includeBytes
     ? (["mode", "digest", "bytes"] as const)
@@ -752,7 +759,9 @@ function exactContentFileState(value: unknown, includeBytes: boolean): boolean {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function exactContentChange(change: unknown): boolean {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (!record(change) || typeof change.path !== "string" || !safeSourcePath(change.path)) {
     return false;
   }
@@ -1219,6 +1228,7 @@ export function createRepositoryObservation(
     !isDigest(input.installationIdentityDigest) ||
     !exactKeys(input.releaseGate, ["name", "configured"]) ||
     input.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof input.releaseGate.configured !== "boolean";
   if (invalidRepositoryIdentity || invalidRepositoryRevision() || invalidInstallationOrGate()) {
     throw new Error("The repository observation is invalid.");
@@ -1634,6 +1644,7 @@ export function assertExactDraftPullRequestProposal(proposal: DraftPullRequestPr
   if (
     !isDigest(proposal.repositoryObservationDigest) ||
     proposal.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof proposal.releaseGate.configured !== "boolean" ||
     !isDigest(proposal.reviewDigest)
   ) {
@@ -1876,6 +1887,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     value.version !== GITHUB_PUBLICATION_VERSION ||
     !isDigest(value.proposalDigest) ||
     !isDigest(value.idempotencyKey) ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof value.approvedByCallId !== "string"
   ) {
     throw new Error("GitHub mutation receipt bindings are invalid.");

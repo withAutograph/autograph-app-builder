@@ -287,6 +287,7 @@ describe("GET recovery of historical native approval", () => {
           };
         },
       );
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const getSession = vi.fn(() => Promise.resolve(current));
       const observeSessionPaged = vi.fn<NonNullable<HostedEveStore["observeSessionPaged"]>>(
         async (input) => {
@@ -318,6 +319,7 @@ describe("GET recovery of historical native approval", () => {
           return current;
         },
       );
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const readCheckpointPage = vi.fn<NonNullable<HostedEveStore["readCheckpointPage"]>>((input) =>
         Promise.resolve({
           checkpointDigest: input.checkpointRef.digest,
@@ -330,9 +332,11 @@ describe("GET recovery of historical native approval", () => {
       const store: HostedEveStore = {
         getSession,
         listSessions: base.listSessions.bind(base),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         reserveOperation: vi.fn(() =>
           Promise.resolve({ disposition: "existing" as const, operation }),
         ),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         readUnsettledResponseOperations: vi.fn(() =>
           Promise.resolve({
             operations: [
@@ -342,6 +346,7 @@ describe("GET recovery of historical native approval", () => {
             ],
           }),
         ),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         settleSucceeded: vi.fn<HostedEveStore["settleSucceeded"]>((input) =>
           Promise.resolve(
             hostedOperationRecordSchema.parse({
@@ -356,6 +361,7 @@ describe("GET recovery of historical native approval", () => {
         readCheckpointPage,
       };
       const service = createHostedEveSessionService({
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         assertSendDeliveryOwner: () => Promise.resolve(),
         now: () => 50,
         principal,

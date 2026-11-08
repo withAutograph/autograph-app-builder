@@ -233,7 +233,9 @@ describe("private local preview setup", () => {
         "The recorded Auth origin cannot change outside the owned local preview handoff\npassword=split-",
         "secret postgres://user:private@host/db\n",
       ]),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       wait: () => Promise.resolve({ exitCode: 1 }),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       kill: () => Promise.resolve(),
     });
     const result = await prepareAppLocalPreview({

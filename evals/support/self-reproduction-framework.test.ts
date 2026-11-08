@@ -13,13 +13,16 @@ const browser = () => {
   return {
     close,
     page,
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     value: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       newContext: () => Promise.resolve({ close, newPage: () => Promise.resolve(page) }),
     } as never,
   };
 };
 
 const adapter = {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters, typescript/promise-function-async -- Preserve the existing unknown input contract. Preserve the returned promise and synchronous throw behavior.
   exerciseBrowser: (_page: unknown, id: string) => {
     const requirement = frameworkMatrix.find((row) => row.id === id);
     if (!requirement) {
@@ -36,6 +39,7 @@ const adapter = {
       reason: "Browser assertions completed.",
     });
   },
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   instantNavigationRecipe: () =>
     Promise.resolve({
       artifacts: [],
@@ -49,6 +53,7 @@ const adapter = {
         sourcePath: "/",
       },
     }),
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   reviewSource: () =>
     Promise.resolve({
       artifacts: [],
@@ -92,6 +97,7 @@ describe("trusted framework evidence", () => {
       adapters: {
         candidate: {
           ...adapter,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           instantNavigationRecipe: () =>
             Promise.resolve({
               disposition: "infrastructure-unavailable" as const,
@@ -116,6 +122,7 @@ it("retains sanitized diagnostics and blocks an evaluator exception", async () =
     adapters: {
       candidate: {
         ...adapter,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         reviewSource: () => Promise.reject(new Error("Fixture unavailable Bearer private-secret")),
       },
     },
@@ -140,6 +147,7 @@ it("keeps a missing browser fixture unassessed after a source review", async () 
     adapters: {
       candidate: {
         ...adapter,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         exerciseBrowser: () =>
           Promise.resolve({
             artifacts: [],
@@ -166,6 +174,7 @@ it("retains an executed instant assertion failure as observed failure", async ()
     adapters: { candidate: adapter },
     browser: browser().value,
     outputRoot,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     runInstant: () => Promise.reject(new Error("Resolved content never appeared")),
   });
   expect(

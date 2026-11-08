@@ -346,6 +346,7 @@ export const createPublicReleaseDeployment = (input: {
         owner,
         authority: input.owner,
         owned: original,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(original.purpose === "application" ? { allowApplicationRemoval: true as const } : {}),
         publicOrigin,
         request,
@@ -354,6 +355,7 @@ export const createPublicReleaseDeployment = (input: {
           await base(current);
           await heldFence?.();
         },
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(readSourceOwner === undefined
           ? {}
           : {

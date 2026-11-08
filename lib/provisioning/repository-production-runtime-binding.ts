@@ -161,6 +161,7 @@ export const createRepositoryProductionRuntimeBinding = (input: {
         : [];
     });
     if (row === undefined) {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       return { dispatched: checkpoints.length > 0, expected, row: undefined };
     }
     if (

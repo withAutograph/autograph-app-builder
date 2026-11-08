@@ -184,6 +184,7 @@ try {
   const installRoot = path.join(output, ".portable-install");
   await mkdir(installRoot, { mode: 0o700 });
   await Promise.all(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     ["codex", "vscode", "cursor"].map((client) =>
       run(node, [
         "--import",

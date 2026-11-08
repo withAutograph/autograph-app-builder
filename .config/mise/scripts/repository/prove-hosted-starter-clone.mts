@@ -45,6 +45,7 @@ function parseQuotedEnvironmentValue(source: string, name: string): string {
   } catch {
     throw new Error(`The Development environment contains invalid ${name}.`);
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value !== "string" || value.length === 0 || value.length > 32_768) {
     throw new Error(`The Development environment contains invalid ${name}.`);
   }

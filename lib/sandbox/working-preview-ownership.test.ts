@@ -29,6 +29,7 @@ describe("sandbox preview ownership journal", () => {
         "-e",
         `${source}\nconsole.log(JSON.stringify(await ownershipOperation(${JSON.stringify(operation)})));`,
       ]);
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       return JSON.parse(result.stdout) as {
         claimed?: boolean;
         attempt?: { attemptId: string };

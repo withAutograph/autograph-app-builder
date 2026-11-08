@@ -33,6 +33,7 @@ async function productionAppSpecInstructions(): Promise<string> {
     "agent/skills/design-app/references/app-spec.md",
   ];
   const contents = await Promise.all(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     paths.map((path) => readFile(nodePath.resolve(repositoryRoot, path), "utf-8")),
   );
   return contents.join("\n\n");

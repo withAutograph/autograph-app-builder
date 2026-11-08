@@ -41,6 +41,7 @@ export function Appearance({ className }: AppearanceProps) {
     () => false,
   );
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <div>
       <h2 className="text-sm font-semibold mb-3">{localization.appearance}</h2>
@@ -121,4 +122,5 @@ export function Appearance({ className }: AppearanceProps) {
       </Card>
     </div>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

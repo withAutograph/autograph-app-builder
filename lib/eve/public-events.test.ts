@@ -50,6 +50,7 @@ const isRecordedResult = (
 ): event is MessageStreamEvent & z.infer<typeof recordedResultSchema> =>
   recordedResultSchema.safeParse(event).success;
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing unknown input contract.; Preserve the existing type assertion at this boundary.
 const installedEvent = (event: unknown) => event as MessageStreamEvent;
 
 describe("authorization completion projection", () => {
@@ -198,6 +199,7 @@ function recordedPrototypeEvents(input?: {
             revision,
             sessionId: "wrun_1",
             size: Buffer.byteLength(content),
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(input?.invalidated === undefined ? {} : { invalidated: input.invalidated }),
           },
           toolName: input?.resultToolName ?? "record_prototype_artifact",
@@ -1600,6 +1602,7 @@ const result = (events: ReturnType<typeof projectInstalledEveEvents>) => ({
 });
 
 describe("public draft pull request approval scope", () => {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   const requested = (toolName: string, approvalReceipt: unknown) =>
     installedEvent({
       data: {
@@ -1688,6 +1691,7 @@ describe("public draft pull request approval scope", () => {
 
 describe("suspended hosted identity invitation", () => {
   const link = "https://auth.example.com/api/auth/platform/operator-link?nonce=ordinary-link-nonce";
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   const partial = (output: unknown, toolName = "prepare-app-hosted-runtime") =>
     installedEvent({
       type: "action.partial",
@@ -1791,6 +1795,7 @@ describe("Production app identity invitation", () => {
     members: [{ email: "private-email@example.com" }],
     proof: "private-proof",
   });
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   const completed = (toolName: string, callId: string, value: unknown, isError = false) =>
     installedEvent({
       type: "action.result",

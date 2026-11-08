@@ -61,9 +61,11 @@ const run = async (
     server.listen(0, "127.0.0.1", resolve);
   });
   const address = server.address();
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (address === null || typeof address === "string") {
     throw new Error("Missing server address");
   }
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const transport: typeof fetch = (url, options) => {
     // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     const target = new URL(String(url));
@@ -142,6 +144,7 @@ it("blocks cross-origin paths before transport receives a capability", async () 
       expiresAt: Date.now() + 60_000,
       launchUrl: "https://preview.test/__autograph_preview_launch?token=private",
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     fetch: () => {
       called = true;
       return Promise.reject(new Error("Must not run"));
@@ -166,6 +169,7 @@ it("honors cancellation before access exchange", async () => {
       expiresAt: Date.now() + 60_000,
       launchUrl: "https://preview.test/__autograph_preview_launch?token=private",
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     fetch: () => {
       called = true;
       return Promise.reject(new Error("Must not run"));
@@ -191,6 +195,7 @@ it("bounds untrusted read response and omits its contents", async () => {
       expiresAt: Date.now() + 60_000,
       launchUrl: "https://preview.test/__autograph_preview_launch?token=private",
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     fetch: () => {
       count += 1;
       if (count === 1) {
@@ -224,6 +229,7 @@ it("validates the complete streamed read even when an early marker matches", asy
       expiresAt: Date.now() + 60_000,
       launchUrl: "https://preview.test/__autograph_preview_launch?token=private",
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     fetch: (_url, options) => {
       calls += 1;
       if (calls === 1) {
@@ -237,6 +243,7 @@ it("validates the complete streamed read even when an early marker matches", asy
       if (options?.method === "POST") {
         // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
         const submitted: unknown = JSON.parse(String(options.body));
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         if (typeof submitted !== "object" || submitted === null || !("value" in submitted)) {
           throw new Error("Invalid test request");
         }

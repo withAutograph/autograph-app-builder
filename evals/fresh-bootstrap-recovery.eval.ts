@@ -22,25 +22,30 @@ export default defineEval({
     ]);
     try {
       const destination = path.join(fixture.allowedRoot, "recovery");
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       await withFreshBootstrapTestCapability(fixture.capability, () =>
         session.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
       session.requireInputRequest({ toolName: "publish_fresh_repository" });
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       await withFreshBootstrapTestCapability(fixture.capability, () =>
         session.respondAll("approve"),
       );
       t.succeeded();
 
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       await withFreshBootstrapTestCapability(fixture.capability, () =>
         session.send("Recover fresh repository bootstrap after partial failure."),
       );
       session.requireInputRequest({ toolName: "recover_fresh_repository" });
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const turn1 = await withFreshBootstrapTestCapability(fixture.capability, () =>
         session.respondAll("approve"),
       );
       t.succeeded();
       t.check(turn1.message, includes("separately approved exact"));
 
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const retry = await withFreshBootstrapTestCapability(fixture.capability, () =>
         session.send("Retry fresh repository recovery after a lost response."),
       );

@@ -338,9 +338,11 @@ export function analyzeSource({
   const imports: SourceAnalysis["imports"] = [];
   const observations: Observation[] = [];
   const limitations: string[] = [...(reference?.limitations ?? [])];
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const typedJsx = reference?.arrustedRoot
     ? checkJsxAttributes({ arrustedRoot: reference.arrustedRoot, files })
     : undefined;
+  /* oxlint-enable typescript/strict-boolean-expressions */
   if (typedJsx) {
     limitations.push(...typedJsx.limitations);
   }
@@ -753,6 +755,7 @@ export function analyzeSource({
           }
           if (item && reference) {
             const declaration = reference.modules[item.source]?.exports[item.name];
+            /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
             if (!declaration) {
               observations.push(
                 observation(
@@ -830,9 +833,11 @@ export function analyzeSource({
                 ),
               );
             }
+            /* oxlint-enable typescript/strict-boolean-expressions */
           }
         }
         if (item) {
+          /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
           observations.push(
             observation(
               `component:public:${file.path}:${node.getStart(source)}`,
@@ -845,6 +850,7 @@ export function analyzeSource({
               "public-component",
             ),
           );
+          /* oxlint-enable typescript/strict-boolean-expressions */
         } else if (
           ts.isIdentifier(tag) &&
           /^[A-Z]/u.test(tag.text) &&

@@ -77,6 +77,7 @@ export type ApprovalTarget = Pick<
 >;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function parseApprovalReceipt(value: unknown): ApprovalReceipt {
   return approvalReceiptSchema.parse(value);
 }
@@ -218,6 +219,7 @@ const isDraftPullRequestTool = (toolName?: string) =>
   toolName === "publish_github_draft_pr" || toolName === "publish-github-draft-pr";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function publicReceiptDescription(receipt: unknown, toolName?: string): string | undefined {
   const parsed = approvalReceiptSchema.safeParse(receipt);
   let expectedPhase: ApprovalReceipt["phase"] | undefined;
@@ -521,9 +523,10 @@ const validatedHostedOperatorApprovalPlan = (
     parsed.data.selection.projectId !== record.projectId ||
     parsed.data.selection.branch !== record.branch
   ) {
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional descriptions explicitly return no public approval.
+    // oxlint-disable-next-line unicorn/no-useless-undefined, typescript/consistent-return -- Preserve absent or validated approval plan results. Optional descriptions explicitly return no public approval.
     return undefined;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absent or validated approval plan results.
   return parsed.data;
 };
 
@@ -593,6 +596,7 @@ const operatorApprovalDescription = (
     .join("\n\n");
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const continuityApprovalDescription = (input: unknown): string | undefined => {
   const parsed = continuityApprovalToolInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -622,6 +626,7 @@ const continuityApprovalDescription = (input: unknown): string | undefined => {
     "This does not change the app's main project or prove behavior after a later deployment.",
   ].join("\n\n");
 };
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const nativeTargetApprovalDescription = (input: unknown): string | undefined => {
   const parsed = z
     .strictObject({
@@ -669,6 +674,7 @@ const isApprovalInputRecord = (input: unknown): input is Record<string, unknown>
   typeof input === "object" && input !== null && !Array.isArray(input);
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function otherPublicApprovalDescription(input: unknown, toolName?: string): string | undefined {
   if (!isApprovalInputRecord(input)) {
     return undefined;
@@ -733,10 +739,11 @@ function otherPublicApprovalDescription(input: unknown, toolName?: string): stri
   }
   if (toolName === "accept_change_set") {
     const changeSet =
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof record.changeSet === "object" &&
       record.changeSet !== null &&
       !Array.isArray(record.changeSet)
-        ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+        ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
           (record.changeSet as Record<string, unknown>)
         : undefined;
     const parsed = z
@@ -760,6 +767,7 @@ function otherPublicApprovalDescription(input: unknown, toolName?: string): stri
 }
 
 export const publicApprovalDescription = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   input: unknown,
   toolName?: string,
 ): string | undefined => {

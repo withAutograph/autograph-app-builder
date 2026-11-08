@@ -167,7 +167,7 @@ describe("accepted AppSpec resume", () => {
       const current = appBuilderWorkflowState.get();
       appBuilderWorkflowState.update(
         () =>
-          // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The workflow fixture retains only fields observed by this acceptance scenario.
+          // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The workflow fixture retains only fields observed by this acceptance scenario.; Preserve the existing type assertion at this boundary.
           ({
             ...current,
             phase: "planned",

@@ -50,6 +50,7 @@ export interface ManagementResolverDependencies<Profile extends ManagementProfil
   ) => Promise<RepositoryProductionCapture>;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const routingUnavailable = (error: unknown) => {
   if (error instanceof RepositoryProductionDestinationRequiredError) {
     return true;
@@ -57,6 +58,7 @@ const routingUnavailable = (error: unknown) => {
   if (!(error instanceof Error)) {
     return false;
   }
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const message = Object.getOwnPropertyDescriptor(error, "message")?.value;
   return (
     message === "repository_production_source_unavailable" ||

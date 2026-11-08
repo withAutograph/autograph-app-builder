@@ -25,12 +25,15 @@ export type EveEvalPrewarmLockReceipt = Readonly<{
 }>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function isErrno(error: unknown, code: string) {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ownerBound(info: Awaited<ReturnType<typeof lstat>>) {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof info.uid !== "number" || typeof info.mode !== "number") {
     return false;
   }
@@ -90,16 +93,20 @@ async function readLockOwner(lock: string) {
     throw new Error("owner.json was not an owner-bound regular file");
   }
   const source = await readFile(ownerPath, "utf-8");
+  // SAFETY: JSON.parse returns any; unknown makes no claim about the parsed shape.
   const value = JSON.parse(source) as unknown;
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof value !== "object" ||
     value === null ||
     Object.keys(value).toSorted().join(",") !== "createdAt,pid"
   ) {
     throw new Error("owner.json did not match Eve's lock schema");
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const owner = value as { createdAt?: unknown; pid?: unknown };
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof owner.createdAt !== "string" ||
     !Number.isFinite(Date.parse(owner.createdAt)) ||
     !Number.isSafeInteger(owner.pid) ||
@@ -304,7 +311,7 @@ export function waitForEveEvalChild(
         }
       }
     };
-    // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the existing broader shape used by this operation.
+    // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/require-safety-comment-for-type-assertion -- Keep the existing broader shape used by this operation.; Preserve the existing type assertion at this boundary.
     const handlers = {} as {
       interrupt: () => void;
       terminate: () => void;

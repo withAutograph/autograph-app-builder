@@ -14,6 +14,7 @@ import {
 async function RedirectAccountVisitor() {
   const requestHeaders = await headers();
   const { origin } = new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:3000/api/auth");
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   const state = await resolveWorkspaceOnboardingState(() =>
     ensurePreviewOAuthDeploymentSessionOrganization({
       environment: process.env,

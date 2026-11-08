@@ -243,6 +243,7 @@ describe("Browser prototype preview", () => {
         route: { digest, sessionId: "session-one" },
       },
       {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         prototype: undefined,
         route: { digest, sessionId: "session-one" },
       },
@@ -318,6 +319,7 @@ describe("Browser prototype preview", () => {
   it("waits briefly for a prototype event that is still being delivered", async () => {
     const get = vi
       .fn<EveSessionService["get"]>()
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       .mockResolvedValueOnce({ ...result, prototype: undefined })
       .mockResolvedValueOnce(result);
     const resolver = createServicePrototypePreviewResolver({

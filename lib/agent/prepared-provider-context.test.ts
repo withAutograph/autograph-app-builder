@@ -206,6 +206,7 @@ describe("prepared provider continuity", () => {
     expect(
       withPreparedGitHubSelection(
         { repository: "acme/stock" },
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         undefined as typeof intent | undefined,
       ),
     ).toEqual({
@@ -375,6 +376,7 @@ describe("prepared provider continuity", () => {
         apiOrigin: "https://preview.vercel.app/api/emulate/vercel",
         authority,
         fetch: request,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         intent: { ...intent, provisioning: undefined },
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
         readCredential: async () => credential,

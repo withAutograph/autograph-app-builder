@@ -14,6 +14,7 @@ const argument = (name: string) => {
   if (value === undefined || value === "" || value.startsWith("--")) {
     throw new Error(`Missing value for ${name}.`);
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve optional command-line argument results.
   return value;
 };
 const client = argument("--client");
@@ -61,6 +62,7 @@ await mkdir(clientRoot, { mode: 0o700 });
 await cp(path.join(source, pluginDirectoryName), path.join(clientRoot, pluginDirectoryName), {
   recursive: true,
 });
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
 const harness = JSON.parse(
   await readFile(path.join(source, "clients", `${client}.client-harness.json`), "utf-8"),
 );
@@ -70,6 +72,7 @@ await writeFile(
   path.join(clientRoot, "client-harness.json"),
   `${JSON.stringify(harness, null, 2)}\n`,
 );
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
 const release = JSON.parse(await readFile(path.join(source, "release-receipt.json"), "utf-8"));
 await writeFile(
   path.join(clientRoot, "installation-receipt.json"),
@@ -78,6 +81,7 @@ await writeFile(
       client,
       format: "agent-plugins-offline-installation-v1",
       pluginRoot: "./app-builder",
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
       releaseArchive: release.archive,
     },
     null,

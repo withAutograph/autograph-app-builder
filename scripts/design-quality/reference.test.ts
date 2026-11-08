@@ -164,7 +164,9 @@ describe("readReference", () => {
     expect(result.implementationDiagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
           code: expect.any(Number),
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
           message: expect.stringMatching(/possibly .*undefined/iu),
         }),
       ]),

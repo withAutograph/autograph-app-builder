@@ -39,6 +39,7 @@ it.each(["history", "local-state", "inert", "unknown", "unavailable"])(
     });
     const page = {
       getByRole: (_role: string, options: { name: string | RegExp }) =>
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         control(typeof options.name === "string" ? options.name : "back"),
       goBack: async () => {
         if (mode === "history") {
@@ -56,6 +57,7 @@ it.each(["history", "local-state", "inert", "unknown", "unavailable"])(
         mode === "history" && view === "docs" ? "https://candidate/docs" : "https://candidate/",
     } satisfies CandidateNavigationPage;
     const capture = vi.fn(async () => {});
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const createPortable = compileFunction(
       `return (${exerciseCandidateNavigation.toString()})`,
     ) as () => typeof exerciseCandidateNavigation;

@@ -2,6 +2,7 @@ import { defineConfig } from "playwright/test";
 
 const baseURL = "http://127.0.0.1:6018";
 
+/* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
 export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   // Do not clean the E2E lane's browser-state fixture in test-results/.
@@ -21,3 +22,4 @@ export default defineConfig({
     url: baseURL,
   },
 });
+/* oxlint-enable typescript/strict-boolean-expressions */

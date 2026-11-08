@@ -630,6 +630,7 @@ describe("existing operator transport export dispatch", () => {
             method: "POST",
             headers: {
               "content-type": "application/json",
+              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
               ...(credential === "invalid" ? { authorization: "Bearer invalid-token" } : {}),
             },
             body: JSON.stringify({ ...action, ownerContext }),

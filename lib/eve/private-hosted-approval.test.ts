@@ -254,6 +254,7 @@ describe("private hosted approval receipts", () => {
         { index: 1, requestIds: ["between-turn-request"], type: "input.resolved" },
       ]);
       expect(
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         privateHostedApprovalReceiptSchema.safeParse({ ...savedReceipt, turnId: undefined })
           .success,
       ).toBe(false);
@@ -826,6 +827,7 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
     },
   };
   const recovered = await createHostedEveSessionService({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     assertNativeRecoveryOwner: () => Promise.resolve(),
     now: () => 10,
     principal,

@@ -38,6 +38,7 @@ describe("hosted continuity planning", () => {
       callId: "continuity-call",
       getSandbox: vi.fn().mockResolvedValue({
         id: "selected-sandbox",
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         readTextFile: () => Promise.resolve(null),
       }),
       getToken: vi.fn(),

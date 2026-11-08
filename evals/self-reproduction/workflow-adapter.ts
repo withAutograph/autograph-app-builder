@@ -47,15 +47,19 @@ export interface WorkflowAdapterFactoryInput {
   outputRoot: string;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const sessionUserId = (session: unknown): string | undefined => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (session === null || typeof session !== "object" || !("user" in session)) {
     return undefined;
   }
   const { user } = session;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (user === null || typeof user !== "object" || !("id" in user)) {
     return undefined;
   }
   const { id } = user;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof id === "string" ? id : undefined;
 };
 
@@ -92,8 +96,10 @@ const firstVisible = async (locators: Locator[]) => {
         // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         .catch(() => false)
     ) {
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve absent locator results and recursive lookup.
       return locator.first();
     }
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve absent locator results and recursive lookup.
     return await find(index + 1);
   };
   return await find(0);
@@ -218,6 +224,7 @@ const referenceAdapter = (
       if (workflowId === "authentication") {
         const ownerSession = await currentSession(page);
         const ownerId = sessionUserId(ownerSession);
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         if (typeof ownerId !== "string") {
           throw new TypeError("Reference OAuth did not establish an owner identity.");
         }
@@ -253,6 +260,7 @@ const referenceAdapter = (
         const handoffId = new URL(restored.url()).pathname.split("/").at(-1);
         const statusPath = `/api/builder/handoffs/${handoffId}`;
         const ownerResponse = await restored.request.get(statusPath);
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
         const ownerBody = await ownerResponse.json();
         // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
         const ownerCanRead = ownerResponse.ok() && ownerBody.status === "prepared";
@@ -274,8 +282,10 @@ const referenceAdapter = (
           const strangerSession = await currentSession(stranger);
           const strangerId = sessionUserId(strangerSession);
           const response = await stranger.request.get(statusPath);
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
           const body = await response.json();
           const isDistinctUser =
+            // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
             ownerCanRead && typeof strangerId === "string" && strangerId !== ownerId;
           otherUserDenied =
             isDistinctUser &&
@@ -483,11 +493,15 @@ const referenceAdapter = (
 
 export const createWorkflowAdapters = (input: WorkflowAdapterFactoryInput): WorkflowAdapters => {
   const adapters: WorkflowAdapters = {};
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (input.referenceUrl) {
     adapters.reference = referenceAdapter(input.referenceUrl, input.referenceFixtureRoot);
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (input.candidateUrl) {
     adapters.candidate = semanticCandidateAdapter(input.candidateUrl);
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return adapters;
 };

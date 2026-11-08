@@ -535,6 +535,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     }
     const preparation = row.record.accountPreparation;
     if (preparation === undefined) {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       return { preparation: undefined, row, state: undefined };
     }
     validateProvenance(context, preparation);

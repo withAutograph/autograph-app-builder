@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/no-undefined-assignment -- Preserve explicit undefined values in existing JSX or generated-source expressions. */
 "use client";
 
 import { getViewURL } from "@better-auth-ui/core";
@@ -47,10 +48,12 @@ export function ChangeEmail({ className }: ChangeEmailProps) {
     const formData = new FormData(e.currentTarget);
     changeEmail({
       callbackURL: getViewURL(baseURL, basePaths.settings, viewPaths.settings.account),
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       newEmail: formData.get("email") as string,
     });
   }
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <div>
       <h2 className="text-sm font-semibold mb-3">{localization.settings.changeEmail}</h2>
@@ -82,6 +85,7 @@ export function ChangeEmail({ className }: ChangeEmailProps) {
                     e.preventDefault();
                     setFieldErrors((prev) => ({
                       ...prev,
+                      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
                       email: (e.target as HTMLInputElement).validationMessage,
                     }));
                   }}
@@ -108,4 +112,5 @@ export function ChangeEmail({ className }: ChangeEmailProps) {
       </form>
     </div>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

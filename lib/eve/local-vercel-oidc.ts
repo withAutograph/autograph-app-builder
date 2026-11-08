@@ -24,8 +24,9 @@ interface VercelOidcClaims {
 
 const OWNER_BOUND_INPUT_ERROR = "Installed Eve input was not owner-bound.";
 
-// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-parameters -- Preserve the existing open-ended value contract. Preserve the existing unknown input contract.
 const closedObject = (value: unknown, name: string): Record<string, unknown> => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${name} was not an object.`);
   }
@@ -160,9 +161,11 @@ export const resolveInstalledEveCli = (repositoryRootInput: string): string => {
     "Installed Eve package",
   );
   const bin =
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof metadata.bin === "string"
       ? metadata.bin
       : closedObject(metadata.bin, "Installed Eve bin").eve;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (metadata.name !== "eve" || typeof bin !== "string" || bin.length === 0) {
     throw new Error("Installed Eve package identity was invalid.");
   }
@@ -189,6 +192,7 @@ export const resolveInstalledEveCli = (repositoryRootInput: string): string => {
 // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const requiredString = (value: Record<string, unknown>, key: string): string => {
   const candidate = value[key];
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof candidate !== "string" || candidate.length === 0) {
     throw new TypeError(`Required ${key} was unavailable.`);
   }
@@ -245,6 +249,7 @@ export const parseLocalVercelOidcToken = (source: string): string => {
   const encoded = match.slice("VERCEL_OIDC_TOKEN=".length);
   const token: unknown = encoded.startsWith('"') ? JSON.parse(encoded) : encoded;
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof token !== "string" ||
     token.length > 8192 ||
     !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u.test(token)

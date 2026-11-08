@@ -398,6 +398,7 @@ describe("native externally managed policy recovery integration", () => {
             record: hostedRuntimeJournalRecordSchema.parse(input.record),
             revision: row.revision + 1,
           };
+          // oxlint-disable-next-line typescript/consistent-return -- Preserve optional journal fixture outcomes.
           return structuredClone(row);
         },
         // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
@@ -432,6 +433,7 @@ describe("native externally managed policy recovery integration", () => {
         authorize: async () => context,
         assertAuthorized: async () => {},
         plan,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(planningCase === "approved-default"
           ? {}
           : {
@@ -755,6 +757,7 @@ describe("native externally managed policy recovery integration", () => {
               record: hostedRuntimeJournalRecordSchema.parse(input.record),
               revision: row.revision + 1,
             };
+            // oxlint-disable-next-line typescript/consistent-return -- Preserve optional journal fixture outcomes.
             return structuredClone(row);
           },
         ),
@@ -768,6 +771,7 @@ describe("native externally managed policy recovery integration", () => {
             }
             requireFixtureValue(row.record.operator, "journal operator").fenceGeneration = 2;
             row.revision += 1;
+            // oxlint-disable-next-line typescript/consistent-return -- Preserve optional journal fixture outcomes.
             return structuredClone(row);
           },
         ),

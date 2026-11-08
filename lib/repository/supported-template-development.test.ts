@@ -142,6 +142,7 @@ describe("development Sandbox workspace refresh", () => {
 
     const files = new Map<string, string | Buffer>();
     const removePath = vi.fn<SandboxSession["removePath"]>(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       ({ path: target, recursive = false }) => {
         if (recursive) {
           for (const key of files.keys()) {
@@ -157,6 +158,7 @@ describe("development Sandbox workspace refresh", () => {
     );
     const sandbox = createSandbox({
       id: "sandbox",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readBinaryFile: vi.fn(({ path: target }: { path: string }) => {
         const value = files.get(target);
         if (value === undefined) {
@@ -164,6 +166,7 @@ describe("development Sandbox workspace refresh", () => {
         }
         return Promise.resolve(Buffer.isBuffer(value) ? value : Buffer.from(value));
       }),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readTextFile: vi.fn<SandboxSession["readTextFile"]>(({ path: target }) => {
         const value = files.get(target);
         if (value === undefined) {
@@ -172,6 +175,7 @@ describe("development Sandbox workspace refresh", () => {
         return Promise.resolve(Buffer.isBuffer(value) ? value.toString("utf-8") : value);
       }),
       removePath,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       run: vi.fn<SandboxSession["run"]>(({ command }) => {
         if (command.includes("tar --extract")) {
           for (const name of ["changed.txt", "deleted.txt"]) {
@@ -184,6 +188,7 @@ describe("development Sandbox workspace refresh", () => {
         }
         return Promise.resolve({ exitCode: 0, stderr: "", stdout: "" });
       }),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       writeBinaryFile: vi.fn<SandboxSession["writeBinaryFile"]>(({ content, path: target }) => {
         files.set(target, Buffer.from(content));
         return Promise.resolve();
@@ -201,6 +206,7 @@ describe("development Sandbox workspace refresh", () => {
         }
         files.set(target, Buffer.concat(chunks));
       }),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       writeTextFile: vi.fn<SandboxSession["writeTextFile"]>(({ content, path: target }) => {
         files.set(target, content);
         return Promise.resolve();
@@ -219,6 +225,7 @@ describe("development Sandbox workspace refresh", () => {
     expect(files.has("repository/deleted.txt")).toBe(false);
     expect(files.get("repository/apps/generated/page.tsx")).toBe("generated");
     expect(removePath).not.toHaveBeenCalledWith(expect.objectContaining({ path: "repository" }));
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const readActual = ({ path: target }: { path: string }) => {
       const value = files.get(target);
       if (value === undefined) {
@@ -227,6 +234,7 @@ describe("development Sandbox workspace refresh", () => {
       return Promise.resolve(Buffer.isBuffer(value) ? value : Buffer.from(value));
     };
     writeFileSync(path.join(source, "changed.txt"), "new source transfer before corrupt readback");
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     sandbox.readBinaryFile.mockImplementation((input) => {
       if (input.path === "repository/changed.txt") {
         return Promise.resolve(Buffer.from("corrupt transferred bytes"));
@@ -282,12 +290,15 @@ const legacyWorkspaceFixture = () => {
   const files = new Map<string, Buffer>();
   const sandbox = createSandbox({
     id: "sandbox",
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     readBinaryFile: vi.fn(({ path: target }: { path: string }) =>
       Promise.resolve(files.get(target) ?? null),
     ),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     readTextFile: vi.fn(({ path: target }: { path: string }) =>
       Promise.resolve(files.get(target)?.toString("utf-8") ?? null),
     ),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     removePath: vi.fn(({ path: target, recursive }: { path: string; recursive?: boolean }) => {
       for (const name of files.keys()) {
         if (name === target || (recursive === true && name.startsWith(`${target}/`))) {
@@ -296,6 +307,7 @@ const legacyWorkspaceFixture = () => {
       }
       return Promise.resolve();
     }),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     run: vi.fn(() =>
       Promise.resolve({
         exitCode: 0,
@@ -321,6 +333,7 @@ const legacyWorkspaceFixture = () => {
       }
       files.set(target, Buffer.concat(chunks));
     }),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     writeTextFile: vi.fn(({ content, path: target }: { content: string; path: string }) => {
       files.set(target, Buffer.from(content));
       return Promise.resolve();
@@ -378,6 +391,7 @@ describe("legacy writable Sandbox workspace", () => {
 
   it("does not seal a failed initial transfer", async () => {
     const { files, sandbox, sha, source } = legacyWorkspaceFixture();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     sandbox.readBinaryFile.mockImplementation(({ path: target }) =>
       Promise.resolve(
         target === "repository/app.txt"

@@ -56,6 +56,7 @@ function observed(input: ParityEvidence, id: string) {
 }
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function status(input: ParityEvidence, id: string, retained = true) {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const report = await assessParity(input, () => Promise.resolve(retained));
   return report.rows.find((row) => row.side === "candidate" && row.requirementId === id)?.status;
 }
@@ -84,6 +85,7 @@ describe("evaluator-owned parity assessment", () => {
   it("retains excluded anonymous entry without awarding or failing parity credit", async () => {
     const input = fixture();
     input.candidate.output = "missing";
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const report = await assessParity(input, () => Promise.resolve(true));
     const excluded = report.rows.filter((row) => row.requirementId === "anonymous-entry");
     expect(excluded).toHaveLength(2);
@@ -125,6 +127,7 @@ describe("evaluator-owned parity assessment", () => {
     expect(await status(input, id)).toBe("passed");
   });
   it("retains all requirements independently on both sides without an aggregate verdict", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const report = await assessParity(fixture(), () => Promise.resolve(false));
     expect(report.rows).toHaveLength(requirements.length * 2);
     expect(report.rows.every((row) => row.status === "unassessed")).toBe(true);

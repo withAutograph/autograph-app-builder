@@ -91,6 +91,7 @@ describe("native recovery authority", () => {
     });
     const canary = "private-auth-error-canary";
     let ownerError: Error | null = null;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const assertOwner = vi.fn(() => {
       if (ownerError !== null) {
         throw ownerError;
@@ -241,6 +242,7 @@ describe("read-only native source observation authority", () => {
       store: {
         commitNativeRecoveryReceipt,
         getPrivateOperation,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         getSession: () => Promise.resolve(source),
       },
     });

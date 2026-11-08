@@ -838,6 +838,7 @@ export const readCompletedCaptureBootstrap = (
     return;
   }
   /* oxlint-enable sonarjs/expression-complexity */
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve optional operator state and authorization outcomes.
   return readUnapprovedCapturePredecessor(record, account.accountPlan, Date.now());
 };
 
@@ -2492,6 +2493,7 @@ export const composeHostedOperatorDependencies = (
     ) {
       throw new HostedOperatorError(RESOURCE_MISMATCH);
     }
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve optional operator state and authorization outcomes.
     return {
       planDigest: operatorPlanDigest(input.plan),
       effect: structuredClone(input.effect),
@@ -2523,6 +2525,7 @@ export const composeHostedOperatorDependencies = (
     await controlPlane.assertAuthorized(input);
     await input.assertCurrent();
     assertScope();
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve optional operator state and authorization outcomes.
     return receipt(
       input,
       createHash("sha256")
@@ -3105,6 +3108,7 @@ export const composeHostedOperatorDependencies = (
       }
       await controlPlane.assertPlanningAuthorized(context);
       const current = await controlPlane.store.read(context);
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional operator state and authorization outcomes.
       return await readNativePreviewRecoveryPlan({
         record: current?.record,
         policy,

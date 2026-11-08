@@ -14,7 +14,7 @@ const mappedIpv4 = (host: string) => {
   }
   const high = Number.parseInt(match[1], 16);
   const low = Number.parseInt(match[2], 16);
-  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
+  // oxlint-disable-next-line eslint/no-bitwise, typescript/consistent-return -- Preserve absent mapped IPv4 results. Intentional bitmask or binary-flag operation.
   return `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`;
 };
 

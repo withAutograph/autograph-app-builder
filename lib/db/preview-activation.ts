@@ -208,6 +208,7 @@ const canonicalRequest = (request: PreviewActivationPlanRequest) => {
   });
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const planPreviewActivation = (input: unknown) => {
   const request = previewActivationPlanRequestSchema.parse(input);
   const canonical = canonicalRequest(request);
@@ -272,6 +273,7 @@ export const runtimeRoleReadbackSchema = z.strictObject({
   tablePrivilegesExact: z.literal(true),
 });
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const assertRuntimeRoleReadback = (input: unknown) => runtimeRoleReadbackSchema.parse(input);
 
 export const executePreviewActivation = async (input: {

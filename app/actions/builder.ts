@@ -93,12 +93,13 @@ async function sameOriginHeaders(contentType?: string) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readJson<T>(response: Response, fallback: string): Promise<T> {
   if (!response.ok) {
-    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+    // oxlint-disable-next-line github/no-then, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing rejection handling and settlement behavior; Preserve the existing assertion at this boundary.
     const payload = (await response.json().catch(() => {
       // Invalid JSON has no error payload.
     })) as { error?: string } | undefined;
     throw new Error(payload?.error ?? fallback);
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   return (await response.json()) as T;
 }
 
@@ -198,9 +199,11 @@ function provisioningInput(
     deploymentAccess: "public-app",
     operation,
     providers: {
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(input.form.githubInstallationId === undefined
         ? {}
         : { githubInstallationId: input.form.githubInstallationId }),
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(input.form.vercelInstallationId === undefined
         ? {}
         : { vercelInstallationId: input.form.vercelInstallationId }),
@@ -265,10 +268,12 @@ async function createContinuationHandoff(
     creationRequestId: input.creationRequestId,
     destination: input.form.buildDestination === "cursor" ? "cursor" : "codex",
     version: 1,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(provisioning.requestDigest === "0".repeat(64)
       ? {}
       : { provisioningRequestId: provisioning.requestId }),
     appName: input.form.appName,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(input.form.sourceCandidate === undefined
       ? {}
       : { sourceCandidate: input.form.sourceCandidate }),
@@ -397,6 +402,7 @@ export async function continueHandoffProvisioning(
     });
     const requestId = data?.intent.provisioningRequestId;
     const providers = data?.intent.providers;
+    // oxlint-disable-next-line typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness.
     if (!data || !requestId || !providers) {
       return { status: "error" };
     }
@@ -404,11 +410,13 @@ export async function continueHandoffProvisioning(
     const run = async (operation: "github" | "vercel") => {
       const selected =
         operation === "github" ? providers.githubInstallationId : providers.vercelInstallationId;
+      // oxlint-disable-next-line typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness.
       if (!selected) {
         return;
       }
       await provisionBuilderProvider({
         appName: data.intent.appName,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(data.intent.provisioning?.deploymentAccess === undefined
           ? {}
           : { deploymentAccess: data.intent.provisioning.deploymentAccess }),
@@ -426,15 +434,19 @@ export async function continueHandoffProvisioning(
     if (parsed.data.retryProvider) {
       await run(parsed.data.retryProvider);
     } else {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (providers.githubInstallationId) {
         await run("github");
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       // The Vercel operation durably records `github_required` when GitHub
       // has not succeeded, so the journal settles instead of leaving an
       // indefinite pending handoff. A later GitHub retry safely re-runs it.
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (providers.vercelInstallationId) {
         await run("vercel");
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
     }
     refresh();
     return { status: "updated" };

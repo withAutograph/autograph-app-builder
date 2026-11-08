@@ -151,12 +151,15 @@ const restoreReceiptOrder = (record: GitHubMutationReceipt): GitHubMutationRecei
   const orderedFields = Object.entries(record)
     .map(([key, value]) => [key, key === "repository" ? repository : value] as const)
     .toSorted(([left], [right]) => order.indexOf(left) - order.indexOf(right));
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   return Object.fromEntries(orderedFields) as GitHubMutationReceipt;
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function parseGitHubPublicationJournalRow(input: unknown): GitHubMutationReceipt {
   const row = journalRowSchema.parse(input);
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const receipt = restoreReceiptOrder(row.record as GitHubMutationReceipt);
   assertCanonicalGitHubMutationReceipt(receipt);
   if (

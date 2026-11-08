@@ -34,6 +34,7 @@ export default defineEval({
       count: 1,
       input: {
         content: (value) => {
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           if (typeof value !== "string") {
             return false;
           }
@@ -109,6 +110,7 @@ Confirmed.
       count: 1,
       input: {
         content: (value) =>
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof value === "string" &&
           value.includes("Operations starts from a review queue") &&
           value.includes("Finance tax verification appears only"),
@@ -119,6 +121,7 @@ Confirmed.
       count: 1,
       input: {
         content: (value) =>
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof value === "string" &&
           validateBuildReadyAppSpec(value).valid &&
           value.includes("prototype/vendor-onboarding/index.html"),
@@ -180,11 +183,13 @@ Confirmed.
       "all assistant messages stay product-facing across the quality suite",
       (events) => {
         const messages = events.flatMap((event) => {
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
           const candidate = event as {
             type?: unknown;
             data?: { message?: unknown };
           };
           return candidate.type === "message.completed" &&
+            // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
             typeof candidate.data?.message === "string"
             ? [candidate.data.message]
             : [];

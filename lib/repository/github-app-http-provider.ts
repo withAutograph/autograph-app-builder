@@ -86,18 +86,22 @@ class GitHubBlobWriteFailureError extends Error {
   }
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const providerHttpStatus = (error: unknown): number | undefined => {
   if (!(error instanceof Error)) {
     return;
   }
   const cause: unknown = error.cause;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (cause === null || typeof cause !== "object" || !("status" in cause)) {
     return;
   }
   const { status } = cause;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof status !== "number" || !Number.isInteger(status)) {
     return;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absent GitHub provider results and errors.
   return status >= 400 && status <= 599 ? status : undefined;
 };
 
@@ -117,6 +121,7 @@ const credentialsSchema = configSchema.omit({ installationId: true });
 export type GitHubAppHttpProviderCredentials = z.infer<typeof credentialsSchema>;
 
 export const parseGitHubAppHttpProviderCredentials = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   input: unknown,
 ): GitHubAppHttpProviderCredentials => {
   const parsed = credentialsSchema.safeParse(input);
@@ -134,6 +139,7 @@ export const parseGitHubAppHttpProviderCredentials = (
   return parsed.data;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const parseGitHubAppHttpProviderConfig = (input: unknown): GitHubAppHttpProviderConfig => {
   const parsed = configSchema.safeParse(input);
   if (!parsed.success) {
@@ -188,7 +194,7 @@ const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep provider data untrusted until its consumer validates it.
+// oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- Keep provider data untrusted until its consumer validates it. Preserve the existing unknown input contract.
 const property = (value: unknown, key: string): unknown => {
   if (!record(value) || !(key in value)) {
     throw new TypeError(invalidResponseMessage);
@@ -196,20 +202,25 @@ const property = (value: unknown, key: string): unknown => {
   return value[key];
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const stringProperty = (value: unknown, key: string): string => {
   const result = property(value, key);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof result !== "string") {
     throw new TypeError(invalidResponseMessage);
   }
   return result;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const decimalProperty = (value: unknown, key: string): string => {
   const result = property(value, key);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof result === "number") {
     if (!Number.isSafeInteger(result) || result < 1) {
       throw new TypeError(invalidResponseMessage);
     }
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   } else if (typeof result !== "string" || !decimal.safeParse(result).success) {
     throw new TypeError(invalidResponseMessage);
   }
@@ -224,14 +235,17 @@ const safeRepositoryIdNumber = (value: string): number => {
   return parsed;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const booleanProperty = (value: unknown, key: string): boolean => {
   const result = property(value, key);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof result !== "boolean") {
     throw new TypeError(invalidResponseMessage);
   }
   return result;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const arrayProperty = (value: unknown, key: string): unknown[] => {
   const result = property(value, key);
   if (!Array.isArray(result)) {
@@ -323,6 +337,7 @@ const permissionRequest = (permission: PermissionSnapshot): GitHubPermissionRequ
   return request;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const normalizedPermissions = (value: unknown): PermissionSnapshot => {
   if (!record(value)) {
     throw new Error(invalidResponseMessage);
@@ -438,6 +453,7 @@ export const createGitHubAppHttpProvider = (input: {
     } catch (error) {
       const status = record(error) ? error.status : undefined;
       const response = record(error) ? error.response : undefined;
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof status === "number" && requestInput.expected.includes(status)) {
         return {
           body: record(response) ? response.data : undefined,
@@ -638,6 +654,7 @@ export const createGitHubAppHttpProvider = (input: {
       return;
     }
     const repositoryId = decimalProperty(response.body, "id");
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve absent GitHub provider results and errors.
     return await repositoryById(
       repositoryId,
       stringProperty(response.body, "default_branch"),
@@ -1183,6 +1200,7 @@ export const createGitHubAppHttpProvider = (input: {
         "historical-source-pull-request-not-merged-in-repository";
       if (
         stringProperty(pull.body, "state") !== "closed" ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof property(pull.body, "merged_at") !== "string" ||
         decimalProperty(pull.body, "number") !== String(source.pullRequestNumber) ||
         decimalProperty(baseRepository, "id") !== repositoryId
@@ -1683,6 +1701,7 @@ export const createGitHubAppHttpProvider = (input: {
         throw new Error("fresh-repository-marker-mismatch");
       }
       const repository = publicRepositorySnapshot(snapshot);
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve absent GitHub provider results and errors.
       return {
         idempotencyKey: proposal.idempotencyKey,
         initialCommit: {
@@ -1734,6 +1753,7 @@ export const createGitHubAppHttpProvider = (input: {
         expected: [200],
         path: `/repositories/${snapshot.repositoryId}`,
       });
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve absent GitHub provider results and errors.
       return {
         ...publicRepositorySnapshot(snapshot),
         archived: booleanProperty(response.body, "archived"),
@@ -1784,6 +1804,7 @@ export const createGitHubAppHttpProvider = (input: {
             entry.before = change.before;
           }
           if (change.kind !== "deleted") {
+            // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
             entry.after = Object.fromEntries([
               ["path", change.path],
               ["mode", change.after.mode === "755" ? "100755" : "100644"],

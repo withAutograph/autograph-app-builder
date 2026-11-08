@@ -504,6 +504,7 @@ describe("same-session draft review lineage with real shared state and draft byt
       await contextStorage.run(new ContextContainer(), async () => {
         const f = fixture();
         await prepareEdited(f);
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         const unreviewed = { ...f.reviewed, reviewReceipt: undefined };
         // SAFETY: This deliberately models the legacy lost-review state; phase-specific evidence is not consumed by the resolver or candidate validator.
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve the real binding fields while varying only the saved workflow phase.

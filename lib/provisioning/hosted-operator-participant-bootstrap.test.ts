@@ -260,6 +260,7 @@ const completedRecord = (plan: HostedOperatorPlan = desiredPlan()) =>
 describe("participant bootstrap planning evidence", () => {
   it("requires a completed capture configuration rather than any READY Gateway", () => {
     const desired = desiredPlan();
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     const legacy = hostedOperatorPlanSchema.parse({ ...desired, normalActorProgram: undefined });
     const record = completedRecord(legacy);
     const result = inspectParticipantBootstrapPreparation(desired, record);
@@ -291,6 +292,7 @@ describe("participant bootstrap planning evidence", () => {
     const before = structuredClone(record);
     expect(inspectParticipantBootstrapPreparation(desired, record).gatewayPrepared).toBe(true);
     expect(record).toEqual(before);
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     record.retainedAuth = undefined;
     expect(inspectParticipantBootstrapPreparation(desired, record).gatewayPrepared).toBe(false);
   });
@@ -411,6 +413,7 @@ describe("participant bootstrap planning evidence", () => {
         throw new Error("fixture row missing");
       }
       if (change === "missing-hash") {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         row.valueSha256 = undefined;
       }
       if (change === "pending-write") {
@@ -456,6 +459,7 @@ describe("participant bootstrap planning evidence", () => {
       );
     }
     if (change === "missing-auth") {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       operator.authPreparation = undefined;
     }
     if (change === "different-auth-target") {
@@ -474,6 +478,7 @@ describe("participant bootstrap planning evidence", () => {
 describe("Realm link configuration codec", () => {
   it("preserves link destinations and binds the sender for owner and participant handoffs", () => {
     const desired = desiredPlan();
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     const ownerPlan = { ...desired, normalActorProgram: undefined };
     const owner = createHostedOperatorRealmLinkConfig(ownerPlan);
     const participant = createHostedOperatorRealmLinkConfig(desired);

@@ -146,16 +146,20 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
     reconstructedCoordination: false,
   };
   const ports: TerminalRecoveryPorts = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     authorize: vi.fn(() =>
       currentOwner ? Promise.resolve() : Promise.reject(new Error("owner revoked")),
     ),
     authorizeActivation: vi.fn<TerminalRecoveryPorts["authorizeActivation"]>().mockResolvedValue(),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     readReceipt: vi.fn(() => Promise.resolve(receipt)),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     commitReceipt: vi.fn<TerminalRecoveryPorts["commitReceipt"]>((input) => {
       receipt = input.recoveryBinding;
       return Promise.resolve(input.recoveryBinding);
     }),
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const collect = vi.fn<TerminalRecoveryDependencies["collect"]>(() =>
     Promise.resolve({
       candidate,
@@ -169,6 +173,7 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
       kind: "candidate",
     }),
   );
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const reconcile = vi.fn<TerminalRecoveryDependencies["reconcile"]>(() =>
     Promise.resolve({
       kind: "ready",
@@ -179,11 +184,13 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
       provenance,
     }),
   );
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const start = vi.fn<TerminalRecoveryDependencies["start"]>((input) => {
     ready = { ...input.descriptor, ownerRunId: "new-native", provenance: input.provenance };
     return Promise.resolve();
   });
   const stopSource = vi.fn<NonNullable<TerminalRecoveryDependencies["stopSource"]>>(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     (id, _reason) => {
       if (id === physicalOwner) {
         nativeStatus = "cancelled";
@@ -199,6 +206,7 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
     reconcile,
     start,
     stopSource,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     inspectSource: vi.fn<NonNullable<TerminalRecoveryDependencies["inspectSource"]>>((id) =>
       Promise.resolve({
         runId: id,
@@ -206,15 +214,18 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
         unsettledStepIds,
       }),
     ),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     readStopReceipt: vi.fn<NonNullable<TerminalRecoveryDependencies["readStopReceipt"]>>((id) =>
       Promise.resolve(stopReceipts.has(id)),
     ),
     readCandidate: vi.fn(() => {
       throw new Error("unused synthetic native payload");
     }),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     readEntry: vi.fn(() =>
       Promise.resolve({ kind: "initial", serializedContext: {}, sessionTimeoutMs: false }),
     ),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     getHook: vi.fn(() =>
       ready === undefined
         ? Promise.reject(new Error("not found"))
@@ -250,6 +261,7 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
       updatedAt: new Date(0),
       completedAt: new Date(0),
     },
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     nativeRunKey: undefined,
     candidates: [
       {
@@ -281,7 +293,9 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
       : result;
   };
   dependencies.readLineagePreflight = () => dependencies.readCandidate(candidate);
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   dependencies.reconcileLineagePreflight = () => reconcile(candidate);
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   dependencies.readLogicalInboxOwner = () => {
     if (ready) {
       return Promise.resolve({ logicalSessionId: "logical", runId: ready.ownerRunId });
@@ -307,6 +321,7 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
     revoke: () => {
       currentOwner = false;
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     run: () =>
       runtime.recoverTerminalSession(
         { auth: actor, descriptor: selectedDescriptor, ports },
@@ -385,6 +400,7 @@ describe("live native execution transfer", () => {
   });
   it("refuses a physical owner change before stop", async () => {
     const f = fixture();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     f.dependencies.inspectSource = vi.fn(() => {
       f.setPhysicalOwner("newer-physical-owner");
       return Promise.resolve({ runId: "old-native", status: "running", unsettledStepIds: [] });
@@ -405,6 +421,7 @@ describe("live native execution transfer", () => {
     await runtime.observeTerminalSession(
       { auth: actor, descriptor, ports: f.ports },
       {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         collect: (input) => f.dependencies.collect(input),
         now: () => 1,
         readCandidate: (candidate) => f.dependencies.readCandidate(candidate),
@@ -436,6 +453,7 @@ describe("live native execution transfer", () => {
   });
   it("rejects source inspection mixed with recovery dispatch fields before native reads", async () => {
     const f = fixture();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const authorizeSourceObservation = vi.fn(() =>
       Promise.resolve({ logicalSessionId: "logical", ownerRunId: "old-native" }),
     );
@@ -474,6 +492,7 @@ describe("live native execution transfer", () => {
     });
     f.dependencies.inspectSource = vi.fn<
       NonNullable<TerminalRecoveryDependencies["inspectSource"]>
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     >((runId) =>
       Promise.resolve({
         runId,
@@ -504,6 +523,7 @@ describe("live native execution transfer", () => {
   });
   it("refuses effects remaining after cancellation", async () => {
     const f = fixture();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     f.stopSource.mockImplementationOnce(() => {
       f.setNativeStatus("cancelled");
       f.setUnsettled(["provider-effect"]);
@@ -545,6 +565,7 @@ describe("live native execution transfer", () => {
     if (reconcile === undefined) {
       throw new Error("Missing reconciliation fixture");
     }
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     f.reconcile.mockImplementation((candidate) =>
       f.getNativeStatus() === "cancelled"
         ? Promise.resolve({ kind: "uncertain", reason: "uncommitted-action-dispatch" })
@@ -556,6 +577,7 @@ describe("live native execution transfer", () => {
   });
   it("honors owner revocation after stopping and before child execution", async () => {
     const f = fixture();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     f.stopSource.mockImplementationOnce(() => {
       f.setNativeStatus("cancelled");
       f.revoke();
@@ -607,10 +629,12 @@ describe("native recovery refusal diagnostics", () => {
             },
             ports: {
               ...f.ports,
+              // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
               authorizeSourceObservation: () =>
                 Promise.resolve({ logicalSessionId: "logical", ownerRunId: "old-native" }),
             },
           },
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           () => Promise.resolve(f.dependencies),
         );
         expect(response.status).toBe(202);
@@ -654,6 +678,7 @@ describe("native recovery refusal diagnostics", () => {
           payload: { operationId: descriptor.operationId, recovery: descriptor },
           ports: f.ports,
         },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         () => Promise.resolve(f.dependencies),
       );
       expect(response.status).toBe(409);
@@ -691,6 +716,7 @@ it("preserves a native recovery refusal when its advisory sink fails", async () 
         payload: { operationId: descriptor.operationId, recovery: descriptor },
         ports: f.ports,
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       () => Promise.resolve(f.dependencies),
     );
     expect(response.status).toBe(409);
@@ -737,6 +763,7 @@ describe("native refusal boundary observation", () => {
       };
       // @ts-expect-error Unknown native runtime labels deliberately test the diagnostic boundary.
       f.collect.mockResolvedValueOnce(nativeResult);
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const inspectSource = vi.fn<NonNullable<TerminalRecoveryDependencies["inspectSource"]>>(() =>
         Promise.resolve({
           runId: "old-native",
@@ -763,10 +790,12 @@ describe("native refusal boundary observation", () => {
             },
             ports: {
               ...f.ports,
+              // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
               authorizeSourceObservation: () =>
                 Promise.resolve({ logicalSessionId: "logical", ownerRunId: "old-native" }),
             },
           },
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           () => Promise.resolve(f.dependencies),
         );
         expect(response.status).toBe(202);
@@ -812,6 +841,7 @@ it("continues exact-source collection after step inspection fails, retaining aut
   const reads: string[] = [];
   const world = {
     runs: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       get: () => {
         reads.push("run");
         return Promise.resolve({ runId: "old-native", status: "running" });
@@ -825,6 +855,7 @@ it("continues exact-source collection after step inspection fails, retaining aut
     },
   };
   // @ts-expect-error The synthetic native World intentionally exposes only the methods exercised by this reader.
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   f.dependencies.inspectSource = (owner) => runtime.inspectNativeRecoverySource(world, owner);
   f.collect.mockResolvedValueOnce({
     boundary: { allowParked: true, stage: "handoff_parent", status: "running" },
@@ -840,10 +871,12 @@ it("continues exact-source collection after step inspection fails, retaining aut
         payload: { recoveryPhase: "inspect-source", sourceObservation: {} },
         ports: {
           ...f.ports,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           authorizeSourceObservation: () =>
             Promise.resolve({ logicalSessionId: "logical", ownerRunId: "old-native" }),
         },
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       () => Promise.resolve(f.dependencies),
     );
     expect(response.status).toBe(202);
@@ -884,10 +917,12 @@ it("returns a safe private summary for collector errors after successful owner a
         payload: { recoveryPhase: "inspect-source", sourceObservation: {} },
         ports: {
           ...f.ports,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           authorizeSourceObservation: () =>
             Promise.resolve({ logicalSessionId: "logical", ownerRunId: "old-native" }),
         },
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       () => Promise.resolve(f.dependencies),
     );
     expect(response.status).toBe(202);
@@ -920,6 +955,7 @@ it("fails closed without a summary or private reads when owner authorization is 
         payload: { recoveryPhase: "inspect-source", sourceObservation: {} },
         ports: { ...f.ports, authorizeSourceObservation },
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       () => Promise.resolve(f.dependencies),
     );
     expect(response.status).toBe(409);
@@ -943,12 +979,14 @@ it("relays the actual native diagnostic response through postMutation on the sta
     kind: "unavailable",
     reason: "source-not-terminal",
   });
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   f.dependencies.inspectSource = () => Promise.reject(new TypeError("private-canary-step-error"));
   const adapter = createSameOriginEveTransport({
     config: { baseUrl: "https://builder.example.test" },
     workloadIdentity: {
       token: vi.fn<() => Promise<string>>().mockResolvedValue("synthetic-token"),
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     fetchImplementation: () =>
       runtime.handleTerminalRecoveryRequest(
         {
@@ -957,10 +995,12 @@ it("relays the actual native diagnostic response through postMutation on the sta
           forwarded: true,
           ports: {
             ...f.ports,
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             authorizeSourceObservation: () =>
               Promise.resolve({ logicalSessionId: "logical", ownerRunId: "old-native" }),
           },
         },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         () => Promise.resolve(f.dependencies),
       ),
   });
@@ -1008,10 +1048,12 @@ it("relays dependency-load failure only after successful exact source authorizat
         payload: { recoveryPhase: "inspect-source", sourceObservation: {} },
         ports: {
           ...f.ports,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           authorizeSourceObservation: () =>
             Promise.resolve({ logicalSessionId: "logical", ownerRunId: "old-native" }),
         },
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       () => Promise.reject(new ReferenceError("private-canary-module")),
     );
     expect(response.status).toBe(202);
@@ -1188,6 +1230,7 @@ describe("owned running-lineage execution transfer", () => {
     "refuses an unresolved %s effect anywhere before any stop",
     async (status) => {
       const f = twoOwners();
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       f.dependencies.inspectSource = (id) =>
         Promise.resolve({
           runId: id,
@@ -1210,6 +1253,7 @@ describe("owned running-lineage execution transfer", () => {
       throw new Error("Missing receipt fixture");
     }
     f.dependencies.readStopReceipt = vi
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       .fn<NonNullable<TerminalRecoveryDependencies["readStopReceipt"]>>((id, reason) =>
         read(id, reason),
       )
@@ -1283,6 +1327,7 @@ it("uses server-default bulk pagination and exhausts all step pages", async () =
     // oxlint-disable-next-line eslint/require-await -- Preserve asynchronous native recovery fixture behavior.
     runs: { get: async () => ({ runId: "old-native", status: "running" }) },
     steps: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       list: (input: { pagination?: { cursor?: string; limit?: number } }) => {
         pages.push(input);
         expect(input.pagination).not.toHaveProperty("limit");
@@ -1320,6 +1365,7 @@ it("terminal-only recollection refuses a newly visible handoff before any succes
     throw new Error("Missing collector fixture");
   }
   let injected = false;
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   f.collect.mockImplementation((input) => {
     if (input.allowParked !== true && !injected) {
       injected = true;
@@ -1370,6 +1416,7 @@ it("retains the canonical unknown operation and source fence after a partial nat
   if (preflight === undefined) {
     throw new Error("Missing preflight fixture");
   }
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   f.dependencies.collectLineagePreflight = (input) =>
     afterRootStop
       ? Promise.resolve({ kind: "unavailable", reason: "paired-native-checkpoint-unavailable" })
@@ -1388,6 +1435,7 @@ it("retains the canonical unknown operation and source fence after a partial nat
       operationIds.push(z.string().parse(payload.operationId));
       const response = await runtime.handleTerminalRecoveryRequest(
         { auth: actor, forwarded: true, payload, ports: f.ports },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         () => Promise.resolve(f.dependencies),
       );
       statuses.push(response.status);
@@ -1395,6 +1443,7 @@ it("retains the canonical unknown operation and source fence after a partial nat
     },
   });
   const adapter: HostedEveTransport = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     start: (input) =>
       input.recovery === undefined
         ? Promise.resolve({
@@ -1482,6 +1531,7 @@ it("GET-only opaque preflight relays complete owned-lineage facts without stoppi
   f.setLineage(["old-native"]);
   f.setAncestorStatus("old-native", "running");
   f.setPhysicalOwner("physical-child");
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   f.dependencies.inspectSource = (id) =>
     Promise.resolve({
       runId: id,
@@ -1501,6 +1551,7 @@ it("GET-only opaque preflight relays complete owned-lineage facts without stoppi
     workloadIdentity: {
       token: vi.fn<() => Promise<string>>().mockResolvedValue("synthetic-token"),
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     fetchImplementation: () =>
       runtime.handleTerminalRecoveryRequest(
         {
@@ -1509,10 +1560,12 @@ it("GET-only opaque preflight relays complete owned-lineage facts without stoppi
           payload: { recoveryPhase: "inspect-source", sourceObservation: {} },
           ports: {
             ...f.ports,
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             authorizeSourceObservation: () =>
               Promise.resolve({ logicalSessionId: "logical", ownerRunId: "old-native" }),
           },
         },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         () => Promise.resolve(f.dependencies),
       ),
   });
@@ -1569,6 +1622,7 @@ it("adopts the same parked ready child after receipt failure without a second st
   f.setPhysicalOwner("physical-child");
   const commit = f.ports.commitReceipt.bind(f.ports);
   f.ports.commitReceipt = vi
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     .fn<TerminalRecoveryPorts["commitReceipt"]>((input) => commit(input))
     .mockRejectedValueOnce(new Error("private-ready-receipt-failure"));
   const info = vi.spyOn(console, "info").mockImplementation(() => {});
@@ -1588,6 +1642,7 @@ it("adopts the same parked ready child after receipt failure without a second st
 });
 it("refuses another operation's ready hook before stopping any owner", async () => {
   const f = fixture();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   f.dependencies.getHook = () =>
     Promise.resolve({
       runId: "foreign-ready",
@@ -1689,6 +1744,7 @@ describe("idle source execution transfer", () => {
     const f = fixture();
     const approvalState = f.before;
     f.setCheckpointState(idleState());
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     f.stopSource.mockImplementation(() => {
       f.setNativeStatus("cancelled");
       f.markStopReceipt("old-native");

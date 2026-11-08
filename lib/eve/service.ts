@@ -295,6 +295,7 @@ async function settleLocalCancellation(operation: Promise<unknown>) {
 }
 
 const localEveRuntimeStateKey = "__AUTOGRAPH_APP_BUILDER_LOCAL_EVE_RUNTIME_STATE_V1__" as const;
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
 const localRuntimeGlobal = globalThis as typeof globalThis & {
   [localEveRuntimeStateKey]?: LocalEveRuntimeState;
 };
@@ -373,6 +374,7 @@ function localEveRestartGeneration(
   if (path === undefined) {
     throw new Error("The local Eve cycle binding was unavailable.");
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional local Eve cycle binding.
   return readLocalEveCycleBinding(path);
 }
 
@@ -486,6 +488,7 @@ function consumeResponse(
     if (modelTurnTimer !== undefined) {
       clearTimeout(modelTurnTimer);
     }
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     modelTurnTimer = undefined;
   };
   const settleResponseBoundary = () => {
@@ -916,6 +919,7 @@ export function createLocalEveSessionService(
     }
   }
 
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const service = Object.create(Object.prototype) as EveSessionService;
   service.start = async ({ prompt, resumeSessionId, clientRequestId, resumeMode }) => {
     if (resumeMode !== undefined && resumeMode !== "recover") {

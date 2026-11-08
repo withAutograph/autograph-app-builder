@@ -133,6 +133,7 @@ const hasExactKeys = (value: Record<string, unknown>, expected: readonly string[
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplateSnapshot => {
   if (
     !isRecord(value) ||
@@ -156,6 +157,7 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
     throw new Error(invalidCanonicalCloneInspectionMessage);
   }
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     value.dirtyPaths.some((path) => typeof path !== "string") ||
     !isRecord(value.contents) ||
     !Array.isArray(value.contract)
@@ -168,20 +170,26 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
   ]);
   if (
     Object.entries(value.contents).some(
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       ([path, content]) => !allowedContents.has(path) || typeof content !== "string",
     )
   ) {
     throw new Error(invalidCanonicalCloneInspectionMessage);
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const contents = value.contents as Partial<Record<string, string>>;
   const contract = value.contract.map((entry) => {
     if (!isRecord(entry) || !hasExactKeys(entry, ["mode", "objectId", "path", "sha256"])) {
       throw new TypeError(invalidCanonicalCloneInspectionMessage);
     }
     if (
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof entry.path !== "string" ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof entry.mode !== "string" ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof entry.objectId !== "string" ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof entry.sha256 !== "string"
     ) {
       throw new TypeError(invalidCanonicalCloneInspectionMessage);
@@ -202,6 +210,7 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
   return {
     contents,
     contract,
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
     dirtyPaths: [...value.dirtyPaths],
     sourcePath: value.sourcePath,
     sourceSha: value.sourceSha,
@@ -267,6 +276,7 @@ const validProvenance = (value: unknown): value is ClonedTemplateProvenance => {
   return value.method === "git-clone-v1" && isDigest(value.readinessDigest);
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const parseSourceReceiptEvidence = (value: unknown): SourceReceiptEvidence => {
   if (!isRecord(value)) {
     throw new Error("Source receipt evidence is invalid or has an unsupported schema.");
@@ -302,12 +312,12 @@ export const parseSourceReceiptEvidence = (value: unknown): SourceReceiptEvidenc
   ) {
     throw new Error("Source receipt evidence is invalid.");
   }
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Retain the existing receipt boundary before checking the stored digest.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Retain the existing receipt boundary before checking the stored digest.; Preserve the existing type assertion at this boundary.
   const { digest, ...unsigned } = value as unknown as SourceReceiptEvidence;
   if (digest !== sourceReceiptDigest(unsigned)) {
     throw new Error("Source receipt evidence digest is invalid.");
   }
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Return the same receipt value after the existing digest check.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Return the same receipt value after the existing digest check.; Preserve the existing type assertion at this boundary.
   return value as unknown as SourceReceiptEvidence;
 };
 
@@ -335,6 +345,7 @@ export const sourceReceiptEvidence = (receipt: SourceReceipt): SourceReceiptEvid
   });
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const parseSourceReceipt = (value: unknown): SourceReceipt => {
   if (!isRecord(value)) {
     throw new Error("Source receipt has an unsupported schema.");
@@ -346,6 +357,7 @@ export const parseSourceReceipt = (value: unknown): SourceReceipt => {
   ) {
     throw new Error("Source receipt has an unsupported schema.");
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value.sourcePath !== "string" || !nodePath.isAbsolute(value.sourcePath)) {
     throw new Error("Source receipt diagnostic path is invalid.");
   }

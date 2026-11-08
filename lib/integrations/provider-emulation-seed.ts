@@ -22,6 +22,7 @@ interface SeedInput {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function providerEmulationSeed(input: SeedInput) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const github = {
     apps: [
       {
@@ -35,10 +36,12 @@ export function providerEmulationSeed(input: SeedInput) {
           },
         ],
         name: EMULATED_APP_NAME,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(input.githubAppPrivateKey ? { private_key: input.githubAppPrivateKey } : {}),
         slug: "autograph-app-builder",
       },
     ],
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(input.strictGitHubOAuth
       ? {
           oauth_apps: [
@@ -74,6 +77,7 @@ export function providerEmulationSeed(input: SeedInput) {
       },
     ],
   } satisfies GitHubSeedConfig;
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return {
     github,
     vercel: {

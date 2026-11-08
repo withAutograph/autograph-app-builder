@@ -2701,6 +2701,7 @@ describe("activation transport diagnostics", () => {
       name: "dispatch failure",
       phase: "transport_dispatch",
       rejected: false,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       response: () => Promise.reject(new Error(secret)),
     },
     {
@@ -2709,6 +2710,7 @@ describe("activation transport diagnostics", () => {
       name: "HTTP403",
       phase: "transport_acceptance",
       rejected: true,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       response: () =>
         Promise.resolve(
           Response.json(
@@ -2723,6 +2725,7 @@ describe("activation transport diagnostics", () => {
       name: "HTTP503",
       phase: "transport_acceptance",
       rejected: false,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       response: () =>
         Promise.resolve(
           Response.json(
@@ -2737,6 +2740,7 @@ describe("activation transport diagnostics", () => {
       name: "accepted missing receipt",
       phase: "transport_acceptance",
       rejected: false,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       response: () =>
         Promise.resolve(
           Response.json(
@@ -2755,6 +2759,7 @@ describe("activation transport diagnostics", () => {
       name: "accepted owner mismatch",
       phase: "transport_acceptance",
       rejected: false,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       response: () =>
         Promise.resolve(
           Response.json(
@@ -2772,6 +2777,7 @@ describe("activation transport diagnostics", () => {
     "reports $name without changing transport errors or retrying",
     async ({ response, phase, category, rejected, malformed }) => {
       const sink = vi.fn<HostedSubmissionDiagnosticSink>();
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const fetchImplementation = vi.fn<typeof fetch>(() => response());
       const transport = createSameOriginEveTransport({
         config,

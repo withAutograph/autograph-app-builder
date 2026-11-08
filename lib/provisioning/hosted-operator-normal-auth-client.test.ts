@@ -379,6 +379,7 @@ describe("normal Auth client", () => {
     for (const expected of [
       { code: "transport_failed" },
       { authCode: "INVALID_EMAIL_OR_PASSWORD", code: "auth_rejected", httpStatus: 401 },
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       { authCode: undefined, code: "auth_rejected", httpStatus: 500 },
       { code: "invalid_response" },
     ]) {

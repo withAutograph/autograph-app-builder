@@ -810,6 +810,7 @@ describe("approval history for recovered public grant authority", () => {
         sourceOwnerRunId: source.adapterSessionId,
         sourcePublicSessionId: source.sessionId,
         version: 1,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(source.sourceHandoffId === undefined
           ? {}
           : { sourceHandoffId: source.sourceHandoffId }),

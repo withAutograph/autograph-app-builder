@@ -23,6 +23,7 @@ export default defineTool({
     const prepared = await prepareOrReuseDependencies({
       callId: ctx.callId,
       current,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       getSandbox: () => ctx.getSandbox(),
     });
     return { ...prepared.receipt, reused: prepared.reused };

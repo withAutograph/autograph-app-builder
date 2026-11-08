@@ -21,6 +21,7 @@ export default defineEval({
       createFreshBootstrapEvalCapability(),
     ]);
     try {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const turn = await withFreshBootstrapTestCapability(fixture.capability, () =>
         session.send(
           `Inspect fresh repository bootstrap at ${path.join(fixture.allowedRoot, "wrong-source")}.`,

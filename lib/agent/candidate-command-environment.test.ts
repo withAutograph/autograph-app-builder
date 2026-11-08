@@ -32,13 +32,16 @@ describe("candidate command environment", () => {
 
   it("preserves spawn process handles, explicit profiles, and sandbox capabilities", async () => {
     const process: SandboxProcess = {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       kill: () => Promise.resolve(),
       stderr: new ReadableStream<Uint8Array>(),
       stdout: new ReadableStream<Uint8Array>(),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       wait: () => Promise.resolve({ exitCode: 0 }),
     };
     const spawn = vi.fn<SandboxSession["spawn"]>().mockResolvedValue(process);
     const run = vi.fn<SandboxSession["run"]>();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const setNetworkPolicy = vi.fn((_policy: SandboxNetworkPolicy) => Promise.resolve());
     const session = {
       id: "sandbox-id",

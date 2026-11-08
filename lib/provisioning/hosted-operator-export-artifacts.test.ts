@@ -450,6 +450,7 @@ test("foreign owner, session/app, missing completion and traversal cannot downlo
     target: { ...f.record.target, sessionId: "foreign-session" },
   });
   expect(await readStatus(f.reader(f.request, { exportId: f.worker.exportId }))).toBe(404);
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   f.readCompletion.mockResolvedValue({ ...f.record, state: "failed", completion: undefined });
   expect(await readStatus(f.reader(f.request, { exportId: f.worker.exportId }))).toBe(404);
 });

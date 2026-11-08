@@ -94,18 +94,20 @@ export default defineTool({
               return globalThis.undefined;
             }
           })();
-    const required = (
-      Object.keys(requiredToolVersions) as (keyof typeof requiredToolVersions)[]
-    ).map((command) => {
-      const observed = tools.find((tool) => tool.command === command);
-      return {
-        available: observed?.available === true,
-        command,
-        expected: requiredToolVersions[command].source,
-        matches: observed?.available === true && toolVersionMatches(command, observed.version),
-        version: observed?.available === true ? observed.version : "",
-      };
-    });
+    const required =
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+      (Object.keys(requiredToolVersions) as (keyof typeof requiredToolVersions)[]).map(
+        (command) => {
+          const observed = tools.find((tool) => tool.command === command);
+          return {
+            available: observed?.available === true,
+            command,
+            expected: requiredToolVersions[command].source,
+            matches: observed?.available === true && toolVersionMatches(command, observed.version),
+            version: observed?.available === true ? observed.version : "",
+          };
+        },
+      );
     const observation = {
       backend: backend.kind,
       backendBlockers: backend.blockers,

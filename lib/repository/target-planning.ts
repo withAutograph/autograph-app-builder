@@ -303,6 +303,7 @@ const parseOutput = <T>(result: TargetCommandResult, schema: z.ZodType<T>, label
   }
   let parsed: unknown;
   try {
+    // SAFETY: JSON.parse returns any; unknown makes no claim about the parsed shape.
     parsed = JSON.parse(stdout) as unknown;
   } catch (error) {
     throw new Error(

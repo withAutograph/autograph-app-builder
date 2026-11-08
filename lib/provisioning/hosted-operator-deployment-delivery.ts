@@ -275,9 +275,13 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       },
       at(value: OperatorGatewayDeliveryDiagnostic["stage"]) {
         stage = value;
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         phase = undefined;
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         method = undefined;
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         httpStatus = undefined;
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         providerFailure = undefined;
       },
       phase(value: OperatorGatewayDeliveryDiagnostic["phase"]) {
@@ -285,7 +289,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       },
       request(value: OperatorGatewayDeliveryDiagnostic["method"]) {
         method = value;
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         httpStatus = undefined;
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         providerFailure = undefined;
       },
       response(value: number) {
@@ -1199,6 +1205,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
               meta: reader.expectedMeta,
               name: project.name,
               project: project.id,
+              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
               ...((deps.target ?? "app") === "app" &&
               input.plan.delivery?.projectSettings !== undefined
                 ? { projectSettings: input.plan.delivery.projectSettings }

@@ -43,6 +43,7 @@ const adapter = (input?: {
       reason: "Browser transition observed.",
     };
   },
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   prepare: (_page, id) => {
     if (id === input?.missing) {
       return Promise.resolve({
@@ -60,6 +61,7 @@ const adapter = (input?: {
     }
     return Promise.resolve({ ready: true as const });
   },
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   verify: (id) =>
     Promise.resolve({
       assertions: assertionIds(id)
@@ -75,7 +77,9 @@ const adapter = (input?: {
 
 const browser = () => {
   const close = vi.fn<() => Promise<void>>().mockResolvedValue();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const newPage = vi.fn(() => Promise.resolve({}));
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const newContext = vi.fn(() => Promise.resolve({ close, newPage }));
   return { close, newContext, newPage, value: { newContext } };
 };
@@ -101,6 +105,7 @@ describe("trusted browser workflow adapters", () => {
         runId: "trusted",
         runtimeReceipts: run.receipts,
       });
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const assessed = await assessParity(evidence, () => Promise.resolve(true));
       expect(
         assessed.rows
@@ -148,6 +153,7 @@ describe("trusted browser workflow adapters", () => {
         runId: "status",
         runtimeReceipts: run.receipts,
       });
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const { rows } = await assessParity(evidence, () => Promise.resolve(true));
       const candidate = (id: string) =>
         rows.find((row) => row.side === "candidate" && row.requirementId === id);
@@ -175,6 +181,7 @@ describe("trusted browser workflow adapters", () => {
     const outputRoot = await mkdtemp(path.join(tmpdir(), "trusted-workflows-error-"));
     const fixtureBrowser = browser();
     const broken = adapter();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     broken.verify = () => Promise.reject(new Error("secret database error"));
     try {
       const run = await runTrustedBrowserWorkflows({

@@ -33,10 +33,12 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function privateTemplateRepository(value: unknown) {
   if (!record(value)) {
     return false;
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value.id !== "number" || !Number.isSafeInteger(value.id)) {
     return false;
   }
@@ -48,6 +50,7 @@ function privateTemplateRepository(value: unknown) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function readOnlyReaderPermissions(value: unknown) {
   if (!record(value)) {
     return false;
@@ -59,6 +62,7 @@ function readOnlyReaderPermissions(value: unknown) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function exactTemplateRepositoryIds(value: unknown) {
   return Array.isArray(value) && value.length === 1 && value[0] === ARRUSTED_TEMPLATE_REPOSITORY_ID;
 }

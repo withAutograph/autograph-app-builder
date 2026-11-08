@@ -12,10 +12,12 @@ interface PreparationPage {
 }
 
 const firstVisible = async (locators: CaptureTarget[]): Promise<Locator | undefined> => {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const counts = await Promise.all(locators.map((locator) => locator.count()));
   const candidates = locators.flatMap((locator, locatorIndex) =>
     Array.from({ length: counts[locatorIndex] ?? 0 }, (_, index) => locator.nth(index)),
   );
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const visibility = await Promise.all(candidates.map((candidate) => candidate.isVisible()));
   return candidates.find((_, index) => visibility[index]);
 };
@@ -25,6 +27,7 @@ const signature = async (page: Page) => {
   return `${page.url()}\n${text?.slice(0, 4000) ?? ""}`;
 };
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const stateTarget = (page: PreparationPage, state: CaptureState) => {
   if (state === "panel-resize") {
     return firstVisible([page.getByRole("separator"), page.locator("[data-panel-resize-handle]")]);
@@ -185,6 +188,7 @@ export const createSemanticCaptureAdapter = (baseURL: string, side: "reference" 
     },
   }) satisfies CaptureAdapter;
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 export const createCaptureAdapters = (input: { referenceURL: string; candidateURL: string }) =>
   Promise.resolve({
     candidate: createSemanticCaptureAdapter(new URL(input.candidateURL).href, "candidate"),

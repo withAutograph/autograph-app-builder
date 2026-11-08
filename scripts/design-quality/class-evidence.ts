@@ -196,9 +196,12 @@ export function signatureAttribution(
 /** Compound, grouped, or stateful selectors deliberately do not prove origin. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function exactClassSelector(selector: string | undefined) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!selector || !/^\.[A-Za-z_-][A-Za-z0-9_-]*$/u.test(selector.trim())) {
     return;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve optional class selector and token results.
   return selector.trim().slice(1);
 }
 
@@ -219,9 +222,11 @@ export function generatedSignatureSelector(
 /** Reads one escaped Tailwind utility token, optionally followed by attribute state. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function escapedTailwindClassToken(selector: string | undefined) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
   if (!selector?.startsWith(".")) {
     return;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   let token = "";
   let index = 1;
   for (; index < selector.length; index += 1) {
@@ -266,6 +271,7 @@ export function escapedTailwindClassToken(selector: string | undefined) {
         index += 1;
       } else if (quote !== undefined) {
         if (character === quote) {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           quote = undefined;
         }
       } else if (character === '"' || character === "'") {
@@ -282,6 +288,7 @@ export function escapedTailwindClassToken(selector: string | undefined) {
       return;
     }
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve optional class selector and token results.
   return token;
 }
 

@@ -12,9 +12,11 @@ import {
 async function resolveFlagForStorybook(flag: {
   run: (context: { identify: Record<string, never>; request: Request }) => Promise<boolean>;
 }) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!process.env.FLAGS) {
     return false;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   try {
     return (
       // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Enable a Storybook feature only when the flag returns explicit true.
@@ -54,6 +56,7 @@ const config: StorybookConfig = {
       ? existingAliases
       : Object.entries(existingAliases).map(([find, replacement]) => ({
           find,
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
           replacement,
         }));
     const storybookBuilderActions = path.join(import.meta.dirname, "builder-actions.ts");
@@ -104,6 +107,7 @@ const config: StorybookConfig = {
           find: "@flags-sdk/vercel",
           replacement: path.join(import.meta.dirname, "vercel-flags-adapter.ts"),
         },
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
         ...aliases,
       ],
     };

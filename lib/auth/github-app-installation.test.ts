@@ -279,6 +279,7 @@ describe("public GitHub App installation authorization", () => {
     // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
     expect(JSON.parse(String(requests[0]?.init?.body))).toMatchObject({
       client_secret: config.clientSecret,
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       code_verifier: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/u),
     });
     // oxlint-disable-next-line typescript/no-base-to-string -- Preserve header coercion in the credential-leak assertion.
@@ -540,6 +541,7 @@ describe("public GitHub App installation authorization", () => {
       authorization.complete(authorizationCallbackUrl(state), authority),
     ).resolves.toMatchObject({ status: "bound", via: "existing" });
     expect(bind).toHaveBeenCalledWith(
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       expect.objectContaining({ binding: expect.objectContaining({ installationId: "98765" }) }),
     );
   });

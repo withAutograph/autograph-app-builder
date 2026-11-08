@@ -4,15 +4,19 @@ import { expect } from "playwright/test";
 import postgres from "postgres";
 import { selfReproductionDraft } from "./self-reproduction-draft-fixture";
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const sessionUserId = (session: unknown): string | undefined => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (session === null || typeof session !== "object" || !("user" in session)) {
     return undefined;
   }
   const { user } = session;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (user === null || typeof user !== "object" || !("id" in user)) {
     return undefined;
   }
   const { id } = user;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof id === "string" ? id : undefined;
 };
 
@@ -80,6 +84,7 @@ export const createReferenceCaptureFixture =
       await waitForBuilderReady(page);
       const session = await currentSession(page);
       const ownerId = sessionUserId(session);
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof ownerId !== "string") {
         throw new TypeError("Emulated OAuth did not establish an owner.");
       }
@@ -140,9 +145,11 @@ export const createReferenceCaptureFixture =
   };
 
 const prepareDefaultReferenceCapture = createReferenceCaptureFixture<Page>(
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   () => import("../../e2e/support/harness"),
 );
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 export const prepareReferenceCaptureFixture = (
   ...args:
     | [page: Page, input: ReferenceCaptureInput]

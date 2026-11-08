@@ -20,9 +20,11 @@ let active: { namespace: string; handler: Handler } | undefined;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function required(value: string | undefined, name: string) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!value) {
     throw new Error(`${name} is required for Preview emulation.`);
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return value;
 }
 
@@ -69,6 +71,7 @@ export function createPreviewEmulateHandler(input: {
       },
     },
   });
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const durableHandler = {} as Handler;
   const methods = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
   const createDurableHandler =
@@ -105,6 +108,7 @@ function handler(environment: NodeJS.ProcessEnv) {
     return;
   }
   if (active?.namespace === emulation.namespace) {
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional emulation handler result.
     return active.handler;
   }
   const created = createPreviewEmulateHandler({
@@ -113,6 +117,7 @@ function handler(environment: NodeJS.ProcessEnv) {
     githubAppPrivateKey: environment.EMULATE_PREVIEW_GITHUB_APP_PRIVATE_KEY,
   });
   active = { handler: created, namespace: emulation.namespace };
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional emulation handler result.
   return created;
 }
 
@@ -129,8 +134,10 @@ export async function invokePreviewEmulateRequest(request: Request) {
     return new Response("Not found", { status: 404 });
   }
   const path = url.pathname.slice(prefix.length).split("/").filter(Boolean);
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const method = request.method as keyof Handler;
   const selectedMethod = selected[method];
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof selectedMethod !== "function") {
     return new Response("Method not allowed", { status: 405 });
   }

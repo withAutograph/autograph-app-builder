@@ -35,6 +35,7 @@ function publishResult(result?: EveSessionResult) {
 }
 
 app.addEventListener("toolresult", ({ structuredContent }) => {
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   publishResult(structuredContent as EveSessionResult | undefined);
 });
 
@@ -69,6 +70,7 @@ function SessionAppContainer() {
       name: "autograph_get",
     });
     if (response.structuredContent) {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       publishResult(response.structuredContent as EveSessionResult);
     }
   }, [capabilities?.serverTools, result]);
@@ -100,6 +102,7 @@ function SessionAppContainer() {
     };
     window.addEventListener("focus", checkAfterReturn);
     document.addEventListener("visibilitychange", checkAfterReturn);
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve conditional visibility-listener cleanup.
     return () => {
       window.removeEventListener("focus", checkAfterReturn);
       document.removeEventListener("visibilitychange", checkAfterReturn);
@@ -128,6 +131,7 @@ function SessionAppContainer() {
       );
     }
     if (response.structuredContent) {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       publishResult(response.structuredContent as EveSessionResult);
     }
   }

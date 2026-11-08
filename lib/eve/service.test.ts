@@ -56,6 +56,7 @@ describe("local Eve acceptance", () => {
       const attach = vi.fn();
       const create = vi.fn();
       const service = createLocalEveSessionService(
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         { sessions: { attach, create } as never },
         { stateGeneration: `hosted-only-${resumeMode}` },
       );
@@ -75,6 +76,7 @@ describe("local Eve acceptance", () => {
     const create = vi.fn();
     const recoverTerminal = vi.fn<() => Promise<void>>().mockResolvedValue();
     const service = createLocalEveSessionService(
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       { sessions: { attach, create } as never },
       { stateGeneration: "local-terminal-not-idle-takeover", recoverTerminal },
     );
@@ -93,6 +95,7 @@ describe("local Eve acceptance", () => {
     const attach = vi.fn();
     const create = vi.fn();
     const service = createLocalEveSessionService(
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       { sessions: { attach, create } as never },
       { stateGeneration: "missing-original-start" },
     );
@@ -114,6 +117,7 @@ describe("local Eve acceptance", () => {
   });
 
   it("lists recent work and resumes the selected local session", async () => {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const events = [{ data: {}, type: "session.waiting" }] as MessageStreamEvent[];
     const response = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -140,9 +144,11 @@ describe("local Eve acceptance", () => {
     };
     const service = createLocalEveSessionService(
       {
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         sessions: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           attach: vi.fn(() => session),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           create: vi.fn(() => Promise.resolve({ response, session })),
         } as never,
       },
@@ -171,6 +177,7 @@ describe("local Eve acceptance", () => {
   });
 
   it("continues at the durable tail after the response stream disconnects", async () => {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const durableEvents = [
       {
         data: { turnId: "turn-recovery" },
@@ -207,9 +214,11 @@ describe("local Eve acceptance", () => {
     const attach = vi.fn(() => session);
     const service = createLocalEveSessionService(
       {
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         sessions: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           attach,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           create: vi.fn(() => Promise.resolve({ response, session })),
         } as never,
       },
@@ -244,6 +253,7 @@ describe("local Eve acceptance", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         yield {
           data: { turnId: "turn-clean-close" },
           type: "step.started",
@@ -265,15 +275,18 @@ describe("local Eve acceptance", () => {
       state: { sessionId: "wrun_clean_close", streamIndex: 0 },
       stream: vi.fn(async function* tailStream() {
         await tailReady.promise;
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         yield { data: {}, type: "session.waiting" } as MessageStreamEvent;
       }),
     };
     const attach = vi.fn(() => session);
     const service = createLocalEveSessionService(
       {
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         sessions: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           attach,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           create: vi.fn(() => Promise.resolve({ response, session })),
         } as never,
       },
@@ -309,6 +322,7 @@ describe("local Eve acceptance", () => {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         cancel: vi.fn(async () => ({ status: "accepted" })),
         async *[Symbol.asyncIterator]() {
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
           yield {
             data: { turnId: "turn-closed-response" },
             type: "step.started",
@@ -330,9 +344,11 @@ describe("local Eve acceptance", () => {
       };
       const service = createLocalEveSessionService(
         {
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
           sessions: {
             // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             attach: vi.fn(() => session),
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             create: vi.fn(() => Promise.resolve({ response, session })),
           } as never,
         },
@@ -360,7 +376,7 @@ describe("local Eve acceptance", () => {
   });
 
   it("preserves buffered settlement across a Next development module reload", async () => {
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Retain the intentionally partial settlement event fixture.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Retain the intentionally partial settlement event fixture.; Preserve the existing type assertion at this boundary.
     const settledEvents = [
       {
         data: { message: "Your plan is ready.", turnId: "turn-reload" },
@@ -389,9 +405,11 @@ describe("local Eve acceptance", () => {
     const stateGeneration = "one-development-invocation";
     const firstService = createLocalEveSessionService(
       {
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         sessions: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           attach: vi.fn(() => session),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           create: vi.fn(() => Promise.resolve({ response, session })),
         } as never,
       },
@@ -415,6 +433,7 @@ describe("local Eve acceptance", () => {
     const reloaded = await import("./service");
     const reloadedService = reloaded.createLocalEveSessionService(
       {
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         sessions: {
           attach: vi.fn(() => session),
           create: vi.fn(),
@@ -431,6 +450,7 @@ describe("local Eve acceptance", () => {
       }),
     ).resolves.toMatchObject({
       cursor: 2,
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       events: expect.arrayContaining([
         expect.objectContaining({
           text: "Your plan is ready.",
@@ -455,6 +475,7 @@ describe("local Eve acceptance", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         yield { data: {}, type: "session.waiting" } as MessageStreamEvent;
       },
     };
@@ -465,13 +486,16 @@ describe("local Eve acceptance", () => {
       respond: vi.fn(async () => response),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => response),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       snapshot: vi.fn(() => Promise.reject(new ClientError(404, "Stored session unavailable"))),
       state: { sessionId: "wrun_previous_cycle" },
     };
     const client = {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach: vi.fn(() => session),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         create: vi.fn(() => Promise.resolve({ response, session })),
       } as never,
     };
@@ -515,16 +539,20 @@ describe("local Eve acceptance", () => {
   });
 
   it("fences disconnected tail readers after cancellation and a child restart", async () => {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const events = [{ data: { turnId: "old-turn" }, type: "step.started" }] as MessageStreamEvent[];
     const tailOpened = Promise.withResolvers<AbortSignal>();
     const response = {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       cancel: vi.fn(() => Promise.reject(new HostedCancellationUnsettledError())),
       async *[Symbol.asyncIterator]() {
         yield* events;
       },
     };
     const session = {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       cancel: vi.fn(() => Promise.resolve({ status: "accepted" })),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       snapshot: vi.fn(() =>
         Promise.resolve({ events, session: { sessionId: "tail-restart", streamIndex: 1 } }),
       ),
@@ -536,8 +564,10 @@ describe("local Eve acceptance", () => {
       },
     };
     const client = {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       sessions: {
         attach: vi.fn(() => session),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         create: vi.fn(() => Promise.resolve({ response, session })),
       } as never,
     };
@@ -569,6 +599,7 @@ describe("local Eve acceptance", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         yield {
           data: { turnId: "turn-before-restart" },
           type: "step.started",
@@ -576,6 +607,7 @@ describe("local Eve acceptance", () => {
         await oldResponseOpen.promise;
       },
     };
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const resumedEvents = [{ data: {}, type: "session.waiting" }] as MessageStreamEvent[];
     const resumedResponse = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -596,6 +628,7 @@ describe("local Eve acceptance", () => {
       send: vi.fn(async () => resumedResponse),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       snapshot: vi.fn(async () => ({
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         events: [
           {
             data: { turnId: "turn-before-restart" },
@@ -608,9 +641,11 @@ describe("local Eve acceptance", () => {
     };
     const attach = vi.fn(() => session);
     const client = {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         create: vi.fn(() => Promise.resolve({ response: oldResponse, session })),
       } as never,
     };
@@ -676,7 +711,7 @@ describe("local Eve acceptance", () => {
       url: "https://preview.example.test/app?access=opaque-signed-value",
       verifiedAt: "2026-09-13T17:00:00.000Z",
     };
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Retain the intentionally partial preview action event fixture.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Retain the intentionally partial preview action event fixture.; Preserve the existing type assertion at this boundary.
     const events = [
       {
         data: {
@@ -748,9 +783,11 @@ describe("local Eve acceptance", () => {
       state: { sessionId: "wrun_prototype" },
     };
     const service = createLocalEveSessionService({
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach: vi.fn(() => session),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         create: vi.fn(() => Promise.resolve({ response: response(events), session })),
       } as never,
     });
@@ -790,7 +827,7 @@ describe("local Eve acceptance", () => {
     const revision = createHash("sha256")
       .update(JSON.stringify({ digest, mediaType, path }))
       .digest("hex");
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Retain the intentionally partial action-request event fixture.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Retain the intentionally partial action-request event fixture.; Preserve the existing type assertion at this boundary.
     const events = [
       {
         data: {
@@ -843,6 +880,7 @@ describe("local Eve acceptance", () => {
     };
     const attach = vi.fn(() => session);
     const service = createLocalEveSessionService(
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       { sessions: { attach } as never },
       { stateGeneration: "route-local-preview" },
     );
@@ -870,6 +908,7 @@ describe("local Eve acceptance", () => {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
         await never;
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         yield {} as MessageStreamEvent;
       },
     };
@@ -882,10 +921,11 @@ describe("local Eve acceptance", () => {
       send: vi.fn(async () => response),
       state: { sessionId: "wrun_prompt_return" },
     };
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    // oxlint-disable-next-line eslint/require-await, typescript/promise-function-async -- preserve Promise-returning test double Preserve the returned promise and synchronous throw behavior.
     const create = vi.fn(() => Promise.resolve({ response, session }));
     const attach = vi.fn(() => session);
     const service = createLocalEveSessionService({
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       sessions: { attach, create } as never,
     });
 
@@ -921,6 +961,7 @@ describe("local Eve acceptance", () => {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         cancel: vi.fn(async () => ({ status: "accepted" })),
         async *[Symbol.asyncIterator]() {
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
           yield {
             data: { turnId: "turn-model-stalled" },
             type: "step.started",
@@ -928,6 +969,7 @@ describe("local Eve acceptance", () => {
           await never;
         },
       };
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       const durableEvents = [
         {
           data: { turnId: "turn-model-stalled" },
@@ -941,6 +983,7 @@ describe("local Eve acceptance", () => {
         respond: vi.fn(async () => response),
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         send: vi.fn(async () => response),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         snapshot: vi.fn(() =>
           Promise.resolve({
             events: durableEvents,
@@ -954,9 +997,11 @@ describe("local Eve acceptance", () => {
       };
       const service = createLocalEveSessionService(
         {
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
           sessions: {
             // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             attach: vi.fn(() => session),
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             create: vi.fn(() => Promise.resolve({ response, session })),
           } as never,
         },
@@ -1004,10 +1049,12 @@ describe("local Eve acceptance", () => {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         cancel: vi.fn(async () => ({ status: "accepted" })),
         async *[Symbol.asyncIterator]() {
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
           yield {
             data: { turnId: "turn-model-healthy" },
             type: "step.started",
           } as MessageStreamEvent;
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
           yield { data: {}, type: "session.waiting" } as MessageStreamEvent;
         },
       };
@@ -1022,9 +1069,11 @@ describe("local Eve acceptance", () => {
       };
       const service = createLocalEveSessionService(
         {
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
           sessions: {
             // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             attach: vi.fn(() => session),
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             create: vi.fn(() => Promise.resolve({ response, session })),
           } as never,
         },
@@ -1054,11 +1103,13 @@ describe("local Eve acceptance", () => {
         return { status: "accepted" };
       }),
       async *[Symbol.asyncIterator]() {
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         yield {
           data: { turnId: "turn-1" },
           type: "step.started",
         } as MessageStreamEvent;
         await cancelled.promise;
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         yield {
           data: { turnId: "turn-1" },
           type: "turn.cancelled",
@@ -1075,9 +1126,11 @@ describe("local Eve acceptance", () => {
       state: { sessionId: "wrun_lifecycle" },
     };
     const service = createLocalEveSessionService({
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach: vi.fn(() => session),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         create: vi.fn(() => Promise.resolve({ response, session })),
       } as never,
     });
@@ -1109,6 +1162,7 @@ describe("local Eve acceptance", () => {
       await expect(
         service.get({ cursor: 0, limit: 100, sessionId: start.sessionId }),
       ).resolves.toMatchObject({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         events: expect.arrayContaining([
           expect.objectContaining({ status: "cancelled", type: "status" }),
         ]),
@@ -1126,8 +1180,10 @@ describe("local Eve acceptance", () => {
     try {
       const { promise: never } = Promise.withResolvers<unknown>();
       const response = {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         cancel: vi.fn(() => never),
         async *[Symbol.asyncIterator]() {
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
           yield {
             data: { turnId: "turn-cancel-timeout" },
             type: "step.started",
@@ -1145,9 +1201,11 @@ describe("local Eve acceptance", () => {
         state: { sessionId: "wrun_cancel_timeout" },
       };
       const service = createLocalEveSessionService({
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         sessions: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           attach: vi.fn(() => session),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           create: vi.fn(() => Promise.resolve({ response, session })),
         } as never,
       });
@@ -1174,6 +1232,7 @@ describe("local Eve acceptance", () => {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
         await never;
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         yield {} as MessageStreamEvent;
       },
     };
@@ -1187,9 +1246,11 @@ describe("local Eve acceptance", () => {
       state: { sessionId: "wrun_exact_turn" },
     };
     const service = createLocalEveSessionService({
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach: vi.fn(() => session),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         create: vi.fn(() => Promise.resolve({ response, session })),
       } as never,
     });
@@ -1213,9 +1274,10 @@ describe("local Eve acceptance", () => {
         }
       },
     });
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const initial = stream([{ data: {}, type: "session.waiting" } as MessageStreamEvent]);
     const followUp = stream([
-      // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Retain the intentionally partial approval-request fixture.
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Retain the intentionally partial approval-request fixture.; Preserve the existing type assertion at this boundary.
       {
         data: {
           requests: ["request-source", "request-plan", "request-preview"].map((requestId) => ({
@@ -1229,7 +1291,7 @@ describe("local Eve acceptance", () => {
       } as unknown as MessageStreamEvent,
     ]);
     const responded = stream([
-      // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Retain the intentionally partial approval-response fixture.
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Retain the intentionally partial approval-response fixture.; Preserve the existing type assertion at this boundary.
       {
         data: {
           resolutions: ["request-source", "request-plan", "request-preview"].map((requestId) => ({
@@ -1242,10 +1304,12 @@ describe("local Eve acceptance", () => {
         },
         type: "input.resolved",
       } as unknown as MessageStreamEvent,
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       {
         data: { turnId: "turn-follow-up" },
         type: "step.completed",
       } as MessageStreamEvent,
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       { data: {}, type: "session.waiting" } as MessageStreamEvent,
     ]);
     const rebound = {
@@ -1260,9 +1324,11 @@ describe("local Eve acceptance", () => {
     const created = { ...rebound };
     const attach = vi.fn(() => rebound);
     const service = createLocalEveSessionService({
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         create: vi.fn(() => Promise.resolve({ response: initial, session: created })),
       } as never,
     });
@@ -1289,6 +1355,7 @@ describe("local Eve acceptance", () => {
         service.get({ cursor: 1, limit: 100, sessionId: started.sessionId }),
       ).resolves.toMatchObject({
         cursor: 4,
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         inputRequests: expect.arrayContaining([
           expect.objectContaining({ requestId: "request-source" }),
           expect.objectContaining({ requestId: "request-plan" }),
@@ -1325,6 +1392,7 @@ describe("local Eve acceptance", () => {
       expect(result.events).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
+            // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
             request: expect.objectContaining({ requestId: "request-source" }),
             type: "input_required",
           }),
@@ -1348,6 +1416,7 @@ const recoveryWaitingEvents: MessageStreamEvent[] = [
 ];
 
 const recoveryResponseFor = (events: MessageStreamEvent[]) => ({
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   cancel: vi.fn(() => Promise.resolve({ status: "accepted" })),
   async *[Symbol.asyncIterator]() {
     yield* events;
@@ -1378,16 +1447,22 @@ describe("local public session recovery", () => {
     ];
     const sessionId = "wrun_lost_history";
     const session = {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       cancel: vi.fn(() => Promise.resolve({ status: "accepted" })),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       respond: vi.fn(() => Promise.resolve(recoveryResponseFor(recoveryWaitingEvents))),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       send: vi.fn(() => Promise.resolve(recoveryResponseFor(recoveryWaitingEvents))),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       snapshot: vi.fn(() =>
         Promise.resolve({ events: [], session: { sessionId, streamIndex: 0 } }),
       ),
       state: { sessionId },
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const create = vi.fn(() => Promise.resolve({ response: recoveryResponseFor(events), session }));
     const client = {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       sessions: {
         attach: vi.fn(() => session),
         create,
@@ -1413,6 +1488,7 @@ describe("local public session recovery", () => {
     expect(result).toMatchObject({
       cursor: 2,
       error: { code: "session_recovery_unavailable" },
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       events: expect.arrayContaining([expect.objectContaining({ type: "input_required" })]),
       sessionId,
       status: "failed",
@@ -1453,11 +1529,13 @@ describe("local public session recovery", () => {
 
   it("reports a missing stored session instead of usable empty progress", async () => {
     const sessionId = "wrun_missing_worker";
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const snapshot = vi.fn(() =>
       Promise.resolve({ events: [], session: { sessionId, streamIndex: 0 } }),
     );
     const create = vi.fn();
     const service = createLocalEveSessionService(
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       { sessions: { attach: vi.fn(() => ({ snapshot })), create } as never },
       { stateGeneration: "missing-worker" },
     );
@@ -1481,10 +1559,12 @@ describe("local public session recovery", () => {
       send: vi.fn().mockRejectedValue(inactive),
       state: { sessionId },
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const create = vi.fn(() =>
       Promise.resolve({ response: recoveryResponseFor(recoveryWaitingEvents), session }),
     );
     const service = createLocalEveSessionService(
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       { sessions: { attach: vi.fn(() => session), create } as never },
       { stateGeneration: "inactive-worker" },
     );
@@ -1523,6 +1603,7 @@ describe("local public session recovery", () => {
       .mockRejectedValueOnce(new Error("temporary connection failure"))
       .mockResolvedValue({ events: recoveryWaitingEvents, session: { sessionId, streamIndex: 1 } });
     const service = createLocalEveSessionService(
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       { sessions: { attach: vi.fn(() => ({ snapshot })) } as never },
       { stateGeneration: "transient-local-read" },
     );

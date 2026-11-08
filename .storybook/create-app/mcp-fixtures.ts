@@ -12,6 +12,7 @@ export const choiceRequest: PublicInputRequest = {
   title: "Choose a build client",
 };
 
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
 export const semanticChoiceRequest: PublicInputRequest = {
   ...choiceRequest,
   presentation: { control: "choice", section: "build-with" },

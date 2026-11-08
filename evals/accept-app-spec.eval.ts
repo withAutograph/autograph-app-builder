@@ -49,6 +49,7 @@ export default defineEval({
       turn5.message,
       satisfies(
         (reply) =>
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof reply === "string" &&
           !/target identity|canonical proposal|digest-bound|target mutation/iu.test(reply),
         "planning result stays product-facing",
@@ -111,6 +112,7 @@ export default defineEval({
     retryValidation.calledTool("validate_app_creation", {
       count: 1,
       output: {
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         commandCount: (value) => typeof value === "number" && value > 0,
         reused: false,
         technicalStatus: "passed",
@@ -188,6 +190,7 @@ export default defineEval({
       turn16.message,
       satisfies(
         (reply) =>
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof reply === "string" &&
           reply.includes('"review"') &&
           reply.includes('"publication"'),

@@ -28,5 +28,6 @@ export function readHostedForwarderSubject(
     projectName: environment.EVE_HOSTED_VERCEL_PROJECT_NAME,
     teamSlug: environment.EVE_HOSTED_VERCEL_TEAM_SLUG,
   });
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve an absent hosted forwarder subject.
   return vercelSubject({ ...config, environment: deploymentEnvironment });
 }

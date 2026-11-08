@@ -55,7 +55,7 @@ function requestFixture(input: { lookupOptions: LookupOptions; responseStatus?: 
       observed.url = url;
       observed.options = options;
       // ClientRequest is a Node EventEmitter by contract.
-      // oxlint-disable-next-line unicorn/prefer-event-target
+      // oxlint-disable-next-line unicorn/prefer-event-target, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       const request = new EventEmitter() as ClientRequest;
       request.end = () => {
         // Node's dns.lookup contract is callback-based.
@@ -74,6 +74,7 @@ function requestFixture(input: { lookupOptions: LookupOptions; responseStatus?: 
           } else {
             expect(address).toBe(publicAddresses[0].address);
           }
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
           const response = Readable.from([Buffer.from("metadata-body")]) as IncomingMessage;
           response.statusCode = input.responseStatus ?? 200;
           response.statusMessage = "Fixture";
@@ -92,6 +93,7 @@ describe("Preview CIMD transport", () => {
   it("returns the pinned array when Node requests all lookup results", async () => {
     await expect(runLookup({ all: true })).resolves.toEqual({
       address: publicAddresses,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       family: undefined,
     });
   });

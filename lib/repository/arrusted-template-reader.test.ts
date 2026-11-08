@@ -16,6 +16,7 @@ afterEach(() => {
 });
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function json(value: unknown, status = 200) {
   return Response.json(value, { status });
 }

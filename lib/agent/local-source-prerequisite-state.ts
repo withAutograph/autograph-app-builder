@@ -36,6 +36,7 @@ const binding = (state: AppBuilderWorkflowState, sessionId: string) => {
     originalSourceSha: state.sourceReceipt.sourceSha,
     originalWorkspaceDigest:
       "proposal" in state ? state.proposal.workspaceDigest : state.workspace.workspaceDigest,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...("proposal" in state ? { proposalDigest: state.proposal.digest } : {}),
     workspaceId: state.workspace.workspaceId,
     sessionId,

@@ -316,6 +316,7 @@ export const captureFixture = () => {
     ...authPlan,
     stage: "app",
     normalActorPreparation: normalActorPreparationSchema.strip().parse(preparation),
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     gatewayDelivery: { ...authPlan.gatewayDelivery, gitRef: undefined },
     effects: [
       ...authPlan.effects.slice(0, 3),

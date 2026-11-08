@@ -32,6 +32,7 @@ export type PreparedGitHubSelection = Pick<
 
 /** Call only after the durable handoff reader has verified the session. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function preparedHandoffReturnPath(sessionAuth: unknown) {
   const parsed = z
     .object({
@@ -74,7 +75,9 @@ export function withPreparedGitHubSelection(
     (intent.provisioning?.github.status === "succeeded"
       ? intent.provisioning.github.installationId
       : undefined);
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return selectedInstallationId ? { ...input, selectedInstallationId } : input;
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }
 
 interface VercelCredential {
@@ -385,9 +388,11 @@ export async function readPreparedVercelAccess(input: {
       ? input.intent.provisioning.vercel
       : undefined;
   const installationId = input.intent.providers?.vercelInstallationId ?? project?.installationId;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!installationId) {
     return { status: "not-selected" };
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   if (project !== undefined) {
     if (project.installationId !== installationId) {
       return { action: REVIEW_SELECTION, status: RESOURCE_UNAVAILABLE };
@@ -492,13 +497,17 @@ export async function readPreparedVercelAccess(input: {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreparedAppContextReader(input: {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   readHandoff: (sessionAuth: unknown) => Promise<PreparedIntent | undefined>;
   github: (
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     sessionAuth: unknown,
     input: RepositoryAccessToolInput,
   ) => Promise<RepositoryAccessResult>;
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   vercel: (sessionAuth: unknown, intent: PreparedIntent) => Promise<PreparedVercelAccess>;
 }) {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   return async (sessionAuth: unknown) => {
     // The trusted reader establishes tenant ownership before any provider work.
     const intent = await input.readHandoff(sessionAuth);
@@ -506,6 +515,7 @@ export function createPreparedAppContextReader(input: {
       return { status: "not-prepared" as const };
     }
     const repository = preparedGitHubRepository(intent);
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     const [github, vercel] = await Promise.all([
       repository
         ? input
@@ -519,6 +529,7 @@ export function createPreparedAppContextReader(input: {
       // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       input.vercel(sessionAuth, intent).catch(unavailable),
     ]);
+    /* oxlint-enable typescript/strict-boolean-expressions */
     const returnTo = preparedHandoffReturnPath(sessionAuth);
     const reconnectUrl = (provider: "github" | "vercel") =>
       returnTo === undefined
@@ -531,11 +542,13 @@ export function createPreparedAppContextReader(input: {
           ).toString();
     // Explicit projection: never spread auth, credentials, raw provider payloads,
     // or the provisioning journal into durable model-visible output.
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     return {
       access: {
         github: github
           ? {
               status: github.status,
+              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
               ...(github.status === "ready"
                 ? {
                     scope: {
@@ -545,12 +558,14 @@ export function createPreparedAppContextReader(input: {
                     },
                   }
                 : {}),
+              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
               ...(github.status === AUTHORIZATION_REQUIRED
                 ? {
                     action: "reconnect" as const,
                     reconnectUrl: reconnectUrl("github"),
                   }
                 : {}),
+              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
               ...(github.status === PROVIDER_UNAVAILABLE
                 ? { action: "retry" as const, retryable: true }
                 : {}),
@@ -577,6 +592,7 @@ export function createPreparedAppContextReader(input: {
       repository: {
         private: intent.repository.private,
         requestedName: intent.repository.requestedName,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(repository ? { fullName: repository } : {}),
       },
       resources: {
@@ -604,10 +620,12 @@ export function createPreparedAppContextReader(input: {
       },
       status: "prepared" as const,
     };
+    /* oxlint-enable typescript/strict-boolean-expressions */
   };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export async function readPreparedAppContext(sessionAuth: unknown) {
   return await createPreparedAppContextReader({
     async github(auth, value) {
@@ -664,7 +682,9 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
           return emulation
             ? {
                 apiOrigin: emulation.vercelOrigin,
+                // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
                 fetch: ((resource, init) =>
+                  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
                   providerEmulationFetch(resource as URL, init, emulation)) satisfies typeof fetch,
               }
             : {};

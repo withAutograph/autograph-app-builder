@@ -266,6 +266,7 @@ export const openHostedRuntimeApprovalStore = async (): Promise<ApprovalStore> =
     store = await pendingStore;
   } catch (error) {
     if (deploymentStore === pendingStore) {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       deploymentStore = undefined;
     }
     throw error;

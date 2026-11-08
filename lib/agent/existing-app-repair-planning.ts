@@ -311,11 +311,14 @@ export const priorOwnedAppDraftPublication = (
     ) {
       continue;
     }
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional prior publication result.
     return {
       proposal,
       installationId: delivery.installationId,
       reviewed,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(appChangedPaths.length === 0 ? {} : { appChangedPaths }),
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(delivery.reconciliation === undefined ? {} : { reconciliation: delivery.reconciliation }),
     };
   }
@@ -414,6 +417,7 @@ const inspectUnapprovedPlan = (
   validateRepairChanges(changes, current);
   // The target planner captures the current preimages for the successor.
   // No approvedBase: the new proposal must obtain its own Build approval.
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   return { requestDigest, approvedBase: undefined, reuse: false, assertCurrent };
 };
 

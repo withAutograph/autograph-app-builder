@@ -155,6 +155,7 @@ export function StoreInSection({
     scopes: gitScopeOptions.map((scope) => ({
       id: scope.value,
       label: scope.label,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(scope.detail === undefined ? {} : { detail: scope.detail }),
     })),
   });

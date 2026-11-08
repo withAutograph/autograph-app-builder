@@ -23,6 +23,7 @@ function decodeVlq(encodedValue: string, start: number) {
     shift += 5;
     if (digit < 32) {
       const decodedValue = Math.floor(result / 2);
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve absent or decoded source-map results.
       return { index, value: result % 2 === 1 ? -decodedValue : decodedValue };
     }
   }
@@ -51,7 +52,9 @@ export function originalCssSource(
     return;
   }
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     !map.sources.every((source) => typeof source === "string") ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     (map.sourceRoot !== undefined && typeof map.sourceRoot !== "string")
   ) {
     return;
@@ -89,6 +92,7 @@ export function originalCssSource(
       // the same generated line.
       if (fields.length === 1) {
         if (line === generatedLine && generated <= generatedColumn) {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           candidate = undefined;
         }
         continue;
@@ -112,9 +116,12 @@ export function originalCssSource(
     }
     if (line === generatedLine && candidate) {
       const path = map.sources[candidate.source];
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof path !== "string" || !path) {
         return;
       }
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve absent or decoded source-map results.
       return {
         column: candidate.originalColumn + 1,
         line: candidate.originalLine + 1,
@@ -123,6 +130,7 @@ export function originalCssSource(
           : path,
         sourceIndex: candidate.source,
       };
+      /* oxlint-enable typescript/strict-boolean-expressions */
     }
   }
 }

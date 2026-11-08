@@ -502,6 +502,7 @@ describe("owner-authorized native target configuration", () => {
     expect(resolveConfiguration).toHaveBeenCalledOnce();
     expect(incoming.bodyUsed).toBe(false);
     expect(openControlPlane).toHaveBeenCalledExactlyOnceWith({
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       environment: undefined,
       request: incoming,
       sourceConfiguration: effective,

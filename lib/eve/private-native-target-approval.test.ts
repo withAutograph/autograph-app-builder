@@ -276,11 +276,13 @@ describe("private native target terminal approval", () => {
       },
       terminals: reader.terminalSnapshot(),
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const readHistory = vi.fn((start: number) => {
       expect(start).toBe(3);
       return Promise.resolve({ complete: true, nativeTailIndex: 2, nextNativeIndex: 3 });
     });
     const common = {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       assertOwner: () => Promise.resolve(),
       historyOwner,
       observation: { save: vi.fn<() => Promise<void>>().mockResolvedValue(), state: saved },
@@ -341,11 +343,13 @@ describe("private native target terminal approval", () => {
     "saves partial %s terminal proof and resumes with the original timestamp",
     async (outcome) => {
       let state: PrivateNativeTargetApprovalObservation | undefined;
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const save = vi.fn((next: PrivateNativeTargetApprovalObservation) => {
         state = structuredClone(next);
         return Promise.resolve();
       });
       const base = {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         assertOwner: () => Promise.resolve(),
         historyOwner,
         owner,
@@ -355,6 +359,7 @@ describe("private native target terminal approval", () => {
         readPrivateNativeTargetApproval({
           ...base,
           observation: { save },
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           readHistory: (_start, onEvent) => {
             onEvent(requested());
             onEvent(settled(outcome));
@@ -376,6 +381,7 @@ describe("private native target terminal approval", () => {
       const result = await readPrivateNativeTargetApproval({
         ...base,
         observation: { save, state },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         readHistory: (start) => {
           expect(start).toBe(2);
           return Promise.resolve({ complete: true, nativeTailIndex: 1, nextNativeIndex: 2 });
@@ -390,6 +396,7 @@ describe("private native target terminal approval", () => {
 
   it("does not pair an old unproved request with a new adapter settlement", async () => {
     let state: PrivateNativeTargetApprovalObservation | undefined;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const save = (next: PrivateNativeTargetApprovalObservation) => {
       state = structuredClone(next);
       return Promise.resolve();
@@ -400,7 +407,9 @@ describe("private native target terminal approval", () => {
         record,
         historyOwner,
         observation: { save },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         assertOwner: () => Promise.resolve(),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         readHistory: (_start, onEvent) => {
           onEvent(requested());
           return Promise.resolve({ complete: false, nativeTailIndex: 2, nextNativeIndex: 1 });
@@ -418,7 +427,9 @@ describe("private native target terminal approval", () => {
         record,
         historyOwner: replacement,
         observation: { save, state },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         assertOwner: () => Promise.resolve(),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         readHistory: (start, onEvent) => {
           expect(start).toBe(0);
           onEvent(settled());

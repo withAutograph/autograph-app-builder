@@ -852,6 +852,7 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
               "POST",
               {
                 comment: io.comment,
+                // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
                 ...(gitBranch === null ? {} : { gitBranch }),
                 key,
                 target: ["preview"],

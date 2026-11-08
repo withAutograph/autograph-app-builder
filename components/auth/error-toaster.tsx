@@ -32,15 +32,18 @@ export function ErrorToaster() {
         return;
       }
 
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const err = error as BetterFetchError;
       // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       if (err?.error?.code === "EMAIL_NOT_VERIFIED") {
         return;
       }
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
       if (err?.error) {
         // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-argument -- Preserve the existing auth error passed to the toast.
         toast.error(err.error.message);
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
     };
 
     const mutationCache = queryClient.getMutationCache();
@@ -64,6 +67,7 @@ export function ErrorToaster() {
         return;
       }
 
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const err = error as BetterFetchError;
       if (
         // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
@@ -72,8 +76,10 @@ export function ErrorToaster() {
       ) {
         return;
       }
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
       // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/prefer-nullish-coalescing, typescript/no-unsafe-argument -- Preserve auth error messaging and its empty-message fallback.
       toast.error(err.error?.message || err.message);
+      /* oxlint-enable typescript/strict-boolean-expressions */
     };
 
     return () => {

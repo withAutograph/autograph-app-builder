@@ -11,6 +11,7 @@ import type {
   previewOwnershipSource,
 } from "./working-preview-ownership";
 
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
 const ownership = vi.hoisted(() => ({ current: null as Partial<PreviewAttempt> | null }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./working-preview-ownership dependency used by this test.
 vi.mock("./working-preview-ownership", async (importOriginal) => {
@@ -56,6 +57,7 @@ const setup = () => {
   const events: string[] = [];
   const command = {
     cmdId: "command-1",
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     exitCode: null as number | null,
     kill: vi.fn(async () => {}),
     wait: vi.fn(async () => {}),
@@ -97,7 +99,7 @@ const setup = () => {
     cwd: "/workspace/repository",
     landingPath: "/example",
     port: 3000,
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The provider fixture supplies only the preview operations under test.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The provider fixture supplies only the preview operations under test.; Preserve the existing type assertion at this boundary.
     provider: provider as unknown as Sandbox,
     sandboxId: "logical-1",
   };
@@ -416,7 +418,7 @@ describe("safe interrupted startup diagnostics", () => {
       fetch: fetcher,
       probeTimeoutMs: 100,
       signal: AbortSignal.timeout(100),
-      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+      // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
     }).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(Error);
     if (!(failure instanceof Error)) {
@@ -465,7 +467,9 @@ describe("preview command termination", () => {
     exited.resolve(null);
     await cleanup;
     expect(settled).toBe(true);
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
     expect(command.kill).toHaveBeenCalledWith("SIGTERM", { abortSignal: expect.any(AbortSignal) });
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
     expect(command.wait).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
   });
 

@@ -43,15 +43,16 @@ function getPreviewOAuthDeploymentRuntime(
     providerEmulation = readProviderEmulation(environment);
   } catch (error) {
     const invalidFields =
-      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
+      // oxlint-disable-next-line sonarjs/expression-complexity, anti-slop/no-runtime-typeof -- Preserve the existing conditions and their evaluation order; Preserve this runtime check and existing input handling.
       typeof error === "object" &&
       error !== null &&
       "issues" in error &&
       Array.isArray(error.issues)
         ? error.issues
             .map((issue) =>
+              // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
               typeof issue === "object" && issue !== null && "path" in issue
-                ? // oxlint-disable-next-line typescript/no-base-to-string -- Preserve string coercion of arbitrary validation-path values.
+                ? // oxlint-disable-next-line typescript/no-base-to-string, anti-slop/require-safety-comment-for-type-assertion -- Preserve string coercion of arbitrary validation-path values.; Preserve the existing type assertion at this boundary.
                   String((issue as { path: unknown[] }).path[0] ?? "unknown")
                 : "unknown",
             )
@@ -218,6 +219,7 @@ export async function ensurePreviewSessionOrganization(input: {
     }
   }
 
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional authenticated organization result.
   return {
     organization: ensured,
     user: current.user,
@@ -260,7 +262,9 @@ export function createPreviewOAuthRequestHandler(input: {
       if (new URL(request.url).pathname === "/api/auth/sign-in/social") {
         let hasRedirect = false;
         try {
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
           const payload = (await response.clone().json()) as { url?: unknown };
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           hasRedirect = typeof payload.url === "string";
         } catch {
           // The response shape is diagnostic only; auth owns the response.

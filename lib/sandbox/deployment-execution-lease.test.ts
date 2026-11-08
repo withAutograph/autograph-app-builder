@@ -158,6 +158,7 @@ describe("hosted sandbox turn lease lifecycle", () => {
         member: true,
         message: "acquire failed",
         store: () =>
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
           ({
             // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             acquire: async () => {
@@ -180,7 +181,7 @@ describe("hosted sandbox turn lease lifecycle", () => {
         sandbox: sandboxFixture(stop),
         sessionAuth: candidate.auth,
         sessionId: "session_1",
-        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+        // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
       }).catch((error: unknown) => error);
       expect(rejection).toBeInstanceOf(Error);
       if (!(rejection instanceof Error)) {
@@ -214,7 +215,7 @@ describe("hosted sandbox turn lease lifecycle", () => {
       sandbox: sandboxFixture(stop),
       sessionAuth: sessionAuth(),
       sessionId: "session_1",
-      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+      // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
     }).catch((error: unknown) => error);
     expect(rejection).toBe(original);
     expect(sandboxCleanupEvidence(rejection)).toEqual({

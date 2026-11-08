@@ -90,6 +90,7 @@ async function currentUser() {
 async function HomeContent({ searchParams }: PageProps) {
   await connection();
   const [query, user] = await Promise.all([searchParams, currentUser()]);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   const mode = typeof query.mode === "string" ? query.mode : undefined;
   const notices: ProviderConnectionNotice[] = [];
   for (const provider of ["vercel", "github"] as const) {
@@ -100,6 +101,7 @@ async function HomeContent({ searchParams }: PageProps) {
     notices.push({
       provider,
       status,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(status === "failed"
         ? {
             reason: parseProviderConnectionFailureReason(
@@ -129,6 +131,7 @@ async function HomeContent({ searchParams }: PageProps) {
     builderResourceProvisioningFlag(),
   ]);
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!resumeKey) {
     const pendingHandoff = await findAuthenticatedPendingBuilderHandoff({
       environment: process.env,
@@ -138,6 +141,8 @@ async function HomeContent({ searchParams }: PageProps) {
       redirect(`/handoff/${encodeURIComponent(pendingHandoff.handoffId)}`);
     }
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const durableDraft = resumeKey
     ? await readAuthenticatedBuilderDraft({
         draftId: resumeKey,
@@ -148,6 +153,7 @@ async function HomeContent({ searchParams }: PageProps) {
         environment: process.env,
         headers: await headers(),
       });
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const integrations = await loadBuilderIntegrationState(
     {
       authenticated: true as const,

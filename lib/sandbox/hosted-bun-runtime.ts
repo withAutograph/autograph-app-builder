@@ -93,7 +93,7 @@ export function createHostedRuntimeInstaller() {
       // Preserve the shared lazy promise while clearing it after a failed install.
       // oxlint-disable-next-line promise/prefer-await-to-callbacks
       // oxlint-disable-next-line promise/prefer-await-to-then
-      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+      // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
       .catch((error: unknown) => {
         if (installs.get(sandbox.id) === install) {
           installs.delete(sandbox.id);

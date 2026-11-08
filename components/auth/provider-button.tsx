@@ -44,6 +44,7 @@ export function ProviderButton({
 
   const { mutate: signInSocial, isPending: signInSocialPending } = useSignInSocial(authClient);
   const { mutate: signInPopup, isPending: signInPopupPending } = useSignInOAuthPopup(
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     authClient as OAuthPopupAuthClient,
   );
 

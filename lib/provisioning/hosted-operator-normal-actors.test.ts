@@ -184,6 +184,7 @@ describe("normal actor preparation", () => {
     const existing = initialNormalActorState(existingProgram, operationRef);
     existing.actors = first.state.actors.map((actor) => ({
       ...actor,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       credentials: undefined,
       storageState: { cookies: [], origins: [] },
     }));

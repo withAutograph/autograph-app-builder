@@ -363,6 +363,7 @@ const ownedRevisionTool = async (published = true, marker = true) => {
       sourceReceiptDigest: sourceEvidence.digest,
       destinationReviewDigest: destination.digest,
     },
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(marker ? { publishedGitHubDraftProposalDigest: proposal.digest } : {}),
   } as unknown as Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
   toolPorts.state = state;
@@ -390,7 +391,9 @@ const ownedRevisionTool = async (published = true, marker = true) => {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The controlled resolver replaces hosted credentials; every tool context port used here is supplied.
   const context = {
     callId: "new-destination-review",
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     session: { id: "original-session", auth: undefined, turn: { id: "revision-turn" } },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     getSandbox: () => Promise.resolve({ readTextFile }),
     abortSignal: cancellation.signal,
   } as unknown as Parameters<typeof prepareDraftReview.execute>[1];
@@ -424,6 +427,7 @@ describe("same-session post-merge destination review", () => {
         { path: "packages/platform/index.ts", digest: after, mode: "644" },
       ],
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     f.inspectDestinationFiles.mockImplementation(({ paths }) =>
       Promise.resolve(preTree.filter((file) => paths.includes(file.path))),
     );
@@ -537,6 +541,7 @@ describe("same-session post-merge destination review", () => {
     // This is deliberately not a provider-proved published reconciliation.
     toolPorts.prior = {
       ...prior,
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       reconciliation: {
         installationIdentityDigest: f.proposal.installationIdentityDigest,
         priorPublicationDigest: "8".repeat(64),
@@ -617,6 +622,7 @@ describe("same-session post-merge destination review", () => {
     expect(f.readTextFile).toHaveBeenCalled();
     expect(f.inspectPr).not.toHaveBeenCalled();
     expect(f.inspectDestinationFiles).toHaveBeenCalledWith({
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       paths: expect.arrayContaining([path, "apps/example/package.json"]),
       repository,
     });
@@ -700,6 +706,7 @@ describe("same-session post-merge destination review", () => {
 
   it("rechecks the workspace after immutable destination preimages return", async () => {
     const f = await ownedRevisionTool();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     f.inspectDestinationFiles.mockImplementation(() => {
       toolPorts.state = { ...f.state, workspace: { ...f.state.workspace, workspaceId: "other" } };
       return Promise.resolve(destination.preTree);
@@ -711,6 +718,7 @@ describe("same-session post-merge destination review", () => {
 
   it("keeps private edits and denies a workspace change during provider reads", async () => {
     const f = await ownedRevisionTool();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     f.inspectPr.mockImplementation(() => {
       toolPorts.state = { ...f.state, workspace: { ...f.state.workspace, workspaceId: "other" } };
       return Promise.resolve({

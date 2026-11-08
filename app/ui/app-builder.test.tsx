@@ -25,7 +25,7 @@ const navigation = vi.hoisted(() => ({
 }));
 const builderActions = vi.hoisted(() => ({
   continueBuilderHandoff: vi.fn<typeof continueBuilderHandoff>(),
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+  // oxlint-disable-next-line typescript/promise-function-async, eslint/require-await -- Preserve this test double's existing promise and synchronous behavior. preserve Promise-returning test double
   loadActiveBuilderDraft: vi.fn(() =>
     Promise.resolve<BuilderDraftPageData | undefined>(globalThis.undefined),
   ),
@@ -86,9 +86,11 @@ builderActions.continueBuilderHandoff.mockImplementation(defaultContinuation);
 const draftFetch = vi.hoisted(() =>
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   vi.fn(async (_url: string, init?: RequestInit) => {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (typeof init?.body !== "string") {
       throw new TypeError("Expected a JSON draft request body.");
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const input = JSON.parse(init.body) as {
       draftId: string;
       expectedRevision: number;
@@ -219,9 +221,11 @@ function AppBuilder(
     ...authenticatedProps
   } = props;
   void user;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
   if (!authenticated) {
     return <AnonymousBuilder />;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return (
     <div className={styles.appShell}>
       <Header />
@@ -237,6 +241,7 @@ function AppBuilder(
   );
 }
 
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
@@ -298,6 +303,7 @@ const requireElement = <T extends Element>(element: T | null | undefined) => {
   return element;
 };
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const waitForFrame = () => {
   const frame = Promise.withResolvers<null>();
   requestAnimationFrame(() => {
@@ -382,7 +388,9 @@ afterEach(async () => {
     });
   }
   container?.remove();
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   root = undefined;
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   container = undefined;
   sessionStorage.clear();
   vi.restoreAllMocks();
@@ -407,11 +415,13 @@ describe("Vercel-faithful App Builder flow", () => {
       if (!restartEffect) {
         return autosave;
       }
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       restartedDiscard ??= (revision) => autosave.discardSupersededByRemoteRevision(revision);
       return { ...autosave, discardSupersededByRemoteRevision: restartedDiscard };
     });
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
     builderActions.loadActiveBuilderDraft
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       .mockImplementationOnce(() => pending.promise)
       .mockResolvedValueOnce(remoteDraft(3, "Fresh remote brief."));
     // oxlint-disable-next-line eslint/require-await -- Preserve the Server Action test interface.
@@ -447,6 +457,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("coalesces slow draft polls through timer ticks and rerenders", async () => {
     vi.useFakeTimers();
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     builderActions.loadActiveBuilderDraft.mockImplementationOnce(() => pending.promise);
     await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
@@ -501,6 +512,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("coalesces visibility events while preserving a fresh read after return", async () => {
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
     builderActions.loadActiveBuilderDraft
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       .mockImplementationOnce(() => pending.promise)
       .mockResolvedValueOnce(remoteDraft(3, "Newest remote brief."));
     const view = await render(<AppBuilder authenticated />);
@@ -533,6 +545,7 @@ describe("Vercel-faithful App Builder flow", () => {
     vi.useFakeTimers();
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
     builderActions.loadActiveBuilderDraft
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       .mockImplementationOnce(() => pending.promise)
       .mockResolvedValueOnce(remoteDraft(2, "Recovered remote brief."));
     const view = await render(<AppBuilder authenticated />);
@@ -553,6 +566,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("does not refresh or apply a pending draft after unmount", async () => {
     vi.useFakeTimers();
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     builderActions.loadActiveBuilderDraft.mockImplementationOnce(() => pending.promise);
     await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
@@ -562,6 +576,7 @@ describe("Vercel-faithful App Builder flow", () => {
       changeVisibility("hidden");
       changeVisibility("visible");
       root?.unmount();
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       root = undefined;
     });
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
@@ -908,8 +923,11 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledWith(
       expect.objectContaining({
         expectedRevision: 0,
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         record: expect.objectContaining({
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
           draft: expect.objectContaining({
+            // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
             form: expect.objectContaining({ brief: "Keep this draft." }),
           }),
         }),
@@ -934,6 +952,7 @@ describe("Vercel-faithful App Builder flow", () => {
     vi.useFakeTimers();
     sessionStorage.setItem("autograph-app-brief", "Claim this anonymous brief.");
     const saved = Promise.withResolvers<{ draftId: string; revision: number; updatedAt: string }>();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     builderActions.saveActiveBuilderDraft.mockImplementationOnce(() => saved.promise);
     await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -942,8 +961,11 @@ describe("Vercel-faithful App Builder flow", () => {
     await act(async () => await vi.advanceTimersByTimeAsync(500));
     expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledWith(
       expect.objectContaining({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         record: expect.objectContaining({
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
           draft: expect.objectContaining({
+            // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
             form: expect.objectContaining({ brief: "Claim this anonymous brief." }),
           }),
         }),
@@ -973,6 +995,7 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     const brief = requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief"));
     await fill(brief, "This local edit will be replaced.");
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     builderActions.loadActiveBuilderDraft.mockResolvedValueOnce({
       draftId: "d1210e56-ded0-436d-a6b8-ae96ddec17e0",
       record: {
@@ -1077,6 +1100,7 @@ describe("Vercel-faithful App Builder flow", () => {
       />
     );
     const view = await render(page(1));
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     read.mockImplementationOnce(() => delayedRead.promise);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => root?.render(page(2)));
@@ -1098,6 +1122,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("does not replace newer edits with its own in-flight autosave", async () => {
     vi.useFakeTimers();
     const save = Promise.withResolvers<{ draftId: string; revision: number; updatedAt: string }>();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     builderActions.saveActiveBuilderDraft.mockImplementationOnce(() => save.promise);
     const view = await render(
       <AppBuilder authenticated user={{ email: "taylor@example.com", name: "Taylor" }} />,
@@ -1355,9 +1380,12 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(builderActions.continueBuilderHandoff).toHaveBeenCalledWith(
       undefined,
       expect.objectContaining({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         creationRequestId: expect.any(String),
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         draftCheckpoint: { draftId: expect.any(String), revision: expect.any(Number) },
         provisioningEnabled: false,
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         requestId: expect.any(String),
         version: 1,
       }),
@@ -1369,6 +1397,7 @@ describe("Vercel-faithful App Builder flow", () => {
 
   it("keeps the edited form mounted through a failed continuation and retries the same intent", async () => {
     const continuation = Promise.withResolvers<{ status: "error" }>();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     builderActions.continueBuilderHandoff.mockImplementationOnce(() => continuation.promise);
     const view = await render(<AppBuilder authenticated />);
     const brief = requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief"));

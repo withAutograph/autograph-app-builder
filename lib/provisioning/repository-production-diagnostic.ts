@@ -199,10 +199,15 @@ export const reportRepositoryProductionFailure = (
           code,
           errorKind: errorKind(error),
           sqlState: sqlState(error),
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(reason === undefined ? {} : { reason }),
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(operatorCode.success ? { operatorCode: operatorCode.data } : {}),
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(httpStatus?.success ? { httpStatus: httpStatus.data } : {}),
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(signal === undefined ? {} : { requestAborted: signal.aborted }),
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(launcherStage === undefined ? {} : { launcherStage }),
         }),
       ),

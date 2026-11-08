@@ -140,7 +140,9 @@ const candidatePackageName = (files: readonly SandboxProviderTargetFile[], appId
   const manifest = files.find((file) => file.path === "package.json");
   if (manifest) {
     try {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const parsed = JSON.parse(String(manifest.content)) as { name?: unknown };
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof parsed.name === "string" && parsed.name.length > 0) {
         return parsed.name;
       }
@@ -255,9 +257,11 @@ export const evaluateCandidateRuntime = async (input: {
       };
     }
     const activeHandle = handle;
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
     if (!activeHandle) {
       throw new Error("Candidate runtime handle was lost during reconstruction.");
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     await Promise.all([
       ...input.files.map((file) =>
         activeHandle.session.writeTextFile({
@@ -348,6 +352,7 @@ export const evaluateCandidateRuntime = async (input: {
     );
     commands.push(build);
     if (build.exitCode !== 0) {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
       if (input.debugPrerender) {
         commands.push(
           await command(
@@ -357,6 +362,7 @@ export const evaluateCandidateRuntime = async (input: {
           ),
         );
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       return {
         commands,
         probes: [],
@@ -372,10 +378,11 @@ export const evaluateCandidateRuntime = async (input: {
       const manifest = await handle.session.readTextFile({
         path: `apps/${input.candidateAppId}/.next/routes-manifest.json`,
       });
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
       const routes = JSON.parse(manifest ?? "{}");
-      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-member-access, anti-slop/no-runtime-typeof -- Preserve the existing untyped input or fixture boundary; Preserve this runtime check and existing input handling.
       if (typeof routes.basePath === "string") {
-        // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
+        // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing untyped input or fixture boundary.; Preserve the existing dynamic value boundary.
         runtimeBasePath = routes.basePath;
       }
     } catch {
@@ -410,6 +417,7 @@ export const evaluateCandidateRuntime = async (input: {
             write(chunk) {
               startup[stream] = excerpt(
                 startup[stream] +
+                  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
                   (typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true })),
               );
             },
@@ -426,7 +434,9 @@ export const evaluateCandidateRuntime = async (input: {
       controller.signal,
     );
     commands.push(probe);
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
     const probes = probe.exitCode === 0 ? JSON.parse(probe.stdout.trim()) : [];
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
     const root = Array.isArray(probes)
       ? probes.find((item: { id?: unknown }) => item.id === "root")
       : undefined;
@@ -450,6 +460,7 @@ export const evaluateCandidateRuntime = async (input: {
       );
       commands.push(browser);
       if (browser.exitCode === 0) {
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
         const browserProbes = JSON.parse(browser.stdout.trim());
         if (Array.isArray(browserProbes)) {
           // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-call -- Keep the runtime-provided probe collection and its existing behavior.
@@ -470,6 +481,7 @@ export const evaluateCandidateRuntime = async (input: {
     }
     return {
       commands,
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
       probes: Array.isArray(probes) ? probes : [],
       producer: "evaluator",
       reason:

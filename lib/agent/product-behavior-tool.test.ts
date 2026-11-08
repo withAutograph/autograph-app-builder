@@ -66,6 +66,7 @@ const scenario = {
 const unexpectedOperation = () => {
   throw new Error("Unexpected tool context or sandbox operation");
 };
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const getSandbox = vi.fn(() =>
   Promise.resolve({
     id: "sandbox-one",
@@ -86,6 +87,7 @@ const getSandbox = vi.fn(() =>
 const context: Parameters<typeof verifyAppBehavior.execute>[1] = {
   abortSignal: new AbortController().signal,
   callId: "verify-app-behavior",
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   getSandbox: (environment?: SandboxEnvironment<object | undefined>) => {
     if (environment !== undefined) {
       throw new Error("Unexpected sandbox environment");
@@ -160,6 +162,7 @@ describe("verify_app_behavior", () => {
     expect(result).toMatchObject({ eligibility: "current", evidence, productStatus: "unassessed" });
     expect(mocks.readback).toHaveBeenCalledWith(
       expect.objectContaining({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         authority: expect.objectContaining({ launchUrl: mocks.preview.receipt.url }),
         scenario,
       }),
@@ -177,6 +180,7 @@ describe("verify_app_behavior", () => {
     "retains an in-flight %s observation after source or runtime replacement without current credit",
     async (status) => {
       const evidence = { coverage: "action-readback-only", reason: "Observed result.", status };
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       mocks.readback.mockImplementationOnce(() => {
         mocks.current.mockReturnValue(false);
         return Promise.resolve(evidence);

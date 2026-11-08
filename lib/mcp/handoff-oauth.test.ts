@@ -38,6 +38,7 @@ function handoffStore(): BuilderHandoffStore {
     const record = records.get(handoffId);
     return record &&
       Object.entries(authority).every(
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         ([key, value]) => record.authority[key as keyof typeof authority] === value,
       )
       ? record
@@ -54,6 +55,7 @@ function handoffStore(): BuilderHandoffStore {
         return;
       }
       if (record.sessionId !== undefined && record.sessionId !== "") {
+        // oxlint-disable-next-line typescript/consistent-return -- Preserve optional handoff and authority fixture results.
         return record;
       }
       const bound = {
@@ -62,6 +64,7 @@ function handoffStore(): BuilderHandoffStore {
         sessionId: input.sessionId,
       };
       records.set(record.handoffId, bound);
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional handoff and authority fixture results.
       return bound;
     },
     read,
@@ -167,11 +170,13 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
           if (
             value.requestId !== provisioningRequestId ||
             Object.entries(authority).some(
+              // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
               ([key, expected]) => value.authority[key as keyof typeof authority] !== expected,
             )
           ) {
             return;
           }
+          // oxlint-disable-next-line typescript/consistent-return -- Preserve optional handoff and authority fixture results.
           return structuredClone(journalRow);
         },
       );
@@ -187,6 +192,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
           if (workspaces.length !== 1) {
             return;
           }
+          // oxlint-disable-next-line typescript/consistent-return -- Preserve optional handoff and authority fixture results.
           return {
             audience: resource,
             issuer,

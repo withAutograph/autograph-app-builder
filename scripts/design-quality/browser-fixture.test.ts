@@ -4,7 +4,9 @@ import { capturePreview } from "./browser";
 
 const browser = vi.hoisted(() => {
   const page = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     evaluate: vi.fn(() => Promise.reject(new Error("measurement reached"))),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     goto: vi.fn(() => Promise.resolve({ ok: () => true })),
     screenshot: vi.fn(),
   };
@@ -49,6 +51,7 @@ it("does not measure or capture an anonymous fallback after fixture failure", as
     capturePreview({
       // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture output path exercises browser capture setup and failure handling.
       output: "/tmp/fixture-test",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       preparePage: () => Promise.reject(new Error("auth unavailable")),
       scenarios: [],
       tokens: {},

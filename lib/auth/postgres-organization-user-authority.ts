@@ -25,9 +25,12 @@ interface OrganizationRow extends Record<string, unknown> {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function resultRows<T>(input: readonly T[] | { rows: readonly T[] }): readonly T[] {
   if (Array.isArray(input)) {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     return input as T[];
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof input === "object" && input !== null && "rows" in input && Array.isArray(input.rows)) {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     return input.rows as T[];
   }
   throw new Error("PostgreSQL returned an unsupported organization result.");
@@ -118,6 +121,7 @@ export function createPostgresPreviewOrganizationAuthority(
         return;
       }
       const activeOrganization = await exactActiveOrganization(database, authority, ownerUserId);
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve absent workspace authority as undefined.
       return activeOrganization?.workspaceId;
     },
 

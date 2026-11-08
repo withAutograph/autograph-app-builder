@@ -27,6 +27,7 @@ vi.mock("@better-auth-ui/react/plugins/passkey", () => ({
   useSignInPasskey: () => ({ mutateAsync: auth.signIn }),
 }));
 
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 let root: Root | undefined;
@@ -38,6 +39,7 @@ afterEach(async () => {
       await Promise.resolve();
     });
   }
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   root = undefined;
   container?.remove();
   vi.clearAllMocks();

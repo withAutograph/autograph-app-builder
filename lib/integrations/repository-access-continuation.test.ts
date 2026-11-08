@@ -44,6 +44,7 @@ function memoryStore(): RepositoryAccessContinuationStore & {
         return;
       }
       record.authorizedAt = input.now;
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional continuation fixture results.
       return record;
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -70,6 +71,7 @@ function memoryStore(): RepositoryAccessContinuationStore & {
         return;
       }
       record.consumedAt = input.now;
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional continuation fixture results.
       return record;
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double

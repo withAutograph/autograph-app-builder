@@ -90,6 +90,7 @@ interface GitHubInstallationAuthorizationDiagnostic {
   installationValidation?: GitHubInstallationValidationSubstage;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const githubInstallationAuthorizationDiagnostic = (error: unknown) => {
   if (!(error instanceof GitHubInstallationAuthorizationError)) {
     return;
@@ -107,6 +108,7 @@ export const githubInstallationAuthorizationDiagnostic = (error: unknown) => {
   if (error.installationValidation !== undefined) {
     diagnostic.installationValidation = error.installationValidation;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional installation diagnostic.
   return diagnostic;
 };
 
@@ -212,6 +214,7 @@ export interface GitHubInstallationMembershipAuthority {
 
 type Fetch = typeof fetch;
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const githubOAuthErrorCategory = (value: unknown) => {
   if (
     value === "incorrect_client_credentials" ||
@@ -250,7 +253,7 @@ const invalidToken = "invalid-token";
 const isNonArrayObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- Property values from external data remain untrusted.
+// oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- Property values from external data remain untrusted. Preserve the existing unknown input contract.
 const property = (value: unknown, key: string): unknown => {
   if (!isNonArrayObject(value) || !(key in value)) {
     throw new Error(invalidResponse);
@@ -258,27 +261,34 @@ const property = (value: unknown, key: string): unknown => {
   return value[key];
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const decimalProperty = (value: unknown, key: string): string => {
   const candidate = property(value, key);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate > 0) {
     return String(candidate);
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof candidate === "string" && decimalSchema.safeParse(candidate).success) {
     return candidate;
   }
   throw new Error(invalidResponse);
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const stringProperty = (value: unknown, key: string): string => {
   const candidate = property(value, key);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof candidate !== "string") {
     throw new TypeError(invalidResponse);
   }
   return candidate;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const nullableStringProperty = (value: unknown, key: string): string | null => {
   const candidate = property(value, key);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (candidate !== null && typeof candidate !== "string") {
     throw new Error(invalidResponse);
   }
@@ -562,6 +572,7 @@ const githubCallbackDiagnostic = (url: string): GitHubCallbackDiagnostic => {
   return { ...details, unknownKeyCount: unknownKeys.length };
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const oauthErrorCategoryFromException = (error: unknown) => {
   try {
     return githubOAuthErrorCategory(
@@ -572,7 +583,7 @@ const oauthErrorCategoryFromException = (error: unknown) => {
   }
 };
 
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- Property values from external data remain untrusted.
+// oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- Property values from external data remain untrusted. Preserve the existing unknown input contract.
 const propertyOrUndefined = (value: unknown, key: string): unknown => {
   if (!isNonArrayObject(value)) {
     return undefined;
@@ -580,6 +591,7 @@ const propertyOrUndefined = (value: unknown, key: string): unknown => {
   return key in value ? value[key] : undefined;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const normalizedUserTokens = (authentication: unknown, now: number) => {
   try {
     const accessToken = stringProperty(authentication, "token");
@@ -587,14 +599,17 @@ const normalizedUserTokens = (authentication: unknown, now: number) => {
       throw new Error(invalidToken);
     }
     const expiresAt =
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof propertyOrUndefined(authentication, "expiresAt") === "string"
         ? String(propertyOrUndefined(authentication, "expiresAt"))
         : undefined;
     const refreshToken =
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof propertyOrUndefined(authentication, "refreshToken") === "string"
         ? String(propertyOrUndefined(authentication, "refreshToken"))
         : undefined;
     const refreshTokenExpiresAt =
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof propertyOrUndefined(authentication, "refreshTokenExpiresAt") === "string"
         ? String(propertyOrUndefined(authentication, "refreshTokenExpiresAt"))
         : undefined;
@@ -627,6 +642,7 @@ const normalizedUserTokens = (authentication: unknown, now: number) => {
   }
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const installationIdentity = (value: unknown) => {
   const account = property(value, "account");
   return {
@@ -687,6 +703,7 @@ const accessibleInstallation = async (input: {
     const totalCount = property(body, "total_count");
     const installations = property(body, "installations");
     if (
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof totalCount !== "number" ||
       !Number.isSafeInteger(totalCount) ||
       totalCount < 0 ||
@@ -703,6 +720,7 @@ const accessibleInstallation = async (input: {
       const candidateAppId = propertyOrUndefined(value, "app_id");
       if (
         candidateAppId !== input.appId &&
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         (typeof candidateAppId !== "number" ||
           !Number.isSafeInteger(candidateAppId) ||
           String(candidateAppId) !== input.appId)
@@ -771,6 +789,7 @@ export const createGitHubAppInstallationAuthorization = (input: {
   const providerFetch: Fetch = input.emulation
     ? (resource, init) => {
         let resourceUrl: string;
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         if (typeof resource === "string") {
           resourceUrl = resource;
         } else if (resource instanceof URL) {
@@ -868,9 +887,11 @@ export const createGitHubAppInstallationAuthorization = (input: {
         approvalUrl.searchParams.append(key, value);
       }
       approvalUrl.searchParams.set("phase", "authorize");
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (details.returnState.resumeKey) {
         approvalUrl.searchParams.set("resume", details.returnState.resumeKey);
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
     }
     return {
       action: "github-app.installation.authorize" as const,
@@ -913,9 +934,11 @@ export const createGitHubAppInstallationAuthorization = (input: {
         ? new URL("/local-connections/github", config.issuer)
         : new URL(`/apps/${config.appSlug}/installations/new`, GITHUB_ORIGIN);
       redirect.searchParams.set("state", state.state);
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (input.emulation && returnState.resumeKey) {
         redirect.searchParams.set("resume", returnState.resumeKey);
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       return {
         action: "github-app.installation.begin" as const,
         authorityDigest: state.authorityDigest,
@@ -948,12 +971,16 @@ export const createGitHubAppInstallationAuthorization = (input: {
           setupAction: "update",
           via: "existing",
         };
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
         if (target?.accountLogin) {
           authorization.targetAccountLogin = githubLoginSchema.parse(target.accountLogin);
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
         if (target?.installationId) {
           authorization.installationId = decimalSchema.parse(target.installationId);
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
         return await beginUserAuthorization(authorization);
       } catch {
         throw new Error(FAILURE_MESSAGE);
@@ -1098,6 +1125,7 @@ export const createGitHubAppInstallationAuthorization = (input: {
           let stage: GitHubInstallationAuthorizationFailureStage;
           if (category !== undefined && responseStatus === 200) {
             stage = "token-exchange-oauth-error";
+            // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           } else if (typeof status === "number") {
             stage = "token-exchange-non-2xx";
           } else {

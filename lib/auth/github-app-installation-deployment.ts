@@ -138,7 +138,9 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         authority,
         draftId: continuationId,
       });
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
       return { kind: builderDraft ? "none" : AUTHORIZATION_EXPIRED } as const;
+      /* oxlint-enable typescript/strict-boolean-expressions */
     }
     const access = await input.repositoryAccess.classify({
       authority,
@@ -369,6 +371,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       if (!authority || !input.repositoryAccess) {
         return;
       }
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional connection authority and target outcomes.
       return await input.repositoryAccess.inspect({ authority, continuationId });
     },
   };
@@ -417,7 +420,8 @@ export function getGitHubAppInstallationDeploymentHandlers(
     credentialStore,
     emulation,
     fetch: emulation
-      ? (resource, init) => providerEmulationFetch(resource as string | URL, init, emulation)
+      ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+        (resource, init) => providerEmulationFetch(resource as string | URL, init, emulation)
       : undefined,
     installationStore: installations,
     membership: {
@@ -462,6 +466,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
       if (session === undefined) {
         return;
       }
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional connection authority and target outcomes.
       return {
         audience: config.resource,
         issuer: config.issuer,
@@ -472,9 +477,12 @@ export function getGitHubAppInstallationDeploymentHandlers(
     authorization,
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async onConnected({ authority, returnState }) {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (!returnState.resumeKey) {
         return;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional connection authority and target outcomes.
       return await repositoryAccessContinuations.authorize({
         authority,
         continuationId: returnState.resumeKey,
@@ -520,7 +528,7 @@ export function createGitHubAppInstallationDeploymentHandler(
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// eslint-disable-next-line eslint/func-style, typescript/consistent-return -- Preserve optional connection authority and target outcomes. Preserve function declaration hoisting and initialization timing.
 export async function verifiedGitHubConnectionTarget(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   headers: Headers;

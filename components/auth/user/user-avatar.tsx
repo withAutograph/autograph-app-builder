@@ -36,17 +36,22 @@ export function UserAvatar({ className, user, isPending, fallback }: UserAvatarP
     enabled: !user && !(isPending ?? false),
   });
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
   if ((isPending || sessionPending) && !user) {
     return <Skeleton className={cn("size-8 rounded-full", className)} />;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   const resolvedUser = user ?? session?.user;
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- Empty user names fall through to the next identifier.
   const initials = (resolvedUser?.username || resolvedUser?.name || resolvedUser?.email)
     ?.slice(0, 2)
     .toUpperCase();
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   return (
     <Avatar className={cn("size-8 bg-muted text-foreground text-sm rounded-full", className)}>
       <AvatarImage
@@ -65,4 +70,5 @@ export function UserAvatar({ className, user, isPending, fallback }: UserAvatarP
       </AvatarFallback>
     </Avatar>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

@@ -235,6 +235,7 @@ const fixedGitApply = async function fixedGitApply(
   }
   if (
     inputResult.status === "rejected" &&
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     (inputResult.reason as NodeJS.ErrnoException).code !== "EPIPE"
   ) {
     throw inputResult.reason;
@@ -529,6 +530,7 @@ const fileState = async function fileState(path: string): Promise<FileState> {
       size,
     };
   } catch (error: unknown) {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return { kind: "absent" };
     }
@@ -608,6 +610,7 @@ export const inspectLocalPublicationDestination =
     const parsed = parseGitStatusV2(
       await git(canonicalPath, ["status", "--porcelain=v2", "-z", "--untracked-files=all"]),
     );
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const dirty = await Promise.all(parsed.map((entry) => dirtyEntry(canonicalPath, entry)));
     const indexPaths = [
       ...new Set(
@@ -777,6 +780,7 @@ const createInitialJournal = async function createInitialJournal(
 };
 
 const assertJournal = function assertJournal(journal: LocalPublicationJournal): void {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   const invalidJournalValue = journal === null || typeof journal !== "object";
   if (
     invalidJournalValue ||
@@ -793,10 +797,12 @@ export const readLocalPublicationJournal = async function readLocalPublicationJo
   const root = await resolveAllowedRepository(destinationPath);
   const path = await gitOwnedPath(root, localPublicationGitPath);
   try {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const journal = JSON.parse(await readFile(path, "utf-8")) as LocalPublicationJournal;
     assertJournal(journal);
     return journal;
   } catch (error: unknown) {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return undefined;
     }

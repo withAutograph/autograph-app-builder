@@ -159,6 +159,7 @@ export const prepareAppCreation = async (
     throw new Error("The app plan must retain its exact imported application source.");
   }
   const result = await executeTargetIdentityAndPlanning({
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(imported === undefined
       ? {}
       : {

@@ -273,6 +273,7 @@ describe("approval receipt", () => {
   it("requires a closed local subject before requesting approval", () => {
     expect(
       approvalRequestDecision({
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         githubSource: undefined,
         phase: "appspec",
         subjectDigest: "1".repeat(64),

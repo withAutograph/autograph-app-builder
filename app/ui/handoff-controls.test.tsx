@@ -34,6 +34,7 @@ const initial: HandoffControlData = {
   status: "prepared",
   version: 1,
 };
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 let root: Root | undefined;
@@ -76,6 +77,7 @@ afterEach(async () => {
       await Promise.resolve();
     });
   }
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   root = undefined;
   container?.remove();
   sessionStorage.clear();
@@ -95,9 +97,12 @@ describe("destination adapters", () => {
       const match = /autograph_start with (?<payload>\{[^\n]+\})\./u.exec(prompt);
       const serializedPayload = match?.groups?.payload;
       expect(serializedPayload).toBeDefined();
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (!serializedPayload) {
         throw new Error("Handoff prompt payload not found");
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
       const payload = JSON.parse(serializedPayload);
       expect(payload).toEqual({
         clientRequestId: `web-handoff:${id}`,
@@ -114,17 +119,21 @@ describe("destination adapters", () => {
     expect(buildCursorInstallUrl(initial.mcpUrl, false)).toBeUndefined();
     const installUrl = buildCursorInstallUrl(initial.mcpUrl, true);
     expect(installUrl).toBeDefined();
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (!installUrl) {
       throw new Error("Cursor install URL not found");
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     const url = new URL(installUrl);
     expect(url.protocol).toBe("cursor:");
     expect(url.pathname).toBe("/mcp/install");
     const config = url.searchParams.get("config");
     expect(config).toBeDefined();
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (!config) {
       throw new Error("Cursor install config not found");
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     expect(JSON.parse(atob(config))).toEqual({
       auth: { CLIENT_ID: "autograph-cursor-desktop" },
       url: initial.mcpUrl,
@@ -306,7 +315,9 @@ describe("durable handoff controls", () => {
     await render(data);
     await click("Renew handoff");
     expect(renewal.action).toHaveBeenCalledTimes(2);
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const first = renewal.action.mock.calls[0]?.[1] as { creationRequestId?: string };
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const retry = renewal.action.mock.calls[1]?.[1] as { creationRequestId?: string };
     expect(first).toMatchObject({ handoffId: id });
     expect(first.creationRequestId).toBe(retry.creationRequestId);

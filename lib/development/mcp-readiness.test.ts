@@ -15,8 +15,10 @@ vi.mock("node:timers/promises", async (importOriginal) => {
 });
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function response(body: unknown, status = 200, sessionId?: string) {
   return new Response(body === undefined ? undefined : JSON.stringify(body), {
+    // oxlint-disable-next-line typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness.
     headers: sessionId ? { "mcp-session-id": sessionId } : undefined,
     status,
   });
@@ -90,6 +92,7 @@ describe("development MCP readiness", () => {
     const requestedWaits: number[] = [];
     let elapsedMs = 0;
     const now = vi.spyOn(Date, "now").mockImplementation(() => elapsedMs);
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     const deterministicDelay = (ms: number, value?: unknown) => {
       requestedWaits.push(ms);
       elapsedMs += ms;
@@ -101,6 +104,7 @@ describe("development MCP readiness", () => {
       return Promise.resolve(value);
     };
     for (let wait = 0; wait < 7; wait += 1) {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       vi.mocked(delay).mockImplementationOnce(deterministicDelay as typeof delay);
     }
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -134,12 +138,14 @@ describe("development MCP readiness", () => {
     let elapsedMs = 0;
     const requestedWaits: number[] = [];
     const now = vi.spyOn(Date, "now").mockImplementation(() => elapsedMs);
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     const deterministicDelay = (ms: number, value?: unknown) => {
       requestedWaits.push(ms);
       elapsedMs += ms;
       return Promise.resolve(value);
     };
     for (let wait = 0; wait < 3; wait += 1) {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       vi.mocked(delay).mockImplementationOnce(deterministicDelay as typeof delay);
     }
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double

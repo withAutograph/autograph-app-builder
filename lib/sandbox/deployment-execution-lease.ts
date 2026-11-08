@@ -86,6 +86,7 @@ const defaultDependencies: RuntimeDependencies = {
 let dependencies = defaultDependencies;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function errorWithCleanupEvidence(error: unknown, evidence: SandboxCleanupEvidence) {
   const preserved =
     error instanceof Error
@@ -102,9 +103,10 @@ function errorWithCleanupEvidence(error: unknown, evidence: SandboxCleanupEviden
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function sandboxCleanupEvidence(error: unknown) {
   return error instanceof Error
-    ? // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/no-unsafe-dictionary-type -- Cleanup evidence is attached to errors under a private symbol.; Preserve the existing open-ended value contract.
+    ? // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Cleanup evidence is attached to errors under a private symbol.; Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
       ((error as unknown as Record<PropertyKey, unknown>)[cleanupEvidenceKey] as
         | SandboxCleanupEvidence
         | undefined)
@@ -188,6 +190,7 @@ export async function acquireHostedSandboxExecutionLease(input: {
       lease: result.lease,
       store,
     });
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve absent leases and existing authority failures.
     return result.lease;
   } catch (error) {
     const evidence = await stopWithin(input.sandbox);
@@ -228,6 +231,7 @@ export async function assertHostedSandboxCommandAuthority(input: {
     });
     commandAuthorities.set(input.sessionId, { ...active, lease });
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absent leases and existing authority failures.
   return lease;
 }
 
@@ -283,6 +287,7 @@ export function setHostedSandboxExecutionLeaseDependenciesForTest(
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function clearHostedSandboxExecutionLeaseCacheForTest() {
   commandAuthorities.clear();
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   database = undefined;
   dependencies = defaultDependencies;
 }

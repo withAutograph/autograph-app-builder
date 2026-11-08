@@ -192,6 +192,7 @@ export function buildPreviewCimdOptions(input: {
       } catch {
         throw new Error("Preview CIMD resources must be JSON documents.");
       }
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof document !== "object" || document === null) {
         throw new Error("Preview CIMD resources must be JSON objects.");
       }

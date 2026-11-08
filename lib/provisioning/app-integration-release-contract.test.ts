@@ -84,6 +84,7 @@ test("fresh Auth bootstrap retains proven optional rows read-only while its writ
   }).not.toThrow();
   expect(() => {
     assertOwnedAppProductionEnvironment(
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       { ...bootstrap, retainedOptionalBindings: undefined },
       Object.keys(values),
     );

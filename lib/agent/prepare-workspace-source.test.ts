@@ -16,14 +16,14 @@ const mocks = vi.hoisted(() => ({
   guard: vi.fn(),
   inspectGitHub: vi.fn(),
   repositoryAccess: vi.fn(),
-  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the existing broader shape used by this operation.
+  // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/require-safety-comment-for-type-assertion -- Keep the existing broader shape used by this operation.; Preserve the existing type assertion at this boundary.
   source: { phase: "empty" } as {
     phase: string;
     receipt?: SourceReceiptFixture;
     githubSource?: GitHubSourceFixture;
   },
   update: vi.fn(),
-  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the existing broader shape used by this operation.
+  // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/require-safety-comment-for-type-assertion -- Keep the existing broader shape used by this operation.; Preserve the existing type assertion at this boundary.
   workflow: { phase: "empty" } as {
     phase: string;
     githubSource?: GitHubSourceFixture;
@@ -32,7 +32,7 @@ const mocks = vi.hoisted(() => ({
   },
   workspace: { workspaceId: "sandbox", workspacePath: "/workspace/repository" },
 }));
-// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/tools dependency used by this test.
+// oxlint-disable-next-line anti-slop/no-module-mocking, anti-slop/no-unknown-parameters -- Keep the controlled eve/tools dependency used by this test. Preserve the existing unknown input contract.
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./source-bound-sandbox dependency used by this test.
 vi.mock("./source-bound-sandbox", () => ({
@@ -72,6 +72,7 @@ vi.mock("../repository/source-receipt", () => ({ SOURCE_RECEIPT_VERSION: 4 }));
 vi.mock("../repository/supported-template", () => ({
   prepareDevelopmentSandboxWorkspace: vi.fn(),
   prepareSupportedSandboxWorkspace: vi.fn(),
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   readPreparedSandboxWorkspaceRecord: () => Promise.resolve(mocks.workspace),
 }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../repository/sandbox-github-source dependency used by this test.
@@ -83,6 +84,7 @@ const selectedSource = () => ({
   phase: "reviewed",
   receipt: { sourcePath: "/workspace/repository", version: 4 },
 });
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const execute = () =>
   prepareWorkspace.execute(
     {},
@@ -112,6 +114,7 @@ describe("hosted workspace source acquisition", () => {
     mocks.source = { phase: "empty" };
     mocks.workflow = { phase: "empty" };
     mocks.inspectGitHub.mockResolvedValue(mocks.workspace);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     mocks.acquire.mockImplementation(() => {
       mocks.source = selectedSource();
       return Promise.resolve(mocks.source);

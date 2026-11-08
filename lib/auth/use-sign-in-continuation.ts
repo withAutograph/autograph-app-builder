@@ -35,7 +35,9 @@ export function useSignInContinuation() {
     ?.auth?.twoFactor;
 
   return useCallback(
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     (data: unknown) => {
+      // oxlint-disable-next-line typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness.
       if (twoFactorPath && isTwoFactorRedirect(data)) {
         storeTwoFactorMethods(data.twoFactorMethods);
 

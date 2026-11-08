@@ -62,6 +62,7 @@ const readOwnedLocalOrigin = async <T>(
   const result = await input.sandbox.run({
     command: `node -e ${quote(source)}`,
     workingDirectory: input.root,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
   });
   input.signal?.throwIfAborted();

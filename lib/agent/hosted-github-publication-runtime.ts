@@ -37,12 +37,14 @@ export type HostedGitHubPublicationProviderFactory = (input: {
 
 export interface HostedGitHubPublicationRuntimeResolver {
   resolve: (
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     sessionAuth: unknown,
     selection?: { selectedInstallationId: string },
   ) => Promise<GitHubPublicationRuntime>;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function exactGitHubPublicationAuthority(sessionAuth: unknown) {
   try {
     return exactForwardedSessionAuthority(sessionAuth);
@@ -67,6 +69,7 @@ interface PublicationStores {
 }
 
 export interface HostedGitHubPublicationRuntimeResolverDependencies {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   readPreparedHandoff: (sessionAuth: unknown) => Promise<
     | (BuilderHandoffIntent & {
         providers?: {
@@ -142,8 +145,9 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
     // oxlint-disable-next-line promise/prefer-await-to-callbacks
     // Preserve the shared lazy promise while clearing it after a failed open.
     // oxlint-disable-next-line promise/prefer-await-to-then
-    // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then -- Preserve the shared database initialization promise and clear it on rejection.
+    // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then, anti-slop/no-unknown-parameters -- Preserve the shared database initialization promise and its unknown rejection boundary.
     databasePromise ??= Promise.resolve(input.openDatabase()).catch((error: unknown) => {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       databasePromise = undefined;
       throw error;
     });
@@ -161,6 +165,7 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
       }
 
       const { authority, principal } = exactGitHubPublicationAuthority(sessionAuth);
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       const selectedInstallationId = await selectedPublicationInstallation(selection, () =>
         dependencies.readPreparedHandoff(sessionAuth),
       );

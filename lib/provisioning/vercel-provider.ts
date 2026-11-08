@@ -280,9 +280,11 @@ export async function provisionVercelProject(input: {
             body.ssoProtection = { deploymentType: PROTECTED_DEPLOYMENT_TYPE };
             body.oidcTokenConfig = { enabled: true, issuerMode: "team" };
           }
+          /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
           if (linkedRepository) {
             body.gitRepository = { repo: linkedRepository, type: "github" };
           }
+          /* oxlint-enable typescript/strict-boolean-expressions */
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const created = await vercel({
             body,
@@ -376,9 +378,11 @@ export async function provisionVercelProject(input: {
           },
           status: "succeeded",
         };
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
         if (linkedRepository) {
           success.linkedGitHubRepository = linkedRepository;
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
         return success;
       },
     );

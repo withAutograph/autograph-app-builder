@@ -40,6 +40,7 @@ const succeeded = createGitHubPrEffectReceipt({
 });
 
 const databaseFixture = (rows: readonly (readonly (object | string)[])[] = []) => {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const request = vi.fn((_sql: string, _params: readonly (object | string | number)[]) =>
     Promise.resolve({ rows: [...rows] }),
   );

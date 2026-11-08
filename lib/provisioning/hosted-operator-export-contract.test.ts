@@ -328,9 +328,11 @@ test("reading and completion require exact export intent approval, own attempt a
   };
   expect(tenantExportJournalRecordSchema.parse(complete).state).toBe("complete");
   for (const changed of [
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     { ...complete, approval: undefined },
     { ...complete, approval: { ...approval, action: "prepare" } },
     { ...complete, approval: { ...approval, idempotencyKey: "another-export-intent" } },
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     { ...complete, completion: undefined },
     {
       ...complete,

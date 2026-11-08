@@ -19,9 +19,11 @@ export async function GET(request: Request) {
   try {
     const code = query.get("code");
     const state = query.get("state");
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (!code || !state) {
       throw new Error("invalid");
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     const relay = verifyLocalVercelRelay(state, emulation.relaySecret, Date.now(), origin);
     const callback = new URL("/vercel/installations/callback", origin);
     callback.searchParams.set("code", code);

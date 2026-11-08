@@ -30,6 +30,7 @@ export function isolateAbortSignalPerFetch(fetchImplementation) {
 }
 
 if (process.env.APP_BUILDER_EVE_EVAL_FETCH_PRELOAD === "1") {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof globalThis.fetch !== "function") {
     throw new TypeError("The Eve eval fetch implementation was unavailable.");
   }

@@ -25,6 +25,7 @@ import { HostedMcpProofClient } from "./hosted-portable-proof";
 import { TOOL_NAMES } from "./portable-release";
 
 const promotionReceiptName = "promotion-receipt.json";
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const compareAssetNames = (left: unknown, right: unknown) => {
   const leftText = String(left);
   const rightText = String(right);
@@ -111,8 +112,10 @@ async function ownerToken(path: string) {
 function deploymentIdentity(value: string) {
   const parsed = JSON.parse(value) as { id?: unknown; url?: unknown };
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof parsed.id !== "string" ||
     !/^dpl_[A-Za-z0-9]+$/u.test(parsed.id) ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof parsed.url !== "string" ||
     !/^[A-Za-z0-9.-]+[.]vercel[.]app$/u.test(parsed.url)
   ) {
@@ -168,9 +171,10 @@ async function removePublicationTree(root: string) {
       await chmod(path, 0o600);
     }
   }
-  // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+  // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
   await makeWritable(root).catch((error: unknown) => {
     if (
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof error !== "object" ||
       error === null ||
       !("code" in error) ||
@@ -244,6 +248,7 @@ try {
     } catch (error) {
       const { stderr } = error as { stderr?: unknown };
       if (
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof stderr === "string" &&
         /release not found|could not resolve to a release/iu.test(stderr)
       ) {
@@ -409,6 +414,7 @@ try {
     metadata.resource !== receipt.endpoint ||
     !Array.isArray(metadata.authorization_servers) ||
     metadata.authorization_servers.length !== 1 ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof metadata.authorization_servers[0] !== "string"
   ) {
     throw new Error("Deployed OAuth resource metadata did not match release.");

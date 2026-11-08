@@ -36,6 +36,7 @@ it("does not retry an owner denial or unclassified failure", async () => {
 it("respects cancellation during a failed read", async () => {
   const controller = new AbortController();
   await expect(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     readContinuityApprovalWithRecovery(() => {
       controller.abort();
       return Promise.reject(new HostedOperatorError("operator_unavailable"));
@@ -46,6 +47,7 @@ it("respects cancellation during a failed read", async () => {
 it("does not return authority from a successful read completed after cancellation", async () => {
   const controller = new AbortController();
   const result = Promise.withResolvers<{ approved: boolean }>();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const read = vi.fn(() => result.promise);
   const pending = readContinuityApprovalWithRecovery(read, controller.signal);
   const rejected = expect(pending).rejects.toThrow();

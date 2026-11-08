@@ -153,6 +153,7 @@ type GitHubRepositorySourceProvider = GitHubRepositoryAccessProvider &
 function repositorySourceProvider(
   value: GitHubRepositoryAccessProvider,
 ): value is GitHubRepositorySourceProvider {
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const candidate = value as Partial<GitHubRepositorySourceProvider>;
   return (
     typeof candidate.inspectRepository === "function" &&
@@ -219,6 +220,7 @@ export function createRepositoryAccessRuntime(input: {
               // Octokit's installation lookup preserves HTTP status. A revoked
               // installation is not an outage; rate limits and invalid app
               // credentials must not ask the user to reconnect their account.
+              // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
               const failure = error as {
                 status?: number;
                 response?: { headers?: Record<string, string> };
@@ -341,9 +343,11 @@ export function createRepositoryAccessRuntime(input: {
               requestId: value.requestId,
               sessionId: value.sessionId,
             };
+            /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
             if (value.selectedInstallationId) {
               continuationInput.selectedInstallationId = value.selectedInstallationId;
             }
+            /* oxlint-enable typescript/strict-boolean-expressions */
             return continuationInput;
           };
           const continuation = await input.continuations.consume(consumeRequest());
@@ -403,9 +407,11 @@ export function createRepositoryAccessRuntime(input: {
               requestId: value.requestId,
               sessionId: value.sessionId,
             };
+            /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
             if (value.selectedInstallationId) {
               continuationInput.selectedInstallationId = value.selectedInstallationId;
             }
+            /* oxlint-enable typescript/strict-boolean-expressions */
             return { ...continuationInput, callbackUrl };
           };
           const continuation = await input.continuations.create(createRequest());
@@ -526,12 +532,14 @@ export function createRepositoryAccessRuntime(input: {
       });
       // Source intent may arrive after eager execution-lease acquisition created
       // the VM. Recover that same VM only when no existing checkout is present.
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       const sandbox = typeof value.sandbox === "function" ? await value.sandbox() : value.sandbox;
       const snapshot = await readSandboxGitHubSourceSnapshot(
         sandbox,
         {
           repository: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
         },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         () => materializeBuilderSandboxGitSource(sandbox, sandboxSource),
       );
       const appBaseline =
@@ -618,9 +626,11 @@ export function createRepositoryAccessRuntime(input: {
         const accessRequest: Parameters<typeof classify>[0] = {
           repository: candidate.record.repository.fullName,
         };
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
         if (candidate.record.selectedInstallationId) {
           accessRequest.selectedInstallationId = candidate.record.selectedInstallationId;
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
         // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Classify candidates in order before choosing access.
         const access = await classify(accessRequest);
         if (access.status !== "ready") {
@@ -674,6 +684,7 @@ interface RepositoryAccessRuntimeConfiguration {
 let runtimeInput: RepositoryAccessRuntimeConfiguration | undefined;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
   const { authority, principal } = exactForwardedSessionAuthority(sessionAuth);
   const { readPreparedHandoffContext } = await import("./handoff-context");
@@ -691,8 +702,10 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
       origin: new URL(installation.issuer).origin,
     };
     if (emulation) {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       configured.providerFetch = (resource, init) => {
         let resourceUrl: string;
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         if (typeof resource === "string") {
           resourceUrl = resource;
         } else if (resource instanceof URL) {

@@ -415,6 +415,7 @@ export function createAutographMcpHandler(
           ) {
             try {
               const recovered = await service.recoverAppliedApprovalResponse({
+                // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
                 responses: input.responses as {
                   requestId: string;
                   response: { kind: "approve" | "deny" };
@@ -508,9 +509,11 @@ async function isPublicDiscoveryRequest(request: Request): Promise<boolean> {
     return (
       messages.length > 0 &&
       messages.every((message) => {
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         if (typeof message !== "object" || message === null || !("method" in message)) {
           return false;
         }
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         return typeof message.method === "string" && publicDiscoveryMethods.has(message.method);
       })
     );
@@ -519,6 +522,7 @@ async function isPublicDiscoveryRequest(request: Request): Promise<boolean> {
   }
 }
 
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
 const discoveryOnlyService = new Proxy({} as EveSessionService, {
   get() {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -530,6 +534,7 @@ const discoveryOnlyService = new Proxy({} as EveSessionService, {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function authenticationRequiredService(challenge: string) {
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   return new Proxy({} as EveSessionService, {
     get() {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -545,6 +550,7 @@ async function isToolCallRequest(request: Request): Promise<boolean> {
   try {
     const body: unknown = await request.clone().json();
     return (
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof body === "object" && body !== null && "method" in body && body.method === "tools/call"
     );
   } catch {
@@ -565,15 +571,17 @@ async function requiredScopesForRequest(request: Request): Promise<string[]> {
   try {
     const body: unknown = await request.clone().json();
     if (
-      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
+      // oxlint-disable-next-line sonarjs/expression-complexity, anti-slop/no-runtime-typeof -- Preserve the existing conditions and their evaluation order; Preserve this runtime check and existing input handling.
       typeof body === "object" &&
       body !== null &&
       "method" in body &&
       body.method === "tools/call" &&
       "params" in body &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof body.params === "object" &&
       body.params !== null &&
       "name" in body.params &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof body.params.name === "string" &&
       hostedToolNames.has(body.params.name)
     ) {

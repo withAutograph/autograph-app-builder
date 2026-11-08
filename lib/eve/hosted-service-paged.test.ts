@@ -481,6 +481,7 @@ describe("unchanged paged observation reuse", () => {
       principal,
       store: f.store,
       transport: f.adapter,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       beforeRead: () => Promise.reject(revoked),
     });
     await expect(service.get({ cursor: 0, limit: 1, sessionId: f.sessionId })).rejects.toBe(
@@ -1506,6 +1507,7 @@ describe("paged hosted session observation", () => {
             publicEventCount: total,
           }),
           pendingRequests,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(accepted && kind === "send" ? { nativeDeliveryState: sendProof } : {}),
         };
         return {
@@ -1533,6 +1535,7 @@ describe("paged hosted session observation", () => {
       f.adapter.sendAccepted = sendAccepted;
       f.adapter.respondAccepted = respondAccepted;
       const requestId = randomUUID();
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const submit = () =>
         kind === "send"
           ? f.service.send({

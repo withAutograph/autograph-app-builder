@@ -16,6 +16,7 @@ const EVE_SERVER_PATH = "/eve/__server";
 const require = createRequire(import.meta.url);
 const installed = require.resolve("eve/package.json");
 const nativeRoot = process.env.EVE_RECOVERY_NATIVE_ROOT ?? path.dirname(installed);
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const load = (file) => import(pathToFileURL(path.join(nativeRoot, "dist/src", file)).href);
 const { createEveVercelOptions } = await load("internal/nitro/host/vercel-build-output-config.js");
 const { normalizeEveVercelRoutes } = await load(

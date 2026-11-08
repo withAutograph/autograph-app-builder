@@ -111,6 +111,7 @@ const workerConfig = () => {
 const emit = (event: WorkerEvent) =>
   process.stdout.write(`${eventPrefix}${JSON.stringify(event)}\n`);
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const waitForCommand = (commandName: string) =>
   new Promise<void>((resolve, reject) => {
     let timeout: NodeJS.Timeout | null = null;

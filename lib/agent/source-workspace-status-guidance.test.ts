@@ -352,6 +352,7 @@ describe("source and workspace status guidance", () => {
     const baselineFiles = [
       { mode: "100644", objectId: "a".repeat(40), path: "app.txt", sha256: sha256("original") },
     ];
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     const selected = { ...workflowState("app_spec_accepted"), githubSource: undefined };
     selected.workspace = {
       ...workspace,
@@ -366,7 +367,9 @@ describe("source and workspace status guidance", () => {
     ]);
     const sandbox = {
       id: observed.workspaceId,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       readTextFile: ({ path }: { path: string }) => Promise.resolve(files.get(path) ?? null),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       run: () =>
         Promise.resolve({
           exitCode: 0,

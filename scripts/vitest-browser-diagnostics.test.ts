@@ -25,7 +25,9 @@ describe("Vitest browser failure diagnostics", () => {
       private errorListener: ((error: Error & { code?: string }) => void) | undefined;
 
       destroy(): void {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         this.connectListener = undefined;
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         this.errorListener = undefined;
       }
 
@@ -98,6 +100,7 @@ describe("Vitest browser failure diagnostics", () => {
     };
     let originalOpenCalls = 0;
     const provider: BrowserProvider = {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       close() {
         return Promise.resolve();
       },
@@ -105,6 +108,7 @@ describe("Vitest browser failure diagnostics", () => {
         return { page };
       },
       name: "playwright",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       openPage() {
         originalOpenCalls += 1;
         return Promise.resolve();
@@ -114,6 +118,7 @@ describe("Vitest browser failure diagnostics", () => {
     const reports: BrowserFailureDiagnostic[] = [];
     const probes: [string, number][] = [];
     const instrumented = attachVitestBrowserFailureDiagnostics(provider, 63_315, {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       probe(host, port) {
         probes.push([host, port]);
         return Promise.resolve("connection_refused");

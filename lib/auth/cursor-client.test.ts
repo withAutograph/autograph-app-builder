@@ -29,6 +29,7 @@ function storage() {
       ],
     ],
   ]);
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   const rowsFor = (table: unknown) => {
     const tableRows = rows.get(table);
     if (!tableRows) {
@@ -36,6 +37,7 @@ function storage() {
     }
     return tableRows;
   };
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   const selectFrom = (table: unknown) => ({
     where: () => {
       const result = Promise.resolve(rowsFor(table));
@@ -43,6 +45,7 @@ function storage() {
     },
   });
   const database = {
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     insert: vi.fn((table: unknown) => ({
       // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       values: (row: Record<string, unknown>) => ({
@@ -56,7 +59,7 @@ function storage() {
       }),
     })),
     select: vi.fn(() => ({ from: selectFrom })),
-    // oxlint-disable-next-line anti-slop/no-unknown-returns -- The transaction fixture preserves the callback's arbitrary result.
+    // oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- The transaction fixture preserves the callback's arbitrary result. Preserve the existing unknown input contract.
     transaction: async (operation: (tx: unknown) => Promise<unknown>) => {
       const before = structuredClone([...rows.values()]);
       try {
@@ -70,7 +73,7 @@ function storage() {
     },
   };
   return {
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The database fixture implements only the OAuth client operations under test.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The database fixture implements only the OAuth client operations under test.; Preserve the existing type assertion at this boundary.
     database: database as unknown as Parameters<typeof setupCursorClient>[0],
     insert: database.insert,
     rows,

@@ -137,11 +137,13 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         }),
         preferredPasskeyAuthenticatorAttachment(),
       ]);
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const body = (await response.json()) as OnboardingResponse;
       if (isPasskeyOnboardingAlreadyAuthenticated(body)) {
         navigate({ replace: true, to: resolvedRedirectTo });
         return;
       }
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (!response.ok || typeof body.context !== "string") {
         throw new Error("Passkey registration is unavailable.");
       }
@@ -150,6 +152,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         context: body.context,
         createSession: true,
         name: "Primary passkey",
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(authenticatorAttachment ? { authenticatorAttachment } : {}),
       });
       if (isPasskeyOnboardingAlreadyAuthenticated(result)) {
@@ -162,10 +165,12 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
       }
       navigate({ to: resolvedRedirectTo });
     } catch (error) {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (authenticatedRedirectTo && isPasskeyOnboardingAlreadyAuthenticated(error)) {
         navigate({ replace: true, to: authenticatedRedirectTo });
         return;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       setFailed(true);
     } finally {
       setPending(false);

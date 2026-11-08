@@ -533,15 +533,18 @@ export async function inspectFixtureApplyOverlay(
     throw new Error("The prepared workspace manifest is missing.");
   }
   const invalidManifest = "The prepared workspace manifest is invalid.";
+  // SAFETY: JSON.parse returns any; unknown makes no claim about the parsed shape.
   const parsed = JSON.parse(sourceManifest) as unknown;
   if (!Array.isArray(parsed)) {
     throw new TypeError(invalidManifest);
   }
   const manifestEntries: unknown[] = parsed;
   const sourceFiles = manifestEntries.map((candidate) => {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (typeof candidate !== "object" || candidate === null || !("path" in candidate)) {
       throw new Error(invalidManifest);
     }
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (typeof candidate.path !== "string" || !safeSourcePath(candidate.path)) {
       throw new Error(invalidManifest);
     }
@@ -632,6 +635,7 @@ function parseTargetReceipt(
   }
   let candidate: unknown;
   try {
+    // SAFETY: JSON.parse returns any; unknown makes no claim about the parsed shape.
     candidate = JSON.parse(result.stdout) as unknown;
   } catch {
     return undefined;

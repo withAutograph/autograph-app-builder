@@ -628,6 +628,7 @@ const approveAppSource = (f: ReturnType<typeof fixture>, includeLegacy = false) 
     gatewayBindings: {
       ...f.input.plan.gatewayBindings,
       trustedSources: {
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(includeLegacy ? approvedSources : {}),
         appPreview: { projectId: selection.projectId, from: "preview", to: "preview" },
       },

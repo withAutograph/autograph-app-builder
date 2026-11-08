@@ -87,7 +87,9 @@ describe("planning from the current checkout", () => {
             readFileSync(nodePath.join(root, path.replace(/^repository\//u, ""))),
           ),
         readTextFile: async () => await Promise.resolve(null),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         removePath: () => Promise.resolve(),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         writeTextFile: () => Promise.resolve(),
         run: async ({ command }: { command: string }) => {
           const stdout = command.startsWith("stat ")
@@ -517,6 +519,7 @@ describe("planning from the current checkout", () => {
       planningRoot: scratchRoot,
     });
     const identity = targetIdentitySchema.parse(JSON.parse(identityResult.stdout));
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const run = vi.fn<SandboxSession["run"]>((input) => {
       const result = { exitCode: 0, stderr: "", stdout: "" };
       if (input.command.startsWith("mkdir ")) {
@@ -540,6 +543,7 @@ describe("planning from the current checkout", () => {
     });
     const sandbox = createSandbox({
       run,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       removePath: ({ path }: { path: string }) => {
         for (const file of files.keys()) {
           if (file.startsWith(`/workspace/${path}/`)) {
@@ -548,15 +552,18 @@ describe("planning from the current checkout", () => {
         }
         return Promise.resolve();
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       writeTextFile: ({ path, content }: { path: string; content: string }) => {
         files.set(`/workspace/${path}`, content);
         return Promise.resolve();
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readBinaryFile: ({ path }: { path: string }) => {
         const content = files.get(`/workspace/${path}`);
         return Promise.resolve(content === undefined ? null : Buffer.from(content));
       },
     });
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const plan = () =>
       executeTargetIdentityAndPlanning({
         appId: "example",

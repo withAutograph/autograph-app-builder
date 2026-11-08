@@ -45,6 +45,7 @@ export const MixedRequests: Story = {
 export const HostToolsUnavailable: Story = { args: { canCallTools: false } };
 export const Submitted: Story = {
   args: {
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     result: { ...mixedResult, inputRequests: undefined, status: "working" },
   },
 };

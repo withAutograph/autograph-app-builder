@@ -14,10 +14,12 @@ const props = {
     adapterGeneration: 1,
     adapterSessionId: "original-adapter",
     cancellationRevision: 0,
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     checkpointDigest: undefined,
   },
   github: [],
   ready: false,
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   request: undefined,
   requestId: "be05a1b9-92d0-4a16-832b-3309a5594244",
   selectable: true,

@@ -30,6 +30,7 @@ export function ProviderConnection({
   resumeKey,
   title,
 }: ProviderConnectionProps) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <main className="min-h-svh bg-background text-foreground">
       <header className="flex h-14 items-center border-b bg-background px-4 text-sm sm:px-8">
@@ -67,6 +68,7 @@ export function ProviderConnection({
       </Card>
     </main>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

@@ -8,10 +8,12 @@ export const evidencePrefix = "SELF_REPRODUCTION_EVIDENCE ";
 // Apply to structured receipts and native diagnostics before persistence. Never
 // serialize the runtime environment or session continuation credentials.
 export function sanitizeEvidence(value: string): string;
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve arbitrary evidence values while redacting them.
+// oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- Preserve arbitrary evidence values while redacting them. Preserve the existing unknown input contract.
 export function sanitizeEvidence(value: unknown): unknown;
 // eslint-disable-next-line eslint/func-style, anti-slop/no-unknown-returns -- Preserve arbitrary evidence values while redacting them. Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function sanitizeEvidence(value: unknown): unknown {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value === "string") {
     return value
       .replaceAll(/\bBearer\s+[^\s"',}]+/giu, "Bearer [REDACTED]")
@@ -32,6 +34,7 @@ export function sanitizeEvidence(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sanitizeEvidence);
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value === "object" && value !== null) {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
@@ -89,18 +92,23 @@ export function evidenceSink(
       return;
     }
     try {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const record = sanitizeEvidence(
         JSON.parse(raw.slice(start + evidencePrefix.length)),
         // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       ) as Record<string, unknown>;
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
       if (
         !record ||
         Array.isArray(record) ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof record !== "object" ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof record.kind !== "string"
       ) {
         return;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       records.push(record);
       appendFileSync(transcriptPath, `${JSON.stringify(record)}\n`, { mode: 0o600 });
     } catch {
@@ -133,6 +141,7 @@ function changeSetStatusOutput(
   record: Record<string, unknown>,
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 ): Record<string, unknown> | undefined {
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const event = record.event as
     | {
         type?: unknown;
@@ -149,8 +158,9 @@ function changeSetStatusOutput(
   const { toolName: resultToolName } = event.data.result;
   if (resultToolName === "change-set-status" || resultToolName === "change_set_status") {
     const { output } = event.data.result;
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     return typeof output === "object" && output !== null && !Array.isArray(output)
-      ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+      ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract; Preserve the existing assertion at this boundary.
         (output as Record<string, unknown>)
       : undefined;
   }
@@ -189,12 +199,16 @@ export function candidateExportFromEvidence(
     const validated: CandidateExportFile[] = [];
     const paths = new Set<string>();
     for (const file of files) {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof file !== "object" || file === null || Array.isArray(file)) {
         return undefined;
       }
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const { path, content } = file as { path?: unknown; content?: unknown };
       if (
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof path !== "string" ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof content !== "string" ||
         path.startsWith("/") ||
         path.includes("\\")

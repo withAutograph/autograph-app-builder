@@ -136,6 +136,7 @@ describe("expired pre-delivery captured account", () => {
     };
     await expect(operations.ensureNormalActorCapture(input)).rejects.toThrow("ordinary invitation");
     expect(invitation).toHaveBeenCalledWith(
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       expect.objectContaining({ actorKey: "owner", organizationId: undefined }),
     );
     expect(network).not.toHaveBeenCalled();

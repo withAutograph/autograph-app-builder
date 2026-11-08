@@ -36,6 +36,7 @@ function createDatabase(results: unknown[]) {
     callback({ execute }),
   );
   return {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     database: { execute, transaction } as never,
     execute,
     transaction,

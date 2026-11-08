@@ -222,6 +222,7 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
   await finishOAuth(page, "GitHub");
   const ownerSession = sessionSchema.parse(await currentSession(page));
   const ownerId = ownerSession?.user?.id;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   expect(typeof ownerId).toBe("string");
   const handoff = await prepareNamedHandoff(
     page,
@@ -256,6 +257,7 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
     await expect(strangerPage).toHaveURL(`${appOrigin}/`);
     const strangerSession = sessionSchema.parse(await currentSession(strangerPage));
     const strangerId = strangerSession?.user?.id;
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     expect(typeof strangerId).toBe("string");
     expect(strangerId).not.toBe(ownerId);
     const unavailableResponse = await getWithTransientRetry(strangerPage, handoff.statusPath);
@@ -488,6 +490,7 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
     `/api/builder/handoffs/${new URL(handoffUrl).pathname.split("/").at(-1)}`,
   );
   expect(response.ok()).toBe(true);
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const saved = await response.json();
   // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
   expect(saved.status).toBe("prepared");

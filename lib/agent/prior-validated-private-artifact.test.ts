@@ -27,6 +27,7 @@ import type { AppBuilderWorkflowState } from "./workflow-state";
 
 afterEach(() => vi.unstubAllEnvs());
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const own = (operation: () => Promise<void>) =>
   contextStorage.run(new ContextContainer(), operation);
 const sign = <T extends object>(body: T) => ({ ...body, digest: sha256(JSON.stringify(body)) });
@@ -149,6 +150,7 @@ const seed = (
     stderr: "",
     stdout: observed.map(({ mode, digest, path }) => `${mode}\t${digest}\t${path}\n`).join(""),
   });
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const run = vi.fn(() => Promise.resolve(result()));
   // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
   const unexpectedSandboxOperation = () => {
@@ -237,6 +239,7 @@ it.each([
     await own(async () => {
       const f = seed();
       const selected = await priorValidatedPrivateArtifact(f.input);
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       f.run.mockImplementationOnce(() => {
         if (drift === "authority") {
           requestPrivateApplyApproval(f.currentScope, "new-pending");

@@ -43,7 +43,9 @@ describe("approval-bound implementation files", () => {
         path: "apps/stock-exceptions/db/migrations/001.sql",
       },
     ]);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const writeTextFile = vi.fn(() => Promise.resolve());
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const executor = vi.fn(() =>
       Promise.resolve({
         exitCode: 0,
@@ -57,6 +59,7 @@ describe("approval-bound implementation files", () => {
       wrapped({
         appId: "stock-exceptions",
         applyRoot: "/workspace/repository",
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         proposal: {
           operation: "iterate-existing-app",
           plan: { source: { workspacePath: "apps/stock-exceptions" } },
@@ -81,7 +84,9 @@ describe("approval-bound implementation files", () => {
   });
 
   it("rejects out-of-app implementation files before applying an existing-app change", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const writeTextFile = vi.fn(() => Promise.resolve());
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const executor = vi.fn(() => Promise.resolve({ exitCode: 0, stderr: "", stdout: "" }));
     const wrapped = withImplementationFiles(executor, [
       { content: "out of scope", path: "packages/platform/src/change.ts" },
@@ -91,6 +96,7 @@ describe("approval-bound implementation files", () => {
       wrapped({
         appId: "inventory-queue",
         applyRoot: "/workspace/repository",
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         proposal: {
           operation: "iterate-existing-app",
           plan: { source: { workspacePath: "apps/inventory-queue" } },

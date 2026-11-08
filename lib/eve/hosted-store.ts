@@ -158,10 +158,12 @@ export const hostedCheckpointRefSchema = z.strictObject({
   id: z.uuid(),
 });
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const canonicalRecordValue = (value: unknown): string => {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalRecordValue).join(",")}]`;
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
       .toSorted(([left], [right]) => left.localeCompare(right))
@@ -173,10 +175,12 @@ const canonicalRecordValue = (value: unknown): string => {
 
 // JSON storage omits undefined object members and writes undefined array items
 // as null. Hash the same shape that a checkpoint can retain after persistence.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const canonicalPersistedValue = (value: unknown): string => {
   if (Array.isArray(value)) {
     return `[${value.map((entry) => (entry === undefined ? "null" : canonicalPersistedValue(entry))).join(",")}]`;
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
       .filter(([, entry]) => entry !== undefined)
@@ -479,6 +483,7 @@ export const hostedSessionCreationDigest = (record: HostedSessionRecord): string
         principal: parsed.principal,
         sessionId: parsed.sessionId,
         version: 1,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(parsed.version === 2 && (parsed.sourceHandoffId ?? "") !== ""
           ? { sourceHandoffId: parsed.sourceHandoffId }
           : {}),
@@ -1821,6 +1826,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     return structuredClone(updated);
   }
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   readUnsettledSendAcknowledgements: HostedEveStore["readUnsettledSendAcknowledgements"] = (
     input,
   ) => {
@@ -1873,6 +1879,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
               InMemoryHostedEveStore.operationKey(principal, operation.operationId),
             ) ?? null,
         })),
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(operations.length > page.length && last !== undefined
           ? {
               nextCursor: {

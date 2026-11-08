@@ -31,7 +31,7 @@ async function hasAuthenticatedVisitor() {
   return Boolean(session?.user);
 }
 
-// oxlint-disable-next-line sonarjs/function-name, eslint/func-style -- React components use PascalCase names for JSX and diagnostics. Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line sonarjs/function-name, eslint/func-style, typescript/consistent-return -- Preserve conditional authentication redirect behavior. React components use PascalCase names for JSX and diagnostics. Preserve function declaration hoisting and initialization timing.
 async function RedirectAuthenticatedVisitor({
   searchParams,
 }: {

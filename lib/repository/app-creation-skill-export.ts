@@ -52,6 +52,7 @@ async function absent(target: string): Promise<boolean> {
     await lstat(target);
     return false;
   } catch (error) {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return true;
     }

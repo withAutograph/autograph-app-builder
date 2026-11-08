@@ -79,6 +79,7 @@ const fixture = () => {
       .mockResolvedValue({ requestId: "legacy-auth-wait" }),
     claimDelivery: vi
       .fn<ProvisioningEventRouteDependencies["claimDelivery"]>()
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       .mockImplementation((_claim, id, _streamStartIndex) => {
         if (delivered.has(id)) {
           return Promise.resolve(false);
@@ -88,6 +89,7 @@ const fixture = () => {
       }),
     readDeliveryClaim: vi
       .fn<ProvisioningEventRouteDependencies["readDeliveryClaim"]>()
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       .mockImplementation((_claim, id) => Promise.resolve(delivered.has(id))),
     readDeliveryStartIndex: vi
       .fn<ProvisioningEventRouteDependencies["readDeliveryStartIndex"]>()
@@ -97,6 +99,7 @@ const fixture = () => {
       .mockResolvedValue("legacy-auth-wait"),
     readDeliveryReceipt: vi
       .fn<ProvisioningEventRouteDependencies["readDeliveryReceipt"]>()
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       .mockImplementation((_claim, id) => {
         if (accepted.has(id)) {
           return Promise.resolve("accepted");
@@ -105,6 +108,7 @@ const fixture = () => {
       }),
     acceptDelivery: vi
       .fn<ProvisioningEventRouteDependencies["acceptDelivery"]>()
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       .mockImplementation((_claim, id) => {
         accepted.add(id);
         return Promise.resolve();
@@ -424,6 +428,7 @@ const question = (requestId: string): InputRequest => ({
   },
 });
 const streamSession = (events: NativeEvent[], live = false) => {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const getEventStream = vi.fn<NativeSession["getEventStream"]>().mockImplementation((options) =>
     Promise.resolve(
       new ReadableStream<NativeEvent>({
@@ -451,11 +456,13 @@ const streamSession = (events: NativeEvent[], live = false) => {
     });
   const getStreamTailIndex = vi
     .fn<NativeSession["getStreamTailIndex"]>()
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     .mockImplementation(() => Promise.resolve(events.length - 1));
   const session: NativeSession = {
     id: claim.adapterSessionId,
     getEventStream,
     getStreamTailIndex,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     respond: (responses, options) => respond(responses, options),
     send: vi
       .fn<NativeSession["send"]>()
@@ -475,6 +482,7 @@ describe("exact legacy technical response and owner proof", () => {
     const pending = new Set(["legacy-auth-wait", "product-decision"]);
     const events: NativeEvent[] = [];
     const native = streamSession(events, true);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     native.respond.mockImplementation((responses, options) => {
       expect(options.auth).toBe(auth);
       for (const response of responses) {
@@ -516,6 +524,7 @@ describe("exact legacy technical response and owner proof", () => {
     const pending = new Set(["product-decision"]);
     const events: NativeEvent[] = [];
     const native = streamSession(events, true);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     native.respond.mockImplementation((responses) => {
       events.push(nativeEvent({ type: "message.received", data: { message: responses[0]?.text } }));
       return Promise.resolve({ sessionId: claim.adapterSessionId, status: "accepted" });

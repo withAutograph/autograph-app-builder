@@ -29,6 +29,7 @@ function canonicalSelector(value: string) {
     if (quote !== undefined) {
       output += char;
       if (char === quote && value[index - 1] !== "\\") {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         quote = undefined;
       }
     } else if (char === '"' || char === "'") {
@@ -126,9 +127,11 @@ export function generatedCssRule(
   value: string | undefined,
   declarations: { name: string; value: string; important?: boolean }[],
 ) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!selector || value === undefined) {
     return;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const tuple = key(selector, property, value);
   const matchingGenerated = generated.filter(
     (rule) => key(rule.selector, rule.property, rule.value) === tuple,
@@ -146,6 +149,7 @@ export function generatedCssRule(
   const matchingShared = shared.filter(
     (rule) => key(rule.selector, rule.property, rule.value) === tuple,
   );
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve optional generated CSS evidence.
   return loaded.length === 1 && matchingGenerated.length === 1 && !matchingShared.length
     ? loaded[0]
     : undefined;

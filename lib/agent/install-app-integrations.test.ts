@@ -26,13 +26,16 @@ vi.mock("./product-behavior-state", () => ({
   invalidateProductBehaviorEvidence: hooks.invalidate,
 }));
 vi.mock("./source-bound-sandbox", () => ({
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   getSourceBoundSandbox: () => Promise.resolve(hooks.sandbox),
 }));
 
 const context: ToolContext = {
   abortSignal: new AbortController().signal,
   callId: "install-integrations",
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   getSandbox: () => Promise.reject(new Error("The source-bound sandbox fixture owns execution.")),
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   getToken: () => Promise.reject(new Error("Installation must not request a provider token.")),
   requireAuth: () => {
     throw new Error("Installation must use the existing private build approval.");

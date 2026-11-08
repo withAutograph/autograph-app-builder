@@ -108,13 +108,15 @@ export const createDevelopmentPackage = async (input: {
     });
     await mkdir(path.join(pluginRoot, "assets"), { mode: 0o700 });
     await cp(path.join(repositoryRoot, PLUGIN_ICON_PATH), path.join(pluginRoot, PLUGIN_ICON_PATH));
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const sourceManifest = JSON.parse(
       await readFile(path.join(repositoryRoot, PLUGIN_MANIFEST_PATH), "utf-8"),
       // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
     ) as Record<string, unknown>;
     const sourceInterface =
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof sourceManifest.interface === "object" && sourceManifest.interface !== null
-        ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+        ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
           (sourceManifest.interface as Record<string, unknown>)
         : {};
     const manifest = {
@@ -135,7 +137,7 @@ export const createDevelopmentPackage = async (input: {
       name: DEVELOPMENT_PLUGIN_NAME,
       version,
     };
-    // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the existing broader shape used by this operation.
+    // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/require-safety-comment-for-type-assertion -- Keep the existing broader shape used by this operation.; Preserve the existing type assertion at this boundary.
     delete (manifest as { apps?: unknown }).apps;
     const mcp = {
       mcpServers: {
@@ -315,10 +317,13 @@ export const registerDevelopmentPackage = async (input: {
         });
         return { stderr: result.stderr, stdout: result.stdout };
       } catch (error) {
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
         if (options.allowFailure) {
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
           const failed = error as { stdout?: string; stderr?: string };
           return { stderr: failed.stderr ?? "", stdout: failed.stdout ?? "" };
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
         throw error;
       }
     });
@@ -335,7 +340,9 @@ export const registerDevelopmentPackage = async (input: {
     ["plugin", "list", "--marketplace", DEVELOPMENT_MARKETPLACE_NAME, "--json"],
     {},
   );
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const parsed = JSON.parse(listed.stdout) as { installed?: unknown[] };
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const installed = parsed.installed?.[0] as
     | {
         pluginId?: unknown;

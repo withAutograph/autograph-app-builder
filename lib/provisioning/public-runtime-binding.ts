@@ -120,6 +120,7 @@ export const readVerifiedPublicRuntimeBinding = async (input: {
     projectId: observed.projectId,
     environment: observed.environment,
     publicOrigin: observed.publicOrigin,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(input.appEntryPath === undefined ? {} : { appEntryPath: input.appEntryPath }),
     deploymentId: observed.deploymentId,
     releaseId: observed.releaseId,

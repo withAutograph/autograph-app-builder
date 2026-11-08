@@ -16,6 +16,7 @@ const fixture = () => {
   });
   const readFile = vi.fn<Session["readFile"]>().mockResolvedValue(null);
   const currentSession = vi.fn(() => ({ readFile }));
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const get = vi.fn<Lookup>(() => Promise.resolve({ currentSession }));
   return {
     assertCurrentOwner,
@@ -74,6 +75,7 @@ describe("read-only application review Sandbox reconstruction", () => {
     expect(await reader.readFile({ path: "/workspace/repository/missing.ts" })).toBeNull();
     expect(state.readFile).toHaveBeenCalledWith(
       { path: "/workspace/repository/missing.ts" },
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       { signal: undefined },
     );
   });
@@ -118,6 +120,7 @@ describe("read-only application review Sandbox reconstruction", () => {
 
   it("rechecks ownership after lookup and before resolving its session", async () => {
     const state = fixture();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     state.get.mockImplementation(() => {
       state.revoke();
       return Promise.resolve({ currentSession: state.currentSession });
@@ -143,6 +146,7 @@ describe("read-only application review Sandbox reconstruction", () => {
     const state = fixture();
     const source = Readable.from([Buffer.from("private source")]);
     const destroyed = vi.spyOn(source, "destroy");
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     state.readFile.mockImplementation(() => {
       state.revoke();
       return Promise.resolve(source);
@@ -169,6 +173,7 @@ describe("read-only application review Sandbox reconstruction", () => {
     const state = fixture();
     const controller = new AbortController();
     const reason = new Error("Stop during lookup");
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     state.get.mockImplementation(() => {
       controller.abort(reason);
       return Promise.resolve({ currentSession: state.currentSession });
@@ -186,6 +191,7 @@ describe("read-only application review Sandbox reconstruction", () => {
     const reason = new Error("read cancelled");
     const source = Readable.from([Buffer.from("source")]);
     const destroyed = vi.spyOn(source, "destroy");
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     state.readFile.mockImplementation((_file, options) => {
       expect(options?.signal?.aborted).toBe(false);
       request.abort(reason);

@@ -43,6 +43,7 @@ describe("route-local auth configuration", () => {
         vi.stubEnv(key, scenario.credentials ? "test-configured" : undefined);
       }
       passkeysFlag.mockResolvedValue(false);
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
       const { children: configuration } = RouteProviders({ children: null, fallback: null }).props;
       // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       expect(configuration.type).toBe(AuthConfiguration);
@@ -65,7 +66,7 @@ describe("route-local auth configuration", () => {
       expect(boundary.type).toBe(Suspense);
       // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       expect(boundary.props.fallback).toBe(fallback);
-      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing untyped input or fixture boundary.; Preserve the existing dynamic value boundary.
       const configuration = boundary.props.children;
       // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       expect(configuration.type).toBe(AuthConfiguration);

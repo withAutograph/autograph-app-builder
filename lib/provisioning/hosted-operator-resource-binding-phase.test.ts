@@ -343,9 +343,11 @@ describe("read-only completed resource binding phase", () => {
       throw new Error("fixture operator missing");
     }
     if (change === "approval") {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       operator.approvalId = undefined;
     }
     if (change === "fence") {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       operator.fenceGeneration = undefined;
     }
     if (change === "pending-effect") {
@@ -360,7 +362,9 @@ describe("read-only completed resource binding phase", () => {
       operator.receipts = operator.receipts.slice(1);
     }
     if (change === "missing-private-state") {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       f.row.record.privateState = undefined;
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       f.input.privateState = undefined;
     }
     if (change === "different-private-state") {
@@ -388,6 +392,7 @@ describe("read-only completed resource binding phase", () => {
       f.row.record.step = "planned";
     }
     if (change === "missing-readiness") {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       operator.authPreparation = undefined;
     }
     expect(() => requireFinalResourceBindingPhase(f.row, f.input)).toThrow();
@@ -502,6 +507,7 @@ describe("retained installation metadata resource authority", () => {
         }
         operator.plan = desired;
         operator.planDigest = operatorPlanDigest(desired);
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         operator.approvalId = undefined;
         operator.receipts = [];
         f.row.record.approvedByCallId = "operator:unapproved-plan";

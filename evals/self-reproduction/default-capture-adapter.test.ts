@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createCaptureAdapters } from "./default-capture-adapter";
 
 const absentLocator = {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   count: () => Promise.resolve(0),
   nth: () => {
     throw new Error("Unexpected locator access");
@@ -26,6 +27,7 @@ describe("default self-reproduction capture adapter", () => {
     const page = {
       getByRole: vi.fn(() => absentLocator),
       getByText: vi.fn(() => absentLocator),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       goto: vi.fn(() => Promise.resolve()),
       locator: vi.fn(() => absentLocator),
     };
@@ -43,6 +45,7 @@ describe("default self-reproduction capture adapter", () => {
     const page = {
       getByRole: vi.fn(() => absentLocator),
       getByText: vi.fn(() => absentLocator),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       goto: vi.fn(() => Promise.resolve()),
       locator: vi.fn(() => absentLocator),
     };
@@ -62,6 +65,7 @@ describe("default self-reproduction capture adapter", () => {
       referenceURL: "http://127.0.0.1:3000",
     });
     const page = {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       goto: vi.fn(() => Promise.reject(new Error("connection refused"))),
       getByRole: vi.fn(() => absentLocator),
       getByText: vi.fn(() => absentLocator),

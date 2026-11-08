@@ -58,6 +58,7 @@ export class HostedSessionAuthorityError extends Error {
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function exactForwardedSessionAuthority(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   sessionAuth: unknown,
   continuationOptions?: RealmContinuationSessionAuthorityOptions,
 ): {
@@ -128,6 +129,7 @@ export function exactForwardedSessionAuthority(
 /** A prepared app belongs to the initiating session, not a later message. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sourceHandoffIdForSessionAuth(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   sessionAuth: unknown,
   continuationOptions?: RealmContinuationSessionAuthorityOptions,
 ) {
@@ -149,12 +151,14 @@ export function sourceHandoffIdForSessionAuth(
   if (!parsed.success) {
     // Local sessions have no prepared hosted context. A malformed hosted
     // envelope must not silently become an unbound session.
-    const current = (
-      sessionAuth as { current?: { authenticator?: string; principalType?: string } } | null
-    )?.current;
+    const current =
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      (sessionAuth as { current?: { authenticator?: string; principalType?: string } } | null)
+        ?.current;
     if (current?.authenticator === "mcp-oauth-jwks" || current?.principalType === "service") {
       throw new HostedSessionAuthorityError("invalid");
     }
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve the absent source handoff result.
     return;
   }
   exactForwardedSessionAuthority(sessionAuth);

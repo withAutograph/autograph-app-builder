@@ -92,6 +92,7 @@ const run = async (command: string, args: string[], input?: string) => {
     child.stdin?.end(input);
   }
   try {
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
     const [code, signal] = await once(child, "close");
     if (code !== 0) {
       throw new Error(`${command} exited with ${code ?? signal}`);
@@ -106,6 +107,7 @@ const freePort = async () => {
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof, typescript/strict-boolean-expressions -- Preserve the runtime type check and truthiness behavior.
   if (!address || typeof address === "string") {
     throw new Error("Missing loopback port.");
   }
@@ -148,9 +150,10 @@ try {
   const copies = await Promise.allSettled(
     files.map(async (file) => {
       // Git also lists submodule directory entries; they are not app sources.
-      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+      // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
       const info = await lstat(path.join(source, file)).catch((error: unknown) => {
         if (
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof error === "object" &&
           error !== null &&
           "code" in error &&
@@ -183,9 +186,10 @@ try {
   await Promise.all(
     packageDirectories.map(async (directory) => {
       const dependencyView = path.join(source, directory, "node_modules");
-      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+      // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
       const installed = await lstat(dependencyView).catch((error: unknown) => {
         if (
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof error === "object" &&
           error !== null &&
           "code" in error &&
@@ -280,6 +284,7 @@ try {
   tls.listen(0, "127.0.0.1");
   await once(tls, "listening");
   const address = tls.address();
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof, typescript/strict-boolean-expressions -- Preserve the runtime type check and truthiness behavior.
   if (!address || typeof address === "string") {
     throw new Error("Missing TLS port.");
   }
@@ -298,6 +303,7 @@ try {
         signal.throwIfAborted();
         if (error instanceof Error && "code" in error && "stderr" in error) {
           const killed = "killed" in error && error.killed === true;
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           if (typeof error.code === "number" && typeof error.stderr === "string" && !killed) {
             return { exitCode: error.code, stderr: error.stderr };
           }

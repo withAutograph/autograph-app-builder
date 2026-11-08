@@ -115,6 +115,7 @@ export function createDeploymentGitHubPublicationRuntimeResolver(input: {
     dependencies: input.resolverDependencies,
     enabled: true,
     prEffectsEnabled: (input.environment.APP_BUILDER_GITHUB_PR_DELIVERY_ENABLED ?? "1") === "1",
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     openDatabase: () => openDatabase(config.databaseUrl),
     providerFactory: ({ authority, installation }) =>
       createAdapter(
@@ -132,6 +133,7 @@ let defaultResolver: HostedGitHubPublicationRuntimeResolver | undefined;
 /** Lazily parses deployment configuration so local discovery stays disabled. */
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function githubPublicationRuntimeForSession(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   sessionAuth: unknown,
   selection?: { selectedInstallationId: string },
 ) {

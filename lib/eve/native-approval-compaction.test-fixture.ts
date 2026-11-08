@@ -8,6 +8,7 @@ import { compactMessages } from "../../node_modules/eve/dist/src/harness/compact
 
 export const model = () =>
   new MockLanguageModelV4({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     doGenerate: () =>
       Promise.resolve({
         content: [{ type: "text", text: "Retained product instructions and completed history." }],
@@ -57,6 +58,7 @@ export const history = (approved = true): ModelMessage[] => [
     ],
   },
 ];
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 export const compact = (messages: ModelMessage[], recentWindowSize = 2) =>
   compactMessages(messages, model(), { recentWindowSize, threshold: 1800 });
 export const execute = async (
@@ -65,6 +67,7 @@ export const execute = async (
   apply: (
     input: { proposalDigest: string },
     options: { abortSignal?: AbortSignal },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   ) => Promise<{ state: string }> = vi.fn(() => Promise.resolve({ state: "applied" })),
 ) => {
   const agent = new ToolLoopAgent({

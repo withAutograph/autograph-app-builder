@@ -412,6 +412,7 @@ describe("approved hosted runtime consumers", () => {
         args: ["mise", "run", "app:describe", context.appId],
         cmd: "/usr/bin/env",
         cwd: context.root,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         signal: undefined,
       });
       await runtime.runTask({
@@ -422,6 +423,7 @@ describe("approved hosted runtime consumers", () => {
           APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
           PATH: "/sandbox/custom/bin:/usr/bin",
           APP_RUNTIME_STATE_DIR: "/untrusted-state-directory",
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           OPTIONAL_INPUT: undefined,
           APP_RUNTIME_ALREADY_COMPILED: "untrusted",
         },
@@ -460,6 +462,7 @@ describe("approved hosted runtime consumers", () => {
     },
   );
   it.each([
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     { publicDelivery: false, publicOrigin: undefined },
     { publicDelivery: false, publicOrigin: "https://apps-preview.example.test" },
     { publicDelivery: true, publicOrigin: "https://public-app.example.test" },
@@ -478,6 +481,7 @@ describe("approved hosted runtime consumers", () => {
       const bindings = vi.fn().mockResolvedValue({
         environment,
         nativePreview: publicOrigin === undefined || publicDelivery ? undefined : { publicOrigin },
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(publicDelivery
           ? { publicDelivery: { publicOrigin, appEntryPath: "/actual-catalog-route" } }
           : {}),
@@ -773,6 +777,7 @@ describe("approved hosted runtime consumers", () => {
       await expect(
         runtime.runTask({
           task: "test-e2e",
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(failure === "resume" ? { allowDispatch: false, commandId: "retained-command" } : {}),
         }),
       ).rejects.toThrow("SDK failure [REDACTED] and [REDACTED]");

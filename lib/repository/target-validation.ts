@@ -338,6 +338,7 @@ export const compilerDiagnostics = (output: string): TargetValidationDiagnostic[
     const oxcHeader = oxcCompilerHeaderPattern.exec(sourceLine);
     if (oxcHeader !== null) {
       pendingCompiler = {
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         code: oxcHeader[1] as `TS${number}`,
       };
       continue;
@@ -345,6 +346,7 @@ export const compilerDiagnostics = (output: string): TargetValidationDiagnostic[
     const location = sourceLocationPattern.exec(sourceLine);
     if (location !== null && pendingCompiler !== undefined) {
       append(pendingCompiler.code, location[1], location[2], location[3]);
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       pendingCompiler = undefined;
       continue;
     }
@@ -368,6 +370,7 @@ export const compilerDiagnostics = (output: string): TargetValidationDiagnostic[
         continue;
       }
       if (/^TS\d+$/u.test(match[4])) {
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         append(match[4] as `TS${number}`, match[1], match[2], match[3]);
       }
       break;
@@ -591,6 +594,7 @@ exit "$status"`;
 
 export const fixtureValidationCommandExecutor =
   (): ValidationCommandExecutor =>
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   ({ appId, command }) => {
     const isBuild = command === repositoryDeliveryBuildCommand(appId);
     if (appId === "validation-interruption" && isBuild) {
@@ -635,6 +639,7 @@ const failureReceipt = (
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 };
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 export const executeProposalBoundValidation = (input: {
   sandbox: SandboxSession;
   executor: ValidationCommandExecutor;

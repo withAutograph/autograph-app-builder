@@ -1,3 +1,4 @@
+/* oxlint-disable anti-slop/require-safety-comment-for-type-assertion -- Preserve existing assertions, including those in template expressions. */
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { pipeline } from "node:stream/promises";
@@ -2729,6 +2730,7 @@ const executeBootstrap = async (input: {
           input.proposal.destinationPath,
         );
       } catch {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         verification = undefined;
       }
       if (verification === undefined) {

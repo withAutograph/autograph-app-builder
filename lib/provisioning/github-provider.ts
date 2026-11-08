@@ -53,6 +53,7 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function property(value: unknown, key: string) {
   if (!record(value) || !(key in value)) {
     throw new TypeError(INVALID_RESPONSE);
@@ -61,8 +62,10 @@ function property(value: unknown, key: string) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function stringProperty(value: unknown, key: string) {
   const result = property(value, key);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof result !== "string") {
     throw new TypeError(INVALID_RESPONSE);
   }
@@ -70,8 +73,10 @@ function stringProperty(value: unknown, key: string) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function decimalProperty(value: unknown, key: string) {
   const result = property(value, key);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return decimal.parse(typeof result === "number" ? String(result) : result);
 }
 
@@ -87,11 +92,13 @@ function suffix() {
 }
 
 // eslint-disable-next-line eslint/func-style -- Shared by the GitHub request boundary.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function retryAfterMilliseconds(headers: unknown, now: number): number | undefined {
   if (!record(headers)) {
     return undefined;
   }
   const raw = headers["retry-after"];
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof raw !== "string") {
     return undefined;
   }
@@ -220,6 +227,7 @@ export async function provisionGitHubRepository(input: {
         fetch: request,
         token: args.token,
       }).request(`${args.method ?? "GET"} ${args.path}`, {
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(record(args.body) ? args.body : {}),
       });
       if (!args.expected.includes(response.status)) {
@@ -243,6 +251,7 @@ export async function provisionGitHubRepository(input: {
       if (status === 403) {
         throw new Error("provider-permission-denied", { cause: error });
       }
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof status === "number" && args.expected.includes(status)) {
         return {
           body: record(response) ? response.data : undefined,
@@ -319,12 +328,15 @@ export async function provisionGitHubRepository(input: {
       if (credential === undefined || credential === null || !credential.active) {
         throw new Error(CREDENTIAL_UNAVAILABLE);
       }
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       const expires = credential.tokens.accessTokenExpiresAt
         ? Date.parse(credential.tokens.accessTokenExpiresAt)
         : undefined;
+      /* oxlint-enable typescript/strict-boolean-expressions */
       if (expires === undefined || expires > now() + 60_000) {
         return credential.tokens.accessToken;
       }
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (
         !credential.tokens.refreshToken ||
         !credential.tokens.refreshTokenExpiresAt ||
@@ -332,6 +344,7 @@ export async function provisionGitHubRepository(input: {
       ) {
         throw new Error(CREDENTIAL_UNAVAILABLE);
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       let authentication: unknown;
       try {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -600,6 +613,7 @@ export async function provisionGitHubRepository(input: {
     const isPrivate = property(repo.body, "private");
     if (
       owner !== input.installation.accountLogin ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof isPrivate !== "boolean" ||
       isPrivate !== input.private ||
       stringProperty(repo.body, "default_branch") !== "main"

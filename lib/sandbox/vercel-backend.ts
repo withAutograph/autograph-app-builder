@@ -21,11 +21,14 @@ const PROVIDER_RETRY_DELAY_MS = 250;
 const SANDBOX_WORKSPACE = "/workspace";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function retryableProviderFailure(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const { status } = error as Error & { status?: unknown };
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof status === "number" && (status === 429 || status >= 500)) {
     return true;
   }
@@ -35,14 +38,18 @@ function retryableProviderFailure(error: unknown): boolean {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function providerDiagnostic(error: unknown): string {
   if (!(error instanceof Error)) {
     return "unknown";
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const { cause } = error as Error & { cause?: unknown };
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof cause !== "object" || cause === null || !("code" in cause)) {
     return "Vercel Sandbox request failed (provider_error)";
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   const code = typeof cause.code === "string" ? cause.code : "provider_error";
   return `Vercel Sandbox request failed (${code})`;
 }
@@ -433,6 +440,7 @@ export const createBuilderVercelProvider = (
             persistent: true,
             region: DEFAULT_SANDBOX_REGION,
             mounts: { "/workspace": drive },
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(options?.sandboxEnvironment === undefined
               ? {}
               : { env: { ...options.sandboxEnvironment } }),

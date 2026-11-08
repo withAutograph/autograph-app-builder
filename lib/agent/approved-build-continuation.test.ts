@@ -289,6 +289,7 @@ describe("approved stopped build continuation", () => {
 it("projects only the independently acquired existing repository into private destination recovery", async () => {
   const { recordRepositoryAccessReceipt } = await import("./repository-access-state");
   const access = recordRepositoryAccessReceipt({
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     current: undefined,
     sessionId: scope.sessionId,
     confirmedByCallId: "actual-repository-acquisition",

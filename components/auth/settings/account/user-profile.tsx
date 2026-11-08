@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/no-undefined-assignment -- Preserve explicit undefined values in existing JSX or generated-source expressions. */
 "use client";
 
 import { parseAdditionalFieldValue } from "@better-auth-ui/core";
@@ -46,15 +47,19 @@ export function UserProfile({ className }: UserProfileProps) {
     e.preventDefault();
 
     const formData = new FormData(e.currentTarget);
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const name = formData.get("name") as string;
 
     // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
     const additionalFieldValues: Record<string, unknown> = {};
 
     for (const field of additionalFields ?? []) {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
       if (field.profile === false || field.readOnly) {
         continue;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const value = parseAdditionalFieldValue(field, formData.get(field.name) as string | null);
 
       if (field.validate) {
@@ -87,6 +92,7 @@ export function UserProfile({ className }: UserProfileProps) {
     }
   };
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <div>
       <h2 className="text-sm font-semibold mb-3">{localization.settings.userProfile}</h2>
@@ -124,6 +130,7 @@ export function UserProfile({ className }: UserProfileProps) {
 
                     setFieldErrors((prev) => ({
                       ...prev,
+                      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
                       name: (e.target as HTMLInputElement).validationMessage,
                     }));
                   }}
@@ -155,7 +162,7 @@ export function UserProfile({ className }: UserProfileProps) {
                 );
               }
 
-              // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+              // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract; Preserve the existing assertion at this boundary.
               const value = (session.user as Record<string, unknown>)[field.name];
 
               // Re-mount when the session value loads so the field's
@@ -173,6 +180,7 @@ export function UserProfile({ className }: UserProfileProps) {
                     ...field,
                     // `defaultValue` is sign-up-only; on the profile we
                     // always seed from the session.
+                    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
                     defaultValue: value as AdditionalFieldValue | null,
                   }}
                   isPending={isPending}
@@ -192,4 +200,5 @@ export function UserProfile({ className }: UserProfileProps) {
       </form>
     </div>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

@@ -22,8 +22,11 @@ const evidence: ApplicationReviewEvidence = {
   requirements: [{ id: "original", kind: "original", order: 0 }],
   sourceFiles: [{ path: "app/save.ts", digest: "a", mode: "644" }],
   changedPaths: ["app/save.ts"],
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   readRedactionTexts: () => Promise.resolve([input.originalRequest ?? "", input.appSpec]),
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   readRequirements: () => Promise.resolve({ text: input.originalRequest ?? "" }),
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   readSource: () =>
     Promise.resolve({
       path: "app/save.ts",
@@ -35,8 +38,10 @@ const evidence: ApplicationReviewEvidence = {
       endColumn: file.length + 1,
       totalLines: 1,
     }),
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   verifyRequirementQuote: ({ quote }) =>
     Promise.resolve((input.originalRequest ?? "").includes(quote)),
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   verifySourceCitation: ({ path, startLine, endLine, excerpt }) =>
     Promise.resolve(path === "app/save.ts" && startLine === 1 && endLine === 1 && excerpt === file),
 };
@@ -210,6 +215,7 @@ describe("durable application reviewer fallback", () => {
     const fallback = model("sol", [[{ input: { path: "app/save.ts" }, name: "readSource" }]]);
     const failedEvidence = {
       ...evidence,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       readSource: () => Promise.reject(new Error("unavailable")),
     };
     const result = await assessApplicationSource(input, failedEvidence, {
@@ -283,6 +289,7 @@ describe("durable application reviewer fallback", () => {
     const fallback = model("sol", [complete]);
     const inaccessible: ApplicationReviewEvidence = {
       ...evidence,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       readSource: () => Promise.reject(new Error("unavailable")),
     };
     const result = await assessApplicationSource(input, inaccessible, {

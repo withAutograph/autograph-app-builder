@@ -56,6 +56,7 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
         return;
       }
       record.authorizedAt ??= input.now;
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional authorization and consumption fixture results.
       return record;
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -85,6 +86,7 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
         return;
       }
       record.consumedAt = input.now;
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional authorization and consumption fixture results.
       return record;
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -227,6 +229,7 @@ describe("deployment repository access authorization", () => {
   it("uses a target proof without reading an installation repository inventory", async () => {
     const legacy = mutableProvider({ repositoryAvailable: () => true });
     const provider = await legacy({ authority, installation });
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const inspectInstallation = vi.fn(() =>
       Promise.reject(new Error("inventory must not be read")),
     );
@@ -332,9 +335,11 @@ describe("deployment repository access authorization", () => {
       principal,
     });
     const challengeUrl = started.challenge.url;
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (!challengeUrl) {
       throw new Error("Expected authorization challenge URL");
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     expect(new URL(challengeUrl).searchParams.get("returnTo")).toBe(`/handoff/${continuationId}`);
   });
 
@@ -414,6 +419,7 @@ describe("deployment repository access authorization", () => {
       principal,
     });
     await fixture.continuations.authorize({ authority, continuationId });
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const complete = () =>
       authorization.completeAuthorization({
         callback: {
@@ -434,6 +440,7 @@ describe("deployment repository access authorization", () => {
 
     fixture.makeAvailable();
     await expect(complete()).resolves.toEqual({
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       token: expect.stringMatching(/^[0-9a-f]{64}$/u),
     });
     expect(fixture.continuationStore.records[0]?.consumedAt).toBeInstanceOf(Date);
@@ -453,6 +460,7 @@ describe("deployment repository access authorization", () => {
     });
     await fixture.continuations.authorize({ authority, continuationId });
     fixture.makeAvailable();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const complete = (bypass: string) =>
       authorization.completeAuthorization({
         callback: {

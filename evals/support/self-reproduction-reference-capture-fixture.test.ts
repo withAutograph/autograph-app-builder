@@ -4,12 +4,14 @@ import { prepareReferenceCaptureFixture } from "./self-reproduction-reference-ca
 import { selfReproductionDraft } from "./self-reproduction-draft-fixture";
 
 const fixture = vi.hoisted(() => ({
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   authenticate: vi.fn<(page: unknown, provider: string) => Promise<void>>().mockResolvedValue(),
   end: vi.fn<() => Promise<void>>().mockResolvedValue(),
   query: vi.fn(),
 }));
 const harness = {
   appOrigin: "https://localhost:3001",
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   currentSession: () => Promise.resolve({ user: { id: "synthetic-owner" } }),
   databaseUrl: "postgresql://synthetic",
   finishOAuth: fixture.authenticate,
@@ -21,6 +23,7 @@ vi.mock("postgres", () => ({ default: () => Object.assign(fixture.query, { end: 
 const page = {
   getByLabel: (name: string) => ({
     fill: vi.fn(),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     inputValue: () =>
       Promise.resolve(
         name === "App Name" ? selfReproductionDraft.appName : selfReproductionDraft.brief,
@@ -95,6 +98,7 @@ it("captures three restored contexts without waiting for a new write acknowledge
       ...page,
       getByLabel: (name: string) => ({
         fill,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         inputValue: () =>
           Promise.resolve(
             name === "App Name" ? selfReproductionDraft.appName : selfReproductionDraft.brief,

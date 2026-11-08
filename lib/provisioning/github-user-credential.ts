@@ -121,6 +121,7 @@ export function decryptGitHubUserTokens(input: {
   decipher.setAAD(Buffer.from(input.associatedData));
   decipher.setAuthTag(Buffer.from(input.credentialTag, "base64"));
   return githubUserTokenSetSchema.parse(
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     JSON.parse(
       Buffer.concat([
         decipher.update(Buffer.from(input.encryptedCredential, "base64")),

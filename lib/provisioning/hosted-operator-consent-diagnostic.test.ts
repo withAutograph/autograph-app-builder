@@ -1380,6 +1380,7 @@ it.each([
     metadata: { domain_code: secret, stage: "schema_replan" },
     expected: { stage: "schema_replan" },
   },
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   { metadata: { domain_code: "migration_contention", stage: secret }, expected: undefined },
   {
     metadata: Object.defineProperty({}, "stage", {
@@ -1387,6 +1388,7 @@ it.each([
         throw new Error(secret);
       },
     }),
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     expected: undefined,
   },
   {
@@ -1398,6 +1400,7 @@ it.each([
         },
       },
     ),
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     expected: undefined,
   },
 ])(

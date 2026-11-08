@@ -246,9 +246,11 @@ const listAvailableSourcePaths = async function listAvailableSourcePaths(
   const entries: unknown[] = Array.isArray(manifest) ? manifest : [];
   const allowedPaths = entries.flatMap((candidate): string[] => {
     if (
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof candidate === "object" &&
       candidate !== null &&
       "path" in candidate &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof candidate.path === "string"
     ) {
       return [candidate.path];

@@ -141,7 +141,9 @@ describe("test capability preload", () => {
       // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Node exposes this active-handle diagnostic outside its public process type.
       (process as unknown as { _getActiveHandles: () => readonly unknown[] })._getActiveHandles();
     // oxlint-disable-next-line unicorn/consistent-function-scoping
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     const isMessagePort = (handle: unknown) =>
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof handle === "object" && handle !== null && handle.constructor.name === "MessagePort";
     const beforePorts = activeHandles().filter(isMessagePort).length;
     const timeoutWorker = new Worker(timeoutWorkerFixture, { execArgv: [] });
@@ -183,6 +185,7 @@ describe("test capability preload", () => {
     const result = spawnSync(process.execPath, ["-e", source], {
       cwd: repositoryRoot,
       encoding: "utf-8",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       env: { ...process.env, NODE_OPTIONS: undefined },
     });
     expect(result.status, result.stderr).toBe(0);

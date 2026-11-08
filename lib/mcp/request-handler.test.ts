@@ -151,6 +151,7 @@ async function mcpResult<T>(response: Response): Promise<T> {
     .split("\n")
     .find((line) => line.startsWith("data: "))
     ?.slice("data: ".length);
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const payload = JSON.parse(data ?? body) as { result?: T };
   if (payload.result === undefined) {
     throw new Error(`MCP result was missing: ${body}`);
@@ -923,6 +924,7 @@ describe("request-scoped MCP service selection", () => {
     ];
     const projections = await Promise.all(
       responses.map(async (response) => ({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
         body: await response.json(),
         cache: response.headers.get("cache-control"),
         status: response.status,

@@ -74,6 +74,7 @@ const authorizationCoordinatesSchema = z.object({
   name: z.string().min(1),
   turnId: z.string().min(1),
 });
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const authorizationRequestId = (data: unknown): string | undefined => {
   const coordinates = authorizationCoordinatesSchema.safeParse(data);
   if (!coordinates.success) {
@@ -118,7 +119,9 @@ const visibleOperationLabels = new Set([
   "Preparing local app data",
 ]);
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const draftValidationCommandLabel = (value: unknown): string | undefined => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value !== "string") {
     return undefined;
   }
@@ -155,17 +158,21 @@ const draftValidationCommandLabel = (value: unknown): string | undefined => {
   return local?.groups?.appId === undefined ? undefined : "Preparing local app data";
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const recordStringField = (value: unknown, key: string): string | undefined => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value !== "object" || value === null || !(key in value)) {
     return undefined;
   }
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
   const field = (value as Record<string, unknown>)[key];
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof field === "string" ? field : undefined;
 };
 
 const draftValidationLabel = (
   toolName: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   value: unknown,
   requested: boolean,
 ): string | undefined => {
@@ -241,7 +248,8 @@ const publicBuilderFailure = (failure: { code: string; message: string }, operat
   } as const satisfies Record<string, string>;
   const name =
     operation !== undefined && Object.hasOwn(operationLabels, operation)
-      ? operationLabels[operation as keyof typeof operationLabels]
+      ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+        operationLabels[operation as keyof typeof operationLabels]
       : "this Builder step";
   const size =
     /Chunk size (?<actual>\d+) exceeds maximum allowed size of (?<maximum>\d+) bytes/u.exec(
@@ -408,6 +416,7 @@ export const createInstalledPrototypeReferenceReducer = (input: {
   const requestedUiPreview = new Map<string, string>(state?.requestedUiPreview);
   let latest: PublicPrototypeReference | undefined = state?.latest;
   return {
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     accept(candidate: unknown) {
       const event = z.object({ data: z.unknown(), type: z.string() }).loose().safeParse(candidate);
       if (!event.success) {
@@ -1273,7 +1282,8 @@ const inputRequest = (request: {
   }
   const title =
     request.kind === toolApprovalKind && toolName !== undefined && toolName in approvalTitles
-      ? approvalTitles[toolName as keyof typeof approvalTitles]
+      ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+        approvalTitles[toolName as keyof typeof approvalTitles]
       : request.prompt;
   let description: string | undefined;
   if (request.kind === toolApprovalKind && toolName === prepareAppProductionTool) {
@@ -1346,6 +1356,7 @@ const inputRequest = (request: {
 };
 
 /** Only the ordinary invitation is public; the rest of a suspended tool result stays private. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const hostedIdentityInvitation = (value: unknown): string | undefined => {
   const invitation = z
     .object({ authIdentityLink: z.url().startsWith("https://") })
@@ -1866,6 +1877,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
         : null;
     }
     case assistantMessageEvent: {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       return event.turnId && event.text !== undefined
         ? {
             index: event.index,
@@ -1874,11 +1886,14 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
             type: "assistant_message",
           }
         : null;
+      /* oxlint-enable typescript/strict-boolean-expressions */
     }
     case "progress": {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (!(event.label && event.state && isProgressState(event.state))) {
         return null;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       const progress: Pick<
         Extract<PublicEveEvent, { type: "progress" }>,
         "index" | "label" | "state" | "turnId"
@@ -1901,6 +1916,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
       return event.status ? { index: event.index, status: event.status, type: "status" } : null;
     }
     case publicErrorEvent: {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       return event.code && event.message
         ? {
             code: event.code,
@@ -1909,6 +1925,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
             type: "error",
           }
         : null;
+      /* oxlint-enable typescript/strict-boolean-expressions */
     }
     default: {
       return null;

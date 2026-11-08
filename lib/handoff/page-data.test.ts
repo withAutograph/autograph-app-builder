@@ -216,6 +216,7 @@ describe("owner-only handoff browser data", () => {
     );
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
     const data = await response.json();
     // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     expect(data.status).toBe("continued");

@@ -105,11 +105,13 @@ describe("Preview OAuth activation contract", () => {
       membership: authority,
       now: () => 2_000_000_000_000,
     });
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const user = { id: "user_1" } as never;
     await expect(
       options.postLogin?.shouldRedirect({
         headers: new Headers(),
         scopes: ["autograph:session"],
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         session: {} as never,
         user,
       }),
@@ -117,6 +119,7 @@ describe("Preview OAuth activation contract", () => {
     await expect(
       options.postLogin?.consentReferenceId({
         scopes: ["autograph:session"],
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         session: {} as never,
         user,
       }),
@@ -145,11 +148,13 @@ describe("Preview OAuth activation contract", () => {
       config,
       membership: membership(false),
     });
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const user = { id: "user_1" } as never;
     await expect(
       inactive.postLogin?.shouldRedirect({
         headers: new Headers(),
         scopes: ["autograph:session"],
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         session: {} as never,
         user,
       }),
@@ -157,6 +162,7 @@ describe("Preview OAuth activation contract", () => {
     await expect(
       inactive.postLogin?.consentReferenceId({
         scopes: ["autograph:session"],
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         session: {} as never,
         user,
       }),
@@ -263,6 +269,7 @@ describe("Preview OAuth activation contract", () => {
             Response.json({
               client_name: "Privileged client",
               redirect_uris: ["https://client.example/callback"],
+              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
               ...(tokenEndpointAuthMethod === undefined
                 ? {}
                 : { token_endpoint_auth_method: tokenEndpointAuthMethod }),

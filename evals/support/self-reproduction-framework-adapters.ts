@@ -48,6 +48,7 @@ export const createDefaultFrameworkAdapter = <PageInput = unknown>(input: {
   return {
     exerciseBrowser:
       input.browserFixture ??
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       (() =>
         Promise.resolve({
           artifacts: [],
@@ -57,6 +58,7 @@ export const createDefaultFrameworkAdapter = <PageInput = unknown>(input: {
         })),
     instantNavigationRecipe:
       input.navigationFixture ??
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       (() =>
         Promise.resolve({
           disposition: "not-run",
@@ -66,6 +68,7 @@ export const createDefaultFrameworkAdapter = <PageInput = unknown>(input: {
         })),
     reviewSource:
       input.sourceReview ??
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       (() =>
         Promise.resolve({
           artifacts: [],
@@ -82,9 +85,11 @@ export const createDefaultFrameworkAdapters = (input: {
   reference?: { files: readonly SourceFile[]; baseURL: string };
   candidate?: { files: readonly SourceFile[]; baseURL: string };
 }): Partial<Record<"reference" | "candidate", TrustedFrameworkAdapter>> => ({
+  // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
   ...(input.reference
     ? { reference: createDefaultFrameworkAdapter({ side: "reference", ...input.reference }) }
     : {}),
+  // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
   ...(input.candidate
     ? { candidate: createDefaultFrameworkAdapter({ side: "candidate", ...input.candidate }) }
     : {}),

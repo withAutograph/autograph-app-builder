@@ -427,6 +427,7 @@ describe("native app access recovery", () => {
           return {
             ...base,
             scope: found.scope,
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(found.description ? { appUrl: await appUrl() } : {}),
           };
         },

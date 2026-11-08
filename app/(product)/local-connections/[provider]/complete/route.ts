@@ -19,9 +19,11 @@ function validEmulatorRedirect(input: {
   state: string;
 }) {
   const location = input.response.headers.get("location");
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!location || input.response.status < 300 || input.response.status >= 400) {
     return;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const destination = new URL(location);
   if (
     // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
@@ -33,6 +35,7 @@ function validEmulatorRedirect(input: {
   ) {
     return;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve invalid emulator redirects as absent.
   return destination;
 }
 
@@ -53,7 +56,7 @@ export async function POST(request: Request, context: { params: Promise<{ provid
   const state = form.get("state");
   const phase = form.get("phase");
   if (
-    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
+    // oxlint-disable-next-line sonarjs/expression-complexity, anti-slop/no-runtime-typeof -- Preserve the existing conditions and their evaluation order; Preserve this runtime check and existing input handling.
     typeof state !== "string" ||
     state.length < 20 ||
     state.length > 2048 ||
@@ -116,6 +119,7 @@ export async function POST(request: Request, context: { params: Promise<{ provid
       // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       clientId !== emulation.githubClientId ||
       redirectUri !== `${origin}/github/installations/callback` ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof codeChallenge !== "string" ||
       !/^[A-Za-z0-9_-]{43}$/u.test(codeChallenge) ||
       codeChallengeMethod !== "S256"

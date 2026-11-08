@@ -138,6 +138,7 @@ function sessionTenantPredicate(principal: HostedPrincipal) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function parseHostedOperationRow(input: unknown): HostedOperationRecord {
   const row = operationRowSchema.parse(input);
   const record = hostedOperationRecordSchema.parse(row.record);
@@ -168,6 +169,7 @@ export function parseHostedOperationRow(input: unknown): HostedOperationRecord {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function parseHostedSessionRow(input: unknown): HostedSessionRecord {
   const row = sessionRowSchema.parse(input);
   const record = hostedSessionRecordSchema.parse(row.record);
@@ -1154,6 +1156,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       });
     },
 
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     recordCancellationIntent(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {
@@ -1224,6 +1227,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           .set({
             ...operationValues(updated),
             // An old ACK has no dispatch baseline; retries must never invent one.
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
             ...(operation.sendDelivery === undefined && revision !== undefined
               ? { sendCancellationRevisionAtDispatch: revision }
               : {}),

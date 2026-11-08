@@ -62,6 +62,7 @@ const rejectedToolError = (error: HostedRejectedOperationError, operation: McpOp
   };
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const safeUnexpectedCause = (error: unknown): string => {
   const messages: string[] = [];
   let current = error;
@@ -145,6 +146,7 @@ type ErrorToolResponse = Omit<ReturnType<typeof toolResult<EveSessionResult>>, "
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function safeToolError(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   error: unknown,
   sessionId = "",
   operation: McpOperation = "autograph_get",

@@ -22,6 +22,7 @@ const runGenerator = async (cwd: string, endpoint: string) => {
   child.stderr.on("data", (chunk: string) => {
     stderr += chunk;
   });
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const [code] = await once(child, "exit");
   if (code !== 0) {
     throw new Error(`OpenAI package generator exited ${code}: ${stderr.trim()}`);

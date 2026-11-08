@@ -23,6 +23,7 @@ describe("Preview Better Auth UI", () => {
   it("serializes complete and repeated auth-page search parameters", () => {
     const search = serializeAuthPageSearchParams({
       callbackURL: ["/workspace?source=one#first", "/workspace?source=two#second"],
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       omitted: undefined,
       passkey: "unavailable",
       redirectTo: "/auth/setting-up?callbackURL=%2Ffinal%3Fsource%3Dnested",
@@ -163,7 +164,9 @@ describe("Preview Better Auth UI", () => {
     const clientPlugin = oauthProviderClient();
     const hooks = clientPlugin.fetchPlugins?.[0]?.hooks;
 
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     expect(typeof hooks?.onRequest).toBe("function");
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     await hooks?.onRequest?.(request as never);
 
     const body = z.object({ oauth_query: z.string() }).parse(JSON.parse(request.body));

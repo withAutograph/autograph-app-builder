@@ -238,6 +238,7 @@ const receiptIdentity = (input: { plan: typeof plan }) => ({
 });
 const dependencies: ProtectedHostedOperatorDependencies = {
   store,
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   authorize(request, selection) {
     if (
       request.headers.get("authorization") !== "Bearer local-fixture" ||
@@ -247,12 +248,15 @@ const dependencies: ProtectedHostedOperatorDependencies = {
     }
     return Promise.resolve({ authority: config.authority, target: config.target });
   },
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   assertAuthorized() {
     return Promise.resolve();
   },
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   plan() {
     return Promise.resolve(plan);
   },
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   readApproval(input) {
     return Promise.resolve({
       action: input.action,
@@ -326,6 +330,7 @@ const dependencies: ProtectedHostedOperatorDependencies = {
     });
     return receipt;
   },
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   verify() {
     if (config.failure === "verify-before") {
       throw new Error("fixture failed before proof read");
@@ -343,6 +348,7 @@ const dependencies: ProtectedHostedOperatorDependencies = {
     }
     return Promise.resolve(proof);
   },
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   bindings() {
     return Promise.resolve({
       PLATFORM_ORIGIN: "https://gateway.fixture.test",

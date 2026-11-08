@@ -20,6 +20,7 @@ let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 let autosave: BuilderDraftAutosave<Snapshot> | undefined;
 
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
@@ -71,8 +72,11 @@ afterEach(async () => {
     });
   }
   container?.remove();
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   root = undefined;
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   container = undefined;
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   autosave = undefined;
   vi.restoreAllMocks();
 });
@@ -195,6 +199,7 @@ describe("useBuilderDraftAutosave", () => {
         if (entry?.mutationId !== acknowledgement.mutationId) {
           return false;
         }
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         entry = undefined;
         return true;
       }),
@@ -203,6 +208,7 @@ describe("useBuilderDraftAutosave", () => {
         if (entry?.mutationId !== mutationId) {
           return false;
         }
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         entry = undefined;
         return true;
       }),
@@ -243,6 +249,7 @@ describe("useBuilderDraftAutosave", () => {
         if (entry?.mutationId !== mutationId) {
           return false;
         }
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         entry = undefined;
         return true;
       }),

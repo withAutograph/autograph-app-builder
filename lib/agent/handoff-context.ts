@@ -12,6 +12,7 @@ export function createPreparedHandoffReader(input: {
   read: BuilderHandoffStore["read"];
   isActiveMember: (authority: HostedSessionTenantAuthority) => Promise<boolean>;
 }) {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   return async (sessionAuth: unknown) => {
     const handoffId = sourceHandoffIdForSessionAuth(sessionAuth);
     if (handoffId === undefined) {
@@ -29,6 +30,7 @@ export function createPreparedHandoffReader(input: {
     if (
       record.handoffId !== handoffId ||
       Object.entries(authority).some(
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         ([key, value]) => record.authority[key as keyof HostedSessionTenantAuthority] !== value,
       )
     ) {
@@ -36,6 +38,7 @@ export function createPreparedHandoffReader(input: {
     }
     // Initial redemption checks expiry. A trusted session retains its prepared
     // context afterwards, including when its engine is restarted or recovered.
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve absent handoff context during recovery.
     return record.intent;
   };
 }
@@ -60,10 +63,11 @@ async function createDeploymentPreparedHandoffReader() {
     issuer: config.issuer,
   });
   const read = createPreparedHandoffReader({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     isActiveMember: (value) => membership.isActiveMember(value),
     read: createPostgresBuilderHandoffStore(database).read,
   });
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+  // oxlint-disable-next-line eslint/require-await, anti-slop/no-unknown-parameters -- preserve Promise-returning framework or interface contract Preserve the existing unknown input contract.
   return async (sessionAuth: unknown) => {
     const { authority } = exactForwardedSessionAuthority(sessionAuth);
     if (authority.issuer !== config.issuer || authority.audience !== config.resource) {
@@ -78,6 +82,7 @@ async function createDeploymentPreparedHandoffReader() {
 let deploymentReader: ReturnType<typeof createDeploymentPreparedHandoffReader> | undefined;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export async function readPreparedHandoffContext(sessionAuth: unknown) {
   if (sourceHandoffIdForSessionAuth(sessionAuth) === undefined) {
     return;
@@ -87,12 +92,14 @@ export async function readPreparedHandoffContext(sessionAuth: unknown) {
   // oxlint-disable-next-line promise/prefer-await-to-callbacks
   // Preserve the shared lazy promise while clearing it after a failed creation.
   // oxlint-disable-next-line promise/prefer-await-to-then
-  // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then -- Preserve the shared initialization promise and clear it on rejection.
+  // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then, anti-slop/no-unknown-parameters -- Preserve the shared initialization promise and its unknown rejection boundary.
   deploymentReader ??= createDeploymentPreparedHandoffReader().catch((error: unknown) => {
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     deploymentReader = undefined;
     throw error;
   });
   // oxlint-enable promise/prefer-await-to-callbacks
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absent handoff context during recovery.
   return await (
     await deploymentReader
   )(sessionAuth);

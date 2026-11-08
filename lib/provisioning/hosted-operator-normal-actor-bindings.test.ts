@@ -394,6 +394,7 @@ const boundFixture = async (normal = true) => {
     ...plan,
     access: [],
     stage: "app",
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(normal
       ? {
           normalActorProgram: normalProgram,

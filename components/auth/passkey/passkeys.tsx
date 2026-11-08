@@ -32,6 +32,7 @@ export function Passkeys({ className }: PasskeysProps) {
   let passkeyContent;
   if (isPending) {
     passkeyContent = <PasskeySkeleton />;
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
   } else if (passkeys?.length) {
     passkeyContent = (
       <ItemGroup className="gap-0">
@@ -52,6 +53,7 @@ export function Passkeys({ className }: PasskeysProps) {
       />
     );
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>

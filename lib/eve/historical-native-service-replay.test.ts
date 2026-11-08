@@ -292,6 +292,7 @@ describe("service recovery of historical native approval", () => {
           };
         },
       );
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const getSession = vi.fn(() => Promise.resolve(current));
       const observeSessionPaged = vi.fn<NonNullable<HostedEveStore["observeSessionPaged"]>>(
         async (input) => {
@@ -323,6 +324,7 @@ describe("service recovery of historical native approval", () => {
           return current;
         },
       );
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const readCheckpointPage = vi.fn<NonNullable<HostedEveStore["readCheckpointPage"]>>((input) =>
         Promise.resolve({
           checkpointDigest: input.checkpointRef.digest,
@@ -337,9 +339,11 @@ describe("service recovery of historical native approval", () => {
         listSessions: base.listSessions.bind(base),
         observeSessionPaged,
         readCheckpointPage,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         reserveOperation: vi.fn(() =>
           Promise.resolve({ disposition: "existing" as const, operation }),
         ),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         settleSucceeded: vi.fn<HostedEveStore["settleSucceeded"]>((input) =>
           Promise.resolve(
             hostedOperationRecordSchema.parse({
@@ -352,6 +356,7 @@ describe("service recovery of historical native approval", () => {
         settleUnsuccessful: vi.fn(),
       };
       const service = createHostedEveSessionService({
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         assertSendDeliveryOwner: () => Promise.resolve(),
         now: () => 50,
         principal,

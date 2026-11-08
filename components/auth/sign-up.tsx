@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/no-undefined-assignment -- Preserve explicit undefined values in existing JSX or generated-source expressions. */
 "use client";
 
 import {
@@ -76,6 +77,7 @@ interface SignUpFormProps {
   submitWithFeedback: (event: SyntheticEvent<HTMLFormElement>) => Promise<void>;
 }
 
+/* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
 const SignUpForm = ({
   additionalFields,
   emailAndPassword,
@@ -152,6 +154,7 @@ const SignUpForm = ({
           }}
           onInvalid={(e) => {
             e.preventDefault();
+            // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
             const el = e.target as HTMLInputElement;
             const msg = el.validity.valueMissing
               ? localization.auth.fieldRequired
@@ -205,6 +208,7 @@ const SignUpForm = ({
             disabled={isPending}
             onInvalid={(e) => {
               e.preventDefault();
+              // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
               const el = e.target as HTMLInputElement;
               const min = emailAndPassword?.minPasswordLength;
               const max = emailAndPassword?.maxPasswordLength;
@@ -272,6 +276,7 @@ const SignUpForm = ({
               disabled={isPending}
               onInvalid={(e) => {
                 e.preventDefault();
+                // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
                 const el = e.target as HTMLInputElement;
                 const min = emailAndPassword?.minPasswordLength;
                 const max = emailAndPassword?.maxPasswordLength;
@@ -340,6 +345,7 @@ const SignUpForm = ({
     </FieldGroup>
   </form>
 );
+/* oxlint-enable typescript/strict-boolean-expressions */
 
 /**
  * Renders a sign-up form with name, email, and password fields, optional social provider buttons, and submission handling.
@@ -437,7 +443,9 @@ export function SignUp({
 
     const formData = new FormData(e.currentTarget);
     // `emailAndPassword.name === false` hides the name field and submits "".
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const name = (formData.get("name") as string | null) ?? "";
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const email = formData.get("email") as string;
 
     if (emailAndPassword?.confirmPassword === true && password !== confirmPassword) {
@@ -451,9 +459,12 @@ export function SignUp({
     const additionalFieldValues: Record<string, unknown> = {};
 
     for (const field of additionalFields ?? []) {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
       if (!field.signUp || field.readOnly === true) {
         continue;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const value = parseAdditionalFieldValue(field, formData.get(field.name) as string | null);
 
       if (field.validate) {

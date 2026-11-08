@@ -43,6 +43,7 @@ export function ApprovalRequest({
   const primaryLabel = primaryLabelOverride ?? (previewApproval ? "Approve" : defaultPrimaryLabel);
   const secondaryLabel = secondaryLabelOverride ?? (readyToBuild ? "Make changes" : "Cancel");
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <div className={`approval-request${previewApproval ? " approval-request--preview" : ""}`}>
       {previewApproval ? (
@@ -118,4 +119,5 @@ export function ApprovalRequest({
       </div>
     </div>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

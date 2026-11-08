@@ -44,9 +44,11 @@ describe("reference navigation evidence", () => {
     ).toEqual([]);
     const unrelated = report(["passed", "passed"]);
     const [suite] = unrelated.suites;
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
     if (!suite) {
       throw new Error("Expected a navigation suite.");
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     suite.file = "unrelated.spec.ts";
     expect(referenceNavigationObservation({ artifacts: [], report: unrelated }).disposition).toBe(
       "not-run",

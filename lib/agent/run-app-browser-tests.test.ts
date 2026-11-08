@@ -185,6 +185,7 @@ describe("private app browser tests", () => {
     );
   });
   it("passes a literal focused selection to the private browser task", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const run = vi.fn(() => Promise.resolve({ exitCode: 0, stderr: "", stdout: "" }));
     const result = await runAppBrowserTests({
       appId: "spend-review",

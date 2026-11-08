@@ -35,7 +35,7 @@ function caseDirectory(id: string, root?: string) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function listDesignCases(root?: string): Promise<ListedDesignCase[]> {
   const base = designCasesRoot(root);
-  // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+  // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
   const entries = await readdir(base, { withFileTypes: true }).catch((error: unknown) => {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return [];

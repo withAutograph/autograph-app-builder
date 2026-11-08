@@ -127,9 +127,11 @@ export const refreshLocalPlanningSource = async (
       originalSourceSha: baseline.sourceSha,
       originalWorkspaceDigest: baseline.workspaceDigest,
       workspaceId: baseline.workspaceId,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(completedTransport?.requiresCurrentManifestReadback
         ? { verifyCurrentManifest: current.workspace }
         : {}),
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(baseline.sourceOverlay === undefined ? {} : { sourceOverlay: baseline.sourceOverlay }),
       receipt: observed.receipt,
       capture: observed.capture,

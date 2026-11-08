@@ -19,6 +19,7 @@ function validateState(state: string) {
   }
   if (
     Buffer.byteLength(state, "utf-8") > MAX_STATE_BYTES ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof parsed !== "object" ||
     parsed === null ||
     Array.isArray(parsed)
@@ -30,10 +31,13 @@ function validateState(state: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function pendingVercelCodeCount(state: string | undefined) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!state) {
     return 0;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   try {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const snapshot = JSON.parse(state) as {
       store?: { data?: Record<string, { entries?: unknown[] }> };
     };

@@ -120,6 +120,7 @@ const fixture = () => {
   };
   const responseCtx: ApprovalResponseContext<NativeTargetPreparationRequest> = {
     auth: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       getToken: () => Promise.reject(new Error("unused")),
       requireAuth: () => {
         throw new Error("unused");
@@ -141,6 +142,7 @@ const fixture = () => {
     options?: RequestInit;
     body: ReturnType<typeof nativeTargetTransportRequestSchema.parse>;
   }[] = [];
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const request = vi.fn<typeof fetch>((url, options) => {
     const serialized = z.string().parse(options?.body);
     sent.push({
@@ -159,6 +161,7 @@ const fixture = () => {
     endpoint: "https://operator.example",
     fetch: request,
     ownerContext: owner,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     token: () => Promise.resolve("synthetic-oidc"),
   });
   const proof = {
@@ -355,6 +358,7 @@ describe("native target protected client", () => {
         createNativeTargetOnboardingClient({
           endpoint,
           ownerContext: f.owner,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           token: () => Promise.resolve("synthetic"),
         }),
       ).toThrow();

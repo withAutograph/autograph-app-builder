@@ -747,6 +747,7 @@ describe("shared host protection plan successor", () => {
           ? { ...effect, description: "Bind shared Gateway environment" }
           : effect,
       ),
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       gatewayBindings: { ...originalPlan.gatewayBindings, trustedSources: undefined },
     });
     f.deps.plan = async () => successorPlan;
@@ -759,6 +760,7 @@ describe("shared host protection plan successor", () => {
     const candidate = createSharedHostProtectionSuccessorPlan(previous.record, now);
     expect(candidate).toEqual({
       ...originalPlan,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       gatewayBindings: { ...originalPlan.gatewayBindings, trustedSources: undefined },
       retention: {
         ...originalPlan.retention,
@@ -845,7 +847,9 @@ describe("shared host protection plan successor", () => {
         leaseId: original.operationRef,
         operator: {
           ...record.operator,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           pendingEffectAttempt: undefined,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           pendingEffectId: undefined,
           receipts: candidate.effects.map((effect) => ({
             effectId: effect.id,
@@ -1477,6 +1481,7 @@ describe("pending native app project settings repair", () => {
       ...originalPlan,
       delivery: {
         ...originalPlan.delivery,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         projectSettings: undefined,
       },
     });

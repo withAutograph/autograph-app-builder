@@ -80,6 +80,7 @@ it.each([
       "postgresql://postgres@127.0.0.1:54321/autograph_navigation_fixture?host=remote.example",
   },
   { BETTER_AUTH_SECRET: "short" },
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   { GITHUB_CLIENT_SECRET: undefined },
   { APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1" },
   { APP_BUILDER_LOCAL_AUTH_EMULATION: "1" },

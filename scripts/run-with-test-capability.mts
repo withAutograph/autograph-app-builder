@@ -71,7 +71,9 @@ function childEnvironment() {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function gateAEvalWorkflowBodyTimeout(profile: unknown): string | undefined {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof profile !== "object" || profile === null || !Object.isFrozen(profile)) {
     return undefined;
   }
@@ -233,7 +235,9 @@ export async function runWithTestCapability(options: {
     env: {
       ...childEnvironment(),
       APP_BUILDER_EVE_EVAL_FETCH_PRELOAD: options.profile === "eve" ? "1" : undefined,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       APP_BUILDER_TEST_CAPABILITY_ID: undefined,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       APP_BUILDER_TEST_MODEL: undefined,
       EVE_DEV_WORKER_APP_ROOT: options.profile === "eve" ? repositoryRoot : undefined,
       HOME: evalRuntime?.home ?? process.env.HOME,
@@ -289,8 +293,10 @@ export async function runWithTestCapability(options: {
         request.version === 2;
       if (
         !hasValidEnvelope ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof request.nonce !== "string" ||
         !/^[0-9a-f]{64}$/u.test(request.nonce) ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof request.context !== "string"
       ) {
         throw new Error("Malformed authorization request.");

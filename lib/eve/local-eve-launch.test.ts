@@ -93,6 +93,7 @@ describe("closed local Eve launch", () => {
     // oxlint-disable-next-line unicorn/prefer-event-target
     const child = Object.assign(new EventEmitter(), {
       kill: (signal?: NodeJS.Signals | number) => {
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         if (typeof signal === "string") {
           forwarded.push(signal);
         }
@@ -303,6 +304,7 @@ it("the real child launch can retain private planning artifacts without a hosted
   };
   const artifacts = await createLocalOperatorArtifactStorage({
     authority,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     assertCurrentOwner: (current) => {
       expect(current).toEqual(context);
       return Promise.resolve();
@@ -338,6 +340,7 @@ it("the real child launch can retain private planning artifacts without a hosted
   };
   const artifacts = await createLocalOperatorArtifactStorage({
     authority,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     assertCurrentOwner: (current) => {
       expect(current).toEqual(context);
       return Promise.resolve();

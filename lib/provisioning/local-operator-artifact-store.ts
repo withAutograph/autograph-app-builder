@@ -407,6 +407,7 @@ export const createLocalOperatorArtifactStorage = async (input: {
           destination,
           sequence,
           version: 1,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(historicalAppPublication(selectionMode, destination, selected?.destination)
             ? { historicalOnly: true }
             : {}),

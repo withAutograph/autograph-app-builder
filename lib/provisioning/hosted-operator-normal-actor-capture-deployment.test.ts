@@ -276,6 +276,7 @@ const fixture = () => {
   const noOp = vi.fn(async () => {
     await Promise.resolve();
   });
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   const capture = { actorKey: "owner", context, link, organizationId: undefined, preparation };
   const readPending = vi.fn(async () => await Promise.resolve(capture));
   const readStaging = vi.fn(
@@ -434,6 +435,7 @@ describe("native normal capture deployment assembly", () => {
       actorKey: "different",
       context,
       link,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       organizationId: undefined,
       preparation,
     });

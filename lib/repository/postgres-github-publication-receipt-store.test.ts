@@ -23,6 +23,7 @@ const authority = {
   workspaceId: "workspace_one",
 } as const;
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const sha256 = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -80,7 +81,7 @@ function databaseFixture(input: {
   const update = vi.fn(() => ({ set }));
 
   return {
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The database fixture supplies only the receipt-store query operations.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The database fixture supplies only the receipt-store query operations.; Preserve the existing type assertion at this boundary.
     database: { insert, select, update } as unknown as Database,
     insert,
     limit,

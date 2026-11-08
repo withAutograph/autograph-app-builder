@@ -31,8 +31,11 @@ function readStatus(value: HandoffControlData, handoffId: string): HandoffContro
     value.handoffId !== handoffId ||
     !["prepared", "continued", "expired"].includes(value.status) ||
     !["codex", "cursor"].includes(value.destination) ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof value.cursorInstallReady !== "boolean" ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof value.mcpUrl !== "string" ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof value.expiresAt !== "string" ||
     Number.isNaN(Date.parse(value.expiresAt))
   ) {
@@ -60,9 +63,11 @@ const renderCursorSetupLink = (destination: string, url?: string) => {
   if (destination !== "cursor") {
     return null;
   }
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (url) {
     return <a href={url}>Add Autograph to Cursor</a>;
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return <p>Cursor connection setup is not available yet.</p>;
 };
 
@@ -263,6 +268,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
           return;
         }
         stopPolling?.();
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         stopPolling = undefined;
         activeKey = nextKey;
         if (nextKey !== undefined) {
@@ -343,7 +349,9 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       } catch {
         // Session storage is optional.
       }
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       const id = saved && /^[0-9a-f-]{36}$/iu.test(saved) ? saved : crypto.randomUUID();
+      /* oxlint-enable typescript/strict-boolean-expressions */
       renewalRequest.current = { handoffId: data.handoffId, id };
       try {
         sessionStorage.setItem(storageKey, id);
@@ -353,9 +361,11 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     }
     dispatchHandoffView({ type: "clear-renewal-notice" });
     const request = renewalRequest.current;
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
     if (!request) {
       return;
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     startTransition(
       dispatchRenewal.bind(null, {
         creationRequestId: request.id,

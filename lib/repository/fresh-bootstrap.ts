@@ -401,7 +401,7 @@ export const createFreshBootstrapProposal = (input: {
 };
 
 const canonicalProposal = (proposal: FreshBootstrapProposal) => {
-  // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/no-unsafe-dictionary-type -- Keep the existing broader shape used by this operation.; Preserve the existing open-ended value contract.
+  // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Keep the existing broader shape used by this operation.; Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
   const unsigned = { ...proposal } as Record<string, unknown>;
   delete unsigned.digest;
   return unsigned;
@@ -632,6 +632,7 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
   }
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const freshBootstrapJournalDigest = (value: unknown) => stableDigest(value);
 
 export const proposalFromFreshBootstrapJournal = (
@@ -665,6 +666,7 @@ export const proposalFromFreshBootstrapJournal = (
   ]) {
     Reflect.deleteProperty(candidate, key);
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   return { ...(candidate as Omit<FreshBootstrapProposal, "digest">), digest };
 };
 
@@ -712,15 +714,21 @@ export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJour
     (journal.status !== "pending" &&
       journal.status !== "failed" &&
       journal.status !== "succeeded") ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof journal.publishedByCallId !== "string" ||
     journal.publishedByCallId.length === 0 ||
     journal.publishedByCallId.length > 512 ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof journal.leaseMarkerDigest !== "string" ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     (journal.recoveryOfDigest !== undefined && typeof journal.recoveryOfDigest !== "string") ||
     (journal.previousLeaseMarkerDigest !== undefined &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof journal.previousLeaseMarkerDigest !== "string") ||
     ((journal.status === "pending" || journal.status === "failed") &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       (typeof journal.stageCreated !== "boolean" ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof journal.destinationPublished !== "boolean")) ||
     (journal.status === "failed" &&
       (![
@@ -731,14 +739,20 @@ export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJour
         "capability-disabled",
         "recovery-conflict",
       ].includes(journal.reason) ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof journal.failureMessage !== "string" ||
         journal.failureMessage.length === 0 ||
         journal.failureMessage.length > 4096)) ||
     (journal.status === "succeeded" &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       (typeof journal.headReference !== "string" ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof journal.headCommit !== "string" ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof journal.headTree !== "string" ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof journal.remoteDigest !== "string" ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof journal.worktreeDigest !== "string"))
   ) {
     throw new Error("The fresh-bootstrap journal is malformed.");

@@ -38,8 +38,10 @@ export function DeletePasskeyDialog({ open, onOpenChange, passkey }: DeletePassk
   const { authClient, localization } = useAuth<PasskeyAuthClient>();
   const { localization: passkeyLocalization } = useAuthPlugin(passkeyPlugin);
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty passkey name uses the localized fallback.
   const passkeyName = passkey.name || passkeyLocalization.passkey;
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const previewId = `delete-passkey-preview-${passkey.id}`;
 
   const { mutate: deletePasskey, isPending: isDeleting } = useDeletePasskey(authClient, {
@@ -48,6 +50,7 @@ export function DeletePasskeyDialog({ open, onOpenChange, passkey }: DeletePassk
       onOpenChange(false),
   });
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
@@ -95,4 +98,5 @@ export function DeletePasskeyDialog({ open, onOpenChange, passkey }: DeletePassk
       </AlertDialogContent>
     </AlertDialog>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

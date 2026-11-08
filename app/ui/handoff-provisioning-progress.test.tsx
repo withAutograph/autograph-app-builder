@@ -65,7 +65,7 @@ class TestEventSource {
     this.closed = true;
   }
 
-  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
+  // oxlint-disable-next-line sonarjs/max-union-size, anti-slop/no-unknown-parameters -- Preserve the existing set of accepted alternatives. Preserve the existing unknown input contract.
   emit(name: "snapshot" | "end" | "open" | "error", value?: unknown) {
     const event = new MessageEvent("message", { data: JSON.stringify(value) });
     for (const listener of this.listeners.get(name) ?? []) {
@@ -83,12 +83,15 @@ class TestEventSource {
 
 const streamAt = (index: number): TestEventSource => {
   const stream = TestEventSource.instances[index];
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   if (!stream) {
     throw new Error(`Expected EventSource instance at index ${index}`);
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return stream;
 };
 
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
@@ -114,7 +117,9 @@ afterEach(async () => {
     });
   }
   container?.remove();
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   root = undefined;
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   container = undefined;
   TestEventSource.instances.length = 0;
   vi.restoreAllMocks();
@@ -220,6 +225,7 @@ describe("HandoffProvisioningProgress", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     await act(async () => root?.unmount());
     expect(stream.closed).toBe(true);
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     root = undefined;
   });
 

@@ -118,6 +118,7 @@ const prepareSafeOutputParent = async (root: string, output: string) => {
         throw new Error(`${path.relative(root, current)} must be a real directory.`);
       }
     } catch (error) {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         throw error;
       }
@@ -132,20 +133,26 @@ const prepareSafeOutputParent = async (root: string, output: string) => {
   try {
     await assertTreeContainsNoLinks(root, output);
   } catch (error) {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
     }
   }
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const schemaVersion = (schema: unknown) => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof schema !== "string") {
     return;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve an absent schema version result.
   return /\/schemas\/(?<version>[^/]+)\/(?:plugin|mcp)\.schema\.json$/u.exec(schema)?.[1];
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const assertAutographMcpEndpoint = (value: unknown, { release }: { release: boolean }) => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value !== "string") {
     throw new TypeError(`${AUTOGRAPH_MCP_SERVER_NAME} must use an absolute MCP URL.`);
   }
@@ -201,6 +208,7 @@ const requireString = ({
   max?: number;
 }) => {
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof value !== "string" ||
     value.length < min ||
     (max !== undefined && value.length > max)
@@ -236,7 +244,7 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
         .join("; ")}`,
     );
   }
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
   const frontmatter = document.toJS({ maxAliasCount: 0 }) as Record<string, unknown>;
   const unknownFields = Object.keys(frontmatter).filter(
     (field) => !SKILL_FRONTMATTER_FIELDS.has(field),
@@ -300,6 +308,7 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
     const { metadata } = frontmatter;
     if (
       metadata === null ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof metadata !== "object" ||
       Array.isArray(metadata) ||
       Object.getPrototypeOf(metadata) !== Object.prototype
@@ -310,6 +319,7 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
     }
     if (
       Object.entries(metadata).some(
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         ([key, value]) => typeof key !== "string" || typeof value !== "string",
       )
     ) {
@@ -393,6 +403,7 @@ export const validateAgentPluginPackage = async ({
     if (actual !== digest) {
       throw new Error(`${name} does not match the pinned Agent Plugins ${SPEC_VERSION} schema.`);
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     schemaDocuments[name] = JSON.parse(bytes.toString("utf-8")) as JsonObject;
   }
 

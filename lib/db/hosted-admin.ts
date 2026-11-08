@@ -191,6 +191,7 @@ interface HostedAdminRetentionDigest {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function planHostedAdminRequest(input: unknown) {
   const request = hostedAdminPlanRequestSchema.parse(input);
   const plan = {

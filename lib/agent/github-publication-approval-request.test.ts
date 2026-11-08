@@ -104,6 +104,7 @@ vi.mock("./workflow-state", async (importOriginal) => ({
   },
 }));
 vi.mock("./deployment-github-publication-runtime", () => ({
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   githubPublicationRuntimeForSession: () =>
     Promise.resolve({
       publishDraftPullRequest: fixture.publish,
@@ -114,18 +115,22 @@ vi.mock("./app-baseline-state", () => ({ appBaselineState: { get: () => null } }
 vi.mock("../repository/reviewed-change-set", () => ({ assertExistingAppReviewScope: () => {} }));
 vi.mock("../repository/source-receipt", () => ({ sourceReceiptEvidence: () => ({}) }));
 vi.mock("../../agent/tools/change_set_status", () => ({
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   exactNormalizedChangeSet: () => Promise.resolve({ digest: fixture.proposal.changeSetDigest }),
 }));
 vi.mock("./github-publication-content-source", () => ({
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   publicationContentSourceForReviewedWorkflow: () => Promise.resolve({}),
 }));
 vi.mock("./published-app-source", () => ({
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   recordPublishedAppSourceForSession: () => Promise.resolve({ status: "recorded" }),
 }));
 
 const context = {
   callId: "publish-reviewed-proposal",
   session: { id: "saved-builder-session", auth: {} },
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   getSandbox: vi.fn(() => Promise.resolve({})),
 };
 // SAFETY: Only the trusted saved-session identity and provider-free sandbox port are consumed by these authored tools.
@@ -146,6 +151,7 @@ const setup = (input: PublicationInput) => {
   let requested = false;
   const events: UnstampedMessageStreamEvent[] = [];
   const model = new MockLanguageModelV4({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     doStream: () => {
       const requestedNow = !requested;
       requested = true;
@@ -187,6 +193,7 @@ const setup = (input: PublicationInput) => {
     [
       "publish_github_draft_pr",
       {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         approval: (approvalContext) =>
           approval({
             ...approvalContext,
@@ -198,6 +205,7 @@ const setup = (input: PublicationInput) => {
               .parse(approvalContext.toolInput),
           }),
         description: publishTool.description,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         execute: (value: PublicationInput) => publishTool.execute(value, toolContext),
         inputSchema,
         name: "publish_github_draft_pr",
@@ -206,10 +214,12 @@ const setup = (input: PublicationInput) => {
   ]);
   const run = createToolLoopHarness({
     capabilities: { requestInput: true },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     handleEvent: (event) => {
       events.push(event);
       return Promise.resolve();
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     resolveModel: () => Promise.resolve(model),
     tools,
   });
@@ -234,7 +244,9 @@ const setup = (input: PublicationInput) => {
   return {
     events,
     initial,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     run: (session: HarnessSession, value?: StepInput) =>
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       contextStorage.run(container, () => run(session, value)),
   };
 };
@@ -460,6 +472,7 @@ describe("retained draft publication subject recovery", () => {
   );
   it("still rejects another session's artifacts before projecting status", () => {
     fixture.state.artifacts[0].sessionId = "another-builder-session";
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     expect(() => statusTool.execute({}, toolContext)).toThrow("different session");
     expect(fixture.publish).not.toHaveBeenCalled();
     expect(fixture.seal).not.toHaveBeenCalled();
@@ -471,6 +484,7 @@ describe("retained draft publication subject recovery", () => {
       ...fixture.proposal,
       baseSha: "invalid-base-commit",
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     expect(() => statusTool.execute({}, toolContext)).toThrow();
     expect(fixture.publish).not.toHaveBeenCalled();
     expect(fixture.seal).not.toHaveBeenCalled();

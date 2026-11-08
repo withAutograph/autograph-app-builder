@@ -52,6 +52,7 @@ export interface CandidateWorkflowOutcome {
   evidence?: { buttons: string[]; headings: string[]; mutationPaths: string[] };
 }
 
+/* oxlint-disable typescript/consistent-return -- Preserve early outcomes in the serialized browser workflow. */
 /** Evaluator-owned browser checks. Serialized into Sandbox, never supplied to generation. */
 export const exerciseCandidateBrowserWorkflows = async (
   browser: CandidateBrowser,
@@ -81,8 +82,9 @@ export const exerciseCandidateBrowserWorkflows = async (
     const check = (id: string, passed: boolean | null, detail: string) =>
       assertions.push({ detail, id, passed });
     const button = (name: RegExp) => page.getByRole("button", { name }).first();
-    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+    // oxlint-disable-next-line github/no-then, typescript/promise-function-async -- Preserve the existing rejection handling and settlement behavior. Preserve the returned promise and synchronous throw behavior.
     const exists = (locator: CandidateLocator) => locator.isVisible().catch(() => false);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const text = () => page.locator("body").textContent();
     let outcome: CandidateWorkflowOutcome = {
       assertions: [],
@@ -422,6 +424,7 @@ export const exerciseCandidateBrowserWorkflows = async (
   }
   return outcomes;
 };
+/* oxlint-enable typescript/consistent-return */
 
 export const sandboxCandidateWorkflowComparison = () => {
   const script = `
@@ -435,6 +438,7 @@ const browser = await chromium.launch({headless:true});
 try { await run(browser,input.baseURL,async outcomes => {await writeFile(process.argv[3],JSON.stringify(sanitize({producer:'evaluator',kind:'candidate-browser-workflows',outcomes})));}); }
 finally {await browser.close();}
 `;
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   return { artifactPaths: [] as string[], script };
 };
 

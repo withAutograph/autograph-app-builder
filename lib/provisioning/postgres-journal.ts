@@ -42,6 +42,7 @@ function parseRow(
     requestDigest: row.requestDigest,
     requestId: row.requestId,
     revision: row.revision,
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     state: row.state as "pending" | "settled",
     updatedAt: row.updatedAt,
   };
@@ -58,7 +59,9 @@ export function createPostgresBuilderProvisionJournalStore(
       .from(builderProvisioningJournals)
       .where(predicate(authority, input.requestId))
       .limit(1);
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
     return rows[0] ? parseRow(rows[0]) : undefined;
+    /* oxlint-enable typescript/strict-boolean-expressions */
   };
   return {
     async findSettledAppRepository(input) {
@@ -102,7 +105,9 @@ export function createPostgresBuilderProvisionJournalStore(
           ),
         )
         .returning();
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
       return rows[0] ? parseRow(rows[0]) : undefined;
+      /* oxlint-enable typescript/strict-boolean-expressions */
     },
     async listDue(input) {
       const cursor = input.after;
@@ -182,9 +187,11 @@ export function createPostgresBuilderProvisionJournalStore(
         })
         .onConflictDoNothing()
         .returning();
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
       const row = rows[0]
         ? parseRow(rows[0])
         : await read({ authority, requestId: input.request.requestId });
+      /* oxlint-enable typescript/strict-boolean-expressions */
       if (!row) {
         throw new Error("provision-journal-not-durable");
       }

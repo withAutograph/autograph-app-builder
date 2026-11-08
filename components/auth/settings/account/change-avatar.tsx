@@ -48,10 +48,14 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
     setIsUploading(true);
 
     try {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
       const resized = (await avatar.resize?.(file, avatar.size, avatar.extension)) || file;
+      /* oxlint-enable typescript/strict-boolean-expressions */
 
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty upload result falls back to the local avatar data.
       const image = (await avatar.upload?.(resized)) || (await fileToAvatarDataUrl(resized));
+      /* oxlint-enable typescript/strict-boolean-expressions */
 
       updateUser(
         { image },
@@ -80,6 +84,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
   };
 
   const finishAvatarDeletion = async (currentImage: string | null | undefined) => {
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (currentImage) {
       setIsDeleting(true);
       try {
@@ -93,6 +98,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
         setIsDeleting(false);
       }
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     toast.success(localization.settings.avatarDeletedSuccess);
   };
 
@@ -109,6 +115,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
     );
   };
 
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
     <Field className={className}>
       <FieldLabel>{localization.settings.avatar}</FieldLabel>
@@ -165,4 +172,5 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
       </div>
     </Field>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

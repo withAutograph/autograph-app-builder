@@ -367,6 +367,7 @@ export const updateExistingDraft = async (input: {
     review: input.review,
     source: input.contentSource,
   });
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const inspectApplied = (observed: ExistingDraftObservation) =>
     (!isPublishedDraftRepairReview(input.review) ||
       observed.headTree === input.review.resolvedTree) &&

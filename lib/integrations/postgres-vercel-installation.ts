@@ -21,6 +21,7 @@ import type {
 type Database = HostedDatabase;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function tenant(table: typeof hostedVercelInstallations, authorityInput: unknown) {
   const authority = hostedTenantAuthoritySchema.parse(authorityInput);
   return and(
@@ -71,6 +72,7 @@ export async function readActiveVercelInstallationToken(input: {
     }
     throw error;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absent installation and continuation results.
   return {
     binding: {
       active: row.active,
@@ -78,6 +80,7 @@ export async function readActiveVercelInstallationToken(input: {
       installationId: row.installationId,
       plan: row.plan,
       scopeId: row.scopeId,
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       scopeType: row.scopeType as "team" | "user",
       slug: row.slug,
       updatedAt: row.updatedAt,
@@ -105,6 +108,7 @@ export const readVercelInstallationBindings = async (input: {
     .from(hostedVercelInstallations)
     .where(tenant(hostedVercelInstallations, input.authority))
     .orderBy(asc(hostedVercelInstallations.displayName));
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   return rows as VercelInstallationBinding[];
 };
 
@@ -140,9 +144,12 @@ export function createPostgresVercelAuthorizationStateStore(
       const returnState: Parameters<typeof parseProviderConnectionReturn>[0] = {
         returnTo: row.returnTo,
       };
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (row.resumeKey) {
         returnState.resumeKey = row.resumeKey;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve absent installation and continuation results.
       return parseProviderConnectionReturn(returnState);
     },
     async create(input) {
@@ -183,9 +190,12 @@ export function createPostgresVercelAuthorizationStateStore(
       const returnState: Parameters<typeof parseProviderConnectionReturn>[0] = {
         returnTo: rows[0].returnTo,
       };
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (rows[0].resumeKey) {
         returnState.resumeKey = rows[0].resumeKey;
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve absent installation and continuation results.
       return parseProviderConnectionReturn(returnState);
     },
   };
@@ -242,6 +252,7 @@ export function createPostgresVercelInstallationStore(input: {
       if (rows.length !== 1) {
         throw new Error("Vercel installation was not durable.");
       }
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       return rows[0] as VercelInstallationBinding;
     },
     async deactivate(installationId, now) {

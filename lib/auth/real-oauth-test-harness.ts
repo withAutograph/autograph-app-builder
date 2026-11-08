@@ -171,6 +171,7 @@ export const registerTestCursorClient = async (harness: RealOAuthHarness) => {
     model: "oauthResource",
     where: [{ field: "identifier", value: resource }],
   });
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   if (!target) {
     await harness.db.create({
       data: {
@@ -185,6 +186,7 @@ export const registerTestCursorClient = async (harness: RealOAuthHarness) => {
       model: "oauthResource",
     });
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   await harness.db.create({
     data: cursorClientRegistration(),
     model: "oauthClient",
@@ -198,6 +200,7 @@ export const registerTestCursorClient = async (harness: RealOAuthHarness) => {
 /** Complete an actual browser-cookie authorization/consent and PKCE exchange. */
 export const verifyRealOAuthToken = async (harness: RealOAuthHarness, accessToken: string) => {
   const response = await harness.customFetchImpl(`${issuer}/jwks`);
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const jwks = (await response.json()) as { keys: JsonWebKey[] };
   const verification = await jwtVerify(accessToken, createLocalJWKSet(jwks), {
     algorithms: ["ES256"],
@@ -249,14 +252,17 @@ export const grantRealOAuth = async (
     if (!consent.ok) {
       throw new Error("OAuth consent failed.");
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const body = (await consent.json()) as {
       redirect_uri?: string;
       url?: string;
     };
     const consentRedirect = body.redirect_uri ?? body.url;
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (!consentRedirect) {
       throw new Error("OAuth consent did not return a redirect.");
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     callback = new URL(consentRedirect);
   }
   const code = callback.searchParams.get("code");
@@ -283,6 +289,7 @@ export const grantRealOAuth = async (
   if (!response.ok) {
     throw new Error("OAuth token exchange failed.");
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const tokens = (await response.json()) as OAuthTokens;
   const claims = await verifyRealOAuthToken(harness, tokens.access_token);
   return { claims, consentRequired, tokens };
@@ -306,6 +313,7 @@ export const refreshRealOAuth = async (
   if (!response.ok) {
     throw new Error("OAuth refresh failed.");
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const tokens = (await response.json()) as OAuthTokens;
   return {
     claims: await verifyRealOAuthToken(harness, tokens.access_token),

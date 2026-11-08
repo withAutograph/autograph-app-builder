@@ -33,6 +33,7 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
       count: 1,
       input: {
         content: (value) =>
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof value === "string" &&
           value.includes("Operations review queue") &&
           value.includes("Finance: verify tax information") &&
@@ -48,6 +49,7 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
     t.calledTool("record_prototype_artifact", {
       count: 1,
       input: {
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         content: (value) => typeof value === "string" && !value.includes("## Build handoff"),
         path: "prototype/vendor-onboarding/app-spec.md",
       },
@@ -56,6 +58,7 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
       count: 1,
       input: {
         content: (value) =>
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof value === "string" &&
           value.includes("## Build handoff") &&
           value.includes('"status": "build-ready"'),
@@ -97,6 +100,7 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
       "all public assistant messages omit routine source and authority mechanics",
       (events) => {
         const messages = events.flatMap((event) =>
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           event.type === "message.completed" && typeof event.data.message === "string"
             ? [event.data.message]
             : [],

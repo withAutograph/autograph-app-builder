@@ -9,7 +9,7 @@ vi.mock("eve/context", () => ({
     let state = initial();
     return {
       get: () => state,
-      // oxlint-disable-next-line anti-slop/no-unknown-returns -- The state fixture retains arbitrary callback values.
+      // oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- The state fixture retains arbitrary callback values. Preserve the existing unknown input contract.
       update: (change: (current: unknown) => unknown) => {
         state = change(state);
       },

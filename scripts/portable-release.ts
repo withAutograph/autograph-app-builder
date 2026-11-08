@@ -32,9 +32,11 @@ export function hasCanonicalFetchRemote(remoteOutput: string, expectedRepository
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function releaseEndpoint(value: string | undefined) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!value) {
     throw new Error("Usage: --endpoint https://agent.example.com");
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const endpoint = new URL(value);
   const invalidEndpoint = "Endpoint must be a credential-free, deployed, literal HTTPS origin.";
   if (

@@ -61,6 +61,7 @@ export function SearchCombobox({
     : options;
   useEffect(() => {
     const close = (event: PointerEvent) => {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       if (rootRef.current?.contains(event.target as Node) !== true) {
         setOpen(false);
       }
@@ -85,6 +86,7 @@ export function SearchCombobox({
     setFiltering(false);
     setOpen(false);
   };
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
   return (
     <div
       className={styles.combobox}
@@ -208,4 +210,5 @@ export function SearchCombobox({
       </dialog>
     </div>
   );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 }

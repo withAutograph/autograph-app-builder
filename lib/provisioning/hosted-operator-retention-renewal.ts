@@ -108,6 +108,7 @@ const renewalPlanFrom = (prior: HostedOperatorPlan, expiresAt: string) => {
   }
   return hostedOperatorPlanSchema.safeParse({
     ...prior,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(prior.hostProtection === undefined
       ? {
           appTrustedSources: {
@@ -121,6 +122,7 @@ const renewalPlanFrom = (prior: HostedOperatorPlan, expiresAt: string) => {
       : {}),
     gatewayBindings: {
       ...gatewayBindings,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(prior.hostProtection === undefined
         ? {
             trustedSources: {

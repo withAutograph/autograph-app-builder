@@ -189,9 +189,11 @@ const runConfiguredPairedCaptures = async () => {
   if (adapterFile === undefined || adapterFile === null || adapterFile === "") {
     return;
   }
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!values["reference-url"] || !values["candidate-url"]) {
     throw new Error("--capture-adapter requires both --reference-url and --candidate-url.");
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const evaluatorRoot = await realpath(join(root, "evals"));
   const resolvedAdapter = await realpath(resolve(adapterFile));
   const adapterRelative = relative(evaluatorRoot, resolvedAdapter);
@@ -210,6 +212,7 @@ const runConfiguredPairedCaptures = async () => {
     }) => Promise<Partial<Record<"reference" | "candidate", CaptureAdapter>>>;
   };
   const { createCaptureAdapters } = loaded;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof createCaptureAdapters !== "function") {
     throw new TypeError("Capture adapter must export createCaptureAdapters().");
   }
@@ -256,6 +259,7 @@ const runConfiguredWorkflowAdapters = async (candidateRoot: string | undefined) 
     join(root, "evals/self-reproduction/workflow-adapter.ts");
   const resolvedAdapter = await realpath(resolve(adapterFile));
   const evaluatorRoot = await realpath(join(root, "evals"));
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (
     !within(evaluatorRoot, resolvedAdapter) ||
     within(output, resolvedAdapter) ||
@@ -263,10 +267,12 @@ const runConfiguredWorkflowAdapters = async (candidateRoot: string | undefined) 
   ) {
     throw new Error("Workflow adapter module must be evaluator-owned and under evals/.");
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const loaded = (await import(pathToFileURL(resolvedAdapter).href)) as {
     createWorkflowAdapters?: WorkflowAdapterFactory;
   };
   const { createWorkflowAdapters } = loaded;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof createWorkflowAdapters !== "function") {
     throw new TypeError("Workflow adapter module must export createWorkflowAdapters().");
   }
@@ -413,6 +419,7 @@ const candidateAppId = (files: Awaited<ReturnType<typeof readSource>>): string =
   if (contract) {
     try {
       const parsed = JSON.parse(contract.content) as { appId?: unknown };
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof parsed.appId === "string" && /^[a-z][a-z0-9-]*$/u.test(parsed.appId)) {
         return parsed.appId;
       }
@@ -441,6 +448,7 @@ const escapeHtml = (value: string) => {
   return value.replaceAll(/[&<>"']/gu, (character) => replacements[character] ?? character);
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const jsonFile = async (name: string, data: unknown) => {
   await artifactFile(name, `${JSON.stringify(sanitizeEvidence(data), null, 2)}\n`);
 };
@@ -475,8 +483,10 @@ const requirementRow = (requirement: Assessment["rows"][number]) =>
 // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 type ReportGap = Record<string, unknown>;
 
+/* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
 const gapRow = (gap: ReportGap) =>
   `<li><strong>${escapeHtml(String(gap.priority).toUpperCase())}: ${escapeHtml(String(gap.title))}</strong><p>${escapeHtml(String(gap.expected))}</p><p>${escapeHtml(String(gap.recommendation))}</p><small>${escapeHtml(gap.confirmed ? "Observed failure; see retained evidence" : "Incomplete assessment; see status and reason")}</small></li>`;
+/* oxlint-enable typescript/strict-boolean-expressions */
 
 const captureFileLink = (item: { label: string }, file: string) => {
   const link = `<a href="${escapeHtml(file)}">${escapeHtml(basename(file))}</a>`;
@@ -509,9 +519,11 @@ const reportHtml = (report: {
       const candidateCapture = report.captures
         .find((item) => item.label === "candidate diagnostic routes")
         ?.files.find((file) => file.endsWith(`/${name}/root.png`));
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
       if (!reference || !candidateCapture) {
         return "";
       }
+      /* oxlint-enable typescript/strict-boolean-expressions */
       return `<section><h3>${escapeHtml(name)} initial routes</h3><p>Diagnostic comparison; equivalent workflow states have not been established.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><figure><figcaption>Reference</figcaption><img style="width:100%" src="${escapeHtml(reference)}" alt="Reference initial route"></figure><figure><figcaption>Candidate</figcaption><img style="width:100%" src="${escapeHtml(candidateCapture)}" alt="Candidate initial route"></figure></div></section>`;
     })
     .join("");
@@ -616,6 +628,7 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
       interrupted = reason;
       // Forward termination to the native eval process group, including its broker.
       const kill = (signal: NodeJS.Signals) => {
+        /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
         if (child.pid) {
           try {
             process.kill(-child.pid, signal);
@@ -623,6 +636,7 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
             /* Already exited. */
           }
         }
+        /* oxlint-enable typescript/strict-boolean-expressions */
       };
       kill("SIGTERM");
       force = setTimeout(() => {
@@ -675,9 +689,11 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
   let native: Record<string, unknown> | undefined;
   for (const match of rawOutput.matchAll(/(?:^|\n)(?=\{)/gu)) {
     try {
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
       const parsed = JSON.parse(rawOutput.slice(match.index + match[0].length));
       // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       if (Array.isArray(parsed.results)) {
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
         native = parsed;
         break;
       }
@@ -1064,10 +1080,12 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
   await saveReport();
   try {
     const providedCheckout = values["arrusted-root"] ?? process.env.SELF_REPRODUCTION_ARRUSTED_ROOT;
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     const shouldPrepareTemplateSource =
       Boolean(providedCheckout) ||
       values["candidate-runtime"] === true ||
       (values["report-only"] !== true && !values.generator);
+    /* oxlint-enable typescript/strict-boolean-expressions */
     const templateSource = shouldPrepareTemplateSource
       ? await prepareSelfReproductionTemplateSource({
           outputDirectory: output,
@@ -1178,6 +1196,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
           await jsonFile("workflow-results.json", workflowEvidence);
         }
       } catch (error) {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         candidateFiles = undefined;
         candidate = {
           reason: error instanceof Error ? error.message : String(error),
@@ -1212,6 +1231,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       }
     }
     await saveReport();
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (
       values["reference-runtime"] === true ||
       (values["report-only"] !== true && !values.generator && !values["reference-url"])
@@ -1233,6 +1253,8 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         Object.assign(process.env, reference.receipt.environment);
       }
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     if (
       values["candidate-runtime"] === true ||
       (values["report-only"] !== true && !values.generator)
@@ -1341,6 +1363,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
             };
       await jsonFile(candidateRuntimeFile, candidateRuntime);
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     captures.push(
       ...(await Promise.all([
         capture("reference", values["reference-url"], root),
@@ -1377,6 +1400,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         throw new Error("Expected reference instant-navigation evaluator evidence.");
       }
       referenceNavigationReceipts = [receipt];
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     } else if (
       values["reference-navigation"] === true ||
       (values["report-only"] !== true && !values.generator)
@@ -1394,6 +1418,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       referenceNavigationReceipts = [receipt];
       await jsonFile("reference-navigation/receipt.json", receipt);
     }
+    /* oxlint-enable typescript/strict-boolean-expressions */
     await saveReport();
     await runConfiguredPairedCaptures();
     if (

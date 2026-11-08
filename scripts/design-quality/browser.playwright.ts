@@ -26,6 +26,7 @@ test("an unavailable preview is not captured or scored as an empty design", asyn
   await once(server, "listening");
   try {
     const address = server.address();
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof, typescript/strict-boolean-expressions -- Preserve the runtime type check and truthiness behavior.
     if (!address || typeof address === "string") {
       throw new Error("No listener");
     }
@@ -343,10 +344,13 @@ test("attributes a matched stylesheet declaration through its CSS source map", a
     // while the authored declaration itself begins at column 10.
     version: 3,
   });
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await page.route(FIXTURE_PAGE_URL, (route) => route.fulfill({ body: "" }));
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await page.route("http://example.test/generated.css.map", (route) =>
     route.fulfill({ body: map, contentType: "application/json" }),
   );
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await page.route(FIXTURE_COMPILED_CSS_URL, (route) =>
     route.fulfill({
       body: `${compiledCss}\n/*# sourceMappingURL=/generated.css.map */`,
@@ -409,10 +413,13 @@ test("reports an exactly mapped shared declaration as shared without scoring cre
     sourcesContent: [authoredCss],
     version: 3,
   });
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await page.route(FIXTURE_PAGE_URL, (route) => route.fulfill({ body: "" }));
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await page.route("http://example.test/shared.css.map", (route) =>
     route.fulfill({ body: map, contentType: "application/json" }),
   );
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await page.route(FIXTURE_COMPILED_CSS_URL, (route) =>
     route.fulfill({
       body: `${compiledCss}\n/*# sourceMappingURL=/shared.css.map */`,
@@ -475,10 +482,13 @@ test("keeps multiple mapped cascade declarations unknown", async ({ page }) => {
     sourcesContent: [authoredCss],
     version: 3,
   });
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await page.route(FIXTURE_PAGE_URL, (route) => route.fulfill({ body: "" }));
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await page.route("http://example.test/ambiguous.css.map", (route) =>
     route.fulfill({ body: map, contentType: "application/json" }),
   );
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await page.route("http://example.test/ambiguous.css", (route) =>
     route.fulfill({
       body: `${compiledCss}\n/*# sourceMappingURL=/ambiguous.css.map */`,
@@ -528,10 +538,13 @@ test("does not trust mismatched CSS source-map content", async ({ page }) => {
     sourcesContent: [".origin { color: red; }"],
     version: 3,
   });
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await page.route(FIXTURE_PAGE_URL, (route) => route.fulfill({ body: "" }));
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await page.route("http://example.test/generated.css.map", (route) =>
     route.fulfill({ body: map, contentType: "application/json" }),
   );
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await page.route(FIXTURE_COMPILED_CSS_URL, (route) =>
     route.fulfill({
       body: `${compiledCss}\n/*# sourceMappingURL=/generated.css.map */`,

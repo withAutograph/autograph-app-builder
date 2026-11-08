@@ -175,6 +175,7 @@ export default defineTool({
         (state.phase === "reviewed" ? state.githubDraftProposal?.proposal : undefined) ??
         retainedPublication?.proposal ??
         priorResumedBuildDraftProposal(state, ctx.session.id),
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(prior === undefined
         ? {}
         : {
@@ -182,6 +183,7 @@ export default defineTool({
               appId: state.appSpec.appId,
               proposal: prior.proposal,
               installationId: prior.installationId,
+              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
               ...(prior.reconciliation === undefined
                 ? {}
                 : { reconciliation: prior.reconciliation }),

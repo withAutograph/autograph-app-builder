@@ -127,6 +127,7 @@ const fixture = () => {
   let allowed = true;
   let onRead: ((operationId: string) => void) | undefined;
   const binding = createNativeRecoveryBinding({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     assertOwner: () => {
       if (!allowed) {
         throw new Error("closure-current-owner-revoked");
@@ -134,10 +135,12 @@ const fixture = () => {
       return Promise.resolve();
     },
     store: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       getPrivateOperation: (_principal, operationId) => {
         onRead?.(operationId);
         return Promise.resolve(operations.get(operationId) ?? null);
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       getSession: (_principal, sessionId) => Promise.resolve(sessions.get(sessionId) ?? null),
     },
   });

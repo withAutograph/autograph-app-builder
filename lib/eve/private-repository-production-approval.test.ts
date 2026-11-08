@@ -227,6 +227,7 @@ describe("Production setup consent", () => {
         adapterGeneration: 1,
       },
       assertOwner,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readHistory: (_start, observe) => {
         observe(request());
         observe(settle());

@@ -958,6 +958,7 @@ export function composeGitHubPublicationRuntime(input: {
         installation,
         preTree: await adapter.inspectDestinationFiles({ paths, repository }),
         repository,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(ownedMergedPublicationDigest === undefined ? {} : { ownedMergedPublicationDigest }),
       };
     },
@@ -1005,6 +1006,7 @@ export function composeGitHubPublicationRuntime(input: {
         number: request.pullRequestNumber,
         owner: request.owner,
         repositoryId: request.repositoryId,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(recovery === undefined ? {} : { recovery }),
       });
       const matchesSelection = isDeepStrictEqual(
@@ -1046,6 +1048,7 @@ export function composeGitHubPublicationRuntime(input: {
     async inspectAppliedExistingDraftUpdate(request) {
       return await inspectAppliedExistingDraftUpdate({ adapter: draftUpdateAdapter, ...request });
     },
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(input.prEffects === undefined || adapter.prDelivery === undefined
       ? {}
       : {
@@ -1602,6 +1605,7 @@ export function composeGitHubPublicationRuntime(input: {
         number: request.pullRequestNumber,
         owner: request.githubSource.repository.owner,
         repositoryId: request.githubSource.repository.repositoryId,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(recovery === undefined ? {} : { recovery }),
       });
       if (
@@ -1678,6 +1682,7 @@ export function composeGitHubPublicationRuntime(input: {
         pullRequestNumber: request.pullRequestNumber,
         repository,
         review: request.review,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(recovery === undefined ? {} : { recovery }),
         selectedSourceRef:
           prior === undefined

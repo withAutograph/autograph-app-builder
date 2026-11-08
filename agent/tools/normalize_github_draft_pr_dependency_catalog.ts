@@ -80,6 +80,7 @@ export default defineTool({
       operation: "recording normalized dependency metadata",
       transition: () => ({
         ...current,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         dependencyCatalogPending: undefined,
         dependencyCatalog: {
           files: [

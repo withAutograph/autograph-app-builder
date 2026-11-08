@@ -247,6 +247,7 @@ describe("target validation", () => {
     const { sandbox } = sandboxFixture();
     const environment = {
       APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["/private-state/original-predecessor.json"]',
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       OPTIONAL_INPUT: undefined,
     };
     const executor = vi
@@ -1077,6 +1078,7 @@ cat "$log"
 rm -f "$log"
 exit "$status"`,
         env: {
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(alreadyCompiled ? { APP_RUNTIME_ALREADY_COMPILED: "1" } : {}),
           APP_RUNTIME_STATE_DIR: path.posix.dirname(
             localRuntimeEnvironmentPath("/workspace/repository", "example"),
@@ -1161,6 +1163,7 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
           environment: {
             APP_RUNTIME_STATE_DIR: "/untrusted-state-directory",
             APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
+            // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
             OPTIONAL_INPUT: undefined,
           },
           onChunk: streaming

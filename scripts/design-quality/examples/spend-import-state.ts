@@ -103,9 +103,11 @@ export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping)
     const source = sourceFor(mapping, target);
     return source !== undefined && source !== "";
   });
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const representativeBaselineReady = fixture.representativeRows.filter(
     ({ issue }) => !issue,
   ).length;
+  /* oxlint-enable typescript/strict-boolean-expressions */
   const unshownReady = Math.max(0, fixture.preview.creates - representativeBaselineReady);
   const rows = fixture.representativeRows.map((row) => {
     const vendor = mappedValue(row.source, mapping, "vendor_name");
@@ -113,8 +115,10 @@ export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping)
     const currency = mappedValue(row.source, mapping, "currency") ?? "USD";
     const date = mappedValue(row.source, mapping, "transaction_date");
     const sourceRef = mappedValue(row.source, mapping, "source_record_ref");
+    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
     return {
       amount:
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof amount === "number"
           ? new Intl.NumberFormat("en-US", {
               currency: String(currency),
@@ -127,6 +131,7 @@ export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping)
       sourceRef: sourceRef === undefined ? "Not imported" : String(sourceRef),
       vendor: vendor === undefined ? unmappedValue : String(vendor),
     } satisfies SpendPreviewRow;
+    /* oxlint-enable typescript/strict-boolean-expressions */
   });
   const ready = complete
     ? unshownReady + rows.filter(({ result }) => result === "Ready").length
@@ -159,6 +164,7 @@ export function reduceSpendState(state: SpendState, action: SpendAction): SpendS
     return { mapping, stage: "mapping" };
   }
   if (action.type === "preview-requested") {
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     return { ...state, saved: undefined, stage: "preview" };
   }
   if (action.type === "save-requested") {
@@ -175,11 +181,13 @@ export function reduceSpendState(state: SpendState, action: SpendAction): SpendS
     return { ...state, stage: "review" };
   }
   if (action.type === "match-selected") {
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     return { ...state, decision: undefined, selectedMatchId: action.id };
   }
   if (action.type === "decision-deferred") {
     return { ...state, decision: "deferred" };
   }
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (action.type === "decision-applied" && state.selectedMatchId) {
     return {
       ...state,
@@ -194,6 +202,7 @@ export function reduceSpendState(state: SpendState, action: SpendAction): SpendS
         : undefined,
     };
   }
+  /* oxlint-enable typescript/strict-boolean-expressions */
   return state;
 }
 

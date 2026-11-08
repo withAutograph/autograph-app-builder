@@ -33,6 +33,7 @@ export class LocalOidcRefreshFailedError extends Error {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requiredEnvironmentValue(environment: NodeJS.ProcessEnv, name: "HOME" | "PATH"): string {
   const value = environment[name];
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value !== "string" || value.length === 0) {
     throw new Error(`Required ${name} was unavailable.`);
   }
@@ -108,6 +109,7 @@ function installedOidcNeedsRefresh(input: {
       },
     );
   } catch (error) {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return true;
     }

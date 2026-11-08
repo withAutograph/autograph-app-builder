@@ -20,10 +20,12 @@ export default defineEval({
     t.check(
       recordedStatus,
       satisfies((reply) => {
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         if (typeof reply !== "string") {
           return false;
         }
         try {
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
           const state = JSON.parse(reply.slice(reply.indexOf("{")));
           return (
             // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-argument -- Inspect the existing workflow fixture digest.

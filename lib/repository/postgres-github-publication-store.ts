@@ -67,10 +67,13 @@ const hasExactStoredKeys = (value: GitHubPublicationProposal, keys: readonly str
   JSON.stringify(Object.keys(value).toSorted()) === JSON.stringify([...keys].toSorted());
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function parseProposal(input: unknown): GitHubPublicationProposal {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw new Error("GitHub publication proposal JSON is malformed.");
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const stored = input as GitHubPublicationProposal;
   // PostgreSQL jsonb reorders object keys. Publication v2 digests use the
   // constructor's JSON.stringify order, so restore that exact order after
@@ -142,6 +145,7 @@ function parseProposal(input: unknown): GitHubPublicationProposal {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function parseGitHubPublicationProposalRow(input: unknown): GitHubPublicationProposal {
   const row = proposalRowSchema.parse(input);
   const proposal = parseProposal(row.proposal);

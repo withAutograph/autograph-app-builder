@@ -298,6 +298,7 @@ export function createLocalEveInvocation(input: {
       REPOSITORY_WORKSPACE_ROOT: roots.destinationRoot,
       TMPDIR: "/tmp",
       TZ: "UTC",
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
       ...(limits === undefined
         ? {}
         : { APP_BUILDER_PRIVATE_COMPUTE_LIMITS: JSON.stringify(limits) }),
@@ -403,6 +404,7 @@ export async function runLocalEve(input: {
     pinnedNode: process.execPath,
     repositoryRoot,
     vercelProject: project,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS === undefined
       ? {}
       : {

@@ -140,6 +140,7 @@ describe("analyzeSource", () => {
       expect.arrayContaining([
         expect.objectContaining({
           classification: "token-reference",
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
           summary: expect.stringContaining("color treatment override"),
           verdict: "nonconforming",
         }),

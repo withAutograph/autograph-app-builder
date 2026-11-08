@@ -28,6 +28,7 @@ export function publicationContentSourceForReviewedWorkflow(input: {
 }): GitHubPublicationContentSource {
   const relativeRoot = input.state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
   let applyFiles: Promise<Map<string, { path: string; mode: string; digest: string }>> | undefined;
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   const observeApplyFiles = () =>
     (applyFiles ??= (async () => {
       const observed = hasTestCapability("simulated-target")
