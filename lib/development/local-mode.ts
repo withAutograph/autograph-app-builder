@@ -482,7 +482,9 @@ export const waitForDevelopmentSourceChange = (input: {
     }
     resolve(changed);
   };
-  handlers.aborted = () => finish(false);
+  handlers.aborted = () => {
+    finish(false);
+  };
   const check = async () => {
     if (checking) {
       pending = true;
@@ -522,12 +524,16 @@ export const waitForDevelopmentSourceChange = (input: {
   }
   input.signal?.addEventListener("abort", handlers.aborted, { once: true });
   try {
-    watcher = watch(input.sourceRoot, { recursive: true }, () => schedule(input.debounceMs ?? 150));
+    watcher = watch(input.sourceRoot, { recursive: true }, () => {
+      schedule(input.debounceMs ?? 150);
+    });
   } catch {
     finish(true);
     return promise;
   }
-  watcher.once("error", () => finish(true));
+  watcher.once("error", () => {
+    finish(true);
+  });
   timers.audit = setInterval(schedule, input.auditMs ?? 30_000);
   schedule();
   return promise;

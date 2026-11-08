@@ -91,7 +91,9 @@ export function BuilderContinuation({
     const frame = window.requestAnimationFrame(() => {
       setSavedBrief(sessionStorage.getItem("autograph-app-brief") ?? "");
     });
-    return () => window.cancelAnimationFrame(frame);
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
   }, []);
   useEffect(() => {
     if (!continuation || continuationPending) {
@@ -158,7 +160,9 @@ export function BuilderContinuation({
           };
           const input = savedContinuation.current;
           if (input) {
-            startTransition(() => dispatchContinuation(input));
+            startTransition(() => {
+              dispatchContinuation(input);
+            });
           }
         }}
       >
@@ -177,7 +181,9 @@ export function BuilderContinuation({
             onClick={() => {
               const input = savedContinuation.current;
               if (input) {
-                startTransition(() => dispatchContinuation(input));
+                startTransition(() => {
+                  dispatchContinuation(input);
+                });
               }
             }}
           >

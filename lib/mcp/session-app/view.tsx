@@ -487,11 +487,15 @@ const useIdentityInvitationTime = (invitations: PublicIdentityInvitation[]) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     if (Number.isFinite(nextExpiry)) {
       timer = setTimeout(
-        () => setClock(Date.now()),
+        () => {
+          setClock(Date.now());
+        },
         Math.min(nextExpiry - Date.now() + 1, 2_147_483_647),
       );
     }
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+    };
   }, [nextExpiry]);
   return now;
 };

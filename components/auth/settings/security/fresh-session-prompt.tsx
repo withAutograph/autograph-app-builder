@@ -22,7 +22,9 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
   const [password, setPassword] = useState("");
   const signIn = useSignInEmail(auth.authClient, {
     meta: { errorPresentation: "inline" },
-    onError: () => setPassword(""),
+    onError: () => {
+      setPassword("");
+    },
     onSuccess: async (data) => {
       if (isTwoFactorRedirect(data)) {
         continueSignIn(data);
@@ -60,7 +62,9 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
                 autoComplete="current-password"
                 disabled={signIn.isPending}
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                }}
                 type="password"
                 required
               />

@@ -1173,8 +1173,12 @@ const verifyGhcrLoginWithOwnedProcessGroup = async function verifyGhcrLoginWithO
       target.push(copy);
     }
   };
-  child.stdout.on("data", (chunk: Buffer) => collect(stdout, chunk));
-  child.stderr.on("data", (chunk: Buffer) => collect(stderr, chunk));
+  child.stdout.on("data", (chunk: Buffer) => {
+    collect(stdout, chunk);
+  });
+  child.stderr.on("data", (chunk: Buffer) => {
+    collect(stderr, chunk);
+  });
   child.stdin.on("error", () => {
     failed = true;
     terminate();

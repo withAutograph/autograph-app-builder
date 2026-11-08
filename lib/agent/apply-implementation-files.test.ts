@@ -107,18 +107,18 @@ describe("approval-bound implementation files", () => {
       operation: "iterate-existing-app",
       plan: { source: { workspacePath: "apps/inventory-queue" } },
     } as never;
-    expect(() =>
+    expect(() => {
       assertExistingAppImplementationFiles(
         [{ content: "out of scope", path: "packages/platform/src/change.ts" }],
         proposal,
-      ),
-    ).toThrow("Existing-app implementation files must stay inside the app workspace.");
-    expect(() =>
+      );
+    }).toThrow("Existing-app implementation files must stay inside the app workspace.");
+    expect(() => {
       assertExistingAppImplementationFiles(
         [{ content: "in scope", path: "apps/inventory-queue/app/page.tsx" }],
         proposal,
-      ),
-    ).not.toThrow();
+      );
+    }).not.toThrow();
   });
   it("applies explicit removal non-recursively and retries an absent file safely", async () => {
     const sandbox = {
