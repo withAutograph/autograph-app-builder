@@ -4207,14 +4207,23 @@ export function createHostedEveSessionService(input: {
           });
           return readAcceptedMutation(sessionId, session.checkpointDigest, 0);
         }
-        snapshot = await input.transport.cancel({
+        const transport = input.transport;
+        const cancel = transport.cancel;
+        const cancelIdentity: Pick<
+          Parameters<HostedEveTransport["cancel"]>[0],
+          "adapterSessionId"
+        > &
+          Partial<Parameters<HostedEveTransport["cancel"]>[0]> = {
           adapterSessionId: session.adapterSessionId,
-          ...(session.version === 2 && session.nativeRecoveryBinding !== undefined
-            ? { logicalSessionId: session.nativeRecoveryBinding.logicalSessionId }
-            : {}),
-          principal,
-          ...(turnId === undefined ? {} : { turnId }),
-        });
+        };
+        if (session.version === 2 && session.nativeRecoveryBinding !== undefined) {
+          cancelIdentity.logicalSessionId = session.nativeRecoveryBinding.logicalSessionId;
+        }
+        const cancelInput = { ...cancelIdentity, principal };
+        if (turnId !== undefined) {
+          cancelInput.turnId = turnId;
+        }
+        snapshot = await cancel.call(transport, cancelInput);
       } catch (error) {
         if (error instanceof SubmissionRejectedBeforeDispatchError) {
           throw new HostedRejectedOperationError(error.code);

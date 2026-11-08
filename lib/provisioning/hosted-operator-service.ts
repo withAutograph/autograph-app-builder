@@ -1643,7 +1643,7 @@ const handlePlanOperation = async (
               );
             });
           }
-          const next = {
+          const next: HostedRuntimeJournalRecord = {
             ...retainCompletedParticipantGateway(record),
             approvedByCallId: UNAPPROVED_PLAN,
             environmentBound: false,
@@ -1652,27 +1652,29 @@ const handlePlanOperation = async (
               retainedAuth !== undefined && sameAuthPreparation(retainedAuth.plan, plan)
                 ? retainedAuth
                 : undefined,
-            status: "pending" as const,
-            step: "reserved" as const,
-            ...(captureTransition &&
+            status: "pending",
+            step: "reserved",
+          };
+          if (
+            captureTransition &&
             captureSuccessor !== undefined &&
             record.retainedAuth !== undefined
-              ? {
-                  unapprovedAppProposalHistory: [
-                    ...(record.unapprovedAppProposalHistory ?? []),
-                    {
-                      approvedByCallId: "operator:unapproved-plan" as const,
-                      operator: record.operator,
-                      preparation: captureSuccessor.account,
-                      retainedAuth: record.retainedAuth,
-                      ...(record.retainedParticipantGateway === undefined
-                        ? {}
-                        : { retainedParticipantGateway: record.retainedParticipantGateway }),
-                    },
-                  ],
-                }
-              : {}),
-          };
+          ) {
+            const history = [...(record.unapprovedAppProposalHistory ?? [])];
+            const entry: NonNullable<
+              HostedRuntimeJournalRecord["unapprovedAppProposalHistory"]
+            >[number] = {
+              approvedByCallId: "operator:unapproved-plan",
+              operator: record.operator,
+              preparation: captureSuccessor.account,
+              retainedAuth: record.retainedAuth,
+            };
+            if (record.retainedParticipantGateway !== undefined) {
+              entry.retainedParticipantGateway = record.retainedParticipantGateway;
+            }
+            history[history.length] = entry;
+            next.unapprovedAppProposalHistory = history;
+          }
           delete next.proof;
           if (
             gatewaySourceSuccessor ||

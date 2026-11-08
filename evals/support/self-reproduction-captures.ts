@@ -87,16 +87,16 @@ export async function writePairedCaptureManifest(
             (item) => item.requirementId === requirementId,
           );
           const prefix = `parity/captures/${viewport.name}/${state}/${side}`;
-          return [
-            side,
-            {
-              disposition: observation?.disposition ?? "not-run",
-              ...(observation?.artifacts.includes(`${prefix}.png`) ? { png: `${prefix}.png` } : {}),
-              ...(observation?.artifacts.includes(`${prefix}.json`)
-                ? { receipt: `${prefix}.json` }
-                : {}),
-            },
-          ];
+          const capture: PairedCaptureManifestRow["reference"] = {
+            disposition: observation?.disposition ?? "not-run",
+          };
+          if (observation?.artifacts.includes(`${prefix}.png`)) {
+            capture.png = `${prefix}.png`;
+          }
+          if (observation?.artifacts.includes(`${prefix}.json`)) {
+            capture.receipt = `${prefix}.json`;
+          }
+          return [side, capture];
         }),
       ) as Pick<PairedCaptureManifestRow, "reference" | "candidate">;
       return { requirementId, state, viewport, ...pair };

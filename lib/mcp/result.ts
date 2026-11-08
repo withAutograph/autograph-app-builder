@@ -131,6 +131,10 @@ export function toolResult<const Result extends EveSessionListResult | EveSessio
   };
 }
 
+type ErrorToolResponse = Omit<ReturnType<typeof toolResult<EveSessionResult>>, "_meta"> & {
+  _meta?: { ui: { resourceUri: string } } | { "mcp/www_authenticate": string[] };
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function safeToolError(
   error: unknown,
@@ -221,9 +225,9 @@ export function safeToolError(
     sessionId,
     status: "failed",
   };
-  return {
-    ...toolResult(result, message),
-    ...(authenticationRequired ? { _meta: { "mcp/www_authenticate": [error.challenge] } } : {}),
-    isError: true,
-  };
+  const response: ErrorToolResponse = toolResult(result, message);
+  if (authenticationRequired) {
+    response._meta = { "mcp/www_authenticate": [error.challenge] };
+  }
+  return { ...response, isError: true };
 }

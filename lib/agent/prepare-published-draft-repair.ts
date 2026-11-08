@@ -516,44 +516,55 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
   const { access, runtime, owned, repair } = await acquireOwnedPublishedDraft(input, previous);
   const { ownedPrevious, preservedPrevious, recoveryMode, reopenCurrent, previousInput } =
     reconciliationPreparationLineage(input, previous, repair);
-  const source = await runtime.inspectExistingDraftReconciliationSource({
-    repositoryId: owned.draft.repositoryId,
-    owner: owned.draft.owner,
-    name: owned.draft.name,
-    pullRequestNumber: owned.draft.number,
-    priorPublishedProposalDigest: owned.proposal.digest,
-    recovery: draftInspectionRecoveryForSession({
-      ctx,
-      appId: state.appSpec.appId,
-      appSpecDigest: state.appSpec.digest,
-      root: state.applyReceipt.applyRoot,
-      pullRequestNumber: input.pullRequestNumber,
+  const inspectionRequest = (): Parameters<
+    typeof runtime.inspectExistingDraftReconciliationSource
+  >[0] => {
+    const request: Omit<
+      Parameters<typeof runtime.inspectExistingDraftReconciliationSource>[0],
+      "readPublishedSource"
+    > = {
+      repositoryId: owned.draft.repositoryId,
+      owner: owned.draft.owner,
+      name: owned.draft.name,
+      pullRequestNumber: owned.draft.number,
       priorPublishedProposalDigest: owned.proposal.digest,
-    }),
-    ...(ownedPrevious?.proposal === undefined
-      ? {}
-      : { previousReconciliation: ownedPrevious.proposal }),
-    ...(ownedPrevious?.publishedReconciliation === undefined
-      ? {}
-      : { publishedReconciliation: ownedPrevious.publishedReconciliation }),
-    readPublishedSource: async (draft) =>
-      await readPublishedOperatorSourceForSession({
+      recovery: draftInspectionRecoveryForSession({
+        ctx,
         appId: state.appSpec.appId,
         appSpecDigest: state.appSpec.digest,
         root: state.applyReceipt.applyRoot,
-        callId: ctx.callId,
-        sessionAuth: ctx.session.auth,
-        adapterSessionId: ctx.session.id,
-        callbackExecution: hostedOperatorCallbackExecution(ctx.session),
-        signal: ctx.abortSignal,
-        lookup: {
-          repositoryId: draft.repositoryId,
-          branch: draft.headBranch,
-          gitSha: draft.headSha,
-          gitTree: draft.headTree,
-        },
+        pullRequestNumber: input.pullRequestNumber,
+        priorPublishedProposalDigest: owned.proposal.digest,
       }),
-  });
+    };
+    if (ownedPrevious?.proposal !== undefined) {
+      request.previousReconciliation = ownedPrevious.proposal;
+    }
+    if (ownedPrevious?.publishedReconciliation !== undefined) {
+      request.publishedReconciliation = ownedPrevious.publishedReconciliation;
+    }
+    return {
+      ...request,
+      readPublishedSource: async (draft) =>
+        await readPublishedOperatorSourceForSession({
+          appId: state.appSpec.appId,
+          appSpecDigest: state.appSpec.digest,
+          root: state.applyReceipt.applyRoot,
+          callId: ctx.callId,
+          sessionAuth: ctx.session.auth,
+          adapterSessionId: ctx.session.id,
+          callbackExecution: hostedOperatorCallbackExecution(ctx.session),
+          signal: ctx.abortSignal,
+          lookup: {
+            repositoryId: draft.repositoryId,
+            branch: draft.headBranch,
+            gitSha: draft.headSha,
+            gitTree: draft.headTree,
+          },
+        }),
+    };
+  };
+  const source = await runtime.inspectExistingDraftReconciliationSource(inspectionRequest());
   if (
     source.draft.headSha !== owned.draft.headSha ||
     source.draft.headTree !== owned.draft.headTree

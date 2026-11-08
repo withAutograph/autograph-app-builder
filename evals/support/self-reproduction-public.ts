@@ -93,10 +93,22 @@ export const recordPublicObservation = (outputDir: string, record: unknown) => {
   );
 };
 
+interface WorkingAppObservation {
+  availability: "reported_ready" | "expired" | "unavailable" | "unassessed";
+  reason: string;
+  expiresAt?: string;
+  verifiedAt?: string;
+}
+
+interface PublicRpcPrefix {
+  jsonrpc: "2.0";
+  id?: number;
+}
+
 export const publicObservationReport = (state: PublicState, nowMs = Date.now()) => {
   const receipt = state.session?.workingPreview;
   const failed = state.session?.status === "failed" || state.session?.status === "cancelled";
-  let availability: "reported_ready" | "expired" | "unavailable" | "unassessed" = "unassessed";
+  let availability: WorkingAppObservation["availability"] = "unassessed";
   let reason = "No working-app receipt was exposed by the public session.";
   if (failed || receipt === null) {
     availability = "unavailable";
@@ -110,31 +122,35 @@ export const publicObservationReport = (state: PublicState, nowMs = Date.now()) 
       ? "The working-app preview receipt has expired."
       : "The Builder reported runtime readiness at verifiedAt; current reachability and product behavior still require browser assessment.";
   }
-  return sanitizePublicObservation({
+  const report = {
     ...state,
     comparison: "unassessed",
     elapsedMs: nowMs - Date.parse(state.startedAt),
     note: "A completed Builder session or HTTP-ready preview does not prove a working independent replica. Compare user-visible behavior separately.",
     outOfBoxProof: false,
-    previewObservation: {
-      backendCorrectness: "unassessed",
-      browserInteraction: "unassessed",
-      fixtureUi: {
-        functionality: "fixtures-only",
-        present: state.session?.uiPreview !== undefined,
-      },
-      independentChildCreation: "unassessed",
-      observedAt: new Date(nowMs).toISOString(),
-      prototype: {
-        functionality: "visual-prototype",
-        present: state.session?.prototype !== undefined,
-      },
-      workingApp: {
-        availability,
-        reason,
-        ...(receipt ? { expiresAt: receipt.expiresAt, verifiedAt: receipt.verifiedAt } : {}),
-      },
+  };
+  const preview = {
+    backendCorrectness: "unassessed",
+    browserInteraction: "unassessed",
+    fixtureUi: {
+      functionality: "fixtures-only",
+      present: state.session?.uiPreview !== undefined,
     },
+    independentChildCreation: "unassessed",
+    observedAt: new Date(nowMs).toISOString(),
+    prototype: {
+      functionality: "visual-prototype",
+      present: state.session?.prototype !== undefined,
+    },
+  };
+  const workingApp: WorkingAppObservation = { availability, reason };
+  if (receipt) {
+    workingApp.expiresAt = receipt.expiresAt;
+    workingApp.verifiedAt = receipt.verifiedAt;
+  }
+  return sanitizePublicObservation({
+    ...report,
+    previewObservation: { ...preview, workingApp },
     redaction:
       "Shareable URLs retain origins only. Original public responses and usable preview URLs remain in owner-only transcript.private.jsonl and state.json; do not share these private files.",
   });
@@ -224,8 +240,13 @@ export const makePublicTransport = async (
   ): Promise<unknown> => {
     sequence += 1;
     const id = sequence;
-    const response = await fetch(url, {
-      body: JSON.stringify({ jsonrpc: "2.0", ...(notification ? {} : { id }), method, params }),
+    const performFetch = fetch;
+    const rpc: PublicRpcPrefix = { jsonrpc: "2.0" };
+    if (!notification) {
+      rpc.id = id;
+    }
+    const response = await performFetch(url, {
+      body: JSON.stringify({ ...rpc, method, params }),
       credentials: "omit",
       headers: publicRequestHeaders(session, bearerToken),
       method: "POST",

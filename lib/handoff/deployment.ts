@@ -160,35 +160,48 @@ export function createBuilderHandoffRouteHandler(input: {
       const github = provision?.record.response.github;
       const appName = provision?.record.request.appName ?? body.appName;
       const repository = provision?.record.request.repository ?? body.repository;
-      const created = await input.handoffs.create({
+      const { handoffs } = input;
+      const create = handoffs.create.bind(handoffs);
+      const creation = {
         authority,
         creationRequestId: body.creationRequestId,
-        intent: {
-          ...(body.destination === undefined ? {} : { destination: body.destination }),
-          appId:
-            provision?.record.response.appId ??
-            body.sourceCandidate?.appId ??
-            deriveBuilderAppId(appName),
-          ...(body.sourceCandidate === undefined ? {} : { sourceCandidate: body.sourceCandidate }),
-          appName,
-          brief: body.brief,
-          connections: body.connections,
-          modelId: body.modelId,
-          repository: {
-            private: repository.private,
-            requestedName: repository.name,
-            ...(github?.status === "succeeded" ? { resolvedFullName: github.fullName } : {}),
-          },
-          ...(provision === undefined
-            ? {}
-            : {
-                providers: provision.record.request.providers,
-                provisioning: provision.record.response,
-                provisioningRequestDigest: provision.requestDigest,
-                provisioningRequestId: provision.requestId,
-              }),
-        },
-      });
+      };
+      const destination: Pick<BuilderHandoffIntent, "destination"> = {};
+      if (body.destination !== undefined) {
+        destination.destination = body.destination;
+      }
+      const identified: Pick<BuilderHandoffIntent, "destination" | "appId" | "sourceCandidate"> = {
+        ...destination,
+        appId:
+          provision?.record.response.appId ??
+          body.sourceCandidate?.appId ??
+          deriveBuilderAppId(appName),
+      };
+      if (body.sourceCandidate !== undefined) {
+        identified.sourceCandidate = body.sourceCandidate;
+      }
+      const intentPrefix = {
+        ...identified,
+        appName,
+        brief: body.brief,
+        connections: body.connections,
+        modelId: body.modelId,
+      };
+      const intentRepository: BuilderHandoffIntent["repository"] = {
+        private: repository.private,
+        requestedName: repository.name,
+      };
+      if (github?.status === "succeeded") {
+        intentRepository.resolvedFullName = github.fullName;
+      }
+      const intent: BuilderHandoffIntent = { ...intentPrefix, repository: intentRepository };
+      if (provision !== undefined) {
+        intent.providers = provision.record.request.providers;
+        intent.provisioning = provision.record.response;
+        intent.provisioningRequestDigest = provision.requestDigest;
+        intent.provisioningRequestId = provision.requestId;
+      }
+      const created = await create({ ...creation, intent });
       return Response.json(
         {
           expiresAt: created.expiresAt.toISOString(),

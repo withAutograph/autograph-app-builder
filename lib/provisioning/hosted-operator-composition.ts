@@ -1056,44 +1056,49 @@ const resolveParticipantPlan = async (
     ...base.effects.filter((effect) => [GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind)),
   ];
   await controlPlane.assertPlanningAuthorized(context);
-  const appPlan = hostedOperatorPlanSchema.parse(
-    resourcePreparationPlan({
-      ...base,
-      ...(appTrustedSources === undefined ? {} : { appTrustedSources }),
-      ...(signupPolicy === undefined
-        ? {}
+  const planSchema = hostedOperatorPlanSchema;
+  const parsePlan = planSchema.parse.bind(planSchema);
+  const planPrefix: HostedOperatorPlan = { ...base };
+  if (appTrustedSources !== undefined) {
+    planPrefix.appTrustedSources = appTrustedSources;
+  }
+  if (signupPolicy !== undefined) {
+    planPrefix.authSignupPolicy = bindSignupPolicy(
+      signupPolicy,
+      base,
+      signupPolicy.organizationId,
+      allowedAppRoles,
+    );
+  }
+  const planInput: HostedOperatorPlan = {
+    ...planPrefix,
+    stage: "app",
+    access: proposedAccess,
+    authMembership:
+      organizations.length === 0
+        ? undefined
+        : { kind: "create-owned-organizations", organizations },
+    normalActorPreparation: {
+      accountOperationRef: preparation.accountOperationRef,
+      programDigest: preparation.programDigest,
+      accountPlanDigest: preparation.accountPlanDigest,
+      accountApprovalId: preparation.accountApprovalId,
+      accountApprovedByCallId: preparation.accountApprovedByCallId,
+    },
+    delivery,
+    deploymentBoundary:
+      base.deploymentBoundary === undefined
+        ? undefined
         : {
-            authSignupPolicy: bindSignupPolicy(
-              signupPolicy,
-              base,
-              signupPolicy.organizationId,
-              allowedAppRoles,
-            ),
-          }),
-      stage: "app",
-      access: proposedAccess,
-      authMembership:
-        organizations.length === 0
-          ? undefined
-          : { kind: "create-owned-organizations", organizations },
-      normalActorPreparation: {
-        accountOperationRef: preparation.accountOperationRef,
-        programDigest: preparation.programDigest,
-        accountPlanDigest: preparation.accountPlanDigest,
-        accountApprovalId: preparation.accountApprovalId,
-        accountApprovedByCallId: preparation.accountApprovedByCallId,
-      },
-      delivery,
-      deploymentBoundary:
-        base.deploymentBoundary === undefined
-          ? undefined
-          : {
-              ...base.deploymentBoundary,
-              app: { ...base.deploymentBoundary.app, branch: delivery.branch },
-            },
-      ...(gatewayBindings === undefined ? {} : { gatewayBindings }),
-      effects: appStageEffects(effects, gatewayBindings),
-    }),
+            ...base.deploymentBoundary,
+            app: { ...base.deploymentBoundary.app, branch: delivery.branch },
+          },
+  };
+  if (gatewayBindings !== undefined) {
+    planInput.gatewayBindings = gatewayBindings;
+  }
+  const appPlan = parsePlan(
+    resourcePreparationPlan({ ...planInput, effects: appStageEffects(effects, gatewayBindings) }),
   );
   return await withRetainedAppInstallationTargets(appPlan, context, controlPlane);
 };
@@ -1312,26 +1317,34 @@ export const resolveFullPlan = async (
       kind: "delivery",
     },
   );
-  return hostedOperatorPlanSchema.parse(
-    resourcePreparationPlan({
-      ...base,
-      ...(appTrustedSources === undefined ? {} : { appTrustedSources }),
-      ...(signupPolicy === undefined
-        ? {}
+  const planSchema = hostedOperatorPlanSchema;
+  const parsePlan = planSchema.parse.bind(planSchema);
+  const planPrefix: HostedOperatorPlan = { ...base };
+  if (appTrustedSources !== undefined) {
+    planPrefix.appTrustedSources = appTrustedSources;
+  }
+  if (signupPolicy !== undefined) {
+    planPrefix.authSignupPolicy = bindSignupPolicy(signupPolicy, base, organizationId, allowedAppRoles);
+  }
+  const planInput: HostedOperatorPlan = {
+    ...planPrefix,
+    access: verifiedActorAccess(verified.identity.actorId, organizationId, allowedAppRoles),
+    authMembership,
+    delivery,
+    deploymentBoundary:
+      base.deploymentBoundary === undefined
+        ? undefined
         : {
-            authSignupPolicy: bindSignupPolicy(signupPolicy, base, organizationId, allowedAppRoles),
-          }),
-      access: verifiedActorAccess(verified.identity.actorId, organizationId, allowedAppRoles),
-      authMembership,
-      delivery,
-      deploymentBoundary:
-        base.deploymentBoundary === undefined
-          ? undefined
-          : {
-              ...base.deploymentBoundary,
-              app: { ...base.deploymentBoundary.app, branch: delivery.branch },
-            },
-      ...(gatewayBindings === undefined ? {} : { gatewayBindings }),
+            ...base.deploymentBoundary,
+            app: { ...base.deploymentBoundary.app, branch: delivery.branch },
+          },
+  };
+  if (gatewayBindings !== undefined) {
+    planInput.gatewayBindings = gatewayBindings;
+  }
+  return parsePlan(
+    resourcePreparationPlan({
+      ...planInput,
       effects: appStageEffects(
         [
           ...effects,

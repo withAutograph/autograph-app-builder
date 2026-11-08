@@ -338,16 +338,20 @@ export function createRepositoryAccessRuntime(input: {
               true,
             );
           }
-          const continuation = await input.continuations.consume({
-            authority: input.authority,
-            continuationId: resume?.continuationId ?? "",
-            repository: value.repository,
-            requestId: value.requestId,
-            sessionId: value.sessionId,
-            ...(value.selectedInstallationId
-              ? { selectedInstallationId: value.selectedInstallationId }
-              : {}),
-          });
+          const consumeRequest = (): Parameters<typeof input.continuations.consume>[0] => {
+            const continuationInput: Parameters<typeof input.continuations.consume>[0] = {
+              authority: input.authority,
+              continuationId: resume?.continuationId ?? "",
+              repository: value.repository,
+              requestId: value.requestId,
+              sessionId: value.sessionId,
+            };
+            if (value.selectedInstallationId) {
+              continuationInput.selectedInstallationId = value.selectedInstallationId;
+            }
+            return continuationInput;
+          };
+          const continuation = await input.continuations.consume(consumeRequest());
           if (!continuation) {
             throw failed(
               "continuation_invalid",
@@ -394,16 +398,22 @@ export function createRepositoryAccessRuntime(input: {
               true,
             );
           }
-          const continuation = await input.continuations.create({
-            authority: input.authority,
-            repository: value.repository,
-            requestId: value.requestId,
-            sessionId: value.sessionId,
-            ...(value.selectedInstallationId
-              ? { selectedInstallationId: value.selectedInstallationId }
-              : {}),
-            callbackUrl,
-          });
+          const createRequest = (): Parameters<typeof input.continuations.create>[0] => {
+            const continuationInput: Omit<
+              Parameters<typeof input.continuations.create>[0],
+              "callbackUrl"
+            > = {
+              authority: input.authority,
+              repository: value.repository,
+              requestId: value.requestId,
+              sessionId: value.sessionId,
+            };
+            if (value.selectedInstallationId) {
+              continuationInput.selectedInstallationId = value.selectedInstallationId;
+            }
+            return { ...continuationInput, callbackUrl };
+          };
+          const continuation = await input.continuations.create(createRequest());
           const authorizeUrl = new URL("/github/installations", input.origin);
           authorizeUrl.searchParams.set("returnTo", input.returnTo ?? "/");
           authorizeUrl.searchParams.set("resume", continuation.continuationId);
