@@ -1,5 +1,6 @@
 import { runInNewContext } from "node:vm";
 import postcss from "postcss";
+import type { Root } from "postcss";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
@@ -78,14 +79,16 @@ describe("preview runtime initialization", () => {
   });
 });
 
+const appendPreviewSource = (stylesheet: Root) => {
+  stylesheet.append({ name: "source", params: '".builder-preview"' });
+};
+
 describe("preview stylesheet provenance", () => {
   it("keeps an inline map tied to the exact theme input and separates bundle CSS", async () => {
     const themeCss = ".origin { color: rgb(12, 34, 56); }\n";
     const output = await postcss([
       {
-        Once(stylesheet) {
-          stylesheet.append({ name: "source", params: '".builder-preview"' });
-        },
+        Once: appendPreviewSource,
         postcssPlugin: "preview-sources",
       },
     ]).process(themeCss, {

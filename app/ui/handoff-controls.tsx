@@ -267,7 +267,9 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
               dispatchHandoffView({ type: "status", data: next });
               setNotice("");
             },
-            (next) => dispatchHandoffView({ type: "access", access: next }),
+            (next) => {
+              dispatchHandoffView({ type: "access", access: next });
+            },
             setNotice,
           );
         }
@@ -348,8 +350,8 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     if (!request) {
       return;
     }
-    startTransition(() =>
-      dispatchRenewal({
+    startTransition(
+      dispatchRenewal.bind(null, {
         creationRequestId: request.id,
         handoffId: data.handoffId,
       }),

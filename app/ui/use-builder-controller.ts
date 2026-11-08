@@ -319,7 +319,7 @@ export function useBuilderController({
       // This transition launches the action; the returned promise only waits
       // for the matching state acknowledgement so the autosave outbox can
       // clear exactly the mutation the server completed.
-      startTransition(() => dispatchServerSave(input));
+      startTransition(dispatchServerSave.bind(null, input));
       return acknowledgement.promise;
     },
     [dispatchServerSave],
@@ -654,7 +654,9 @@ export function useBuilderController({
     const frame = window.requestAnimationFrame(() => {
       document.querySelector<HTMLElement>(`#${id}`)?.focus();
     });
-    return () => window.cancelAnimationFrame(frame);
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
   }, [initialDraft, interactive, resumedGitHubConnection, resumedVercelConnection]);
   useEffect(() => {
     let disposed = false;
@@ -853,8 +855,12 @@ export function useBuilderController({
     if (!draftSyncNotice) {
       return;
     }
-    const timer = window.setTimeout(() => setDraftSyncNotice(""), 4000);
-    return () => window.clearTimeout(timer);
+    const timer = window.setTimeout(() => {
+      setDraftSyncNotice("");
+    }, 4000);
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [draftSyncNotice]);
   useEffect(() => {
     observeSnapshot();
