@@ -29,9 +29,12 @@ ${renewalReviewDesignPrompt}`);
       count: 1,
       input: {
         catalogGaps: [],
-        files: (value) =>
-          Array.isArray(value) &&
-          value.some(
+        files: (value) => {
+          if (!Array.isArray(value)) {
+            return false;
+          }
+          const files: unknown[] = value;
+          return files.some(
             (file) =>
               typeof file === "object" &&
               file !== null &&
@@ -39,7 +42,8 @@ ${renewalReviewDesignPrompt}`);
               typeof file.content === "string" &&
               file.content.includes("DataTableComposition") &&
               !file.content.includes("fetch("),
-          ),
+          );
+        },
         manifest: (value) => {
           if (typeof value !== "object" || value === null) {
             return false;

@@ -23,6 +23,7 @@ const UNMATCHED_LITERAL = "unmatched-literal";
 const SEMANTIC_TOKEN_REFERENCE = "semantic-token-reference";
 const GENERATED_OVERRIDE = "generated-override";
 const INHERITED_SHARED = "inherited-shared";
+const allStrings = (values: unknown[]) => values.every((value) => typeof value === "string");
 
 export const viewports = [
   { height: 900, name: "desktop", width: 1440 },
@@ -584,7 +585,7 @@ export async function measureStyles(
           parsed &&
           parsed.version === 3 &&
           Array.isArray(parsed.sources) &&
-          parsed.sources.every((source: unknown) => typeof source === "string") &&
+          allStrings(parsed.sources) &&
           (parsed.sourceRoot === undefined || typeof parsed.sourceRoot === "string") &&
           typeof parsed.mappings === "string"
         ) {

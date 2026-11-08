@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { RouteProviders } from "./route-providers";
+import { AuthConfiguration, RouteProviders } from "./route-providers";
 
 const { passkeysFlag } = vi.hoisted(() => ({ passkeysFlag: vi.fn() }));
 
@@ -42,7 +42,8 @@ describe("route-local auth configuration", () => {
       }
       passkeysFlag.mockResolvedValue(false);
       const { children: configuration } = RouteProviders({ children: null, fallback: null }).props;
-      const resolved = await configuration.type(configuration.props);
+      expect(configuration.type).toBe(AuthConfiguration);
+      const resolved = await AuthConfiguration({ children: null });
       expect(resolved.props.githubAuthEnabled).toBe(scenario.enabled);
       expect(resolved.props.vercelAuthEnabled).toBe(scenario.enabled);
     },
@@ -59,7 +60,8 @@ describe("route-local auth configuration", () => {
       expect(boundary.type).toBe(Suspense);
       expect(boundary.props.fallback).toBe(fallback);
       const configuration = boundary.props.children;
-      const resolved = await configuration.type(configuration.props);
+      expect(configuration.type).toBe(AuthConfiguration);
+      const resolved = await AuthConfiguration({ children });
       expect(resolved.props.passkeysEnabled).toBe(enabled);
       expect(resolved.props.children).toBe(children);
     },

@@ -41,7 +41,15 @@ describe("sandbox diagnostic browser captures", () => {
       "chromium",
       "process",
       `return (async () => {${body}})()`,
-    );
+    ) as (
+      readFile: () => Promise<string>,
+      writeFile: (path: string, content: string) => Promise<number>,
+      mkdir: () => Promise<void>,
+      dirname: () => string,
+      join: (...parts: string[]) => string,
+      browser: typeof chromium,
+      process: { argv: string[] },
+    ) => Promise<unknown>;
     await execute(
       async () => JSON.stringify({ baseURL: "http://127.0.0.1:3000/app" }),
       async (_path: string, content: string) => writes.push(content),

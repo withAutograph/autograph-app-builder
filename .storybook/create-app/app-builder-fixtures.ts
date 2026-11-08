@@ -6,22 +6,51 @@ const storyDefaultModelId = "openai/gpt-5.6-sol";
 const storyVercelInstallationId = "vercel-autograph";
 const storyAppId = "vendor-portal";
 
+const storyGithubScopes: {
+  accountLogin: string;
+  accountType: "Organization" | "User";
+  installationId: string;
+  status: "connected";
+}[] = [
+  {
+    accountLogin: "withAutograph",
+    accountType: "Organization",
+    installationId: "101",
+    status: "connected",
+  },
+  {
+    accountLogin: "jasonmorganson",
+    accountType: "User",
+    installationId: "202",
+    status: "connected",
+  },
+];
+const storyVercelScopes: {
+  displayName: string;
+  installationId: string;
+  plan: string;
+  slug: string;
+  status: "connected";
+}[] = [
+  {
+    displayName: "Autograph",
+    installationId: storyVercelInstallationId,
+    plan: "Pro",
+    slug: "autograph",
+    status: "connected",
+  },
+  {
+    displayName: "Sandbox",
+    installationId: "vercel-sandbox",
+    plan: "Hobby",
+    slug: "sandbox",
+    status: "connected",
+  },
+];
+
 export const storyIntegrations = {
   github: {
-    scopes: [
-      {
-        accountLogin: "withAutograph",
-        accountType: "Organization",
-        installationId: "101",
-        status: "connected",
-      },
-      {
-        accountLogin: "jasonmorganson",
-        accountType: "User",
-        installationId: "202",
-        status: "connected",
-      },
-    ],
+    scopes: storyGithubScopes,
     status: "connected",
   },
   models: {
@@ -46,22 +75,7 @@ export const storyIntegrations = {
     status: "ready",
   },
   vercel: {
-    scopes: [
-      {
-        displayName: "Autograph",
-        installationId: storyVercelInstallationId,
-        plan: "Pro",
-        slug: "autograph",
-        status: "connected",
-      },
-      {
-        displayName: "Sandbox",
-        installationId: "vercel-sandbox",
-        plan: "Hobby",
-        slug: "sandbox",
-        status: "connected",
-      },
-    ],
+    scopes: storyVercelScopes,
     status: "connected",
   },
 } satisfies BuilderIntegrationState;
@@ -119,13 +133,13 @@ export const storyProvisioning = {
   version: 1,
 } satisfies BuilderProvisionResponse;
 
-export const storyTeamOptions = storyIntegrations.vercel.scopes.map((scope) => ({
+export const storyTeamOptions = storyVercelScopes.map((scope) => ({
   detail: scope.plan,
   label: scope.displayName,
   value: scope.installationId,
 }));
 
-export const storyGitScopeOptions = storyIntegrations.github.scopes.map((scope) => ({
+export const storyGitScopeOptions = storyGithubScopes.map((scope) => ({
   detail: scope.accountType,
   label: scope.accountLogin,
   value: scope.installationId,

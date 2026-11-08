@@ -41,6 +41,7 @@ if (
   throw new Error("Structural test package root was not owner-bound.");
 }
 const require = createRequire(import.meta.url);
+/** @type {typeof import("../lib/testing/test-capability-registry.cjs")} */
 const registry = require(path.resolve(repositoryRoot, "lib/testing/test-capability-registry.cjs"));
 const workerThreads = require("node:worker_threads");
 const allowedWorkerEnvironment = new Set([
@@ -313,6 +314,7 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
         },
       });
       let settled = false;
+      /** @type {{ timeout: ReturnType<typeof setTimeout> | undefined }} */
       const timer = { timeout: undefined };
       const cleanup = () => {
         if (settled) {

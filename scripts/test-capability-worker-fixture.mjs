@@ -11,10 +11,13 @@ import { once } from "node:events";
  * @property {string | null} workflowHeadersTimeout Workflow headers timeout, if set.
  */
 
+/** @param {unknown} value @returns {value is () => unknown} */
+const isCapabilityAccessor = (value) => typeof value === "function";
+
 const accessor =
   process[Symbol.for("withAutograph.autograph-app-builder.test-capability-registry.v2")];
 /** @type {unknown} */
-const capability = typeof accessor === "function" ? (accessor() ?? null) : null;
+const capability = isCapabilityAccessor(accessor) ? (accessor() ?? null) : null;
 const gateAFields = [
   "APP_BUILDER_LOCAL_PUBLICATION",
   "APP_BUILDER_BRANCH_WORKTREE_PUBLICATION",

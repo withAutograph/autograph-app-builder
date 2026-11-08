@@ -2,7 +2,6 @@ import { privateComputeLimitsSchema } from "../sandbox/private-compute-profile";
 import type { PrivateComputeLimits } from "../sandbox/private-compute-profile";
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { once } from "node:events";
 import { lstatSync, realpathSync } from "node:fs";
 import nodePath from "node:path";
 import { readLocalEveCycleBinding } from "./local-cycle-binding";
@@ -33,6 +32,24 @@ type SignalTarget = Readonly<{
   once: (signal: ForwardedSignal, listener: () => void) => unknown;
   off: (signal: ForwardedSignal, listener: () => void) => unknown;
 }>;
+
+interface EveChildProcess {
+  kill: ChildProcess["kill"];
+  once: {
+    (
+      event: "exit",
+      listener: (code: number | null, signal: NodeJS.Signals | null) => void,
+    ): unknown;
+    (event: "error", listener: (error: Error) => void): unknown;
+  };
+  removeListener: {
+    (
+      event: "exit",
+      listener: (code: number | null, signal: NodeJS.Signals | null) => void,
+    ): unknown;
+    (event: "error", listener: (error: Error) => void): unknown;
+  };
+}
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function required(environment: Environment, name: string) {
@@ -325,7 +342,7 @@ export function localEveLaunchReceipt(invocation: LocalEveInvocation) {
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function waitForForwardedEveChild(
-  child: NodeJS.EventEmitter & Pick<ChildProcess, "kill">,
+  child: EveChildProcess,
   signalTarget: SignalTarget = process,
 ) {
   const forwardInterrupt = () => child.kill("SIGINT");
@@ -334,7 +351,21 @@ export async function waitForForwardedEveChild(
   signalTarget.once("SIGTERM", forwardTerminate);
 
   try {
-    const [code, signal] = await once(child, "exit");
+    const { promise, resolve, reject } =
+      Promise.withResolvers<[number | null, NodeJS.Signals | null]>();
+    const handlers = {
+      exit(exitCode: number | null, exitSignal: NodeJS.Signals | null) {
+        child.removeListener("error", handlers.error);
+        resolve([exitCode, exitSignal]);
+      },
+      error(error: Error) {
+        child.removeListener("exit", handlers.exit);
+        reject(error);
+      },
+    };
+    child.once("exit", handlers.exit);
+    child.once("error", handlers.error);
+    const [code, signal] = await promise;
     return code ?? (signal ? 1 : 0);
   } finally {
     signalTarget.off("SIGINT", forwardInterrupt);

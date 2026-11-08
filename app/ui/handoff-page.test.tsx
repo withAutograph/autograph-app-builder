@@ -1,9 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HandoffContent } from "../(product)/handoff/[id]/handoff-content";
+import type { getBuilderHandoffPageData } from "../../lib/handoff/deployment";
 
 const server = vi.hoisted(() => ({
-  load: vi.fn(),
+  load: vi.fn<(input: Parameters<typeof getBuilderHandoffPageData>[0]) => Promise<unknown>>(),
   redirect: vi.fn((url: string) => {
     throw new Error(`redirect:${url}`);
   }),

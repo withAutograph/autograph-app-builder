@@ -56,9 +56,10 @@ it.each(["history", "local-state", "inert", "unknown", "unavailable"])(
     } satisfies CandidateNavigationPage;
     const capture = vi.fn(async () => {});
     // oxlint-disable-next-line eslint/no-new-func -- Verify serialized portable function has no module closure dependencies.
-    const portable = new Function(
+    const createPortable = new Function(
       `return (${exerciseCandidateNavigation.toString()})`,
-    )() as typeof exerciseCandidateNavigation;
+    ) as () => typeof exerciseCandidateNavigation;
+    const portable = createPortable();
     const result = await portable(page, "https://candidate/", capture);
     result.artifacts = ["documentation.png", "back.png", "forward.png"];
     const receipt = runtimeReceiptSchema.parse(candidateNavigationReceipt({ observation: result }));

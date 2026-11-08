@@ -57,6 +57,9 @@ export function testCapabilityEnabled(
   return Object.isFrozen(candidate.capabilities) && candidate.capabilities.includes(capability);
 }
 
+const isCapabilityAccessor = (value: unknown): value is () => unknown =>
+  typeof value === "function";
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function hasTestCapability(
   capability: TestCapability,
@@ -66,6 +69,6 @@ export function hasTestCapability(
   return testCapabilityEnabled(
     capability,
     environment,
-    typeof accessor === "function" ? accessor() : undefined,
+    isCapabilityAccessor(accessor) ? accessor() : undefined,
   );
 }
