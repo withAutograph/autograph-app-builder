@@ -85,8 +85,8 @@ export const observeManagedRuntimePorts = async (
   provider: Pick<ManagedRuntimeSandboxPort, "runCommand" | "routes">,
 ) => {
   const command = await provider.runCommand({
-    cmd: "node",
     args: ["-e", portObservationSource, JSON.stringify(provider.routes.map((route) => route.port))],
+    cmd: "node",
     env: {},
   });
   if (command.exitCode !== 0) {
@@ -216,12 +216,12 @@ const writeCurrent = async (provider: ManagedRuntimeSandboxPort, record: Continu
   const temporary = `${file}.${record.fence}.next`;
   await provider.writeFiles([
     {
-      path: temporary,
       content: JSON.stringify({
         ...record.current,
         leaseExpiresAt: managedRuntimeOwnerLease(record.current.leaseExpiresAt),
       }),
       mode: 0o600,
+      path: temporary,
     },
   ]);
   await provider.fs.rename(temporary, file);
@@ -315,8 +315,8 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
     const recoveredLocator = { ...locator, providerSessionId: session.id };
     const current = continuityCurrentSchema.parse({
       ...record.current,
-      providerSessionId: session.id,
       leaseExpiresAt: expiresAt,
+      providerSessionId: session.id,
     });
     await assertCurrent();
     await checkpoint({ locator: recoveredLocator, current });
@@ -432,7 +432,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
         await provider.fs.mkdir(locator.rootDirectory, { recursive: true });
         await provider.fs.chmod(locator.rootDirectory, 0o700);
         const file = `${locator.rootDirectory}/input.json`;
-        await provider.writeFiles([{ path: file, content: JSON.stringify(input), mode: 0o600 }]);
+        await provider.writeFiles([{ content: JSON.stringify(input), mode: 0o600, path: file }]);
         await provider.update({
           networkPolicy: "allow-all",
           ports: [...new Set([...provider.routes.map((route) => route.port), bridgePort])],
@@ -441,10 +441,10 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
         locator = { ...locator, dispatchAttempted: true };
         await checkpoint({ locator });
         const command = await provider.runCommand({
-          cmd: descriptor.executablePath,
           args: [descriptor.subcommand, "--input-file", file],
-          env: {},
+          cmd: descriptor.executablePath,
           detached: true,
+          env: {},
           signal: deps.signal(context),
         });
         locator = { ...locator, commandId: command.cmdId };
@@ -516,9 +516,9 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
           branch: record.plan.target.branch,
           environment: material.environment,
           files: { "environment.json": JSON.stringify(material.environment) },
+          persistFiles: () => Promise.resolve(),
           projectId: record.plan.target.projectId,
           stateDirectory: `${locator.rootDirectory}/suite`,
-          persistFiles: () => Promise.resolve(),
         },
         observeInstallation: () => Promise.resolve(material.proof),
         resumeCommand: async (commandId) => await provider.getCommand(commandId),
@@ -526,8 +526,8 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
       });
       const privateEnvironment = managedSuiteEnvironment({
         capabilities,
-        socketPath: ready.socketPath,
         publicProfile: profile,
+        socketPath: ready.socketPath,
       });
       const { runTask } = prepared;
       const managed = {
@@ -556,9 +556,9 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
         runtime: managed,
         signal: deps.signal(context),
         continuation: {
-          commandId: record.suiteCommandId,
-          commandCheckpoint: checkpoint,
           allowDispatch,
+          commandCheckpoint: checkpoint,
+          commandId: record.suiteCommandId,
         },
       });
       if (result.exitCode === null) {
@@ -583,8 +583,8 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
           }
           await deps.disposeWorkerAsset({
             attemptId: record.attemptId,
-            state: record.workerAsset,
             checkpoint,
+            state: record.workerAsset,
           });
         } catch (error) {
           failure ??= error;

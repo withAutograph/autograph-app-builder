@@ -1412,7 +1412,7 @@ export const reportExportPlanningFailure = (
       phase: "inline",
       stage: "operator_request",
       outcome: "setup_unavailable",
-      exportPlanningFailure: { stage: planStage, errorClass },
+      exportPlanningFailure: { errorClass, stage: planStage },
     });
   } catch {
     /* Diagnostics cannot replace the original rejection. */
@@ -1490,8 +1490,8 @@ export const observeOperatorPlanStage = async <T>(
     return await run();
   } catch (error) {
     const planningFailure: OperatorPlanningFailure = {
-      stage: planStage,
       errorClass: "unexpected",
+      stage: planStage,
     };
     try {
       if (error instanceof HostedOperatorError) {

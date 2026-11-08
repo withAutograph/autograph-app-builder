@@ -97,7 +97,7 @@ export const observeNativeTargetVercelProject = async (
   const settings = hostedOperatorAppProjectSettingsSchema.parse(input.settings);
   const protection = nativeTargetProjectProtectionSchema.parse(input.protection);
   if (!input.installation.active || input.token === "") {
-    return { status: "uncertain", projectId: input.projectId, reason: "provider_unavailable" };
+    return { projectId: input.projectId, reason: "provider_unavailable", status: "uncertain" };
   }
   const request = input.fetch ?? fetch;
   let response: Response;
@@ -112,26 +112,26 @@ export const observeNativeTargetVercelProject = async (
       },
     );
   } catch {
-    return { status: "uncertain", projectId: input.projectId, reason: "provider_unavailable" };
+    return { projectId: input.projectId, reason: "provider_unavailable", status: "uncertain" };
   }
   if (response.status === 404) {
-    return { status: "uncertain", projectId: input.projectId, reason: "unobserved_project" };
+    return { projectId: input.projectId, reason: "unobserved_project", status: "uncertain" };
   }
   if (response.status !== 200) {
-    return { status: "uncertain", projectId: input.projectId, reason: "provider_unavailable" };
+    return { projectId: input.projectId, reason: "provider_unavailable", status: "uncertain" };
   }
   let body: unknown;
   try {
     body = await response.json();
   } catch {
-    return { status: "uncertain", projectId: input.projectId, reason: "invalid_response" };
+    return { projectId: input.projectId, reason: "invalid_response", status: "uncertain" };
   }
   const parsed = projectSchema.safeParse(body);
   if (!parsed.success) {
-    return { status: "uncertain", projectId: input.projectId, reason: "invalid_response" };
+    return { projectId: input.projectId, reason: "invalid_response", status: "uncertain" };
   }
   if (!projectMatches(parsed.data, { ...input, protection, settings }, input.projectId)) {
-    return { status: "candidate", projectId: input.projectId, reason: "name_or_profile_mismatch" };
+    return { projectId: input.projectId, reason: "name_or_profile_mismatch", status: "candidate" };
   }
   return {
     status: "verified",
@@ -159,12 +159,12 @@ export const createNativeTargetVercelProject = async (
   const settings = hostedOperatorAppProjectSettingsSchema.parse(input.settings);
   const protection = nativeTargetProjectProtectionSchema.parse(input.protection);
   if (!input.installation.active || input.name.trim() === "" || input.token === "") {
-    return { status: "rejected", reason: "authorization_denied" };
+    return { reason: "authorization_denied", status: "rejected" };
   }
   try {
     await input.authorizeAttempt();
   } catch {
-    return { status: "rejected", reason: "authorization_denied" };
+    return { reason: "authorization_denied", status: "rejected" };
   }
 
   // Once dispatched, an exception or unreadable response is an unknown write.
@@ -204,38 +204,38 @@ export const createNativeTargetVercelProject = async (
       },
     );
   } catch {
-    return { status: "uncertain", reason: "unknown_write" };
+    return { reason: "unknown_write", status: "uncertain" };
   }
   if (response.status === 409) {
-    return { status: "rejected", reason: "collision" };
+    return { reason: "collision", status: "rejected" };
   }
   if (response.status === 401 || response.status === 403) {
-    return { status: "rejected", reason: "permission_denied" };
+    return { reason: "permission_denied", status: "rejected" };
   }
   if (response.status === 429) {
-    return { status: "rejected", reason: "rate_limited" };
+    return { reason: "rate_limited", status: "rejected" };
   }
   if (response.status === 400 || response.status === 422) {
-    return { status: "rejected", reason: "provider_rejected" };
+    return { reason: "provider_rejected", status: "rejected" };
   }
   if (response.status !== 200 && response.status !== 201) {
-    return { status: "uncertain", reason: "unknown_write" };
+    return { reason: "unknown_write", status: "uncertain" };
   }
 
   let body: unknown;
   try {
     body = await response.json();
   } catch {
-    return { status: "uncertain", reason: "unknown_write" };
+    return { reason: "unknown_write", status: "uncertain" };
   }
   const accepted = z.looseObject({ id: z.string().min(1) }).safeParse(body);
   if (!accepted.success) {
-    return { status: "uncertain", reason: "unknown_write" };
+    return { reason: "unknown_write", status: "uncertain" };
   }
   try {
     await input.acceptProjectId(accepted.data.id);
   } catch {
-    return { status: "uncertain", reason: "receipt_unavailable", projectId: accepted.data.id };
+    return { projectId: accepted.data.id, reason: "receipt_unavailable", status: "uncertain" };
   }
   return await observeNativeTargetVercelProject({
     ...input,

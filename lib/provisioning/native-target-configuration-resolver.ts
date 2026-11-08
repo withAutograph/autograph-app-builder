@@ -282,9 +282,9 @@ export const createNativeTargetConfigurationResolver =
           };
           return await resolveOwnedStandardRuntimeConfiguration({
             configuration: input.configuration,
-            resources,
             context,
             environment: input.environment ?? {},
+            resources,
           });
         }
         if (input.environment?.PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES !== undefined) {
@@ -401,7 +401,7 @@ export const createNativeTargetConfigurationResolver =
         stage = "resolver_effective_config";
         return await resolveNativeTargetEffectiveConfiguration({
           configuration: input.configuration,
-          invocation: { request, ownerContext, sessionId: selected.sessionId },
+          invocation: { ownerContext, request, sessionId: selected.sessionId },
           appId: selected.appId,
           selectResourceConfiguration: (ready) => {
             try {
@@ -492,8 +492,8 @@ export const openNativeTargetConfigurationResources = async (
             readVercelCredential: (credential) =>
               readActiveVercelInstallationToken({
                 ...credential,
-                database,
                 config: tokenKeyring,
+                database,
               }),
           },
           context,
@@ -517,7 +517,7 @@ export const openNativeTargetConfigurationResources = async (
           findProvisioningForAppRepository:
             createPostgresBuilderProvisionJournalStore(database).findSettledAppRepository,
           readVercelCredential: (credential: { authority: unknown; installationId: string }) =>
-            readActiveVercelInstallationToken({ ...credential, database, config: tokenKeyring }),
+            readActiveVercelInstallationToken({ ...credential, config: tokenKeyring, database }),
         };
         const choiceStore = createBuilderPublicOriginStore(database);
         const choiceScope = {
@@ -559,8 +559,8 @@ export const openNativeTargetConfigurationResources = async (
             await readActiveVercelInstallationToken({
               authority: context.authority,
               installationId: destination.installationId,
-              database,
               config: tokenKeyring,
+              database,
             }),
         });
       },
@@ -591,7 +591,7 @@ export const openNativeTargetConfigurationResources = async (
         if (captured.description === undefined) {
           throw new HostedOperatorError("builder_destination_configuration_required");
         }
-        return { selection, description: captured.description };
+        return { description: captured.description, selection };
       },
 
       registry: createPostgresNativeTargetOnboardingStore(database),
