@@ -43,6 +43,7 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
       addPasskey.reset();
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       pendingRequest.current = undefined;
     }
     onOpenChange(nextOpen);

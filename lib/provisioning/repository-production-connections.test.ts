@@ -124,6 +124,7 @@ describe("Production repository connection bindings", () => {
   it("reports missing and invalid binding phases before credentials reach SQL", async () => {
     const h = fixture();
     const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     h.environment.APP_PRODUCTION_AUTH_OPERATOR = undefined;
     await expect(h.read()).rejects.toThrow("repository_production_connection_binding_unavailable");
     expect(log.mock.calls.flat().join("")).toContain('"phase":"auth_operator_binding"');
@@ -204,6 +205,7 @@ describe("Production repository connection bindings", () => {
     "stops before database reads when %s is missing; never tries another binding",
     async (key) => {
       const h = fixture();
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       h.environment[key] = undefined;
       await expect(h.read()).rejects.toThrow(
         "repository_production_connection_binding_unavailable",

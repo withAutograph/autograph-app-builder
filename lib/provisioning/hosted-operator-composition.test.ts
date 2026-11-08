@@ -572,6 +572,7 @@ describe("app publication binding at plan renewal", () => {
     const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "initial-repository" });
     const legacyDescription = appDescriptionSchema.parse({
       ...currentSourceDescription,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       deployment: undefined,
     });
     const plan = await resolveFullPlan(
@@ -2145,6 +2146,7 @@ describe("existing populated Auth workflow planning", () => {
       original.retainedAuth = retainedOperatorAuthFromJournal(original);
       original.operator = {
         ...original.operator!,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         approvalId: undefined,
         plan: {
           ...original.operator!.plan,
@@ -2653,6 +2655,7 @@ describe("existing populated Auth workflow planning", () => {
         sessionId: "adapter",
         workspaceId: "sandbox",
       },
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       approvedScope: undefined,
       selection: frozenSelection,
       contextId: "prepared-context",
@@ -2918,6 +2921,7 @@ describe("existing populated Auth workflow planning", () => {
     const selection = vi.mocked(planningAuthority.readOwnedOperatorPlanningSelection);
     selection.mockResolvedValue({
       currentSpec: { appSpecDigest: "new-unvalidated-spec" },
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       selection: undefined,
     } as Awaited<ReturnType<typeof planningAuthority.readOwnedOperatorPlanningSelection>>);
     const readApproval = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(async () => ({
@@ -3380,6 +3384,7 @@ describe("existing populated Auth workflow planning", () => {
     f.original.retainedAuth = retained;
     f.original.approvedByCallId = "operator:unapproved-plan";
     const operator = f.original.operator!;
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     operator.approvalId = undefined;
     operator.operationRef = "00000000-0000-4000-8000-000000000002";
     operator.plan = {
@@ -3424,13 +3429,17 @@ describe("existing populated Auth workflow planning", () => {
       recordedState: "READY",
     },
     {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       configuredDeploymentId: undefined,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       expectedDeploymentId: undefined,
       expectedOrigin: "https://gateway.example",
       recordedState: "READY",
     },
     {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       configuredDeploymentId: undefined,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       expectedDeploymentId: undefined,
       expectedOrigin: "https://gateway.example",
       recordedState: "BUILDING",
@@ -3645,6 +3654,7 @@ describe("existing populated Auth workflow planning", () => {
       });
       Object.assign(f.controlPlane, { prepareRealmIdentityLink });
       if (nonceState === "pending") {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         operator.identityLink.consumedAt = undefined;
       }
       const before = structuredClone(operator.identityLink);
@@ -3746,6 +3756,7 @@ describe("retained approved Auth binding selection", () => {
     expect(() =>
       requireFinalResourceBindingPhase(selected, {
         plan: originalPlan,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         privateState: undefined,
       }),
     ).toThrow();
@@ -3780,7 +3791,9 @@ describe("retained approved Auth binding selection", () => {
     record.retainedAuth = retainedOperatorAuthFromJournal(record);
     record.operator = {
       ...record.operator!,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       authPreparation: undefined,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       approvalId: undefined,
       plan: { ...originalPlan, contextId: "replacement" },
     };
@@ -3796,6 +3809,7 @@ describe("retained approved Auth binding selection", () => {
     expect(accepted.record.operator!.planDigest).toBe(operatorPlanDigest(originalPlan));
     expect(row.record.operator!.plan.contextId).toBe("replacement");
     expect(() =>
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       requireFinalResourceBindingPhase(selected, { plan: originalPlan, privateState: undefined }),
     ).toThrow();
     expect(() =>
@@ -3813,6 +3827,7 @@ describe("retained approved Auth binding selection", () => {
       ),
     ).toThrow();
     const unapproved = structuredClone(selected);
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     unapproved.record.operator!.approvalId = undefined;
     expect(() =>
       requireFinalResourceBindingPhase(unapproved, {
@@ -4132,6 +4147,7 @@ describe("retained active schema installation scope", () => {
   const fixture = () => {
     const desired = hostedOperatorPlanSchema.parse({
       ...bootstrapPlan(),
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       stage: undefined,
       effects: [
         ...bootstrapPlan().effects,
@@ -4308,6 +4324,7 @@ describe("retained active schema installation scope", () => {
       const prepared = credentials.prepareHostedOperatorResourceCredentials({
         ...context,
         plan: f.prior,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         record: { ...row.record, privateState: undefined },
         database: "appDatabase",
         config: { tokenKey: Buffer.alloc(32, 1), tokenKeyVersion: "fixture-key" },

@@ -99,6 +99,7 @@ describe("closed Eve worker environment", () => {
 
   it("accepts an absent optional sandbox run id", () => {
     const envelope = captureEveWorkerEnvelope(
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       trustedSource({ EVE_DEVELOPMENT_SANDBOX_RUN_ID: undefined }),
       appRoot,
     );
@@ -112,7 +113,9 @@ describe("closed Eve worker environment", () => {
   it("deletes an ambient body timeout when the envelope omits it", () => {
     const envelope = captureEveWorkerEnvelope(
       trustedSource({
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         WORKFLOW_LOCAL_BODY_TIMEOUT_MS: undefined,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: undefined,
       }),
       appRoot,

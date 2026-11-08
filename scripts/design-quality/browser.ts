@@ -819,6 +819,7 @@ export async function measureStyles(
           declarationEntries = ownEvidence;
         }
         if (inline.length) {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           declarationEntries = inline.map((p) => ({ p, rule: undefined, selector: undefined }));
         }
         // Chrome can report the same matched rule twice. Collapse only entries

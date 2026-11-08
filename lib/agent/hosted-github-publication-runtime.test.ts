@@ -393,6 +393,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
           authenticator: "local-dev",
           principalId: "local-dev",
           principalType: "local-dev",
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           subject: undefined,
         },
         initiator: forwarded,

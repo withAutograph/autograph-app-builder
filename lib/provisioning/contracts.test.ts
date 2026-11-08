@@ -204,6 +204,7 @@ describe("builder provisioning contracts", () => {
         ...cloned,
         starter: {
           ...cloned.starter,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           sourceReceiptDigest: undefined,
         },
       }).success,

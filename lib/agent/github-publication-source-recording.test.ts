@@ -102,6 +102,7 @@ const hooks = vi.hoisted(() => {
       originalReviewDigest: digest,
       root: "/workspace/resolved",
       workspaceRoot: "/workspace",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       publishedReconciliation: undefined,
     },
   };
@@ -228,6 +229,7 @@ describe("publication records actual source for its compiled app release", () =>
     hooks.state = structuredClone(originalState);
     hooks.completions = [completionFixture()];
     hooks.inspect.mockResolvedValue({ resolvedTree: "tree", unresolvedConflicts: [] });
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     hooks.candidate.publishedReconciliation = undefined;
   });
 

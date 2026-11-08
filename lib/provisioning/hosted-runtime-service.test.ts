@@ -764,6 +764,7 @@ it("honors the actual existing reservation when a legacy row wins concurrent cre
   const store: HostedRuntimeJournalStore = {
     ...memory.store,
     reserve: async (input) =>
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       await memory.store.reserve({ ...input, environmentGitBranch: undefined }),
   };
   const executor: HostedRuntimeExecutor = {

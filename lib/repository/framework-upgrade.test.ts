@@ -323,6 +323,7 @@ describe("framework upgrade planning and apply", () => {
       }),
     ).rejects.toThrow("does not belong");
     await expect(
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       executeTargetIdentityAndPlanning({ ...input, localSourceReconciliation: undefined }),
     ).rejects.toThrow();
     expect(

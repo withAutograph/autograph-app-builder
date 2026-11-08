@@ -160,6 +160,7 @@ export function reduceSpendState(state: SpendState, action: SpendAction): SpendS
     return { mapping, stage: "mapping" };
   }
   if (action.type === "preview-requested") {
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     return { ...state, saved: undefined, stage: "preview" };
   }
   if (action.type === "save-requested") {
@@ -176,6 +177,7 @@ export function reduceSpendState(state: SpendState, action: SpendAction): SpendS
     return { ...state, stage: "review" };
   }
   if (action.type === "match-selected") {
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     return { ...state, decision: undefined, selectedMatchId: action.id };
   }
   if (action.type === "decision-deferred") {

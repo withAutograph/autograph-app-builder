@@ -50,6 +50,7 @@ export const CodeOnly: Story = {
   args: {
     request: {
       ...authorizationRequest,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       authorization: { ...authorizationRequest.authorization, url: undefined },
     },
   },

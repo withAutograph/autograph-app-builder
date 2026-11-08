@@ -121,6 +121,7 @@ const deriveDevelopmentRuntime = (input: StandardRuntimeInput) => {
     nativeNeon: policy.nativeNeon,
     authDatabase: derivedNames("auth"),
     applications: {},
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     standardRuntime: undefined,
   });
   if (input.verifiedPublicOrigin === undefined) {

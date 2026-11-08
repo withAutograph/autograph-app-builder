@@ -391,6 +391,7 @@ const ownedRevisionTool = async (published = true, marker = true) => {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The controlled resolver replaces hosted credentials; every tool context port used here is supplied.
   const context = {
     callId: "new-destination-review",
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     session: { id: "original-session", auth: undefined, turn: { id: "revision-turn" } },
     getSandbox: () => Promise.resolve({ readTextFile }),
     abortSignal: cancellation.signal,

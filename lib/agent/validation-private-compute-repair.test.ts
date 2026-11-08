@@ -96,6 +96,7 @@ describe("explicit reviewed compute task validation repair", () => {
       const sandbox = createSandbox();
       await repair?.applyPolicy(sandbox);
       expect(installPolicy).toHaveBeenCalledWith({
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         abortSignal: undefined,
         applyRoot: state.applyReceipt.applyRoot,
         profile: state.proposal.target.privateCompute,

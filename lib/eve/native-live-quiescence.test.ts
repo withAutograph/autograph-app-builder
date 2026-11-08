@@ -250,6 +250,7 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
       updatedAt: new Date(0),
       completedAt: new Date(0),
     },
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     nativeRunKey: undefined,
     candidates: [
       {

@@ -57,8 +57,11 @@ const fixture = async (id: string) => {
       ? record
       : durableHostedSessionRecordSchema.parse({
           ...record,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           checkpoint: undefined,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           checkpointDigest: undefined,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           checkpointProgressDigest: undefined,
         });
   });

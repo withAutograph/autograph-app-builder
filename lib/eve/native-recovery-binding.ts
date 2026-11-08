@@ -624,6 +624,7 @@ export function createNativeDraftReviewedLineageRecovery(
           return Promise.resolve("stop" as const);
         });
         if (conflicting) {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           lineage = undefined;
         }
       }

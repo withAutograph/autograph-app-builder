@@ -17,6 +17,7 @@ export const productAcceptanceObligations = (
       if (fence === undefined) {
         fence = marker.charAt(0);
       } else if (marker.startsWith(fence)) {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         fence = undefined;
       }
     }

@@ -677,7 +677,8 @@ const standardRepository = (receipt: BuilderProvisionResponse) => {
     vercel.status === "succeeded" &&
     github.fullName === vercel.linkedGitHubRepository
     ? { repositoryId: github.repositoryId, githubInstallationId: github.installationId }
-    : { repositoryId: undefined, githubInstallationId: undefined };
+    : // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
+      { repositoryId: undefined, githubInstallationId: undefined };
 };
 
 type StandardDestinationDependencies = HostedOperatorAppOwnerDependencies &

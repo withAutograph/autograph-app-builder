@@ -597,6 +597,7 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
                 }
               }
             })().finally(() => {
+              // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
               renewalTask = undefined;
             });
           }, 15_000);

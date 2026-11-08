@@ -254,6 +254,7 @@ describe("private hosted approval receipts", () => {
         { index: 1, requestIds: ["between-turn-request"], type: "input.resolved" },
       ]);
       expect(
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         privateHostedApprovalReceiptSchema.safeParse({ ...savedReceipt, turnId: undefined })
           .success,
       ).toBe(false);

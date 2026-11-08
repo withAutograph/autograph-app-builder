@@ -65,6 +65,7 @@ describe("Production destination authority", () => {
     expect(
       resolveRepositoryProductionDestination({
         ...input(),
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         selection: undefined,
         destination: {
           version: 1,
@@ -110,6 +111,7 @@ describe("Production destination authority", () => {
   });
   it("retains acquired-repository setup, including frontend-only apps with no SQL selection", () => {
     expect(
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       resolveRepositoryProductionDestination({ ...input(), selection: undefined, source }),
     ).toEqual({
       profile,
@@ -125,6 +127,7 @@ describe("Production destination authority", () => {
   });
   it("does not turn a configured repository into an app's delivery authority", () => {
     expect(() =>
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       resolveRepositoryProductionDestination({ ...input(), selection: undefined }),
     ).toThrow(RepositoryProductionDestinationRequiredError);
     const unpublished = input();

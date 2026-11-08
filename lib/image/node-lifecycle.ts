@@ -614,6 +614,7 @@ const writeReceipt = function writeReceipt(
     writeSync(descriptor, bytes);
     fsyncSync(descriptor);
     closeSync(descriptor);
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     descriptor = undefined;
     renameSync(temporary, path);
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.

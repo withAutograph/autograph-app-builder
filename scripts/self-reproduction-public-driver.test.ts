@@ -633,6 +633,7 @@ describe("public self-reproduction driver", () => {
     expect(pending.message).toBe(message);
     await runPublicSession({
       ...options,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       message: undefined,
       transport: {
         call: async (name, args) => {

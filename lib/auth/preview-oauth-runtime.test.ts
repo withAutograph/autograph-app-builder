@@ -16,6 +16,7 @@ const environment = {
   GITHUB_CLIENT_ID: "github-client-id",
   GITHUB_CLIENT_SECRET: "github-client-secret",
   MCP_RESOURCE_URL: "https://builder.example.test/mcp",
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   PASSKEY_ONBOARDING: undefined,
   VERCEL_AUTH_CLIENT_ID: "vercel-client-id",
   VERCEL_AUTH_CLIENT_SECRET: "vercel-client-secret",
@@ -216,6 +217,7 @@ describe("Preview OAuth runtime configuration", () => {
       githubClientSecret: "github-client-secret",
     });
     for (const field of ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"] as const) {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       expect(() => readPreviewOAuthRuntimeConfig({ ...environment, [field]: undefined })).toThrow();
     }
   });
@@ -227,6 +229,7 @@ describe("Preview OAuth runtime configuration", () => {
     });
 
     for (const field of ["VERCEL_AUTH_CLIENT_ID", "VERCEL_AUTH_CLIENT_SECRET"] as const) {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       expect(() => readPreviewOAuthRuntimeConfig({ ...environment, [field]: undefined })).toThrow();
     }
   });
@@ -302,23 +305,31 @@ describe("Preview OAuth runtime configuration", () => {
     expect(
       readPreviewOAuthRuntimeConfig({
         ...environment,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         BETTER_AUTH_URL: undefined,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         GITHUB_CLIENT_ID: undefined,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         GITHUB_CLIENT_SECRET: undefined,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         MCP_RESOURCE_URL: undefined,
         PASSKEY_ONBOARDING: "local-preview-v1",
         PASSKEY_PREVIEW_PROTECTION: "vercel-authentication",
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         VERCEL_AUTH_CLIENT_ID: undefined,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         VERCEL_AUTH_CLIENT_SECRET: undefined,
         VERCEL_DEPLOYMENT_ID: "dpl_preview_123",
         VERCEL_URL: "builder.example.test",
       }),
     ).toMatchObject({
       environment: "preview",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       githubClientId: undefined,
       issuer: "https://builder.example.test/api/auth",
       passkeyOnboarding: { deploymentId: "dpl_preview_123" },
       resource: "https://builder.example.test/mcp",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       vercelClientId: undefined,
     });
   });
@@ -327,6 +338,7 @@ describe("Preview OAuth runtime configuration", () => {
     expect(() =>
       readPreviewOAuthRuntimeConfig({
         ...environment,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         GITHUB_CLIENT_SECRET: undefined,
         PASSKEY_ONBOARDING: "local-preview-v1",
         PASSKEY_PREVIEW_PROTECTION: "vercel-authentication",
@@ -347,9 +359,11 @@ describe("Preview OAuth runtime configuration", () => {
       }),
     ).toMatchObject({
       environment: "development",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       githubClientId: undefined,
       hostedAdapter: "0",
       passkeyOnboarding: { deploymentId: "local" },
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       vercelClientId: undefined,
     });
   });
@@ -416,18 +430,21 @@ describe("Preview OAuth runtime configuration", () => {
     expect(() =>
       readPreviewOAuthRuntimeConfig({
         ...emulatedPreview,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         VERCEL_DEPLOYMENT_ID: undefined,
       }),
     ).toThrow("exact Vercel deployment metadata");
     expect(() =>
       readPreviewOAuthRuntimeConfig({
         ...emulatedPreview,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         VERCEL_URL: undefined,
       }),
     ).toThrow("exact Vercel deployment metadata");
     expect(() =>
       readPreviewOAuthRuntimeConfig({
         ...emulatedPreview,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         PASSKEY_PREVIEW_PROTECTION: undefined,
       }),
     ).toThrow("protection acknowledgement");
@@ -515,7 +532,9 @@ it("permits local adapter auth only in explicit emulated development", () => {
     passkeyOnboarding: { origin: "https://localhost:3001", rpId: "localhost" },
   });
   for (const override of [
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     { APP_BUILDER_EXECUTION_MODE: undefined },
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     { APP_BUILDER_EXECUTION_BUNDLE: undefined },
     { APP_BUILDER_LOCAL_ADAPTER: "0" },
     { APP_BUILDER_LOCAL_AUTH_EMULATION: "0" },

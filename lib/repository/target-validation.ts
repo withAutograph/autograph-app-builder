@@ -345,6 +345,7 @@ export const compilerDiagnostics = (output: string): TargetValidationDiagnostic[
     const location = sourceLocationPattern.exec(sourceLine);
     if (location !== null && pendingCompiler !== undefined) {
       append(pendingCompiler.code, location[1], location[2], location[3]);
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       pendingCompiler = undefined;
       continue;
     }

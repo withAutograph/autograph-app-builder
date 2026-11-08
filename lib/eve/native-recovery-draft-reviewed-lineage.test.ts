@@ -32,6 +32,7 @@ it("accepts same-slot reviews with equivalent persisted JSON despite key order o
   const f = await freshFixture();
   const duplicate = structuredClone(f.old);
   const reordered = Object.fromEntries(Object.entries(f.reviewed).toReversed());
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   reordered.optionalTransient = undefined;
   Reflect.set(duplicate.serializedContext, workflowKey, reordered);
   f.input.payload.candidates.push(duplicate);

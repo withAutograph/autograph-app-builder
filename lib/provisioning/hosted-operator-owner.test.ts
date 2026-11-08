@@ -909,6 +909,7 @@ const retainedRenewalApprovalFixture = () => {
       receipts: oldOperator.receipts.filter((receipt) =>
         ["resources", "install"].includes(receipt.effectId),
       ),
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       pendingEffectId: undefined,
       retainedRenewalOperations: [{ approvedByCallId: callId, operator: oldOperator }],
     },
@@ -1324,9 +1325,13 @@ const recoveredOwnerFixture = async (kind: "direct" | "handoff" = "direct") => {
     });
     const child = durableHostedSessionRecordSchema.parse({
       ...source,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       checkpoint: undefined,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       checkpointDigest: undefined,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       checkpointProgressDigest: undefined,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       checkpointRef: undefined,
       privateApprovalReceipts: [],
       adapterSessionId: binding.ownerRunId,
@@ -1907,11 +1912,13 @@ const narrowedGatewayApprovalFixture = () => {
   });
   const narrowed = hostedOperatorPlanSchema.parse({
     ...original,
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     gatewayBindings: { ...original.gatewayBindings, trustedSources: undefined },
   });
   retained.prepareReceipt.toolInput.plan = original;
   retained.prepareReceipt.toolInput.planDigest = operatorPlanDigest(original);
   retained.prepareInput.planDigest = operatorPlanDigest(original);
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   retained.record.retainedAuth = undefined;
   retained.record.status = "pending";
   retained.record.step = "reserved";
@@ -3617,6 +3624,7 @@ describe("attached direct-session standard destination", () => {
       }
       row.record.response.vercel.linkedGitHubRepository = "owned/vendor-onboarding";
       const existingRepositorySource = recordRepositoryAccessReceipt({
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         current: undefined,
         sessionId: f.currentSession.adapterSessionId,
         confirmedByCallId: "actual-acquisition",
@@ -3670,6 +3678,7 @@ describe("attached direct-session standard destination", () => {
       }
       row.record.response.vercel.linkedGitHubRepository = "owned/vendor-onboarding";
       const existingRepositorySource = recordRepositoryAccessReceipt({
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         current: undefined,
         sessionId: f.currentSession.adapterSessionId,
         confirmedByCallId: "actual-acquisition",

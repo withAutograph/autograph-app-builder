@@ -266,6 +266,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
           return;
         }
         stopPolling?.();
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         stopPolling = undefined;
         activeKey = nextKey;
         if (nextKey !== undefined) {

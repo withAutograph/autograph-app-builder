@@ -185,6 +185,7 @@ describe("test capability preload", () => {
     const result = spawnSync(process.execPath, ["-e", source], {
       cwd: repositoryRoot,
       encoding: "utf-8",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       env: { ...process.env, NODE_OPTIONS: undefined },
     });
     expect(result.status, result.stderr).toBe(0);

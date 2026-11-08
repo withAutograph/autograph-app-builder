@@ -267,6 +267,7 @@ export function escapedTailwindClassToken(selector: string | undefined) {
         index += 1;
       } else if (quote !== undefined) {
         if (character === quote) {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           quote = undefined;
         }
       } else if (character === '"' || character === "'") {

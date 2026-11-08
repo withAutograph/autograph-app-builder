@@ -25,7 +25,9 @@ describe("Vitest browser failure diagnostics", () => {
       private errorListener: ((error: Error & { code?: string }) => void) | undefined;
 
       destroy(): void {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         this.connectListener = undefined;
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         this.errorListener = undefined;
       }
 

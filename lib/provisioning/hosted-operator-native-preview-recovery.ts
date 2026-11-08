@@ -233,6 +233,7 @@ export const readyReplacementHistory = (
     if (
       predecessor &&
       isReadyDeliveryReplacementSuccessor(
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         { ...snapshot, leaseId: undefined, leaseExpiresAt: undefined },
         { ...plan, appDeliveryReplacement: plan.appDeliveryReplacement },
         now,

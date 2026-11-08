@@ -306,6 +306,7 @@ describe("native target Vercel project provider", () => {
 
   it("keeps omitted protection readback uncertain", async () => {
     const f = fixture();
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     f.request.mockResolvedValueOnce(Response.json({ ...project, oidcTokenConfig: undefined }));
     expect(await observeNativeTargetVercelProject({ ...f.input, projectId: project.id })).toEqual({
       projectId: project.id,

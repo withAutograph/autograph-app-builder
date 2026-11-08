@@ -247,6 +247,7 @@ describe("target validation", () => {
     const { sandbox } = sandboxFixture();
     const environment = {
       APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["/private-state/original-predecessor.json"]',
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       OPTIONAL_INPUT: undefined,
     };
     const executor = vi
@@ -1162,6 +1163,7 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
           environment: {
             APP_RUNTIME_STATE_DIR: "/untrusted-state-directory",
             APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
+            // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
             OPTIONAL_INPUT: undefined,
           },
           onChunk: streaming

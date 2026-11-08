@@ -75,6 +75,7 @@ export const createBuildReadyAppSpecScanner = () => {
           ready = declaredReadiness(body) ?? ready;
         }
         body = [];
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         fence = undefined;
         return;
       }

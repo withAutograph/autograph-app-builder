@@ -2729,6 +2729,7 @@ const executeBootstrap = async (input: {
           input.proposal.destinationPath,
         );
       } catch {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         verification = undefined;
       }
       if (verification === undefined) {

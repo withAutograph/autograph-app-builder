@@ -235,7 +235,9 @@ export async function runWithTestCapability(options: {
     env: {
       ...childEnvironment(),
       APP_BUILDER_EVE_EVAL_FETCH_PRELOAD: options.profile === "eve" ? "1" : undefined,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       APP_BUILDER_TEST_CAPABILITY_ID: undefined,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       APP_BUILDER_TEST_MODEL: undefined,
       EVE_DEV_WORKER_APP_ROOT: options.profile === "eve" ? repositoryRoot : undefined,
       HOME: evalRuntime?.home ?? process.env.HOME,

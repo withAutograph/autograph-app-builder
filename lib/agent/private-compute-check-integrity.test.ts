@@ -53,6 +53,7 @@ describe("frozen private check policy", () => {
       await verifyPrivateComputeCheckIntegrity({
         appId: "example",
         root: "/workspace/repository",
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         profile: undefined,
         sandbox: { run },
       }),

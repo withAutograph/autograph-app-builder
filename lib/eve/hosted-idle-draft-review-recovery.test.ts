@@ -248,6 +248,7 @@ const fixture = async (
         return { ...record, principal: { ...record.principal, ownerUserId: "foreign" } };
       }
       if (options.priorFault === "missing-receipt") {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         return { ...record, nativeRecoveryReceipt: undefined };
       }
       if (record.nativeRecoveryReceipt !== undefined) {

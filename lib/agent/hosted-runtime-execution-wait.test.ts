@@ -508,12 +508,14 @@ describe("automatic observation of one approved execution", () => {
   it("accepts a legacy terminal STATUS reply and leaves legacy pending evidence unresolved", () => {
     const f = fixture();
     expect(
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       observedHostedRuntimeExecutionIsSettled(f.approved, { ...f.observed, execution: undefined }),
     ).toBe(false);
     expect(
       observedHostedRuntimeExecutionIsSettled(f.approved, {
         ...f.observed,
         status: "prepared",
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         execution: undefined,
       }),
     ).toBe(true);

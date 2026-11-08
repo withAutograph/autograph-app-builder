@@ -144,6 +144,7 @@ describe("hosted MCP request authentication", () => {
     ],
     ["future issued-at", { issuedAt: 2_000_000_001 }],
     ["future not-before", { notBefore: 2_000_000_001 }],
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     ["missing key id", { kid: undefined }],
   ])("rejects %s", async (_name, override) => {
     const { privateKey, publicKey } = await generateKeyPair("ES256");

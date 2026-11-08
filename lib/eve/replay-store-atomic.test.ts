@@ -247,6 +247,7 @@ describe("atomic verified replay publication", () => {
     ["adapter", { replayBinding: { ...replayBinding, adapterSessionId: "other" } }],
     ["generation", { replayBinding: { ...replayBinding, adapterGeneration: 2 } }],
     ["cancellation", { replayBinding: { ...replayBinding, cancellationRevision: 1 } }],
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     ["missing binding", { replayBinding: undefined }],
     [
       "receipt absent from capture",

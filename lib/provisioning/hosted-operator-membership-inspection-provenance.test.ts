@@ -452,6 +452,7 @@ describe("retained membership inspection provenance", () => {
     expect(retainedMembershipInspectionProvenance(record, currentPlan)).toEqual([]);
     expect(record).toEqual(before);
     expect(
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       retainedMembershipInspectionProvenance({ ...record, operator: undefined }, currentPlan),
     ).toEqual([]);
   });
@@ -529,6 +530,7 @@ describe("retained membership inspection provenance", () => {
     const { record, operator } = fixture();
     const ordinary = hostedOperatorPlanSchema.parse({
       ...currentPlan,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       authMembership: undefined,
       effects: currentPlan.effects.filter((effect) => effect.kind !== "auth-membership"),
     });

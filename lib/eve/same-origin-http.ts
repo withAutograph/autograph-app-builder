@@ -1030,9 +1030,11 @@ export async function observeSameOriginEveStream(
           [TURN_COMPLETED, TURN_FAILED, TURN_CANCELLED].includes(event.type) &&
           (turnId === undefined || turnId === currentTurnId)
         ) {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           currentTurnId = undefined;
         }
         if ([SESSION_WAITING, SESSION_COMPLETED, SESSION_FAILED].includes(event.type)) {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           currentTurnId = undefined;
         }
         if (event.type === TURN_CANCELLED) {
@@ -1109,6 +1111,7 @@ export async function observeSameOriginEveStream(
     }
     if (observationComplete && nativeRecoveryBootFailed) {
       boundary = "failed";
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       currentTurnId = undefined;
     }
     let status: EveSessionStatus = boundary;
@@ -1341,9 +1344,11 @@ function activeTurnId(events: readonly MessageStreamEvent[]): string | undefined
       [TURN_COMPLETED, TURN_FAILED, TURN_CANCELLED].includes(event.type) &&
       (turnId === undefined || turnId === active)
     ) {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       active = undefined;
     }
     if ([SESSION_WAITING, SESSION_COMPLETED, SESSION_FAILED].includes(event.type)) {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       active = undefined;
     }
   }
@@ -1561,12 +1566,14 @@ async function readCancellationSettlementIncremental(input: {
         [TURN_COMPLETED, TURN_FAILED, TURN_CANCELLED].includes(event.type) &&
         (eventTurnId === undefined || eventTurnId === currentTurnId)
       ) {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         currentTurnId = undefined;
       }
       if (currentTurnId !== undefined && currentTurnId !== input.turnId) {
         throw new HostedCancellationUnsettledError();
       }
       if ([SESSION_WAITING, SESSION_COMPLETED, SESSION_FAILED].includes(event.type)) {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         currentTurnId = undefined;
       }
       if (endsTurn(event, input.turnId)) {

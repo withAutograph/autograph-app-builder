@@ -82,6 +82,7 @@ function workerEnvironment(source, eveProfile, eveEnvelope) {
   }
   const hasEveEnvelope = eveEnvelope !== undefined;
   environment.EVE_DEV_WORKER_APP_ROOT = hasEveEnvelope ? undefined : repositoryRoot;
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   environment.EVE_DEV = undefined;
   if (!hasEveEnvelope && eveProfile) {
     environment.EVE_DEV = "1";
@@ -322,7 +323,9 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
         ...options,
         env: {
           ...workerEnvironment(options.env ?? process.env, eveProfile, eveEnvelope),
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           APP_BUILDER_TEST_CAPABILITY_ID: undefined,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           APP_BUILDER_TEST_MODEL: undefined,
           NODE_OPTIONS: isTimeoutFixture === true ? undefined : `--import=${preloadUrl}`,
         },
@@ -342,6 +345,7 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
       });
       let settled = false;
       /** @type {{ timeout: ReturnType<typeof setTimeout> | undefined }} */
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       const timer = { timeout: undefined };
       const cleanup = () => {
         if (settled) {

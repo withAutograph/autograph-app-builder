@@ -92,6 +92,7 @@ describe("Preview CIMD transport", () => {
   it("returns the pinned array when Node requests all lookup results", async () => {
     await expect(runLookup({ all: true })).resolves.toEqual({
       address: publicAddresses,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       family: undefined,
     });
   });

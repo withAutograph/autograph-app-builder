@@ -35,6 +35,7 @@ let callbackServer: Server | undefined;
 // oxlint-disable-next-line eslint/require-await -- Keep teardown failures as asynchronous rejections.
 test.afterEach(async () => {
   const server = callbackServer;
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   callbackServer = undefined;
   if (server?.listening === true) {
     server.closeAllConnections();
@@ -273,6 +274,7 @@ test("web login and both emulated connections survive Cursor consent, token refr
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function grant(first: boolean) {
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     callback = undefined;
     const verifier = randomBytes(48).toString("base64url");
     const state = randomBytes(24).toString("base64url");

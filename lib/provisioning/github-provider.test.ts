@@ -104,6 +104,7 @@ describe("GitHub starter repository provisioning", () => {
         // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Exercise rejection of deliberately incomplete provenance.
         provenance: {
           ...canonical.provenance,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           sourceReceiptDigest: undefined,
         } as unknown as NonNullable<StarterSource["provenance"]>,
       }),

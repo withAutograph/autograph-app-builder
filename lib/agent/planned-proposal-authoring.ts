@@ -138,7 +138,9 @@ export const observePlannedAuthoringRequest = (
     prior.requestTurnId === input.turnId &&
     prior.requestMessageSequence === input.sequence
   ) {
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     const comparable = { ...prior, inspectionCallId: undefined };
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     if (next && isDeepStrictEqual(comparable, { ...next, inspectionCallId: undefined })) {
       return;
     }

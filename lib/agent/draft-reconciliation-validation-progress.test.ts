@@ -970,6 +970,7 @@ describe("draft reconciliation command progress", () => {
     const saved = await store.getChunk(key, 0);
     expect(saved?.content).toContain("kernel_bind_actor_membership rejected runtime preparation");
     expect(saved?.content).not.toMatch(/local-secret|db-secret/u);
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     mocks.candidate = { ...mocks.candidate, validationRun: undefined };
     expect(mocks.attempts.at(-1)).toBe(attempt);
     expect(mocks.candidate.validation).toBeUndefined();
@@ -1233,6 +1234,7 @@ describe("draft reconciliation command progress", () => {
       }),
     );
     // Repair may reset current validation; historical diagnostics must remain discoverable.
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     mocks.candidate = { ...mocks.candidate, validationRun: undefined };
     mocks.workflow = { phase: "empty" };
     const discovery = (await getValidationLog.execute(
@@ -1401,6 +1403,7 @@ describe("draft reconciliation command progress", () => {
       mocks.readText.mockResolvedValue(JSON.stringify({}));
       mocks.candidate.validationRun = {
         commands: [{ command: installCommand, exitCode: 0 }],
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         compilation: undefined,
         nextIndex: 1,
         resolvedTree: tree,

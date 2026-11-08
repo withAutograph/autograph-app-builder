@@ -374,6 +374,7 @@ describe("participant plan and approval contract", () => {
       }),
     ).toThrow("target_mismatch");
     expect(
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       hostedOperatorPlanSchema.safeParse({ ...plan, normalActorPreparation: undefined }).success,
     ).toBe(false);
     expect(

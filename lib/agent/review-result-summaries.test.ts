@@ -183,6 +183,7 @@ describe("review result summaries", () => {
     expect(() =>
       readOwnedReviewDetailPage({
         details: {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           productAcceptance: { ...input.productAcceptance, sourceAssessment: undefined },
           reviewReceipt: receipt,
         },

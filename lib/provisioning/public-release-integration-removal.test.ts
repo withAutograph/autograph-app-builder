@@ -40,12 +40,14 @@ test("explicit removal plan preserves two rows without adding integration writes
     false,
   );
   expect(
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     publicReleasePlanSchema.safeParse({ ...value, integrationRemoval: undefined }).success,
   ).toBe(false);
   expect(publicReleasePlanSchema.safeParse({ ...value, purpose: "auth-bootstrap" }).success).toBe(
     false,
   );
   expect(
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     publicReleasePlanSchema.safeParse({ ...value, retainedOptionalBindings: undefined }).success,
   ).toBe(false);
 });
@@ -61,6 +63,7 @@ test("stopped preflight is source-bound and read-only; retry carries original fr
 });
 test("missing actual stopped observer is actionable rather than successful source removal", async () => {
   await expect(
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     readPublicReleaseIntegrationRemoval({ ...fixture(), ports: undefined }),
   ).rejects.toMatchObject({ code: "public_release_integration_removal_required" });
 });

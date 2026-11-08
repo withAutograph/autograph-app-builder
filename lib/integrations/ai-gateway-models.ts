@@ -82,5 +82,6 @@ export async function loadGatewayModels(input?: {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function resetGatewayModelCacheForTests() {
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   lastKnownGood = undefined;
 }

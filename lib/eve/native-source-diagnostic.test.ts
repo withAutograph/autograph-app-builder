@@ -50,7 +50,9 @@ const summary = nativeSourceDiagnosticSchema.parse({
 
 describe("private source diagnostic transport relay", () => {
   it.each([
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     { diagnostic: summary, label: "valid", outcome: "available", reason: undefined },
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     { diagnostic: undefined, label: "missing", outcome: "unavailable", reason: "missing_summary" },
     {
       diagnostic: { ...summary, privateContent: "private-canary-secret" },

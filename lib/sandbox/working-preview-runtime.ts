@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/no-undefined-assignment -- Preserve explicit undefined values in existing JSX or generated-source expressions. */
 import { APIError } from "@vercel/sandbox";
 import type { Command, Sandbox } from "@vercel/sandbox";
 import { randomUUID } from "node:crypto";

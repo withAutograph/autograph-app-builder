@@ -194,6 +194,7 @@ export const startSelfReproductionReferenceRuntime = async (input: {
       await run(["run", "auth-e2e:reset"], "reference-cleanup").catch(() => {
         // Cleanup is best effort after stopping the isolated server.
       });
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       server = undefined;
     }
   };

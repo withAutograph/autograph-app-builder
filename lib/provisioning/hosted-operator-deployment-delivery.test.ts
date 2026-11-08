@@ -1128,6 +1128,7 @@ it.each(["absent", "operation", "digest", "approval", "call", "changed-source", 
     switch (failure) {
       case "absent": {
         f.input.deliveryCandidates = [...provenance.gatewayDeliveryCandidates];
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         f.input.renewalDeliveryProvenance = undefined;
         break;
       }
@@ -1286,6 +1287,7 @@ const narrowedGateway = async () => {
   });
   const current = hostedOperatorPlanSchema.parse({
     ...original,
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     gatewayBindings: { ...original.gatewayBindings, trustedSources: undefined },
   });
   const f = fixture(current, null, true);
@@ -1374,11 +1376,13 @@ it.each([
       break;
     }
     case "project-account": {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       Object.assign(f.differentDeployment, { ownerId: undefined });
       f.project.accountId = "another-owner";
       break;
     }
     case "team": {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       Object.assign(f.differentDeployment, { ownerId: undefined });
       f.team.id = "another-team";
       break;
@@ -1418,6 +1422,7 @@ it.each([
 
 it("uses independently observed project and team ownership when the different alias deployment omits ownerId", async () => {
   const f = await narrowedGateway();
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   Object.assign(f.differentDeployment, { ownerId: undefined });
   expect(await f.writer.deliver(f.input)).toMatchObject({
     selected: { deploymentId: "dpl_new" },
@@ -1441,6 +1446,7 @@ it.each(["absent", "operation", "digest", "approval", "call", "changed-source"])
     const changed = { ...provenance };
     switch (failure) {
       case "absent": {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         f.input.gatewayDeliveryProvenance = undefined;
         break;
       }

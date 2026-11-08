@@ -770,6 +770,7 @@ export function useBuilderController({
           remote = await flight.promise;
         } finally {
           if (draftReadInFlight.current === flight) {
+            // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
             draftReadInFlight.current = undefined;
           }
         }

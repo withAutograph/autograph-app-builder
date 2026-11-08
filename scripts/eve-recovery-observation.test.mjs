@@ -146,6 +146,7 @@ test("receipt observation selects failed physical child and cannot activate, rec
 
 test("without receipt observes only canonical original physical owner", async () => {
   const { state, deps, input, payload } = setup();
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   state.receipt = undefined;
   payload.binding.ownerRunId = input.descriptor.sourceOwnerRunId;
   const observed = await observeTerminalSession(input, deps);

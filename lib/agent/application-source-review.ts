@@ -882,6 +882,7 @@ const restartReviewWithFallback = async (
       invalidEvidence: false,
       evidenceFailed: false,
       outputRejected: false,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       lastRecovery: undefined,
     },
   };

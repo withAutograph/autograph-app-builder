@@ -74,6 +74,7 @@ describe("read-only application review Sandbox reconstruction", () => {
     expect(await reader.readFile({ path: "/workspace/repository/missing.ts" })).toBeNull();
     expect(state.readFile).toHaveBeenCalledWith(
       { path: "/workspace/repository/missing.ts" },
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       { signal: undefined },
     );
   });

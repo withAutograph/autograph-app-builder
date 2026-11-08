@@ -487,6 +487,7 @@ function consumeResponse(
     if (modelTurnTimer !== undefined) {
       clearTimeout(modelTurnTimer);
     }
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     modelTurnTimer = undefined;
   };
   const settleResponseBoundary = () => {

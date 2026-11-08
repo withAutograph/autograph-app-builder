@@ -394,6 +394,7 @@ describe("Production runtime credential binding", () => {
   });
   it.each([
     { decrypted: false },
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     { value: undefined },
     { value: runtimeUrl.replace("app_role", "wrong_role") },
   ])("requires an available exact runtime value %j", async (patch) => {

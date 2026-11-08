@@ -37,6 +37,7 @@ describe("session-bound repository access receipt", () => {
     const first = recordRepositoryAccessReceipt({
       access,
       confirmedByCallId: "call_one",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       current: undefined,
       sessionId: "ses_one",
     });
@@ -72,6 +73,7 @@ describe("session-bound repository access receipt", () => {
     const first = recordRepositoryAccessReceipt({
       access,
       confirmedByCallId: "call_one",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       current: undefined,
       sessionId: "ses_one",
     });
@@ -102,6 +104,7 @@ describe("session-bound repository access receipt", () => {
     const receipt = recordRepositoryAccessReceipt({
       access,
       confirmedByCallId: "call_one",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       current: undefined,
       sessionId: "ses_one",
     });
@@ -163,6 +166,7 @@ describe("session-bound repository access receipt", () => {
     const receipt = recordRepositoryAccessReceipt({
       access,
       confirmedByCallId: "call_one",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       current: undefined,
       sessionId: "ses_one",
     });

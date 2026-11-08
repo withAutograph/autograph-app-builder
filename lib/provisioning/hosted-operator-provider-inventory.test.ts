@@ -401,6 +401,7 @@ describe("private read-only operator provider inventory", () => {
     const aliasSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     alias.input.configuration = {
       ...configuration,
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       gateway: { ...configuration.gateway, deploymentId: undefined },
     };
     alias.fetcher.mockImplementation(async (url, options) => {

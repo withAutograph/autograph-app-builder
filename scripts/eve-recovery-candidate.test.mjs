@@ -258,7 +258,8 @@ const fixture = async function fixture(options = {}) {
         calls.push(["step", runId, stepId, params]);
         const step = steps.get(stepId);
         return params.resolveData === "none"
-          ? { ...step, input: undefined, output: undefined }
+          ? // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
+            { ...step, input: undefined, output: undefined }
           : step;
       },
     },
@@ -1233,6 +1234,7 @@ test("unsupported branded, cyclic and non-JSON-safe history values stay unchange
     cyclic,
     new Branded(),
     { role: "tool", content: new Map() },
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     { role: "tool", content: undefined },
     { role: "tool", content: new Uint8Array([1]) },
     { role: "tool", content: { kind: "native-recovery-transport-reference", value: "private" } },

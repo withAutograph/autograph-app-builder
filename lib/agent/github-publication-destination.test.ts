@@ -50,6 +50,7 @@ const access = (installationId: string) => ({
     scope: { accountLogin: "owner", accountType: "Organization" as const, installationId },
   },
   receipt: recordRepositoryAccessReceipt({
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     current: undefined,
     sessionId: "saved",
     confirmedByCallId: "review",

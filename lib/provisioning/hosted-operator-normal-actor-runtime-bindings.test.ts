@@ -706,6 +706,7 @@ describe("fresh authenticated normal actor runtime bindings", () => {
     const legacy = hostedOperatorPlanSchema.parse({
       ...plan,
       stage: "app",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       normalActorProgram: undefined,
       effects: [
         { description: "Fixture resources", id: "resources", kind: "resources" },

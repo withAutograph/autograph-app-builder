@@ -107,6 +107,7 @@ export function waitForDevelopmentRuntimeChange(input: {
       }
       if (audit !== undefined) {
         clearInterval(audit);
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         audit = undefined;
       }
       watcher?.close();

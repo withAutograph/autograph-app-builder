@@ -82,7 +82,9 @@ const response = (state: "reserved" | "submission_unknown", operationId = "respo
 const seed = async (store: InMemoryHostedEveStore, session: typeof source) => {
   const operation = hostedOperationRecordSchema.parse({
     ...transfer,
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     nativeRecovery: undefined,
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     resumeSessionId: undefined,
     operationId: `initial-${session.sessionId}`,
     clientRequestId: `initial-${session.sessionId}`,

@@ -22,7 +22,9 @@ export { publicReleaseRequiresNativeGitEvent } from "./public-release-contract";
 const semantic = (plan: PublicReleasePlan) => ({
   ...plan,
   purpose: plan.purpose ?? "application",
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   project: { ...plan.project, priorActiveDeploymentId: undefined },
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   source: { ...plan.source, expectedProductionSha: undefined },
   environment: plan.environment.map(({ key, sha256 }) => ({ key, sha256 })),
 });

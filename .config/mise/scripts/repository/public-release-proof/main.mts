@@ -378,7 +378,9 @@ try {
   const fixtureTarget = retainedFixture.plan.selection;
   const freshNormalPlan = hostedOperatorPlanSchema.parse({
     ...retainedFixture.plan,
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     gatewayBindings: undefined,
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     gatewayDelivery: undefined,
     effects: retainedFixture.plan.effects.filter(
       (effect) => !["gateway-bindings", "gateway-delivery"].includes(effect.kind),
@@ -392,6 +394,7 @@ try {
   });
   const freshNormalSetup = retainedOperatorAuthSchema.parse({
     ...retainedFixture,
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     gatewayEnvironment: undefined,
     operationRef: randomUUID(),
     plan: freshNormalPlan,

@@ -2506,6 +2506,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                       : new HostedOperatorError("operator_unavailable"),
                   );
                 } finally {
+                  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
                   renewal = undefined;
                 }
               })();

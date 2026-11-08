@@ -92,6 +92,7 @@ const bootFixture = () => {
     onInterrupt(callback) {
       interrupt = callback;
       return () => {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         interrupt = undefined;
       };
     },
@@ -185,6 +186,7 @@ it.each([undefined, AWAIT_INPUT_CALL])(
     const input = inputFor();
     if (resumePhase === AWAIT_INPUT_CALL) {
       input.provenance = { ...input.provenance, resumePhase };
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       input.replayInput = undefined;
     }
     const pending = bootTerminalRecoveryOwnerWithPorts(input, fixture.ports);
@@ -321,6 +323,7 @@ const recoveryFixture = () => {
       calls.push("activate");
       assert.ok(receipt !== null && receipt !== undefined);
       assert.equal(input.ownerRunId, receipt.ownerRunId);
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       hook = undefined;
     },
     isHookNotFound(error) {
@@ -883,9 +886,11 @@ it("keeps a brand-new prewarmed owner silent until its first message", async () 
   const running = runPreparedSession(
     {
       anchor: { kind: "self" },
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       caller: undefined,
       deploymentId: "initial-deployment",
       streamRunId: "initial-owner",
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       initialInput: undefined,
       awaitFirstMessage: true,
       serializedContext: cp.serializedContext,

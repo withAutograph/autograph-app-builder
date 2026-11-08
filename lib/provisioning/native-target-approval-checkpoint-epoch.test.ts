@@ -101,6 +101,7 @@ const fixture = () => {
   const insertValues = (value: Row) => ({
     onConflictDoNothing: async () => {
       const wait = beforeInsert;
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       beforeInsert = undefined;
       await wait?.();
       const duplicate = rows.some((row) =>
@@ -121,6 +122,7 @@ const fixture = () => {
     where: (predicate: SQL) => ({
       returning: async () => {
         const wait = beforeUpdate;
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         beforeUpdate = undefined;
         await wait?.();
         const row = matching(predicate);

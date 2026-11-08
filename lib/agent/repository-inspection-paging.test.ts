@@ -27,6 +27,7 @@ const fixture = (files: Record<string, string>) => {
         await Promise.resolve(files[path.replace(/^\/workspace\/repository\//u, "")] ?? null),
     ),
   };
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   return { baseline: undefined, files, metadata, paths: Object.keys(files), sandbox };
 };
 const drain = async (input: Parameters<typeof readRepositoryInspectionPage>[0]) => {

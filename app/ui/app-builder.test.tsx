@@ -383,7 +383,9 @@ afterEach(async () => {
     });
   }
   container?.remove();
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   root = undefined;
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   container = undefined;
   sessionStorage.clear();
   vi.restoreAllMocks();
@@ -563,6 +565,7 @@ describe("Vercel-faithful App Builder flow", () => {
       changeVisibility("hidden");
       changeVisibility("visible");
       root?.unmount();
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       root = undefined;
     });
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.

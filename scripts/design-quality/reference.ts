@@ -264,6 +264,7 @@ export const readReference = async (arrustedRoot: string): Promise<Reference> =>
       // oxlint-disable-next-line eslint/no-await-in-loop, typescript/no-unsafe-assignment -- preserve intentional sequential control flow; Preserve the existing JSON parsing boundary.
       pkg = JSON.parse(await readFile(nodePath.join(arrustedRoot, manifest), "utf-8"));
     } catch {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       pkg = undefined;
     }
     if (pkg === undefined || !pkg.name || !relevantModule.test(pkg.name)) {

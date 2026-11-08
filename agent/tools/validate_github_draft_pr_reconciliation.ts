@@ -273,7 +273,9 @@ const runCandidateCommandWithLogs = async <
       }
     }
   } catch {
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     store = undefined;
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     writers = undefined;
   }
   const logs: CandidateValidationAttempt["logs"] = {};
@@ -592,6 +594,7 @@ const runIncrementalValidation = async (
         ...completed.filter((entry) => entry.kind !== "schema" && entry.kind !== "install"),
         ...run.steps.slice(run.nextIndex),
       ],
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       compilation: undefined,
     };
   }
@@ -923,6 +926,7 @@ const runIncrementalValidation = async (
         resolvedTree: changed.resolvedTree,
         steps,
         nextIndex: completedRecovery.length,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         compilation: undefined,
         schemaTaskCompleted: recovery.kind === "schema" ? undefined : run.schemaTaskCompleted,
       };

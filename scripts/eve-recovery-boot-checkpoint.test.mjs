@@ -186,6 +186,7 @@ const fixture = async function fixture(change = () => {}) {
     runs: { get: async () => run },
     steps: {
       get: async (_runId, id, options) =>
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         options.resolveData === "none" ? { ...steps.get(id), input: undefined } : steps.get(id),
     },
   };
@@ -470,6 +471,7 @@ test("same recovery request adopts once, preserves original authority, and activ
     resumeHook: async (_token, input) => {
       assert.equal(input.ownerRunId, receipt.ownerRunId);
       activations += 1;
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       hook = undefined;
     },
     start: async (input) => {

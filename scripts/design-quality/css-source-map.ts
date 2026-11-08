@@ -92,6 +92,7 @@ export function originalCssSource(
       // the same generated line.
       if (fields.length === 1) {
         if (line === generatedLine && generated <= generatedColumn) {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           candidate = undefined;
         }
         continue;

@@ -53,6 +53,7 @@ describe("local OAuth approval", () => {
     { client_id: "other-client" },
     { redirect_uri: "https://example.com/api/auth/callback/github" },
     { response_type: "token" },
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     { code_challenge_method: undefined },
   ])("rejects a malformed or unbound authorization", (override) => {
     expect(() =>

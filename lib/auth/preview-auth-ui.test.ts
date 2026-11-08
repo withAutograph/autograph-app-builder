@@ -23,6 +23,7 @@ describe("Preview Better Auth UI", () => {
   it("serializes complete and repeated auth-page search parameters", () => {
     const search = serializeAuthPageSearchParams({
       callbackURL: ["/workspace?source=one#first", "/workspace?source=two#second"],
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       omitted: undefined,
       passkey: "unavailable",
       redirectTo: "/auth/setting-up?callbackURL=%2Ffinal%3Fsource%3Dnested",

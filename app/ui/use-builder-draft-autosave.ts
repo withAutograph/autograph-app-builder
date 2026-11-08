@@ -143,6 +143,7 @@ export function useBuilderDraftAutosave<T>(
     async (reason: BuilderDraftAutosaveReason): Promise<boolean> => {
       if (timer.current) {
         clearTimeout(timer.current);
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         timer.current = undefined;
       }
 
@@ -157,6 +158,7 @@ export function useBuilderDraftAutosave<T>(
           }
 
           const { current } = queued;
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           queued.current = undefined;
           updateStatus("saving");
           try {
@@ -203,6 +205,7 @@ export function useBuilderDraftAutosave<T>(
         return await pending;
       } finally {
         if (draining.current === pending) {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           draining.current = undefined;
         }
       }
@@ -244,6 +247,7 @@ export function useBuilderDraftAutosave<T>(
         clearTimeout(timer.current);
       }
       timer.current = setTimeout(() => {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         timer.current = undefined;
         void dispatch("debounce");
       }, options.debounceMs ?? 500);
@@ -297,8 +301,10 @@ export function useBuilderDraftAutosave<T>(
   const discardPending = useCallback(async () => {
     if (timer.current) {
       clearTimeout(timer.current);
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       timer.current = undefined;
     }
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     queued.current = undefined;
     await options.outbox.clear();
     updateStatus("saved");
@@ -311,6 +317,7 @@ export function useBuilderDraftAutosave<T>(
       }
       acknowledgedRevision.current = revision;
       if (queued.current && (queued.current.baseRevision ?? 0) < revision) {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         queued.current = undefined;
       }
       const pending = await options.outbox.read();

@@ -210,6 +210,7 @@ const contract = {
 const participantPlan = hostedOperatorPlanSchema.parse({
   ...plan,
   stage: "auth-participants",
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   gatewayBindings: undefined,
   normalActorProgram: {
     version: 1,

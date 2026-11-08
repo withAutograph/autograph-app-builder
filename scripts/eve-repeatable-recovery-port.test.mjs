@@ -49,8 +49,11 @@ const fixture = () => {
   const state = {
     calls: [],
     denied: false,
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     hook: undefined,
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     options: undefined,
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     receipt: undefined,
   };
   const ports = {

@@ -173,6 +173,7 @@ describe("passkey-first onboarding authority", () => {
     expect(
       readPasskeyOnboardingConfig({
         ...previewEnvironment,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         BETTER_AUTH_URL: undefined,
       }),
     ).toMatchObject({ origin: "https://preview.example.test" });
@@ -209,6 +210,7 @@ describe("passkey-first onboarding authority", () => {
       readPasskeyOnboardingConfig(
         {
           ...branchEnvironment,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           APP_BUILDER_PREVIEW_PROVIDER_EMULATION: undefined,
         },
         {
@@ -230,12 +232,14 @@ describe("passkey-first onboarding authority", () => {
     expect(() =>
       readPasskeyOnboardingConfig({
         ...localHttps,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         APP_BUILDER_LOCAL_PROVIDER_EMULATION: undefined,
       }),
     ).toThrow("explicit local provider and authentication emulation gates");
     expect(() =>
       readPasskeyOnboardingConfig({
         ...localHttps,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         APP_BUILDER_LOCAL_AUTH_EMULATION: undefined,
       }),
     ).toThrow("explicit local provider and authentication emulation gates");
@@ -273,6 +277,7 @@ describe("passkey-first onboarding authority", () => {
     expect(() =>
       readPasskeyOnboardingConfig({
         ...previewEnvironment,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         PASSKEY_PREVIEW_PROTECTION: undefined,
       }),
     ).toThrow("protection acknowledgement");

@@ -114,7 +114,9 @@ afterEach(async () => {
     });
   }
   container?.remove();
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   root = undefined;
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   container = undefined;
   TestEventSource.instances.length = 0;
   vi.restoreAllMocks();
@@ -220,6 +222,7 @@ describe("HandoffProvisioningProgress", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     await act(async () => root?.unmount());
     expect(stream.closed).toBe(true);
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     root = undefined;
   });
 

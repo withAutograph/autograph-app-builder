@@ -313,6 +313,7 @@ const completedGatewayBindingObservation = (stage: "app" | "auth-bootstrap" = "a
             planDigest: "a".repeat(64),
             targetDigest: "b".repeat(64),
           },
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           delivery: undefined,
           effects: appPlan.effects.filter((effect) =>
             ["resources", "install", "gateway-bindings", "gateway-delivery"].includes(effect.kind),
@@ -445,6 +446,7 @@ describe.each(["app", "auth-bootstrap"] as const)(
         } else if (invalid === "pending-attempt") {
           delete operator.pendingEffectAttempt;
         } else {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           effect.privateState = undefined;
         }
         const store = {

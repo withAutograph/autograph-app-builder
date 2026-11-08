@@ -71,8 +71,11 @@ afterEach(async () => {
     });
   }
   container?.remove();
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   root = undefined;
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   container = undefined;
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   autosave = undefined;
   vi.restoreAllMocks();
 });
@@ -195,6 +198,7 @@ describe("useBuilderDraftAutosave", () => {
         if (entry?.mutationId !== acknowledgement.mutationId) {
           return false;
         }
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         entry = undefined;
         return true;
       }),
@@ -203,6 +207,7 @@ describe("useBuilderDraftAutosave", () => {
         if (entry?.mutationId !== mutationId) {
           return false;
         }
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         entry = undefined;
         return true;
       }),
@@ -243,6 +248,7 @@ describe("useBuilderDraftAutosave", () => {
         if (entry?.mutationId !== mutationId) {
           return false;
         }
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         entry = undefined;
         return true;
       }),

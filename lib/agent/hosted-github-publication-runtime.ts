@@ -147,6 +147,7 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
     // oxlint-disable-next-line promise/prefer-await-to-then
     // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
     databasePromise ??= Promise.resolve(input.openDatabase()).catch((error: unknown) => {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       databasePromise = undefined;
       throw error;
     });

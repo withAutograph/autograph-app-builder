@@ -287,6 +287,7 @@ export function setHostedSandboxExecutionLeaseDependenciesForTest(
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function clearHostedSandboxExecutionLeaseCacheForTest() {
   commandAuthorities.clear();
+  // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
   database = undefined;
   dependencies = defaultDependencies;
 }

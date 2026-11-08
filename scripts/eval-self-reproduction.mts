@@ -1184,6 +1184,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
           await jsonFile("workflow-results.json", workflowEvidence);
         }
       } catch (error) {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         candidateFiles = undefined;
         candidate = {
           reason: error instanceof Error ? error.message : String(error),

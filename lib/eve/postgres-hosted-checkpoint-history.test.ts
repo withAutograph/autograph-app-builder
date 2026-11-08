@@ -199,6 +199,7 @@ const historyFixture = () => {
       values: async (input: FixtureRow | FixtureRow[]) => {
         const name = getTableName(table);
         if (name === failTable) {
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           failTable = undefined;
           throw new Error("Injected database write failure.");
         }

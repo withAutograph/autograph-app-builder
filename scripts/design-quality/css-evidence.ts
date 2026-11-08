@@ -29,6 +29,7 @@ function canonicalSelector(value: string) {
     if (quote !== undefined) {
       output += char;
       if (char === quote && value[index - 1] !== "\\") {
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         quote = undefined;
       }
     } else if (char === '"' || char === "'") {

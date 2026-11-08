@@ -100,7 +100,9 @@ export const inspectUnapprovedAppSuccessor = (
       ? record
       : {
           ...record,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           leaseId: undefined,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
           leaseExpiresAt: undefined,
         };
   const bootstrap =

@@ -38,6 +38,7 @@ it("retains canonical baseline archive omissions when a directory is addressed t
   };
   const result = await inspectWorkspacePath({
     path,
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     baseline: undefined,
     sandbox,
     metadata: { callId: "read", toolName: "inspect_repository", turnId: "turn" },

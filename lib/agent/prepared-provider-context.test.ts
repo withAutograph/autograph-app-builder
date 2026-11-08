@@ -375,6 +375,7 @@ describe("prepared provider continuity", () => {
         apiOrigin: "https://preview.vercel.app/api/emulate/vercel",
         authority,
         fetch: request,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
         intent: { ...intent, provisioning: undefined },
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
         readCredential: async () => credential,

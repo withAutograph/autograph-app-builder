@@ -124,6 +124,7 @@ class PagedSendDiagnosticStore extends InMemoryHostedEveStore {
   constructor(queuedAcknowledgements = false) {
     super();
     if (!queuedAcknowledgements) {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       this.readUnsettledSendAcknowledgements = undefined;
     }
   }
