@@ -158,12 +158,17 @@ describe("unapproved app successor eligibility", () => {
     completion.plan = operator.plan;
     completion.planDigest = operatorPlanDigest(completion.plan);
     completion.fenceGeneration = 1;
-    completion.receipts = completion.plan.effects.map((effect) => ({
-      effectId: effect.id,
-      observedAt,
-      resourceVersion: "actual-readback",
-      ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
-    }));
+    completion.receipts = completion.plan.effects.map((effect) => {
+      const receipt: (typeof completion.receipts)[number] = {
+        effectId: effect.id,
+        observedAt,
+        resourceVersion: "actual-readback",
+      };
+      if (effect.kind === "access") {
+        receipt.fenceGeneration = 1;
+      }
+      return receipt;
+    });
     const candidate = {
       ...requiredFixture(operator.gatewayDeliveryCandidates?.[0]),
       operationRef: completion.operationRef,

@@ -959,7 +959,7 @@ describe("retained actual normal actor journal", () => {
     "live-lease",
   ])("preserves the old proof when successor authority is invalid: %s", async (change) => {
     const { value, nextInput } = await currentBootstrapFixture();
-    const operator = value.row.record.operator;
+    const { operator } = value.row.record;
     const gatewayRow = operator?.gatewayEnvironment?.[0];
     const actor = nextInput.bootstrap.auth.plan.normalActorProgram?.actors[0];
     if (operator === undefined || gatewayRow === undefined || actor === undefined) {

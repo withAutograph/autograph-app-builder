@@ -500,7 +500,7 @@ describe("retained installation metadata resource authority", () => {
         approvalAvailable = false;
       },
       pendingApp: () => {
-        const operator = f.row.record.operator;
+        const { operator } = f.row.record;
         if (operator === undefined) {
           throw new Error("Fixture operator missing");
         }

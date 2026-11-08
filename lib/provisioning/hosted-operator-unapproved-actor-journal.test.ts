@@ -37,12 +37,17 @@ describe("unapproved app capture continuity", () => {
     gateway.plan = previous.plan;
     gateway.planDigest = operatorPlanDigest(gateway.plan);
     gateway.fenceGeneration = 1;
-    gateway.receipts = gateway.plan.effects.map((effect) => ({
-      effectId: effect.id,
-      observedAt,
-      resourceVersion: "actual-readback",
-      ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
-    }));
+    gateway.receipts = gateway.plan.effects.map((effect) => {
+      const receipt: (typeof gateway.receipts)[number] = {
+        effectId: effect.id,
+        observedAt,
+        resourceVersion: "actual-readback",
+      };
+      if (effect.kind === "access") {
+        receipt.fenceGeneration = 1;
+      }
+      return receipt;
+    });
     const gatewayCandidate = {
       ...requiredFixture(previous.gatewayDeliveryCandidates?.[0]),
       operationRef: gateway.operationRef,
@@ -80,7 +85,7 @@ describe("unapproved app capture continuity", () => {
     );
     const nextPlan = createUnapprovedParticipantPlan(candidate, added);
     const pointer = requiredFixture(nextPlan.normalActorCapturePredecessor);
-    const auth = candidate.bootstrap.auth;
+    const { auth } = candidate.bootstrap;
     const old = structuredClone(requiredFixture(record.operator));
     record.unapprovedAppProposalHistory = [
       {

@@ -1825,7 +1825,7 @@ describe("APP Gateway source continuation", () => {
       planDigest: original.planDigest,
       execution: { state: "settled", outcome: { status: "planned" } },
     });
-    const readApproval = f.deps.readApproval;
+    const { readApproval } = f.deps;
     f.deps.readApproval = async (input) =>
       input.planDigest === original.planDigest ? await readApproval(input) : null;
     const successor = { ...(await prepared(f)), callId: "successor-human-call" };

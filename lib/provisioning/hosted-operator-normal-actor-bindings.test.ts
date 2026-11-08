@@ -538,7 +538,7 @@ describe("private normal actor bindings producer", () => {
 
 const publicBoundFixture = async () => {
   const f = await boundFixture();
-  const row = f.base.row;
+  const { row } = f.base;
   if (!row?.record.operator) {
     throw new Error("Missing prepared fixture");
   }

@@ -407,7 +407,7 @@ describe("pending account restoration after completed infrastructure", () => {
     "preserves unknown work and refuses %s",
     async (kind) => {
       const f = setup();
-      const record = f.row.record;
+      const { record } = f.row;
       const operator = required(record.operator);
       if (kind === "lease" || kind === "expired-lease") {
         record.leaseId = "00000000-0000-4000-8000-000000000004";
@@ -588,7 +588,7 @@ it.each(["auth-resource", "app-resource", "browser", "issuer", "program", "gatew
 
 it("archives old success/failure histories and settled execution observation without reusing its active authority", async () => {
   const f = setup();
-  const record = f.row.record;
+  const { record } = f.row;
   const current = required(record.operator);
   record.pendingAccountRestorations = [
     {

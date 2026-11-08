@@ -332,7 +332,7 @@ describe("retained membership inspection owner approval", () => {
 
 const approvedInspectionFixture = () => {
   const f = membershipInspectionFixture();
-  const operator = f.record.operator;
+  const { operator } = f.record;
   const effect = operator?.plan.effects.find((candidate) => candidate.kind === "auth-membership");
   if (operator === undefined || effect === undefined) {
     throw new Error("Missing fixture effect");

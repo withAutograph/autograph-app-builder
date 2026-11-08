@@ -86,7 +86,7 @@ describe("owned immutable source uploads", () => {
     await f.store.complete({ authority, reference });
     expect(f.rows.size).toBe(before);
     const restored = await f.store.readCompleted({ authority, reference });
-    const restoredFile = validateApplicationSourceArtifact(restored).files[0];
+    const [restoredFile] = validateApplicationSourceArtifact(restored).files;
     expect(restoredFile.mode).toBe("100755");
     expect([...restoredFile.bytes]).toEqual([0, 255, 128, 1]);
   });
