@@ -408,15 +408,15 @@ describe("hosted runtime Auth identity handoff", () => {
   });
   it("returns the protected Auth identity link without a manual confirmation step", async () => {
     stepMocks.step.mockResolvedValueOnce({
+      identityInput: identityLink,
       result: {
         appId: input.appId,
         authenticatedBehavior: "unassessed",
         operationRef,
         status: "auth-schema-prepared",
       },
-      identityInput: identityLink,
     });
-    const value = workflowContext({ status: "answered", optionId: "continue" });
+    const value = workflowContext({ optionId: "continue", status: "answered" });
     const result = await continueHostedRuntimePreparation(input, value.context, stepMocks.step);
     expect(result).toMatchObject({
       authIdentityLink: identityLink.browserUrl,
@@ -456,17 +456,17 @@ describe("hosted runtime Auth identity handoff", () => {
   });
   it("resumes the same approved workflow input and call after the human answers normal sign-in", async () => {
     stepMocks.step
-      .mockResolvedValueOnce({ result: participantBlocked, identityInput: identityLink })
+      .mockResolvedValueOnce({ identityInput: identityLink, result: participantBlocked })
       .mockResolvedValueOnce({
+        identityInput: null,
         result: {
           appId: input.appId,
           authenticatedBehavior: "unassessed",
           operationRef,
           status: "participants-prepared",
         },
-        identityInput: null,
       });
-    const value = workflowContext({ status: "answered", optionId: "continue" });
+    const value = workflowContext({ optionId: "continue", status: "answered" });
     const result = await continueHostedRuntimePreparation(
       participantInput,
       value.context,
@@ -484,8 +484,8 @@ describe("hosted runtime Auth identity handoff", () => {
     "keeps the actual blocked result when normal sign-in is %s",
     async (status) => {
       stepMocks.step.mockResolvedValueOnce({
-        result: participantBlocked,
         identityInput: identityLink,
+        result: participantBlocked,
       });
       const value = workflowContext({ status });
       const result = await continueHostedRuntimePreparation(
@@ -503,8 +503,8 @@ describe("hosted runtime Auth identity handoff", () => {
   );
   it("keeps waiting for real capture rather than treating a human answer as identity evidence", async () => {
     stepMocks.step
-      .mockResolvedValueOnce({ result: participantBlocked, identityInput: identityLink })
-      .mockResolvedValueOnce({ result: participantBlocked, identityInput: identityLink });
+      .mockResolvedValueOnce({ identityInput: identityLink, result: participantBlocked })
+      .mockResolvedValueOnce({ identityInput: identityLink, result: participantBlocked });
     const value = workflowContext({ status: "answered", text: "I signed in" });
     value.ask
       .mockResolvedValueOnce({ status: "answered", text: "I signed in" })

@@ -357,22 +357,22 @@ test("unknown progress counts stay absent and only durable completion exposes th
   const download = { indexPath: `/api/hosted-operator/exports/${planned.exportId}` };
   expect(tenantExportStatusSchema.safeParse({ ...status, download }).success).toBe(false);
   expect(
-    tenantExportStatusSchema.safeParse({ ...status, state: "complete", download }).success,
+    tenantExportStatusSchema.safeParse({ ...status, download, state: "complete" }).success,
   ).toBe(false);
   expect(
     tenantExportStatusSchema.parse({
       ...status,
-      state: "complete",
-      counts: { fileCount: "0", rowCount: "0", byteLength: "0" },
+      counts: { byteLength: "0", fileCount: "0", rowCount: "0" },
       download,
+      state: "complete",
     }).counts?.rowCount,
   ).toBe("0");
   expect(
     tenantExportStatusSchema.safeParse({
       ...status,
-      state: "complete",
-      counts: { fileCount: "0", rowCount: "0", byteLength: "0" },
+      counts: { byteLength: "0", fileCount: "0", rowCount: "0" },
       download: { indexPath: "https://foreign.invalid/export" },
+      state: "complete",
     }).success,
   ).toBe(false);
 });

@@ -35,7 +35,7 @@ const harness = (
   const effects: unknown[] = [];
   const graphql = (body: string) => {
     if (draft && body.includes("mutation ReadyForReview")) {
-      effects.push({ path: "/graphql", body });
+      effects.push({ body, path: "/graphql" });
       if (input.readyDenied === true) {
         return {
           data: { markPullRequestReadyForReview: null },
@@ -66,7 +66,7 @@ const harness = (
   // oxlint-disable-next-line eslint/require-await -- In-memory provider double implements the asynchronous transport.
   const provider = createGitHubPrDeliveryProvider(async () => async ({ path, method, body }) => {
     if (method === "PUT") {
-      effects.push({ path, body });
+      effects.push({ body, path });
       merged = true;
       return { merged, sha: merge };
     }

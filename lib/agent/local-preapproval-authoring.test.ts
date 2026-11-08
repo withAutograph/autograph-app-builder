@@ -18,7 +18,7 @@ import { authoringScopeDigest, readInternalAuthoringMarker } from "./preapproval
 const roots: string[] = [];
 afterEach(async () => {
   vi.unstubAllEnvs();
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 const fixture = async () => {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "authoring-")));
@@ -62,7 +62,7 @@ const fixture = async () => {
   >;
   await recordLocalAuthoringDecision(ctx, decision);
   const assertCurrent = vi.fn(async () => {});
-  return { root, ctx, decision, assertCurrent };
+  return { assertCurrent, ctx, decision, root };
 };
 describe("private local drafting reservation", () => {
   it("persists private single-link reservation before exactly one dispatch and authenticates exact delivery", async () => {

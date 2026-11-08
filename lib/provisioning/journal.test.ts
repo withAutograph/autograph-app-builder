@@ -140,8 +140,8 @@ describe("builder provisioning journal", () => {
     } as unknown as BuilderProvisioningDependencies;
     const result = await executeBuilderProvisioning({
       authority,
-      request: selected,
       dependencies,
+      request: selected,
     });
     expect(result.vercel).toMatchObject({
       code: "provider_permission_denied",
@@ -154,8 +154,8 @@ describe("builder provisioning journal", () => {
     });
     const retry = await executeBuilderProvisioning({
       authority,
-      request: selected,
       dependencies,
+      request: selected,
     });
     expect(retry.vercel).toMatchObject({ code: "reconciliation_uncertain", status: "failed" });
     const projection = await readBuilderProvisioning({

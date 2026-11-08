@@ -67,8 +67,8 @@ const fixture = () => {
     },
   });
   return {
+    binding: { logicalSessionId: "logical", ownerRunId: "physical" },
     descriptor: { logicalSessionId: "logical" },
-    binding: { ownerRunId: "physical", logicalSessionId: "logical" },
     payload: {
       candidates: [
         candidate(30, "terminal-finalizer-input"),

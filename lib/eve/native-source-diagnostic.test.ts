@@ -50,20 +50,20 @@ const summary = nativeSourceDiagnosticSchema.parse({
 
 describe("private source diagnostic transport relay", () => {
   it.each([
-    { label: "valid", diagnostic: summary, outcome: "available", reason: undefined },
-    { label: "missing", diagnostic: undefined, outcome: "unavailable", reason: "missing_summary" },
+    { diagnostic: summary, label: "valid", outcome: "available", reason: undefined },
+    { diagnostic: undefined, label: "missing", outcome: "unavailable", reason: "missing_summary" },
     {
-      label: "extra secret field",
       diagnostic: { ...summary, privateContent: "private-canary-secret" },
+      label: "extra secret field",
       outcome: "unavailable",
       reason: "invalid_summary",
     },
     {
-      label: "unknown status",
       diagnostic: {
         ...summary,
         anchorRead: { ...summary.anchorRead, status: "private-canary-status" },
       },
+      label: "unknown status",
       outcome: "unavailable",
       reason: "invalid_summary",
     },
