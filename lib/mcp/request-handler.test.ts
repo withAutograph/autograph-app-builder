@@ -86,7 +86,7 @@ function runtime(
     membership: {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async isMember({ workspaceId }) {
-        return input.membership?.(workspaceId) ?? true;
+        return await (input.membership?.(workspaceId) ?? true);
       },
     },
     now: () => 2_000_000_000_000,

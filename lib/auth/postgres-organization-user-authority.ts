@@ -123,7 +123,7 @@ export function createPostgresPreviewOrganizationAuthority(
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async ensureOrganizationForVerifiedUser({ userId }) {
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const userResult = await transaction.execute(sql`
           select "name", "email", "email_verified", "banned"
             from "user"

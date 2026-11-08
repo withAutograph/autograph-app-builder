@@ -108,7 +108,7 @@ async function regularFile(filePath: string) {
   if (!info.isFile() || info.isSymbolicLink()) {
     throw new Error(`Expected a regular non-symbolic file: ${nodePath.basename(filePath)}`);
   }
-  return readFile(filePath);
+  return await readFile(filePath);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

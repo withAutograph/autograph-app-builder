@@ -634,7 +634,7 @@ export const createGitHubAppHttpProvider = (input: {
       return;
     }
     const repositoryId = decimalProperty(response.body, "id");
-    return repositoryById(
+    return await repositoryById(
       repositoryId,
       stringProperty(response.body, "default_branch"),
       permissions,
@@ -1950,7 +1950,7 @@ export const createGitHubAppHttpProvider = (input: {
         throw new Error(invalidResponseMessage);
       }
       const accessToken = await destinationSnapshot(repository);
-      return readDestinationPath(
+      return await readDestinationPath(
         repository,
         path,
         accessToken,

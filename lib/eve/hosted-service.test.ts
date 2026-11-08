@@ -750,27 +750,27 @@ const invokeHostedOperation = async function invokeHostedOperation(
 ) {
   switch (operation) {
     case "start": {
-      return service.start({ clientRequestId: "scope_start", prompt: "Build" });
+      return await service.start({ clientRequestId: "scope_start", prompt: "Build" });
     }
     case "get": {
-      return service.get({ cursor: 0, limit: 1, sessionId: "session_1" });
+      return await service.get({ cursor: 0, limit: 1, sessionId: "session_1" });
     }
     case "send": {
-      return service.send({
+      return await service.send({
         clientRequestId: "scope_send",
         message: "Continue",
         sessionId: "session_1",
       });
     }
     case "respond": {
-      return service.respond({
+      return await service.respond({
         clientRequestId: "scope_respond",
         responses: [{ requestId: "request_1", response: { kind: "deny" } }],
         sessionId: "session_1",
       });
     }
     case "cancel": {
-      return service.cancel({ sessionId: "session_1", turnId: "turn_1" });
+      return await service.cancel({ sessionId: "session_1", turnId: "turn_1" });
     }
     default: {
       throw new Error(`Unsupported hosted operation: ${operation}`);

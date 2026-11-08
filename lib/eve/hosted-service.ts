@@ -2803,6 +2803,7 @@ export function createHostedEveSessionService(input: {
         truncatedBeforeIndex,
       );
       const spool = await spoolSnapshotEvents(snapshot);
+      let cancelledResult: Promise<EveSessionResult> | undefined;
       try {
         const summaryDetails: Pick<z.input<typeof eveSessionResultSchema>, "cursor" | "events"> &
           Partial<z.input<typeof eveSessionResultSchema>> = { cursor: 0, events: [] };
@@ -2834,12 +2835,14 @@ export function createHostedEveSessionService(input: {
         });
         if (observed.status === "cancelled" && explicitSendOperationId !== undefined) {
           // oxlint-disable-next-line eslint/no-use-before-define -- The initialized canonical reader preserves a newer Stop over this SEND snapshot.
-          return resultFromDurableCheckpoint(sessionId, observed, cursor, 100);
+          cancelledResult = resultFromDurableCheckpoint(sessionId, observed, cursor, 100);
+        } else {
+          return completeResult;
         }
-        return completeResult;
       } finally {
         await rm(spool.directory, { force: true, recursive: true });
       }
+      return await cancelledResult;
     }
     const checkpoint = checkpointForSnapshot(sessionId, snapshot, capturedAtEpochMs);
     const { store } = input;
@@ -3665,7 +3668,7 @@ export function createHostedEveSessionService(input: {
         if (session.checkpoint === undefined && session.checkpointRef === undefined) {
           throw error;
         }
-        return delayedCheckpointResult(sessionId, session, cursor, limit);
+        return await delayedCheckpointResult(sessionId, session, cursor, limit);
       }
       if (!(error instanceof HostedAdapterSessionUnavailableError)) {
         throw error;
@@ -3946,7 +3949,7 @@ export function createHostedEveSessionService(input: {
     if (marker !== undefined) {
       responseMetadata.internalSessionLimitResponse = marker;
     }
-    return mutate({
+    return await mutate({
       ...responseMetadata,
       async dispatch(operationId) {
         const paged =
@@ -4256,7 +4259,7 @@ export function createHostedEveSessionService(input: {
             cancellation = cancelAccepted.call(transport, cancelInput);
           }
           await cancellation;
-          return readAcceptedMutation(sessionId, session.checkpointDigest, 0);
+          return await readAcceptedMutation(sessionId, session.checkpointDigest, 0);
         }
         const { transport } = input;
         const { cancel } = transport;
@@ -4281,7 +4284,7 @@ export function createHostedEveSessionService(input: {
         }
         throw error;
       }
-      return observeSnapshot(sessionId, snapshot);
+      return await observeSnapshot(sessionId, snapshot);
     },
     async get({ sessionId, cursor, limit }) {
       requireHostedOperationScope(principal, "get");
@@ -4400,7 +4403,7 @@ export function createHostedEveSessionService(input: {
       ) {
         throw new HostedSubmissionUnknownError();
       }
-      return readSession({ cursor, limit, sessionId: session.sessionId });
+      return await readSession({ cursor, limit, sessionId: session.sessionId });
     },
     async list({ cursor, limit }) {
       requireHostedOperationScope(principal, "get");
@@ -4417,7 +4420,7 @@ export function createHostedEveSessionService(input: {
     }, // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async recoverStart(request) {
       requireHostedOperationScope(principal, "start");
-      return readSession(request);
+      return await readSession(request);
     }, // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     respond: respondRequest,
     async recoverAppliedApprovalResponse({ sessionId, responses }) {
@@ -4833,7 +4836,7 @@ export function createHostedEveSessionService(input: {
           ) {
             throw new HostedSessionRecoveryUnavailableError();
           }
-          return mutate({
+          return await mutate({
             async dispatch(operationId) {
               const recovery =
                 recoverySource === undefined
@@ -5032,7 +5035,7 @@ export function createHostedEveSessionService(input: {
         ) {
           throw new HostedSessionRecoveryUnavailableError();
         }
-        return mutate({
+        return await mutate({
           async dispatch(operationId) {
             const { transport } = input;
             const { start } = transport;
@@ -5246,7 +5249,7 @@ export function createHostedEveSessionService(input: {
         throw new SubmissionRejectedBeforeDispatchError("prompt_required");
       }
       const { prompt } = request;
-      return mutate({
+      return await mutate({
         async dispatch(operationId) {
           const { transport } = input;
           const { start } = transport;

@@ -89,7 +89,7 @@ const defaultDependencies: HostedGitHubPublicationRuntimeResolverDependencies = 
   publicationStores: createPostgresGitHubPublicationStores,
   async readPreparedHandoff(sessionAuth) {
     const { readPreparedHandoffContext } = await import("./handoff-context");
-    return readPreparedHandoffContext(sessionAuth);
+    return await readPreparedHandoffContext(sessionAuth);
   },
 };
 
@@ -147,7 +147,7 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
       throw error;
     });
     // oxlint-enable promise/prefer-await-to-callbacks
-    return databasePromise;
+    return await databasePromise;
   }
 
   return {

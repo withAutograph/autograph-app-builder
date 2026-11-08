@@ -108,9 +108,10 @@ export function createDeploymentMcpRequestHandler(input: {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   return async (request: Request): Promise<Response> => {
     if (input.environment.EVE_HOSTED_ADAPTER !== "1") {
-      return fallbackHandler(request);
+      return await fallbackHandler(request);
     }
 
+    let response: Promise<Response>;
     try {
       if (hostedHandler === undefined) {
         const config = readHostedDeploymentConfig(input.environment);
@@ -168,7 +169,7 @@ export function createDeploymentMcpRequestHandler(input: {
               ...handoffService,
               async recheckRepositoryAccess({ principal, repository, sourceHandoffId }) {
                 if (input.recheckRepositoryAccess !== undefined) {
-                  return input.recheckRepositoryAccess({
+                  return await input.recheckRepositoryAccess({
                     repository,
                     sessionAuth: forwardedSessionAuth(principal, sourceHandoffId),
                   });
@@ -179,7 +180,7 @@ export function createDeploymentMcpRequestHandler(input: {
                   await repositoryAccessRuntime.repositoryAccessRuntimeForSession(
                     forwardedSessionAuth(principal, sourceHandoffId),
                   );
-                return repositoryRuntime.classify({ repository });
+                return await repositoryRuntime.classify({ repository });
               },
             },
           },
@@ -189,9 +190,10 @@ export function createDeploymentMcpRequestHandler(input: {
       if (request.url !== hostedResourceUrl) {
         throw new Error("The hosted request does not match the configured MCP resource.");
       }
-      return hostedHandler(request);
+      response = hostedHandler(request);
     } catch {
       return unavailableResponse();
     }
+    return await response;
   };
 }

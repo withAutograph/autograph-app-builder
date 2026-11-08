@@ -8,6 +8,7 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ provider: string; approval: string }> },
 ) {
+  let completion: ReturnType<typeof completeAuthorization>;
   try {
     const emulation = readProviderEmulation(process.env);
     if (!emulation || emulation.mode !== "preview") {
@@ -18,7 +19,10 @@ export async function GET(
     if (verified.provider !== provider || verified.origin !== emulation.canonicalOrigin) {
       throw new Error("Invalid approval binding.");
     }
-    return completeAuthorization({ params: Promise.resolve({ provider }) }, verified.authorization);
+    completion = completeAuthorization(
+      { params: Promise.resolve({ provider }) },
+      verified.authorization,
+    );
   } catch (error) {
     console.error(
       JSON.stringify({
@@ -32,4 +36,5 @@ export async function GET(
       status: 400,
     });
   }
+  return await completion;
 }

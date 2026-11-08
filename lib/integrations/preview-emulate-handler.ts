@@ -132,7 +132,7 @@ export async function invokePreviewEmulateRequest(request: Request) {
   if (typeof selectedMethod !== "function") {
     return new Response("Method not allowed", { status: 405 });
   }
-  return selectedMethod(request, { params: Promise.resolve({ path }) });
+  return await selectedMethod(request, { params: Promise.resolve({ path }) });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

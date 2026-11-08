@@ -608,7 +608,7 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
       const { repositoryAccessRuntimeForSession } =
         await import("./deployment-repository-access-runtime");
       const runtime = await repositoryAccessRuntimeForSession(auth);
-      return runtime.classify(value);
+      return await runtime.classify(value);
     },
     readHandoff: readPreparedHandoffContext,
     async vercel(auth, intent) {
@@ -628,7 +628,7 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
         import("../integrations/local-provider-emulation"),
         import("../integrations/provider-emulation-fetch"),
       ]);
-      return readPreparedVercelAccess({
+      return await readPreparedVercelAccess({
         authority,
         intent,
         async readCredential(value) {
@@ -649,7 +649,7 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
           ) {
             throw new Error("Provider authority is unavailable.");
           }
-          return readActiveVercelInstallationToken({
+          return await readActiveVercelInstallationToken({
             ...value,
             config,
             database,

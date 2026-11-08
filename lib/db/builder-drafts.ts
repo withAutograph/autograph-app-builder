@@ -201,10 +201,10 @@ export function createBuilderDraftStore(database: Database): BuilderDraftStore {
     run: (store: BuilderDraftStore) => Promise<T>,
   ) => {
     const authority = hostedTenantAuthoritySchema.parse(authorityInput);
-    return database.transaction(async (transaction) => {
+    return await database.transaction(async (transaction) => {
       const lockKey = `builder-draft:${JSON.stringify(authority)}`;
       await transaction.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
-      return run(createUnlockedBuilderDraftStore(transaction));
+      return await run(createUnlockedBuilderDraftStore(transaction));
     });
   };
   return {

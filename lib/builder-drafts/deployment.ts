@@ -91,7 +91,7 @@ export async function deleteInactiveBuilderDraftsForMaintenance(input: {
   maxAgeMs?: number;
 }) {
   const preview = readPreviewOAuthRuntimeConfig(input.environment);
-  return createBuilderDraftService({
+  return await createBuilderDraftService({
     now: input.now,
     store: createBuilderDraftStore(openHostedPostgresDatabase(preview.databaseUrl)),
   }).deleteInactiveSince(input.maxAgeMs);

@@ -246,7 +246,7 @@ export function createPostgresHostedAdminStore(database: Database): HostedAdminS
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async deleteTenant({ authority, membershipRevokedBefore }) {
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const inactiveMembership = await transaction
           .select({ workspaceId: hostedWorkspaceMemberships.workspaceId })
           .from(hostedWorkspaceMemberships)

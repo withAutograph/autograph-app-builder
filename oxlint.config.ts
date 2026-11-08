@@ -14,6 +14,10 @@ export default defineConfig({
   },
   overrides: [
     {
+      files: ["lib/eve/hosted-service.ts"],
+      rules: { "typescript/return-await": "off" },
+    },
+    {
       // Eve derives public tool IDs from these existing filenames.
       files: ["agent/tools/*_*.ts"],
       rules: {
@@ -74,7 +78,6 @@ export default defineConfig({
     // Temporary migration baseline; remove these as findings are fixed.
     "typescript/no-unnecessary-boolean-literal-compare": "off",
     "typescript/promise-function-async": "off",
-    "typescript/return-await": "off",
     "typescript/switch-exhaustiveness-check": "off",
     "typescript/no-unnecessary-type-parameters": "off",
     "typescript/use-unknown-in-catch-callback-variable": "off",

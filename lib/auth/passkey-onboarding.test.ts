@@ -52,7 +52,7 @@ it("allows the emulated browser suite to raise only the onboarding-context limit
 
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 async function setupOnboarding(now: () => Date = () => fixedNow) {
-  return getTestInstance(
+  return await getTestInstance(
     {
       basePath: "/api/auth",
       baseURL: integrationConfig.origin,
@@ -101,11 +101,14 @@ async function requestOnboardingContext(
   const requestHeaders = new Headers(headers);
   requestHeaders.set("origin", integrationConfig.origin);
   requestHeaders.set("content-type", "application/json");
-  return fetchImplementation(`${integrationConfig.origin}/api/auth/passkey/onboarding-context`, {
-    body: "{}",
-    headers: requestHeaders,
-    method: "POST",
-  });
+  return await fetchImplementation(
+    `${integrationConfig.origin}/api/auth/passkey/onboarding-context`,
+    {
+      body: "{}",
+      headers: requestHeaders,
+      method: "POST",
+    },
+  );
 }
 
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
@@ -117,14 +120,17 @@ async function requestRegistrationVerification(
   const requestHeaders = new Headers(headers);
   requestHeaders.set("origin", integrationConfig.origin);
   requestHeaders.set("content-type", "application/json");
-  return fetchImplementation(`${integrationConfig.origin}/api/auth/passkey/verify-registration`, {
-    body: JSON.stringify({
-      response: {},
-      ...(createSession ? { createSession } : {}),
-    }),
-    headers: requestHeaders,
-    method: "POST",
-  });
+  return await fetchImplementation(
+    `${integrationConfig.origin}/api/auth/passkey/verify-registration`,
+    {
+      body: JSON.stringify({
+        response: {},
+        ...(createSession ? { createSession } : {}),
+      }),
+      headers: requestHeaders,
+      method: "POST",
+    },
+  );
 }
 
 describe("passkey-first onboarding authority", () => {

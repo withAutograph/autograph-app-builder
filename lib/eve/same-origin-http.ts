@@ -353,7 +353,7 @@ async function authenticatedFetch(input: {
   input.readTrace?.enter("workload_identity");
   const headers = await workloadHeaders(input.workloadIdentity);
   input.readTrace?.enter("fetch");
-  return input.fetchImplementation(endpoint(input.config, input.path), {
+  return await input.fetchImplementation(endpoint(input.config, input.path), {
     ...input.init,
     headers: { ...headers, ...input.init?.headers },
     redirect: "manual",
@@ -1721,7 +1721,7 @@ export function createSameOriginEveTransport(input: {
             if (authorized !== true) {
               throw new SubmissionRejectedBeforeDispatchError("session_access_denied");
             }
-            return observeSameOriginEveStream({
+            return await observeSameOriginEveStream({
               allowPartialObservation:
                 "allowPartialObservation" in request && request.allowPartialObservation === true,
               ...common,
@@ -1913,7 +1913,7 @@ export function createSameOriginEveTransport(input: {
       if (request.internalSessionLimitResponse !== undefined) {
         settlement.internalSessionLimitResponse = request.internalSessionLimitResponse;
       }
-      return readRespondSettlement({
+      return await readRespondSettlement({
         ...settlement,
         requestIds: request.responses.map(({ requestId }) => requestId),
         sessionId: request.adapterSessionId,

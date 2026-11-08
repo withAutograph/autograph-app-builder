@@ -297,7 +297,7 @@ export function createRepositoryAccessRuntime(input: {
           `Builder cannot restore the selected checkout for ${repository}: the GitHub source provider is unavailable. Ask an operator to restore the GitHub App source adapter, then retry.`,
         );
       }
-      return provider.acquireRepositoryReadCredential({
+      return await provider.acquireRepositoryReadCredential({
         repositoryId: value.repository.repositoryId,
       });
     },
@@ -772,5 +772,5 @@ export async function resumeAuthorizedRepositoryAccessForSession(input: {
     }
     return request;
   };
-  return runtime.resumeAuthorizedForSession(resumeInput());
+  return await runtime.resumeAuthorizedForSession(resumeInput());
 }

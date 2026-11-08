@@ -700,7 +700,7 @@ export const startWorkingPreview = async (input: {
     }
     return runtime;
   } catch (error) {
-    return cleanupPreviewAttempt({
+    return await cleanupPreviewAttempt({
       attempt,
       command,
       diagnosticsPath: (input.signal?.aborted ?? false) ? undefined : diagnosticsPath,

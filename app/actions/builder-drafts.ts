@@ -40,7 +40,7 @@ export async function saveActiveBuilderDraft(input: SaveActiveBuilderDraftInput)
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function loadActiveBuilderDraft() {
-  return readAuthenticatedActiveBuilderDraft({
+  return await readAuthenticatedActiveBuilderDraft({
     environment: process.env,
     headers: await headers(),
   });

@@ -34,7 +34,7 @@ function managedVercelAdapter<ValueType, EntitiesType>(): Adapter<ValueType, Ent
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async decide(input) {
-      return resolveAdapter().decide(input);
+      return await resolveAdapter().decide(input);
     },
     // `flag()` resolves adapter metadata during module initialization, before
     // Next has loaded `.env.local`. Keep the SDK key lazy so local evaluation

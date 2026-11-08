@@ -127,9 +127,9 @@ export function createGitHubOAuthApp(input: {
           throw new TypeError(invalidOAuthRequest, { cause: error });
         }
       }
-      return request(resource, { ...init, body });
+      return await request(resource, { ...init, body });
     }
-    return request(resource, init);
+    return await request(resource, init);
   };
   return new OAuthApp({
     Octokit: octokitClass(oauthFetch),

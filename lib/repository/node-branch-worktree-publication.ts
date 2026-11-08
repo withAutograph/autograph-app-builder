@@ -2281,7 +2281,7 @@ const withPublicationLock = async <T>(input: {
     const operation = async () => {
       await input.hooks?.afterLockReady?.(lock.pid);
       lock.assertHeld();
-      return input.operation(lock);
+      return await input.operation(lock);
     };
     return await Promise.race([operation(), lock.lost]);
   } finally {
@@ -2302,7 +2302,7 @@ export const publishReviewedChangeSetToBranchWorktree = async (input: {
   if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "1") {
     throw new Error("Branch-worktree publication is disabled.");
   }
-  return withPublicationLock({
+  return await withPublicationLock({
     hooks: input.hooks,
     identity: input.proposal.publicationIdentityDigest,
     operation: async (lock) => {
@@ -2328,7 +2328,7 @@ export const publishReviewedChangeSetToBranchWorktree = async (input: {
       lock.assertHeld();
       await input.hooks?.afterPendingJournal?.();
       lock.assertHeld();
-      return executePublication({ ...input, lock });
+      return await executePublication({ ...input, lock });
     },
   });
 };
@@ -2347,7 +2347,7 @@ export const recoverBranchWorktreePublication = async (input: {
   if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "1") {
     throw new Error("Branch-worktree publication recovery is disabled.");
   }
-  return withPublicationLock({
+  return await withPublicationLock({
     hooks: input.hooks,
     identity: input.proposal.publicationIdentityDigest,
     operation: async (lock) => {
@@ -2375,7 +2375,7 @@ export const recoverBranchWorktreePublication = async (input: {
       });
       await writeJournal(journalPath(input.proposal.publicationIdentityDigest), pending);
       lock.assertHeld();
-      return executePublication({
+      return await executePublication({
         hooks: input.hooks,
         lock,
         proposal: input.proposal,

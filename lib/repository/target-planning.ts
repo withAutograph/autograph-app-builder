@@ -445,7 +445,7 @@ export const sandboxTargetCommandExecutor =
     if (setup.exitCode !== 0) {
       return setup;
     }
-    return sandbox.run(request);
+    return await sandbox.run(request);
   };
 
 const creationPlan = (

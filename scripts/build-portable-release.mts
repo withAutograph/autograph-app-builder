@@ -142,7 +142,7 @@ async function collectFiles(root: string, directory: string): Promise<Map<string
       const filePath = path.join(directory, entry);
       const fileStatus = await stat(filePath);
       if (fileStatus.isDirectory()) {
-        return collectFiles(root, filePath);
+        return await collectFiles(root, filePath);
       }
       return new Map([[path.relative(root, filePath), await readFile(filePath)]]);
     }),

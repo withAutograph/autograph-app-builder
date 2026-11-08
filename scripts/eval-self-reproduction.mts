@@ -373,7 +373,7 @@ const readCandidateSource = async (
       }
       const path = join(current, entry.name);
       if (entry.isDirectory()) {
-        return readCandidateSource(directory, path);
+        return await readCandidateSource(directory, path);
       }
       if (
         !entry.isFile() ||

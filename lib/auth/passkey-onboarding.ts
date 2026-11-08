@@ -352,7 +352,7 @@ export function createPasskeyOnboardingPlugin(input: {
             config,
             requestedAt,
           );
-          return ctx.json({ context: issued.token });
+          return await ctx.json({ context: issued.token });
         },
       ),
     },

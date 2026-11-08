@@ -262,7 +262,7 @@ export default defineTool({
           "Host repository inspection is available only in the configured local development source mode.",
         );
       }
-      return inspectSupportedRepository(namespace.path);
+      return await inspectSupportedRepository(namespace.path);
     }
     if (namespace.kind === "files") {
       const sandbox = await getSourceBoundSandbox(ctx);
@@ -333,10 +333,10 @@ export default defineTool({
           }),
         });
       }
-      return inspectSupportedRepository(receipt.sourcePath);
+      return await inspectSupportedRepository(receipt.sourcePath);
     }
     if (canAutoSelectDevelopmentSource()) {
-      return inspectSupportedRepository(selectedPath);
+      return await inspectSupportedRepository(selectedPath);
     }
 
     const sandbox = await ctx.getSandbox();

@@ -386,15 +386,15 @@ describe("Vercel-faithful App Builder flow", () => {
     const view = await render(<AppBuilder authenticated />);
     const brief = requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief"));
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(10_000));
     await fill(brief, "Newer local edit.");
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => vi.advanceTimersByTimeAsync(500));
+    await act(async () => await vi.advanceTimersByTimeAsync(500));
     restartEffect = true;
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => root?.render(<AppBuilder authenticated />));
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(10_000));
     expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(1);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => {
@@ -402,7 +402,7 @@ describe("Vercel-faithful App Builder flow", () => {
     });
     expect(brief.value).toBe("Newer local edit.");
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(10_000));
     expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(2);
     expect(brief.value).toBe("Fresh remote brief.");
   });
@@ -413,19 +413,19 @@ describe("Vercel-faithful App Builder flow", () => {
     builderActions.loadActiveBuilderDraft.mockImplementationOnce(() => pending.promise);
     await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(10_000));
     expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(1);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => root?.render(<AppBuilder authenticated />));
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(30_000));
     expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(1);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => {
       pending.resolve(globalThis.undefined);
     });
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(10_000));
     expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(2);
   });
 
@@ -451,7 +451,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const view = await render(<AppBuilder authenticated />);
     const brief = requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief"));
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(10_000));
     expect(enteredReconciliation).toHaveBeenCalledTimes(1);
     await fill(brief, "Local edit during outbox work.");
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
@@ -500,13 +500,13 @@ describe("Vercel-faithful App Builder flow", () => {
       .mockResolvedValueOnce(remoteDraft(2, "Recovered remote brief."));
     const view = await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(10_000));
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => {
       pending.reject(new Error("read-unavailable"));
     });
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(10_000));
     expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(2);
     expect(requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief")).value).toBe(
       "Recovered remote brief.",
@@ -519,7 +519,7 @@ describe("Vercel-faithful App Builder flow", () => {
     builderActions.loadActiveBuilderDraft.mockImplementationOnce(() => pending.promise);
     await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(10_000));
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => {
       changeVisibility("hidden");
@@ -532,7 +532,7 @@ describe("Vercel-faithful App Builder flow", () => {
       pending.resolve(remoteDraft(2, "Late remote brief."));
     });
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
-    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(30_000));
     expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(1);
   });
 
@@ -866,7 +866,7 @@ describe("Vercel-faithful App Builder flow", () => {
       "Keep this draft.",
     );
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => vi.advanceTimersByTimeAsync(500));
+    await act(async () => await vi.advanceTimersByTimeAsync(500));
 
     expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -888,7 +888,7 @@ describe("Vercel-faithful App Builder flow", () => {
     );
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => vi.advanceTimersByTimeAsync(1000));
+    await act(async () => await vi.advanceTimersByTimeAsync(1000));
 
     expect(builderActions.saveActiveBuilderDraft).not.toHaveBeenCalled();
   });
@@ -902,7 +902,7 @@ describe("Vercel-faithful App Builder flow", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => vi.advanceTimersToNextFrame());
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => vi.advanceTimersByTimeAsync(500));
+    await act(async () => await vi.advanceTimersByTimeAsync(500));
     expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledWith(
       expect.objectContaining({
         record: expect.objectContaining({
@@ -1067,7 +1067,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const brief = requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief"));
     await fill(brief, "First local edit.");
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => vi.advanceTimersByTimeAsync(500));
+    await act(async () => await vi.advanceTimersByTimeAsync(500));
     await fill(brief, "Newer local edit.");
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -1133,7 +1133,7 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder authenticated user={{ email: "taylor@example.com", name: "Taylor" }} />,
     );
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => waitForFrame());
+    await act(async () => await waitForFrame());
 
     const appName = requireElement(view.querySelector<HTMLInputElement>("#app-name"));
     const repository = requireElement(view.querySelector<HTMLInputElement>("#repository-name"));
@@ -1175,7 +1175,7 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder authenticated user={{ email: "taylor@example.com", name: "Taylor" }} />,
     );
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => waitForFrame());
+    await act(async () => await waitForFrame());
 
     const appName = requireElement(view.querySelector<HTMLInputElement>("#app-name"));
     const repository = requireElement(view.querySelector<HTMLInputElement>("#repository-name"));
@@ -1249,7 +1249,7 @@ describe("Vercel-faithful App Builder flow", () => {
 
     await fill(appName, "Replay Draft");
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => waitForFrame());
+    await act(async () => await waitForFrame());
 
     expect(appName.value).toBe("Replay Draft");
   });

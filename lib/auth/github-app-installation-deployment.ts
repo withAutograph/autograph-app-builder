@@ -369,7 +369,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       if (!authority || !input.repositoryAccess) {
         return;
       }
-      return input.repositoryAccess.inspect({ authority, continuationId });
+      return await input.repositoryAccess.inspect({ authority, continuationId });
     },
   };
 }
@@ -475,7 +475,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
       if (!returnState.resumeKey) {
         return;
       }
-      return repositoryAccessContinuations.authorize({
+      return await repositoryAccessContinuations.authorize({
         authority,
         continuationId: returnState.resumeKey,
       });

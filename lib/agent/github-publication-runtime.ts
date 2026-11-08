@@ -774,7 +774,7 @@ export function composeGitHubPublicationRuntime(input: {
       ) {
         throw new Error("The exact fresh-repository proposal is unavailable or changed.");
       }
-      return createApprovedFreshRepository({
+      return await createApprovedFreshRepository({
         adapter,
         approvedByCallId: request.approvedByCallId,
         contentSource: request.contentSource,
@@ -1272,7 +1272,7 @@ export function composeGitHubPublicationRuntime(input: {
         subjectDigest: proposal.digest,
         target: approvalTargetFromDraftProposal(proposal),
       });
-      return publishApprovedDraftPullRequest({
+      return await publishApprovedDraftPullRequest({
         adapter,
         approvedByCallId: request.approvedByCallId,
         contentSource: request.contentSource,
@@ -1284,7 +1284,7 @@ export function composeGitHubPublicationRuntime(input: {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async resolveImmutableSource(request) {
       if (adapter.targetSourceAdapter && input.authority) {
-        return resolveImmutableExistingSourceWithTargetProof({
+        return await resolveImmutableExistingSourceWithTargetProof({
           adapter: adapter.targetSourceAdapter,
           authority: input.authority,
           expectedInstallationId: request.expectedInstallationId,
@@ -1295,7 +1295,7 @@ export function composeGitHubPublicationRuntime(input: {
           resolvedByCallId: request.approvedByCallId,
         });
       }
-      return resolveImmutableExistingSource({
+      return await resolveImmutableExistingSource({
         adapter,
         expectedInstallationId: request.expectedInstallationId,
         expectedSha: request.expectedSha,
@@ -1449,7 +1449,7 @@ export function composeGitHubPublicationRuntime(input: {
         repositoryId: request.githubSource.repository.repositoryId,
       });
       const installation = await adapter.inspectInstallation(draftPublicationOperation);
-      return sealExistingDraftUpdate({
+      return await sealExistingDraftUpdate({
         adapter: draftUpdateAdapter,
         installation,
         ...(prior === undefined ? { adoptedDraft } : { priorPublication: prior }),

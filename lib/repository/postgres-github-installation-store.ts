@@ -85,7 +85,7 @@ export function createPostgresHostedGitHubInstallationStore(
         active: true,
         updatedAt: input.now,
       });
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const legacyRows = await transaction
           .select({
             accountId: hostedGitHubInstallations.accountId,

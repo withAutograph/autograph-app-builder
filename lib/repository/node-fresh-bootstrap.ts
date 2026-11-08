@@ -642,7 +642,7 @@ export const productionFreshBootstrapCapability = async (
     systemPython,
     systemPythonIdentity: await executableIdentity(systemPython),
   };
-  return assertCapability(capability);
+  return await assertCapability(capability);
 };
 
 const syncDirectory = async (path: string): Promise<void> => {
@@ -2969,7 +2969,7 @@ const executeBootstrap = async (input: {
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export const publishFreshBootstrap = async (
   input: Omit<Parameters<typeof executeBootstrap>[0], "recoveryOfDigest">,
-) => executeBootstrap(input);
+) => await executeBootstrap(input);
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export const recoverFreshBootstrap = async (
@@ -2977,7 +2977,7 @@ export const recoverFreshBootstrap = async (
     expectedJournalDigest: string;
   },
 ) =>
-  executeBootstrap({
+  await executeBootstrap({
     ...input,
     recoveryOfDigest: input.expectedJournalDigest,
   });

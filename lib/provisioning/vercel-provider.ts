@@ -197,7 +197,7 @@ export async function provisionVercelProject(input: {
 
   // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function inspect(name: string) {
-    return vercel({
+    return await vercel({
       expected: [200, 404],
       path: `/v9/projects/${encodeURIComponent(name)}`,
     });

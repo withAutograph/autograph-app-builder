@@ -160,7 +160,7 @@ describe("prepared provider continuity", () => {
       readHandoff: async () => intent,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
       vercel: async () =>
-        readPreparedVercelAccess({
+        await readPreparedVercelAccess({
           authority,
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
           fetch: async () =>

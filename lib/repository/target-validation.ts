@@ -821,7 +821,7 @@ export const executeProposalBoundValidation = (input: {
         ),
       };
     }
-    return execute(index + 1);
+    return await execute(index + 1);
   };
   return execute(0);
 };

@@ -79,23 +79,23 @@ export function parseLifecycleArguments(
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function runImageLifecycleTask(action: ImageLifecycleAction, args: readonly string[]) {
   const { approval, image, username } = parseLifecycleArguments(action, args);
-  if (action === "verify-sources") return verifyImageSources(approval);
-  if (action === "build") return buildImage(approval);
-  if (action === "inspect-local") return inspectLocalImage(approval);
+  if (action === "verify-sources") return await verifyImageSources(approval);
+  if (action === "build") return await buildImage(approval);
+  if (action === "inspect-local") return await inspectLocalImage(approval);
   if (action === "login") {
     if (username === undefined)
       throw new Error("Missing required image lifecycle argument --username.");
-    return loginGhcr(approval, username);
+    return await loginGhcr(approval, username);
   }
-  if (action === "push") return pushImage(approval);
-  if (action === "inspect-remote") return inspectRemoteImage(approval);
+  if (action === "push") return await pushImage(approval);
+  if (action === "inspect-remote") return await inspectRemoteImage(approval);
   if (action === "preload") {
     if (image === undefined) throw new Error("Missing required image lifecycle argument --image.");
-    return preloadImage(approval, image);
+    return await preloadImage(approval, image);
   }
-  if (action === "prepare-proof-runtime") return prepareProofRuntime(approval);
+  if (action === "prepare-proof-runtime") return await prepareProofRuntime(approval);
   if (image === undefined) throw new Error("Missing required image lifecycle argument --image.");
-  return proveSandboxImage(approval, image);
+  return await proveSandboxImage(approval, image);
 }
 
 const [, entrypoint] = process.argv;

@@ -138,5 +138,5 @@ export async function githubPublicationRuntimeForSession(
   defaultResolver ??= createDeploymentGitHubPublicationRuntimeResolver({
     environment: process.env,
   });
-  return defaultResolver.resolve(sessionAuth, selection);
+  return await defaultResolver.resolve(sessionAuth, selection);
 }

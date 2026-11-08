@@ -687,7 +687,7 @@ export function createLocalEveSessionService(
     }
     const existing = state.recoveries.get(sessionId);
     if (existing !== undefined) {
-      return existing;
+      return await existing;
     }
     const recovery = (async () => {
       const snapshot = await readLocalSnapshot(sessionId);
@@ -710,7 +710,7 @@ export function createLocalEveSessionService(
       // oxlint-disable-next-line promise/prefer-await-to-then
     })().finally(() => state.recoveries.delete(sessionId));
     state.recoveries.set(sessionId, recovery);
-    return recovery;
+    return await recovery;
   }
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

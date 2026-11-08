@@ -72,7 +72,7 @@ const defaultDependencies: RuntimeDependencies = {
   enabled: hostedLeaseEnabled,
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async isMember({ principal, workspaceId, environment }) {
-    return createPostgresWorkspaceMembership(hostedLeaseDatabase(environment)).isMember({
+    return await createPostgresWorkspaceMembership(hostedLeaseDatabase(environment)).isMember({
       principal,
       workspaceId,
     });

@@ -129,7 +129,7 @@ export function useBuilderDraftAutosave<T>(
       }
 
       if (draining.current) {
-        return draining.current;
+        return await draining.current;
       }
       const run = async () => {
         while (queued.current) {

@@ -121,7 +121,7 @@ export async function provisionBuilderProvider(input: {
       method: "POST",
     }),
   );
-  return readJson(response, "provisioning_unavailable");
+  return await readJson(response, "provisioning_unavailable");
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -144,7 +144,7 @@ export async function reserveBuilderProvider(input: {
       method: "POST",
     }),
   );
-  return readJson(response, "provisioning_unavailable");
+  return await readJson(response, "provisioning_unavailable");
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -156,7 +156,7 @@ export async function readBuilderProviderProvisioning(requestId: string) {
       headers: await sameOriginHeaders(),
     }),
   );
-  return readJson<BuilderProvisionResponse>(response, "provisioning_unavailable");
+  return await readJson<BuilderProvisionResponse>(response, "provisioning_unavailable");
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -180,7 +180,7 @@ export async function createBuilderHandoff(input: {
       method: "POST",
     }),
   );
-  return readJson<{
+  return await readJson<{
     version: 1;
     handoffId: string;
     expiresAt: string;
@@ -260,7 +260,7 @@ async function createContinuationHandoff(
   input: ResolvedHandoffContinuationInput,
   provisioning: BuilderProvisionResponse,
 ) {
-  return createBuilderHandoff({
+  return await createBuilderHandoff({
     creationRequestId: input.creationRequestId,
     destination: input.form.buildDestination === "cursor" ? "cursor" : "codex",
     version: 1,

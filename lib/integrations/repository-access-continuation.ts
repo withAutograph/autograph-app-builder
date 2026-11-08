@@ -189,7 +189,7 @@ export function createRepositoryAccessContinuationService(input: {
         }
         return { ...selection, sessionId: opaqueRuntimeId.parse(value.sessionId) };
       };
-      return input.store.consume(consumeInput());
+      return await input.store.consume(consumeInput());
     },
 
     async create(value: {

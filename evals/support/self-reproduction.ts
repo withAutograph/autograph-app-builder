@@ -32,7 +32,7 @@ export async function readSource(root: string, current = root): Promise<SourceFi
       }
       const filePath = path.join(current, entry.name);
       if (entry.isDirectory()) {
-        return readSource(root, filePath);
+        return await readSource(root, filePath);
       }
       if (!entry.isFile() || !/\.(?:[cm]?tsx?|css|mdx?)$/u.test(entry.name)) {
         return [];

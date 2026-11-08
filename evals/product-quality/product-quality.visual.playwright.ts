@@ -26,7 +26,7 @@ async function loadPrototype(page: Page) {
         axe: { run: () => Promise<{ violations: unknown[] }> };
       }
     ).axe;
-    return runner.run();
+    return await runner.run();
   });
   expect(accessibility.violations).toEqual([]);
   await expect(page.getByRole("heading", { name: "Vendor Review" })).toBeVisible();

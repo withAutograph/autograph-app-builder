@@ -47,11 +47,12 @@ interface PageProps {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function currentUser() {
-  const state = await resolveWorkspaceOnboardingState(async () =>
-    ensurePreviewOAuthDeploymentSessionOrganization({
-      environment: process.env,
-      headers: await headers(),
-    }),
+  const state = await resolveWorkspaceOnboardingState(
+    async () =>
+      await ensurePreviewOAuthDeploymentSessionOrganization({
+        environment: process.env,
+        headers: await headers(),
+      }),
   );
   if (state.status === "anonymous") {
     console.warn(

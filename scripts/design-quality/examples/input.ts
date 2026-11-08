@@ -22,7 +22,7 @@ const fixtureStateImport = (stateTarget: string) =>
 
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 async function text(root: string, relativePath: string) {
-  return readFile(path.resolve(root, relativePath), "utf-8");
+  return await readFile(path.resolve(root, relativePath), "utf-8");
 }
 
 const exampleManifests: Record<

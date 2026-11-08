@@ -427,7 +427,7 @@ export async function provisionGitHubRepository(input: {
 
   // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function repository(name: string) {
-    return github({
+    return await github({
       expected: [200, 404],
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}`,
       token,

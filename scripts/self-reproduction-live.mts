@@ -109,7 +109,7 @@ const waitForEveAttempt = async (
     // The development process is expected to take time while it prepares its isolated runtime.
   }
   await delay(500);
-  return waitForEveAttempt(url, signal, deadline);
+  return await waitForEveAttempt(url, signal, deadline);
 };
 
 const waitForEve = (url: string, signal: AbortSignal) =>
@@ -120,7 +120,7 @@ const availableDistinctLoopbackPort = async (
   configured?: string,
 ): Promise<number> => {
   const port = await availableLoopbackPort(configured);
-  return port === excludedPort ? availableDistinctLoopbackPort(excludedPort) : port;
+  return port === excludedPort ? await availableDistinctLoopbackPort(excludedPort) : port;
 };
 
 const answerFor = (result: unknown, answers: Record<string, string>) => {
@@ -159,7 +159,7 @@ const resumeInvocation = async (
     { input: invocation.stdout, timeoutMs: generationTimeoutMs },
   );
   await appendFile(transcriptPath, `${resumed.stdout}\n${resumed.stderr}\n`);
-  return resumeInvocation(resumed, remainingTurns - 1, url, answers);
+  return await resumeInvocation(resumed, remainingTurns - 1, url, answers);
 };
 
 const main = async () => {

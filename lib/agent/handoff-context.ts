@@ -69,7 +69,7 @@ async function createDeploymentPreparedHandoffReader() {
     if (authority.issuer !== config.issuer || authority.audience !== config.resource) {
       throw new BuilderHandoffUnavailableError();
     }
-    return read(sessionAuth);
+    return await read(sessionAuth);
   };
 }
 
@@ -92,5 +92,7 @@ export async function readPreparedHandoffContext(sessionAuth: unknown) {
     throw error;
   });
   // oxlint-enable promise/prefer-await-to-callbacks
-  return (await deploymentReader)(sessionAuth);
+  return await (
+    await deploymentReader
+  )(sessionAuth);
 }

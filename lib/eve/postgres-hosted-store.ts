@@ -783,13 +783,13 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async getSession(principalInput, sessionId) {
       const principal = hostedPrincipalSchema.parse(principalInput);
-      return sessionById(database, principal, sessionId);
+      return await sessionById(database, principal, sessionId);
     },
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning store interface.
     async getSessionByAdapterSessionId(principalInput, adapterSessionId) {
       const principal = hostedPrincipalSchema.parse(principalInput);
-      return sessionByAdapterSessionId(database, principal, adapterSessionId);
+      return await sessionByAdapterSessionId(database, principal, adapterSessionId);
     },
 
     async getStartOperation(principalInput, clientRequestId) {
@@ -818,7 +818,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async observeSession(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const rows = await transaction
           .select()
           .from(agentSessions)
@@ -1183,7 +1183,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     // oxlint-disable-next-line eslint/require-await -- Keep the canonical asynchronous transaction API, including validation rejection.
     async recordSendDelivery(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const operationRow = await operationRowById(
           transaction,
           principal,
@@ -1353,7 +1353,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async replaceSessionAdapter(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const row = await sessionById(transaction, principal, input.sessionId, true);
         if (row === null) {
           throw new Error(SESSION_NOT_FOUND);
@@ -1503,7 +1503,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         return { disposition: "conflict" };
       }
 
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const existing = await operationById(transaction, principal, candidate.operationId);
         if (existing !== null) {
           return isExactReservation(existing, candidate)
@@ -1662,7 +1662,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       const descriptor = nativeRecoveryDescriptorSchema.parse(input.descriptor);
       const receipt = nativeRecoveryBindingSchema.parse(input.recoveryBinding);
       assertNativeRecoveryReceipt(descriptor, receipt);
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const operation = await operationById(transaction, principal, descriptor.operationId, true);
         if (operation === null) {
           throw new Error("Native recovery reservation is unavailable.");
@@ -1788,7 +1788,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     // oxlint-disable-next-line eslint/require-await -- Preserve the existing Promise-returning store interface.
     async settleSucceeded(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const operation = await operationById(transaction, principal, input.operationId, true);
         if (operation === null || operation.requestDigest !== input.requestDigest) {
           throw new Error(OPERATION_CANNOT_SETTLE);
@@ -1969,7 +1969,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       ) {
         throw new Error(sessionError);
       }
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const operation = await operationById(transaction, principal, input.operationId, true);
         if (operation === null || operation.requestDigest !== input.requestDigest) {
           throw new Error(OPERATION_CANNOT_SETTLE);
@@ -2068,7 +2068,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async settleUnsuccessful(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const operation = await operationById(transaction, principal, input.operationId, true);
         assertReserved(operation, input.requestDigest);
         const settled = hostedOperationRecordSchema.parse({

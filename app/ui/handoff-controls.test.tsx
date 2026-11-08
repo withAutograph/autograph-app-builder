@@ -205,7 +205,7 @@ describe("durable handoff controls", () => {
     visibility("hidden");
     await render();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(10_000));
     expect(request).not.toHaveBeenCalled();
     expect(open).not.toHaveBeenCalled();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -222,7 +222,7 @@ describe("durable handoff controls", () => {
       visibility("hidden");
     });
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(10_000));
     expect(request).toHaveBeenCalledOnce();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     request.mockImplementation(async () => Response.json({ ...initial, status: "continued" }));
@@ -232,7 +232,7 @@ describe("durable handoff controls", () => {
     });
     expect(container.textContent).toContain("Continued in your app");
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(20_000));
     expect(request).toHaveBeenCalledTimes(2);
   });
   it("keeps manual copy and retry usable after blocked launch and clipboard failure", async () => {
@@ -270,7 +270,7 @@ describe("durable handoff controls", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     request.mockImplementation(async () => Response.json({ ...data, cursorInstallReady: true }));
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    await act(async () => await vi.advanceTimersByTimeAsync(5000));
     expect(container.querySelector('a[href*="mcp/install"]')?.textContent).toBe(
       "Add Autograph to Cursor",
     );
@@ -389,7 +389,7 @@ describe("durable handoff controls", () => {
     await render();
     expect(container.textContent).toContain("Status is temporarily unavailable");
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    await act(async () => await vi.advanceTimersByTimeAsync(5000));
     expect(request).toHaveBeenCalledTimes(2);
     expect(container.textContent).not.toContain("Status is temporarily unavailable");
   });

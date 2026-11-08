@@ -261,7 +261,7 @@ function createStore(sql: Sql): PreviewActivationStore {
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async provisionInvitedUser(input) {
-      return sql.begin(async (transaction) => {
+      return await sql.begin(async (transaction) => {
         const users = await transaction<
           {
             id: string;

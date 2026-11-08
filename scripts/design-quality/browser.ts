@@ -310,7 +310,7 @@ export async function settleFiniteMotion(page: Page) {
 export async function measurePage(page: Page) {
   await settleFiniteMotion(page);
   await page.addScriptTag({ content: axe.source });
-  return page.evaluate(async () => {
+  return await page.evaluate(async () => {
     // Keep DOM measurement helpers together with browser traversal.
     // oxlint-disable-next-line unicorn/consistent-function-scoping
     const rect = (el: Element) => {
@@ -571,7 +571,7 @@ export async function measureStyles(
           if (target.origin === new URL(page.url()).origin) {
             text = await page.evaluate(async (href) => {
               const response = await fetch(href);
-              return response.ok ? response.text() : undefined;
+              return response.ok ? await response.text() : undefined;
             }, target.href);
           }
         } catch {
