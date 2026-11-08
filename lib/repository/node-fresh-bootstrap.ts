@@ -395,11 +395,17 @@ const git = (
   args: readonly string[],
   commitIdentity?: FreshBootstrapIdentity,
   input?: Uint8Array,
-): string =>
-  captureProcessStdout(capability.systemGit, [...gitOptions, "-C", root, ...args], {
+): string => {
+  const command = capability.systemGit;
+  const commandArgs = [...gitOptions, "-C", root, ...args];
+  const options: Parameters<typeof captureProcessStdout>[2] = {
     env: minimalEnvironment(commitIdentity),
-    ...(input === undefined ? {} : { input }),
-  }).toString("utf-8");
+  };
+  if (input !== undefined) {
+    options.input = input;
+  }
+  return captureProcessStdout(command, commandArgs, options).toString("utf-8");
+};
 
 const gitRecords = async function* gitRecords(
   capability: FreshBootstrapCapability,
@@ -2362,13 +2368,28 @@ const pendingReceipt = (
   layout: FreshBootstrapLayout,
 ): FreshBootstrapPendingReceipt => {
   const { digest: proposalDigest, ...proposalFields } = proposal;
-  const unsigned = {
+  const initial: Pick<
+    FreshBootstrapPendingReceipt,
+    | keyof typeof proposalFields
+    | "destinationPublished"
+    | "layout"
+    | "leaseMarkerDigest"
+    | "recoveryOfDigest"
+    | "previousLeaseMarkerDigest"
+  > = {
     ...proposalFields,
     destinationPublished: layout.phase === "published",
     layout,
     leaseMarkerDigest,
-    ...(recoveryOfDigest === undefined ? {} : { recoveryOfDigest }),
-    ...(previousLeaseMarkerDigest === undefined ? {} : { previousLeaseMarkerDigest }),
+  };
+  if (recoveryOfDigest !== undefined) {
+    initial.recoveryOfDigest = recoveryOfDigest;
+  }
+  if (previousLeaseMarkerDigest !== undefined) {
+    initial.previousLeaseMarkerDigest = previousLeaseMarkerDigest;
+  }
+  const unsigned = {
+    ...initial,
     proposalDigest,
     publishedByCallId,
     stageCreated: layout.phase !== "intent",
@@ -2390,19 +2411,39 @@ const failureReceipt = (input: {
   destinationPublished: boolean;
 }): FreshBootstrapFailureReceipt => {
   const { digest: proposalDigest, ...proposalFields } = input.proposal;
-  const unsigned = {
+  const initial: Pick<
+    FreshBootstrapFailureReceipt,
+    | keyof typeof proposalFields
+    | "destinationPublished"
+    | "failureMessage"
+    | "layout"
+    | "leaseMarkerDigest"
+    | "previousLeaseMarkerDigest"
+  > = {
     ...proposalFields,
     destinationPublished: input.destinationPublished,
     failureMessage: input.failureMessage,
     layout: input.layout,
     leaseMarkerDigest: input.leaseMarkerDigest,
-    ...(input.previousLeaseMarkerDigest === undefined
-      ? {}
-      : { previousLeaseMarkerDigest: input.previousLeaseMarkerDigest }),
+  };
+  if (input.previousLeaseMarkerDigest !== undefined) {
+    initial.previousLeaseMarkerDigest = input.previousLeaseMarkerDigest;
+  }
+  const withReason: typeof initial &
+    Pick<
+      FreshBootstrapFailureReceipt,
+      "proposalDigest" | "publishedByCallId" | "reason" | "recoveryOfDigest"
+    > = {
+    ...initial,
     proposalDigest,
     publishedByCallId: input.publishedByCallId,
     reason: input.reason,
-    ...(input.recoveryOfDigest === undefined ? {} : { recoveryOfDigest: input.recoveryOfDigest }),
+  };
+  if (input.recoveryOfDigest !== undefined) {
+    withReason.recoveryOfDigest = input.recoveryOfDigest;
+  }
+  const unsigned = {
+    ...withReason,
     recoveryRequired: true as const,
     stageCreated: input.stageCreated,
     status: "failed" as const,
@@ -2420,27 +2461,57 @@ const successReceipt = (input: {
   swappedOldIdentity?: PathIdentity;
 }): FreshBootstrapSuccessReceipt => {
   const { digest: proposalDigest, ...proposalFields } = input.proposal;
-  const unsigned = {
+  const initial: Pick<
+    FreshBootstrapSuccessReceipt,
+    | keyof typeof proposalFields
+    | "commitCount"
+    | "destinationIdentity"
+    | "gitDirectoryIdentity"
+    | "headCommit"
+    | "headReference"
+    | "headTree"
+    | "leaseMarkerDigest"
+    | "previousLeaseMarkerDigest"
+  > = {
     ...proposalFields,
-    commitCount: 1 as const,
+    commitCount: 1,
     destinationIdentity: input.verification.destinationIdentity,
     gitDirectoryIdentity: input.verification.gitDirectoryIdentity,
     headCommit: input.proposal.expectedInitialCommit,
     headReference: `refs/heads/${input.proposal.repositoryIdentity.initialBranch}`,
     headTree: input.proposal.expectedGitTree,
     leaseMarkerDigest: input.leaseMarkerDigest,
-    ...(input.previousLeaseMarkerDigest === undefined
-      ? {}
-      : { previousLeaseMarkerDigest: input.previousLeaseMarkerDigest }),
+  };
+  if (input.previousLeaseMarkerDigest !== undefined) {
+    initial.previousLeaseMarkerDigest = input.previousLeaseMarkerDigest;
+  }
+  const withPublication: typeof initial &
+    Pick<
+      FreshBootstrapSuccessReceipt,
+      "proposalDigest" | "publishedByCallId" | "recoveryOfDigest"
+    > = {
+    ...initial,
     proposalDigest,
     publishedByCallId: input.publishedByCallId,
-    ...(input.recoveryOfDigest === undefined ? {} : { recoveryOfDigest: input.recoveryOfDigest }),
-    recoveryRequired: false as const,
+  };
+  if (input.recoveryOfDigest !== undefined) {
+    withPublication.recoveryOfDigest = input.recoveryOfDigest;
+  }
+  const withStatus: typeof withPublication &
+    Pick<
+      FreshBootstrapSuccessReceipt,
+      "recoveryRequired" | "remoteDigest" | "status" | "swappedOldIdentity"
+    > = {
+    ...withPublication,
+    recoveryRequired: false,
     remoteDigest: input.verification.remoteDigest,
-    status: "succeeded" as const,
-    ...(input.swappedOldIdentity === undefined
-      ? {}
-      : { swappedOldIdentity: input.swappedOldIdentity }),
+    status: "succeeded",
+  };
+  if (input.swappedOldIdentity !== undefined) {
+    withStatus.swappedOldIdentity = input.swappedOldIdentity;
+  }
+  const unsigned = {
+    ...withStatus,
     worktreeDigest: input.verification.worktreeDigest,
   };
   return { ...unsigned, digest: freshBootstrapJournalDigest(unsigned) };

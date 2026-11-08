@@ -1276,14 +1276,21 @@ const inputRequest = (request: {
   ) {
     return undefined;
   }
-  return {
+  const header: Pick<PublicInputRequest, "allowFreeform" | "kind" | "requestId"> = {
     allowFreeform: request.allowFreeform ?? false,
     kind: request.kind === toolApprovalKind ? "approval" : "question",
     requestId: request.requestId,
-    ...(description === undefined ? {} : { description }),
-    ...(request.options === undefined
-      ? {}
-      : { options: request.options.map(({ id, label }) => ({ id, label })) }),
+  };
+  const details: Pick<PublicInputRequest, "description" | "options"> = {};
+  if (description !== undefined) {
+    details.description = description;
+  }
+  if (request.options !== undefined) {
+    details.options = request.options.map(({ id, label }) => ({ id, label }));
+  }
+  return {
+    ...header,
+    ...details,
     title,
   };
 };

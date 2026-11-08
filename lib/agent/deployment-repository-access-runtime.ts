@@ -592,13 +592,10 @@ export function createRepositoryAccessRuntime(input: {
         sourceTree: sourceReceipt.sourceTree,
         workspaceDigest: cloned.workspaceDigest,
       });
-      return {
-        accessReceipt,
-        ...(appBaseline === undefined ? {} : { appBaseline }),
-        githubSource,
-        sourceReceipt,
-        workspace,
-      };
+      if (appBaseline === undefined) {
+        return { accessReceipt, githubSource, sourceReceipt, workspace };
+      }
+      return { accessReceipt, appBaseline, githubSource, sourceReceipt, workspace };
     },
     async resumeAuthorizedForSession(value) {
       const candidates = await input.continuations.authorizedForSession({

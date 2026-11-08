@@ -465,19 +465,23 @@ const retainedDeliveryCorrections = (
     );
   });
 };
+interface OperatorRuntimeBindings {
+  environment: Record<string, string>;
+  nativePreview?: z.infer<typeof operatorNativePreviewSchema>;
+  publicDelivery?: PublicRuntimeBinding;
+  normalActors?: ReturnType<typeof projectNormalActorRuntime>;
+}
 type OperatorHttpResponse =
   | OperatorSelection
   | NeonAuthorizationResult
   | z.infer<typeof operatorAuthIdentityInputSchema>
   | OperatorPublicResult
   | { code: "not_found" | "protected_operator_required" }
-  | {
-      environment: Record<string, string>;
-      nativePreview?: z.infer<typeof operatorNativePreviewSchema>;
+  | (OperatorRuntimeBindings & {
       operationRef: string;
       plan: HostedOperatorPlan;
       proof: z.infer<typeof hostedRuntimeProofSchema>;
-    };
+    });
 const response = (value: OperatorHttpResponse, status = 200) =>
   Response.json(value, { headers: { "cache-control": "no-store" }, status });
 const resourceIdentity = (plan: HostedOperatorPlan) =>
@@ -1817,15 +1821,17 @@ const handleBindingsOperation = async (input: {
   if (latest?.revision !== current.revision) {
     throw new HostedOperatorError("operation_in_progress");
   }
-  return response({
-    environment,
-    ...(nativePreview === undefined ? {} : { nativePreview }),
-    ...(publicDelivery === undefined ? {} : { publicDelivery }),
-    ...(normalActors === undefined ? {} : { normalActors }),
-    operationRef,
-    plan,
-    proof,
-  });
+  const bindings: OperatorRuntimeBindings = { environment };
+  if (nativePreview !== undefined) {
+    bindings.nativePreview = nativePreview;
+  }
+  if (publicDelivery !== undefined) {
+    bindings.publicDelivery = publicDelivery;
+  }
+  if (normalActors !== undefined) {
+    bindings.normalActors = normalActors;
+  }
+  return response({ ...bindings, operationRef, plan, proof });
 };
 
 const normalizeOperatorContext = (authorized: Context): Context => {
