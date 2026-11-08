@@ -138,9 +138,11 @@ describe("behavior evidence invalidation during validation repair", () => {
     mocks.describe.mockResolvedValue({ backend: { kind: "static" } });
     mocks.browser.mockResolvedValue({ status: "passed" });
     vi.stubEnv("DATABASE_URL", "postgres://builder-test.invalid/test");
-    mocks.state.update.mockImplementation((change) => {
-      mocks.state.current = change(mocks.state.current);
-    });
+    mocks.state.update.mockImplementation(
+      (change: (state: typeof mocks.state.current) => typeof mocks.state.current) => {
+        mocks.state.current = change(mocks.state.current);
+      },
+    );
     mocks.execute.mockResolvedValue({ ok: true, receipt: { commands: [] } });
     mocks.review.mockResolvedValue({ findings: [], reviewCompleted: true, status: "failed" });
   });
