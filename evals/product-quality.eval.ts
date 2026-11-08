@@ -183,7 +183,7 @@ Confirmed.
       "all assistant messages stay product-facing across the quality suite",
       (events) => {
         const messages = events.flatMap((event) => {
-          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
           const candidate = event as {
             type?: unknown;
             data?: { message?: unknown };

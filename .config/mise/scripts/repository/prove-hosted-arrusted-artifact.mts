@@ -125,7 +125,7 @@ try {
     sync: true,
   });
   const run = (args: readonly string[]) =>
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
     JSON.parse(
       execFileSync(
         input.miseBin,

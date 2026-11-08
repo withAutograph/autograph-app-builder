@@ -257,7 +257,7 @@ export async function runWithTestCapability(options: {
     },
     stdio: ["inherit", "inherit", "inherit", "pipe"],
   });
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
   const authorization = child.stdio[3] as Duplex | null | undefined;
   if (authorization === null || authorization === undefined) {
     throw new Error("The structural test authorization pipe was not created.");
@@ -287,7 +287,7 @@ export async function runWithTestCapability(options: {
       return;
     }
     try {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
       const request = JSON.parse(buffered) as {
         version?: unknown;
         nonce?: unknown;

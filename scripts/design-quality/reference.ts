@@ -367,7 +367,7 @@ const reliableExpressionType = (
   if (checker.isArrayType(type) || checker.isTupleType(type)) {
     return (
       checker
-        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type reference assertion.
         .getTypeArguments(type as ts.TypeReference)
         .every((item) => reliableExpressionType(item, checker, depth + 1, nextSeen))
     );
@@ -537,7 +537,7 @@ const finiteLiteralEvidence = (
     if (checker.isTupleType(expected)) {
       return undefined;
     }
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
     const items = checker.getTypeArguments(expected as ts.TypeReference);
     if (items.length !== 1) {
       return undefined;

@@ -350,7 +350,7 @@ export async function installBrowserBoundaries(
       if (value !== "about:blank") {
         state.opened.push(value);
       }
-      // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The emulator provides the window operations used by the browser handoff; Preserve the existing assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- The emulator provides the window operations used by the browser handoff; Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
       return {
         close() {
           // The emulated window has no resources to close.
@@ -374,6 +374,7 @@ export async function browserBoundaryState(page: Page) {
   return await page.evaluate(() => {
     const state =
       // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve the existing browser fixture assertion.
       (
         window as typeof window & {
           __e2eBoundaries: { clipboard: string[]; opened: string[] };

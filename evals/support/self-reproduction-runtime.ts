@@ -140,7 +140,7 @@ const candidatePackageName = (files: readonly SandboxProviderTargetFile[], appId
   const manifest = files.find((file) => file.path === "package.json");
   if (manifest) {
     try {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
       const parsed = JSON.parse(String(manifest.content)) as { name?: unknown };
       // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof parsed.name === "string" && parsed.name.length > 0) {

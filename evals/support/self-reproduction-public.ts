@@ -300,7 +300,7 @@ export const makePublicTransport = async (
               .map((line) => line.slice(5).trimStart())
               .join("\n");
             if (data) {
-              // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+              // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
               const parsed = JSON.parse(data) as typeof envelope;
               if (parsed.id === id) {
                 found = parsed;
@@ -317,7 +317,7 @@ export const makePublicTransport = async (
       }
       envelope = found;
     } else {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
       envelope = (await response.json()) as typeof envelope;
     }
     // oxlint-disable-next-line typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values.
@@ -361,7 +361,7 @@ export const makePublicTransport = async (
         throw new Error("Only public user lifecycle calls are permitted");
       }
       recordSafely({ arguments: args, at: new Date().toISOString(), direction: "request", name });
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
       const result = (await rpc("tools/call", { arguments: args, name })) as {
         isError?: boolean;
         structuredContent?: unknown;

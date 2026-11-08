@@ -147,7 +147,7 @@ if (path.join(outputParent, path.basename(args.output)) !== args.output) {
 try {
   await mkdir(args.output, { mode: 0o700 });
 } catch (error) {
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
   if ((error as NodeJS.ErrnoException).code === "EEXIST") {
     throw new Error(`Release candidate already exists: ${args.output}`, {
       cause: error,

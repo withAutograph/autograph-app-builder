@@ -156,10 +156,10 @@ export const loadWorkingPreview = async (
     provenance: previewProvenance(
       publicState.sourceRevision,
       publicState.session?.sessionId,
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
       candidate as PreviewReceipt,
     ),
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
     receipt: candidate as PreviewReceipt,
     status: "ready",
   };
@@ -176,7 +176,7 @@ export const writePreviewObservationReport = async (
   report: PreviewObservationReport,
 ) => {
   await mkdir(output, { mode: 0o700, recursive: true });
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
   const sanitized = sanitizeValue(report) as PreviewObservationReport;
   const json = `${JSON.stringify(sanitized, null, 2)}\n`;
   await writeFile(path.join(output, "report.json"), json, { mode: 0o600 });

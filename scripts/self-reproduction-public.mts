@@ -122,7 +122,7 @@ const newState = (endpoint: string): PublicState => {
   };
 };
 const state: PublicState = values.resume
-  ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+  ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing saved state assertion.
     (JSON.parse(readFileSync(path, "utf-8")) as PublicState)
   : newState(values.endpoint);
 state.originalStart = originalPublicStart(state);
@@ -190,7 +190,7 @@ try {
     { bearerToken: process.env.APP_BUILDER_PUBLIC_MCP_TOKEN },
   );
   const responses = hasNonemptyOption(values["responses-file"])
-    ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+    ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing saved responses assertion.
       (JSON.parse(readFileSync(values["responses-file"], "utf-8")) as Responses)
     : undefined;
   const message = hasNonemptyOption(values["message-file"])

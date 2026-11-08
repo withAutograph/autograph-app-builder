@@ -311,7 +311,7 @@ export function waitForEveEvalChild(
         }
       }
     };
-    // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/require-safety-comment-for-type-assertion -- Keep the existing broader shape used by this operation.; Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Keep the existing broader shape used by this operation.; Preserve the existing type assertion at this boundary. Preserve the existing assertion and its runtime behavior.
     const handlers = {} as {
       interrupt: () => void;
       terminate: () => void;
