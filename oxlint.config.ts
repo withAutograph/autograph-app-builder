@@ -610,14 +610,6 @@ export default defineConfig({
       rules: { "typescript/no-unsafe-call": "off" },
     },
     {
-      files: [githubProviderPath],
-      rules: { "react-doctor/js-cache-property-access": "off" },
-    },
-    {
-      files: [handoffControlsPath],
-      rules: { "react-doctor/no-fetch-in-effect": "off" },
-    },
-    {
       files: [draftAutosavePath],
       rules: { "sonarjs/pseudo-random": "off" },
     },
@@ -649,11 +641,6 @@ export default defineConfig({
         sharedLintFile13,
       ],
       rules: { "typescript/restrict-template-expressions": "off" },
-    },
-    {
-      // Preserve existing callback and abort behavior pending contract review.
-      files: ["lib/development/mcp-readiness.ts"],
-      rules: { "typescript/only-throw-error": "off" },
     },
     {
       // Existing findings awaiting behavior-preserving contract changes.

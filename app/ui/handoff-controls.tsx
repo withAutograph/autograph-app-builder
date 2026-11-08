@@ -6,7 +6,6 @@ import {
   useCallback,
   useEffect,
   useRef,
-  useReducer,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -113,6 +112,28 @@ const handoffViewReducer = (
   };
 };
 
+const createHandoffViewStore = (initial: HandoffControlData) => {
+  let state: HandoffViewState = { data: initial, access: "ready", renewalNotice: "" };
+  const initialState = state;
+  const listeners = new Set<() => void>();
+  return {
+    getSnapshot: () => state,
+    getServerSnapshot: () => initialState,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    dispatch: (action: HandoffViewAction) => {
+      state = handoffViewReducer(state, action);
+      for (const listener of listeners) {
+        listener();
+      }
+    },
+  };
+};
+
 const subscribeToHandoffStatus = (
   handoffId: string,
   onStatus: (status: HandoffControlData) => void,
@@ -200,11 +221,8 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     () => false,
   );
   const router = useRouter();
-  const [{ data, access, renewalNotice }, dispatchHandoffView] = useReducer(handoffViewReducer, {
-    data: initial,
-    access: "ready",
-    renewalNotice: "",
-  });
+  const [handoffStore] = useState(() => createHandoffViewStore(initial));
+  const dispatchHandoffView = handoffStore.dispatch;
   const [destination, setDestination] = useState(initial.destination);
   const [notice, setNotice] = useState("");
   const [launchNotice, setLaunchNotice] = useState("");
@@ -226,6 +244,51 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     [],
   );
   const [renewal, dispatchRenewal, renewalPending] = useActionState(runRenewalAction, undefined);
+  const subscribeHandoff = useCallback(
+    (listener: () => void) => {
+      let stopPolling: (() => void) | undefined;
+      let activeKey: string | undefined;
+      const updateSubscription = () => {
+        const current = handoffStore.getSnapshot();
+        const nextKey =
+          current.access === "ready" && !renewalPending && current.data.status !== "continued"
+            ? `${current.data.handoffId}:${current.data.status}`
+            : undefined;
+        if (activeKey === nextKey) {
+          return;
+        }
+        stopPolling?.();
+        stopPolling = undefined;
+        activeKey = nextKey;
+        if (nextKey !== undefined) {
+          stopPolling = subscribeToHandoffStatus(
+            current.data.handoffId,
+            (next) => {
+              dispatchHandoffView({ type: "status", data: next });
+              setNotice("");
+            },
+            (next) => dispatchHandoffView({ type: "access", access: next }),
+            setNotice,
+          );
+        }
+      };
+      const unsubscribe = handoffStore.subscribe(() => {
+        updateSubscription();
+        listener();
+      });
+      updateSubscription();
+      return () => {
+        unsubscribe();
+        stopPolling?.();
+      };
+    },
+    [handoffStore, dispatchHandoffView, renewalPending],
+  );
+  const { data, access, renewalNotice } = useSyncExternalStore(
+    subscribeHandoff,
+    handoffStore.getSnapshot,
+    handoffStore.getServerSnapshot,
+  );
   const handoffPath = `/handoff/${encodeURIComponent(data.handoffId)}`;
   const signInUrl = `/auth/sign-in?callbackURL=${encodeURIComponent(handoffPath)}`;
   const label = destination === "codex" ? "Codex" : "Cursor";
@@ -236,23 +299,6 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     destination === "cursor" && access === "ready"
       ? buildCursorInstallUrl(data.mcpUrl, data.cursorInstallReady)
       : undefined;
-
-  useEffect(() => {
-    if (access !== "ready" || renewalPending || data.status === "continued") {
-      return;
-    }
-    return subscribeToHandoffStatus(
-      data.handoffId,
-      (next) => {
-        dispatchHandoffView({ type: "status", data: next });
-        setNotice("");
-      },
-      (next) => {
-        dispatchHandoffView({ type: "access", access: next });
-      },
-      setNotice,
-    );
-  }, [access, data.handoffId, data.status, renewalPending]);
 
   useEffect(() => {
     if (!renewal || renewalPending || reconciledRenewal.current === renewal) {

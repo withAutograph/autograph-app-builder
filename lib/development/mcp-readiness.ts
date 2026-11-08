@@ -1,12 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function abortReason(signal: AbortSignal | undefined) {
-  const reason: unknown = signal?.reason;
-  return reason ?? new Error("Development MCP readiness was aborted.");
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function jsonRpcBody(text: string) {
   const data = text
     .split("\n")
@@ -120,7 +114,11 @@ export async function waitForDevelopmentMcp(input: {
   let lastError: unknown;
   while (Date.now() - started < timeoutMs) {
     if (input.signal?.aborted === true) {
-      throw abortReason(input.signal);
+      const reason: unknown = input.signal.reason;
+      if (reason === null || reason === undefined) {
+        throw new Error("Development MCP readiness was aborted.");
+      }
+      input.signal.throwIfAborted();
     }
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -136,7 +134,11 @@ export async function waitForDevelopmentMcp(input: {
       retryIntervalMs = Math.min(retryIntervalMs * 2, maximumIntervalMs);
     } catch {
       if (input.signal?.aborted ?? false) {
-        throw abortReason(input.signal);
+        const reason: unknown = input.signal?.reason;
+        if (reason === null || reason === undefined) {
+          throw new Error("Development MCP readiness was aborted.");
+        }
+        input.signal?.throwIfAborted();
       }
       throw new Error("Development MCP readiness wait failed.");
     }
