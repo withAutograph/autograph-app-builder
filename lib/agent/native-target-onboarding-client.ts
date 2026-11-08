@@ -256,7 +256,7 @@ export const createNativeTargetOnboardingClient = (options: {
       ) {
         throw denied();
       }
-      const responder = ctx.responder;
+      const { responder } = ctx;
       if (
         responder.principalId !== owner.authority.ownerUserId ||
         responder.principalType !== "user"

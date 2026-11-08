@@ -47,7 +47,7 @@ export const publicReleaseClientForContext = async (ctx: WorkflowStepToolContext
     execution,
   });
   const common = { ownerContext, adapterSessionId: ctx.session.id, callId: ctx.callId, execution };
-  const token = createVercelWorkloadIdentity().token;
+  const { token } = createVercelWorkloadIdentity();
   const send = async <T>(
     input: z.infer<typeof publicReleaseTransportRequestSchema>,
     schema: z.ZodType<T>,

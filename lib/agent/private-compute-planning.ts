@@ -164,7 +164,7 @@ export const preparePrivateComputePlanning = async (input: {
   if (!("appSpec" in input.state)) {
     throw new Error("Accept the app product before selecting private compute.");
   }
-  const appId = input.state.appSpec.appId;
+  const { appId } = input.state.appSpec;
   const check = input.repairChanges?.find(
     (change) => change.path === `apps/${appId}/.config/mise/tasks/check`,
   );

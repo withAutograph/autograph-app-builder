@@ -75,7 +75,7 @@ const bindCurrentProposalSource = (
   }
   const { proposal } = current;
   const { digest, ...unsigned } = proposal;
-  const target = current.proposal.target;
+  const { target } = current.proposal;
   if (
     !ctx.session.id ||
     proposal.plannedByCallId.length === 0 ||
@@ -243,9 +243,9 @@ const renderCurrentProposalSource = (
   binding: ReturnType<typeof bindCurrentProposalSource>,
 ): Output => {
   const { proposal, target } = binding;
-  const digest = proposal.digest;
+  const { digest } = proposal;
   const prefix = `apps/${input.appId}/`;
-  const changes = target.iteration.changes;
+  const { changes } = target.iteration;
   const paths = validateProposalChanges(changes, prefix);
   const output: Output = {
     appId: input.appId,
