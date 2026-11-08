@@ -219,13 +219,14 @@ it("does not offer or accept delivery approval without fresh proof of the publis
 
 it("rejects another session, installation or reconciliation rather than borrowing its approval", async () => {
   const f = await recovered();
-  for (const changed of [
+  const [otherSession, otherInstallation, otherReconciliation] = [
     { ...f.approval, sessionId: "another-session" },
     { ...f.approval, installationId: "999" },
     { ...f.approval, reconciliationDigest: "0".repeat(64) },
-  ]) {
-    await expect(approve(changed)).resolves.toMatchObject({ type: "denied" });
-  }
+  ];
+  await expect(approve(otherSession)).resolves.toMatchObject({ type: "denied" });
+  await expect(approve(otherInstallation)).resolves.toMatchObject({ type: "denied" });
+  await expect(approve(otherReconciliation)).resolves.toMatchObject({ type: "denied" });
   expect(mocks.runtimeForSession).not.toHaveBeenCalled();
   expect(mocks.inspectReconciled).not.toHaveBeenCalled();
   expect(mocks.run).not.toHaveBeenCalled();

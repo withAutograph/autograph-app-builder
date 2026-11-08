@@ -540,7 +540,6 @@ export default defineConfig({
       // Preserve ordering in existing sequential operations.
       files: [
         "e2e/support/harness.ts",
-        "lib/agent/github-pr-delivery-lineage.test.ts",
         "lib/provisioning/hosted-operator-ready-replacement-native.ts",
         productionCreatorTestPath,
       ],
