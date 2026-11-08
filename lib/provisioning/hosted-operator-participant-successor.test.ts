@@ -61,7 +61,7 @@ const program = normalActorProgramSchema.parse({
   appId: target.appId,
   origin: "https://apps.example.com",
   actors: [
-    { actorKey: "owner", email: "owner@example.test", name: "Owner", account: "capture-existing" },
+    { account: "capture-existing", actorKey: "owner", email: "owner@example.test", name: "Owner" },
   ],
   organizations: [],
   memberships: [],
@@ -81,24 +81,24 @@ const plan = hostedOperatorPlanSchema.parse({
     sessionId: target.sessionId,
   },
   appDatabase: {
-    resourceId: "app-resource",
     database: "normal",
     migratorRole: "normal_owner",
+    resourceId: "app-resource",
     runtimeRole: "normal_runtime",
   },
   authDatabase: {
-    resourceId: "auth-resource",
     database: "auth",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
   effects: [
     {
+      description: "Capture approved actual accounts",
       id: "normal-accounts",
       kind: "normal-accounts",
-      description: "Capture approved actual accounts",
     },
   ],
   installer: { reference: "owned-worker", sha256: "a".repeat(64) },
@@ -299,9 +299,9 @@ const fixture = async (
     },
     stage: "app",
     effects: ["resources", "install", "access", "bindings"].map((kind) => ({
+      description: "Observe approved phase",
       id: kind,
       kind,
-      description: "Observe approved phase",
     })),
     normalActorPreparation: normalActorPreparationSchema.strip().parse(original),
   });
@@ -335,7 +335,7 @@ const fixture = async (
     ...program,
     actors: [
       ...program.actors,
-      { actorKey: "qa", email: "qa@example.test", name: "QA", account: "create-email-password" },
+      { account: "create-email-password", actorKey: "qa", email: "qa@example.test", name: "QA" },
     ],
   });
   timing?.beforeProposal?.();
@@ -550,9 +550,9 @@ describe("approved additive capture participant state", () => {
           .strip()
           .parse(f.row.record.accountPreparation),
         effects: ["resources", "install", "access", "bindings"].map((kind) => ({
+          description: "Approved current phase",
           id: kind,
           kind,
-          description: "Approved current phase",
         })),
       });
       const currentOperation = "77777777-7777-4777-8777-777777777777";
@@ -1156,10 +1156,10 @@ describe("approved additive capture participant state", () => {
       ...program,
       actors: [
         ...program.actors,
-        { actorKey: "qa", email: "qa@example.test", name: "QA", account: "create-email-password" },
+        { account: "create-email-password", actorKey: "qa", email: "qa@example.test", name: "QA" },
       ],
       organizations: [
-        { organizationId: "qa-org", name: "QA", slug: "qa-org", ownerActorKey: "owner" },
+        { name: "QA", organizationId: "qa-org", ownerActorKey: "owner", slug: "qa-org" },
       ],
       memberships: [{ actorKey: "owner", organizationId: "qa-org", role: "owner" }],
     });

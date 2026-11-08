@@ -102,7 +102,7 @@ it("settles native approval before dispatch, preserves results and authorizers, 
       // oxlint-disable-next-line eslint/no-await-in-loop -- Each SDK step consumes the preceding durable state.
       result = await result.next(result.session);
     }
-    return { result, events };
+    return { events, result };
   };
   const session = fixture();
   assert.equal(derivePendingState(session).pendingCoordinationCallIds, undefined);
@@ -205,7 +205,7 @@ it("settles native approval before dispatch, preserves results and authorizers, 
         { auth, response: { requestId: pending.requests[0].requestId, optionId } },
       ],
     });
-    return { result: generatedResult, events: generatedEvents };
+    return { events: generatedEvents, result: generatedResult };
   };
   const generatedApproved = await generatedDecision("approve");
   assert.deepEqual(
