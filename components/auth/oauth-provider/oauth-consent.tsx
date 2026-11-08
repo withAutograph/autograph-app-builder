@@ -80,7 +80,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
       (!publicClient.isPending && session && !client));
   const canRespond = Boolean(request?.clientId && session && client && !consent.isPending);
 
-  if (invalidRequest) {
+  if (invalidRequest === true) {
     return (
       <Card className={cn("w-full max-w-md", className)}>
         <CardHeader>
