@@ -16,7 +16,6 @@ const handoffProgressPath = "app/ui/handoff-provisioning-progress.tsx";
 const builderControllerPath = "app/ui/use-builder-controller.ts";
 const draftAutosavePath = "app/ui/use-builder-draft-autosave.ts";
 const productionSetupTestPath = "lib/provisioning/repository-production-setup.test.ts";
-const eveEvalPreloadPath = "scripts/eve-eval-fetch-preload.mjs";
 
 const referenceLifecyclePath = "evals/support/self-reproduction-reference-lifecycle.ts";
 const nodeFreshBootstrapPath = "lib/repository/node-fresh-bootstrap.ts";
@@ -117,7 +116,6 @@ export default defineConfig({
     {
       // Preserve existing control flow pending focused review.
       files: [
-        ".config/mise/scripts/repository/build-starter-source-release.mts",
         "agent/tools/artifact_workflow_status.ts",
         "agent/tools/read_github_pr_delivery.ts",
         "agent/tools/target_execution_status.ts",
@@ -603,7 +601,6 @@ export default defineConfig({
         "lib/repository/local-planning-source.test.ts",
         "lib/repository/local-preview-auth-origin.test.ts",
         "oxlint.config.ts",
-        eveEvalPreloadPath,
         "scripts/eve-recovery-holder-observation.test.mjs",
       ],
       rules: { "unicorn/consistent-function-scoping": "off" },

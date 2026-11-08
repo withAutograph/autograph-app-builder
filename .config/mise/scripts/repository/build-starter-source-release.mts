@@ -10,6 +10,9 @@ const TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
 const REPOSITORY = "https://github.com/withAutograph/arrusted-development";
 const TREE_ENTRY = /^(?<mode>100644|100755) blob [0-9a-f]{40}\t(?<path>.+)$/u;
 
+const isMissingArgument = (value: string | undefined): value is undefined | "" =>
+  value === undefined || value === "";
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sha256(value: Uint8Array) {
   return createHash("sha256").update(value).digest("hex");
@@ -30,12 +33,9 @@ function argumentsFrom(values: readonly string[]) {
   const output = args.get("--output");
   const releaseOrigin = args.get("--release-origin");
   if (
-    root === undefined ||
-    root === "" ||
-    output === undefined ||
-    output === "" ||
-    releaseOrigin === undefined ||
-    releaseOrigin === "" ||
+    isMissingArgument(root) ||
+    isMissingArgument(output) ||
+    isMissingArgument(releaseOrigin) ||
     args.size !== 3
   ) {
     throw new Error(
