@@ -106,8 +106,17 @@ export interface RepositoryProductionCreatorDependencies {
   // oxlint-disable-next-line anti-slop/no-unknown-returns -- Mutation output is never trusted; an independent parsed read confirms it.
   invokeAuth: (context: RepositoryProductionEffectContext, request: Json) => Promise<unknown>;
   assertAuthorized: (row: RepositoryProductionRow) => Promise<void>;
-  /** Resume the original approved setup through its normal lease and continuation. */
-  resume: (row: RepositoryProductionRow, originalSessionId: string) => Promise<{ state: string }>;
+  /** Reuse the app physical slot without queuing automatic callbacks behind setup. */
+  withCompletionLease: <T>(
+    row: RepositoryProductionRow,
+    run: (assertCurrent: () => Promise<void>) => Promise<T>,
+  ) => Promise<T>;
+  /** Resume the original approved setup while retaining the completion's physical fence. */
+  resume: (
+    row: RepositoryProductionRow,
+    originalSessionId: string,
+    assertCurrent: () => Promise<void>,
+  ) => Promise<{ state: string }>;
   now?: () => Date;
 }
 
@@ -613,12 +622,29 @@ export const createRepositoryProductionCreator = (
       if (frame === undefined || frame.invitationId !== invitationId) {
         return "not-owned";
       }
-      const value = await read(row, frame);
-      if (value === undefined || !isVerified(value, frame)) {
-        return "pending";
-      }
-      const result = await deps.resume(row, frame.sessionId);
-      return result.state === "ready" ? "ready" : "pending";
+      return await deps.withCompletionLease(
+        row,
+        async (assertCurrent): Promise<"not-owned" | "ready" | "pending"> => {
+          await assertCurrent();
+          const currentRow = await deps.findInvitation(invitationId);
+          const currentFrame = currentRow === undefined ? undefined : frameFor(currentRow);
+          if (
+            currentRow === undefined ||
+            currentFrame === undefined ||
+            currentFrame.invitationId !== invitationId
+          ) {
+            return "not-owned";
+          }
+          const value = await read(currentRow, currentFrame);
+          await assertCurrent();
+          if (value === undefined || !isVerified(value, currentFrame)) {
+            return "pending";
+          }
+          const result = await deps.resume(currentRow, currentFrame.sessionId, assertCurrent);
+          await assertCurrent();
+          return result.state === "ready" ? "ready" : "pending";
+        },
+      );
     },
   };
 };

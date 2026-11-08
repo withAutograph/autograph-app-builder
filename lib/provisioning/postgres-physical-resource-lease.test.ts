@@ -2,7 +2,10 @@
 import type postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
 
-import { createPostgresPhysicalResourceLease } from "./postgres-physical-resource-lease";
+import {
+  createPostgresPhysicalResourceLease,
+  PhysicalResourceLeaseBusyError,
+} from "./postgres-physical-resource-lease";
 import type { PhysicalResourceFence } from "./postgres-physical-resource-lease";
 
 const custodyKey = JSON.stringify([
@@ -24,6 +27,7 @@ const fixture = () => {
   const backend = { backend_pid: 101, backend_start: "2026-10-09T11:00:00.000Z" };
   const acquired: string[] = [];
   const held = new Set<string>();
+  let available = true;
   let active = false;
   let close = vi.fn<() => void>();
   const disconnect = Promise.withResolvers<never>();
@@ -33,11 +37,14 @@ const fixture = () => {
     }
     const sql = strings.join("?").replaceAll(/\s+/gu, " ").trim();
     events.push(sql);
-    if (sql.includes("pg_advisory_xact_lock")) {
+    if (sql.includes("pg_try_advisory_xact_lock") && !available) {
+      return [{ held: false }];
+    }
+    if (sql.includes("pg_advisory_xact_lock") || sql.includes("pg_try_advisory_xact_lock")) {
       const key = String(values[0]);
       acquired.push(key);
       held.add(`${acquired.length}`);
-      return [];
+      return [{ held: true }];
     }
     if (sql.includes("as class_id")) {
       return [{ class_id: "1", object_id: `${acquired.length}` }];
@@ -89,6 +96,9 @@ const fixture = () => {
   });
   return {
     acquired,
+    makeBusy() {
+      available = false;
+    },
     backend,
     disconnect() {
       close();
@@ -106,6 +116,35 @@ const fixture = () => {
 };
 
 describe("physical resource transaction lease", () => {
+  it("does not initialize, read the durable fence or dispatch work when an automatic slot is busy", async () => {
+    const test = fixture();
+    test.makeBusy();
+    const initializeUnderLock = vi.fn(async () => {});
+    const run = vi.fn(async () => "unexpected");
+    await expect(
+      test.lease({ ...test.input, initializeUnderLock, tryAcquire: true }, run),
+    ).rejects.toBeInstanceOf(PhysicalResourceLeaseBusyError);
+    expect(initializeUnderLock).not.toHaveBeenCalled();
+    expect(test.readCurrentFence).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+    expect(test.events.slice(-2)).toEqual(["rollback", "end"]);
+  });
+
+  it("retains the actual held lock and durable fence for an automatic winner", async () => {
+    const test = fixture();
+    const initializeUnderLock = vi.fn(async () => {});
+    await test.lease(
+      { ...test.input, initializeUnderLock, tryAcquire: true },
+      async (assertFence) => {
+        await assertFence();
+        test.fence.fenceGeneration += 1;
+        await expect(assertFence()).rejects.toThrow("fence is stale");
+      },
+    );
+    expect(initializeUnderLock).toHaveBeenCalledOnce();
+    expect(test.events.slice(-2)).toEqual(["commit", "end"]);
+  });
+
   it("locks the fixed custody slot through callback completion and invalidates retained assertions", async () => {
     const test = fixture();
     let retained: (() => Promise<void>) | undefined;

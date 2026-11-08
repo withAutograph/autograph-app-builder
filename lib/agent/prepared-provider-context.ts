@@ -641,9 +641,7 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
           if (config.issuer !== authority.issuer || config.resource !== authority.audience) {
             throw new Error("Provider authority is unavailable.");
           }
-          if (providerDatabase === undefined) {
-            providerDatabase = openHostedPostgresDatabase(environment.DATABASE_URL ?? "");
-          }
+          providerDatabase ??= openHostedPostgresDatabase(environment.DATABASE_URL ?? "");
           const database = providerDatabase;
           if (
             !(await createPostgresWorkspaceMembership(database).isMember({

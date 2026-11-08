@@ -25,9 +25,7 @@ export const productAcceptanceObligations = (
         break;
       }
       inWalkthrough = /^##\s+Acceptance walkthrough\s*$/iu.test(line);
-      continue;
-    }
-    if (inWalkthrough) {
+    } else if (inWalkthrough) {
       selected.push(line);
     }
   }
