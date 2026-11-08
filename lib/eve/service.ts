@@ -1548,7 +1548,7 @@ export function createEveSessionService(
     }
     const client = new Client({ host: url.origin, redirect: "error" });
     const recovery = createLocalNativeRecovery(environment);
-    return createLocalEveSessionService(
+    const localClient =
       recovery === undefined
         ? client
         : withLocalRecoveredSessions(client, recovery, async (sessionId, body) => {
@@ -1573,32 +1573,30 @@ export function createEveSessionService(
               );
             }
             return localRecoveredControlReceiptSchema.parse(value);
-          }),
-      {
-        restartGeneration: localEveRestartGeneration(environment),
-        stateGeneration: localCycleGeneration(environment),
-        ...(recovery === undefined
-          ? {}
-          : {
-              isRecoveredSession: (sessionId: string) => recovery.lineage(sessionId).length > 1,
-              cancelRecovery: async (sessionId: string) => {
-                await recovery.cancel(sessionId);
-              },
-              recoverTerminal: async (sessionId: string, requestId: string) => {
-                await recovery.recover(client, sessionId, requestId, async (body) => {
-                  const response = await fetch(new URL("/eve/v1/session", url.origin), {
-                    method: "POST",
-                    redirect: "error",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify(body),
-                  });
-                  if (!response.ok) throw new LocalSessionRecoveryUnavailableError();
-                  return localRecoveryResponseSchema.parse(await response.json());
-                });
-              },
-            }),
-      },
-    );
+          });
+    const options: NonNullable<Parameters<typeof createLocalEveSessionService>[1]> = {
+      restartGeneration: localEveRestartGeneration(environment),
+      stateGeneration: localCycleGeneration(environment),
+    };
+    if (recovery !== undefined) {
+      options.isRecoveredSession = (sessionId) => recovery.lineage(sessionId).length > 1;
+      options.cancelRecovery = async (sessionId) => {
+        await recovery.cancel(sessionId);
+      };
+      options.recoverTerminal = async (sessionId, requestId) => {
+        await recovery.recover(client, sessionId, requestId, async (body) => {
+          const response = await fetch(new URL("/eve/v1/session", url.origin), {
+            method: "POST",
+            redirect: "error",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (!response.ok) throw new LocalSessionRecoveryUnavailableError();
+          return localRecoveryResponseSchema.parse(await response.json());
+        });
+      };
+    }
+    return createLocalEveSessionService(localClient, options);
   }
   return {
     cancel: notConfigured,

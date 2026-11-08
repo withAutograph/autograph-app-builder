@@ -51,12 +51,18 @@ export const recoverOriginalApprovedPlan = async (
     // Each CAS retry rechecks current canonical ownership and actual approval.
     const current = await deps.store.read(context);
     const saved = current?.record.operator;
-    const original = await deps.readApprovedPlan({
+    const { readApprovedPlan } = deps;
+    const approvalInput: Parameters<
+      NonNullable<ProtectedHostedOperatorDependencies["readApprovedPlan"]>
+    >[0] = {
       ...context,
       plan,
       now: now(),
-      ...(saved === undefined ? {} : { currentOperation: saved }),
-    });
+    };
+    if (saved !== undefined) {
+      approvalInput.currentOperation = saved;
+    }
+    const original = await readApprovedPlan.call(deps, approvalInput);
     if (original === null) {
       return null;
     }

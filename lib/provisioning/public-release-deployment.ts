@@ -869,7 +869,11 @@ export const createPublicReleaseDeployment = (input: {
           },
         );
         await base(current);
-        const candidate = publicReleasePlanSchema.parse({
+        const parseReleasePlan = publicReleasePlanSchema.parse.bind(publicReleasePlanSchema);
+        const planPrefix: Omit<
+          z.input<typeof publicReleasePlanSchema>,
+          "environment" | "effects"
+        > = {
           version: 1,
           kind: "public-app-release-v1",
           purpose: original.purpose,
@@ -898,10 +902,22 @@ export const createPublicReleaseDeployment = (input: {
             syntheticOnly: true,
           },
           publicOrigin,
-          ...(integrations === undefined ? {} : { integrationCapability: integrations.attachment }),
-          ...(retainedOptionalBindings === undefined ? {} : { retainedOptionalBindings }),
+        };
+        if (integrations !== undefined) {
+          planPrefix.integrationCapability = integrations.attachment;
+        }
+        if (retainedOptionalBindings !== undefined) {
+          planPrefix.retainedOptionalBindings = retainedOptionalBindings;
+        }
+        const planInput: Omit<z.input<typeof publicReleasePlanSchema>, "effects"> = {
+          ...planPrefix,
           environment: prepared.environment,
-          ...(integrationRemoval === undefined ? {} : { integrationRemoval }),
+        };
+        if (integrationRemoval !== undefined) {
+          planInput.integrationRemoval = integrationRemoval;
+        }
+        const candidate = parseReleasePlan({
+          ...planInput,
           effects:
             integrationRemoval === undefined
               ? [bindProductionRuntimeEffect, "publish-release-source"]

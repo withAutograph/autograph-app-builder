@@ -200,23 +200,19 @@ export function createRepositoryAccessRuntime(input: {
           unavailable = true;
           throw error;
         }
+        const targetAccess: Pick<GitHubRepositoryAccessProvider, "inspectTargetAccess"> = {};
+        if (provider.inspectTargetAccess !== undefined) {
+          targetAccess.inspectTargetAccess = async function inspectTargetAccess(value) {
+            try {
+              return await provider.inspectTargetAccess?.(value);
+            } catch (error) {
+              unavailable = true;
+              throw error;
+            }
+          };
+        }
         return {
-          ...(provider.inspectTargetAccess === undefined
-            ? {}
-            : {
-                async inspectTargetAccess(
-                  value: Parameters<
-                    NonNullable<GitHubRepositoryAccessProvider["inspectTargetAccess"]>
-                  >[0],
-                ) {
-                  try {
-                    return await provider.inspectTargetAccess?.(value);
-                  } catch (error) {
-                    unavailable = true;
-                    throw error;
-                  }
-                },
-              }),
+          ...targetAccess,
           async inspectInstallation(value) {
             try {
               return await provider.inspectInstallation(value);

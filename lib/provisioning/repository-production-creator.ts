@@ -318,19 +318,25 @@ export const createRepositoryProductionCreator = (
       if (frame === undefined) {
         const owner = await deps.readOwner(row);
         const linked = await linkedCreator(row);
-        frame = frameSchema.parse({
-          version: 1,
-          kind: CREATOR_LINK_KIND,
-          invitationId: repositoryProductionOperationRef(row.record.scope),
-          scopeDigest: repositoryProductionDigest(row.record.scope),
-          sessionId: row.record.intent.sessionId,
-          email: owner.email.toLowerCase(),
-          roles: [...new Set(row.record.intent.creatorRoles)].toSorted(),
-          returnUrl: returnUrl(row.record.intent.sessionId),
-          expiresAt: expiresAt(),
-          realmDigest: deps.realmDigest(row.record.scope),
-          ...(linked === undefined ? {} : { linkedCreator: linked }),
-        });
+        const createFrameInput = (): z.input<typeof frameSchema> => {
+          const frameInput: z.input<typeof frameSchema> = {
+            version: 1,
+            kind: CREATOR_LINK_KIND,
+            invitationId: repositoryProductionOperationRef(row.record.scope),
+            scopeDigest: repositoryProductionDigest(row.record.scope),
+            sessionId: row.record.intent.sessionId,
+            email: owner.email.toLowerCase(),
+            roles: [...new Set(row.record.intent.creatorRoles)].toSorted(),
+            returnUrl: returnUrl(row.record.intent.sessionId),
+            expiresAt: expiresAt(),
+            realmDigest: deps.realmDigest(row.record.scope),
+          };
+          if (linked !== undefined) {
+            frameInput.linkedCreator = linked;
+          }
+          return frameInput;
+        };
+        frame = frameSchema.parse(createFrameInput());
         await context.assertCurrent();
         await context.checkpoint(frame);
       }

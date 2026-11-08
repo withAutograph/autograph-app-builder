@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { organization } from "better-auth/plugins";
 import { generateKeyPair, SignJWT, jwtVerify } from "jose";
+import type { JWTVerifyOptions } from "jose";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
@@ -447,19 +448,18 @@ const fixture = async (publicRelease?: {
         if (proof === null) {
           return new Response(null, { status: 401 });
         }
-        const { payload } = await jwtVerify(proof, publicKey, {
+        const verifyOptions: JWTVerifyOptions = {
           issuer: program.origin,
           audience: "https://operator.example.com",
-          ...(values.has("attestation")
-            ? {
-                currentDate: new Date(
-                  z
-                    .object({ capturedAt: z.iso.datetime() })
-                    .parse(JSON.parse(values.get("attestation") ?? "{}")).capturedAt,
-                ),
-              }
-            : {}),
-        });
+        };
+        if (values.has("attestation")) {
+          verifyOptions.currentDate = new Date(
+            z
+              .object({ capturedAt: z.iso.datetime() })
+              .parse(JSON.parse(values.get("attestation") ?? "{}")).capturedAt,
+          );
+        }
+        const { payload } = await jwtVerify(proof, publicKey, verifyOptions);
         const cookie = cookies.get(String(payload.sessionId));
         const actual = await auth.api.getSession({
           headers: new Headers({ cookie: cookie ?? "" }),

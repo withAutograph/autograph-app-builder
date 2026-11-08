@@ -2832,18 +2832,31 @@ export function createHostedEveSessionService(input: {
       }
     }
     const checkpoint = checkpointForSnapshot(sessionId, snapshot, capturedAtEpochMs);
-    const observed = await input.store.observeSession?.({
-      checkpoint,
-      ...(explicitSendOperationId === undefined ? {} : { explicitSendOperationId }),
-      ...(completeResult.uiPreview?.appId === undefined
-        ? {}
-        : { appId: completeResult.uiPreview.appId }),
-      nowEpochMs: capturedAtEpochMs,
-      principal,
-      resumability,
-      sessionId,
-      stage: stageForResult(completeResult),
-    });
+    const store = input.store;
+    const observeSession = store.observeSession;
+    let observation: ReturnType<NonNullable<HostedEveStore["observeSession"]>> | undefined;
+    if (observeSession != null) {
+      const observationDetails: Pick<
+        Parameters<NonNullable<HostedEveStore["observeSession"]>>[0],
+        "checkpoint"
+      > &
+        Partial<Parameters<NonNullable<HostedEveStore["observeSession"]>>[0]> = { checkpoint };
+      if (explicitSendOperationId !== undefined) {
+        observationDetails.explicitSendOperationId = explicitSendOperationId;
+      }
+      if (completeResult.uiPreview?.appId !== undefined) {
+        observationDetails.appId = completeResult.uiPreview.appId;
+      }
+      observation = observeSession.call(store, {
+        ...observationDetails,
+        nowEpochMs: capturedAtEpochMs,
+        principal,
+        resumability,
+        sessionId,
+        stage: stageForResult(completeResult),
+      });
+    }
+    const observed = await observation;
     if (observed?.status === "cancelled") {
       const durable = toDurableHostedSessionRecord(observed);
       if (durable.checkpoint) {
