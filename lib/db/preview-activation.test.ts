@@ -12,6 +12,7 @@ import {
   executePreviewActivation,
   planPreviewActivation,
   previewActivationApplyRequestSchema,
+  previewActivationPlanRequestSchema,
 } from "./preview-activation";
 import type { PreviewActivationStore } from "./preview-activation";
 
@@ -142,6 +143,17 @@ const invite = {
 };
 
 describe("Preview activation prerequisite contract", () => {
+  it.each(["issuer", "resource"] as const)(
+    "reports malformed %s as a validation issue without throwing",
+    (field) => {
+      const result = previewActivationPlanRequestSchema.safeParse({
+        ...invite,
+        [field]: "https://%",
+      });
+      expect(result.success).toBe(false);
+    },
+  );
+
   it("plans and executes invited GitHub users without disclosing identity", async () => {
     const plan = planPreviewActivation(invite);
     expect(JSON.stringify(plan)).not.toContain(invite.email);

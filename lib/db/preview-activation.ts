@@ -61,8 +61,15 @@ export const previewActivationPlanRequestSchema = z
     if (request.action === runtimeRoleAction) {
       return;
     }
-    const issuer = new URL(request.issuer);
-    const resource = new URL(request.resource);
+    let issuer: URL;
+    let resource: URL;
+    try {
+      issuer = new URL(request.issuer);
+      resource = new URL(request.resource);
+    } catch {
+      // The URL schemas report malformed values; refinements can still run after those issues.
+      return;
+    }
     if (
       // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       issuer.pathname !== "/api/auth" ||
