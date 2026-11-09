@@ -99,6 +99,36 @@ const defined = <T>(value: T | undefined): T => {
   return value;
 };
 
+/** Creator identity and membership remain fresh protected reads for each projection. */
+export const readRepositoryProductionCreatorAccess = async (
+  row: RepositoryProductionRow | undefined,
+  describe: ReturnType<typeof createRepositoryProductionCreator>["describe"],
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Raw protected Auth output is parsed before projecting creator membership.
+  readMembers: (row: RepositoryProductionRow) => Promise<unknown>,
+) => {
+  const checkMembership =
+    row?.record.effects["creator-access"].state === "applied" &&
+    row.record.creatorActorId !== undefined;
+  const [identity, members] = await Promise.allSettled([
+    row ? describe(row) : undefined,
+    checkMembership ? readMembers(row) : undefined,
+  ]);
+  // Both protected reads finish before the caller releases its request resources.
+  if (identity.status === "rejected") {
+    throw identity.reason;
+  }
+  if (members.status === "rejected") {
+    throw members.reason;
+  }
+  const creatorRemoved = checkMembership
+    ? !z
+        .array(z.object({ id: z.string() }))
+        .parse(members.value)
+        .some((person) => person.id === row.record.creatorActorId)
+    : false;
+  return { identity: identity.value, creatorRemoved };
+};
+
 /** Fresh People writes wait only for real in-flight schema or creator-grant effects. */
 export const assertNoConflictingProductionSetup = (input: {
   row: RepositoryProductionRow | undefined;
@@ -760,15 +790,12 @@ export const createRepositoryProductionNativeHandler =
             const state = row
               ? await setup(known.scope).status(known.scope, row.record.intent)
               : { state: "checking-access" as const };
-            const identity = row ? await creator.describe(row) : undefined;
-            const creatorRemoved =
-              row?.record.effects["creator-access"].state === "applied" &&
-              row.record.creatorActorId !== undefined
-                ? !z
-                    .array(z.object({ id: z.string() }))
-                    .parse(await authRequest(readContext(row), { action: listMembersAction }, true))
-                    .some((person) => person.id === row.record.creatorActorId)
-                : false;
+            const { identity, creatorRemoved } = await readRepositoryProductionCreatorAccess(
+              row,
+              async (saved) => await creator.describe(saved),
+              async (saved) =>
+                await authRequest(readContext(saved), { action: listMembersAction }, true),
+            );
             const resolved: ManagedAppAccess = {
               scope: known.scope,
               appName: known.scope.appId,

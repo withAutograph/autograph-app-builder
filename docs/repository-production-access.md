@@ -248,6 +248,13 @@ workload, reads the stored inviter and verified invitee, and rechecks current
 ownership. Neither an email match nor the invitee's possession of a Creator
 Builder session is required or sufficient.
 
+People projection overlaps only independent protected read-only workers: creator
+invitation with creator membership, and app members with app invitations. Every
+read retains its existing scope, owner, fence and lease checks. Both workers
+settle before request resources or the shared lease are released; a rejection
+preserves the original error and first-read priority. Access writes and their
+required ordering remain serialized.
+
 Automatic Auth callbacks try the same physical PostgreSQL transaction lock
 without waiting. A callback returns pending when another continuation holds the
 app slot, before starting another Auth worker or setup reconciliation. Explicit

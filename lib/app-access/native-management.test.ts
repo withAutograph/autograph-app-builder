@@ -1,6 +1,6 @@
 /* oxlint-disable eslint/require-await -- In-memory adapters preserve asynchronous production ports. */
 import { randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   initialRepositoryProductionRecord,
@@ -685,4 +685,147 @@ describe("native app access recovery", () => {
     expect(h.invites.get(creator.id)?.status).toBe("pending");
     expect(h.sends).toEqual([]);
   });
+});
+
+describe("protected People reads", () => {
+  it("starts members and invitations together under the same held lease", async () => {
+    const f = harness();
+    const originalWorkers = f.deps.workers;
+    const gate: PromiseWithResolvers<void> = Promise.withResolvers();
+    const started = new Set<string>();
+    let held = false;
+    f.deps.withLease = async (_scope, run) => {
+      held = true;
+      try {
+        return await run(async () => {
+          expect(held).toBe(true);
+        });
+      } finally {
+        held = false;
+      }
+    };
+    f.deps.workers = (target) => {
+      const workers = originalWorkers(target);
+      return {
+        ...workers,
+        invokeAuthManagement: async (context, input, readOnly) => {
+          expect(readOnly).toBe(true);
+          expect(held).toBe(true);
+          const {
+            request: { action },
+          } = z.object({ request: z.object({ action: z.string() }) }).parse(input);
+          started.add(action);
+          await gate.promise;
+          return await workers.invokeAuthManagement(context, input, readOnly);
+        },
+      };
+    };
+    const reading = f.service.read(owner);
+    try {
+      await vi.waitFor(
+        () => {
+          expect(started).toEqual(new Set(["list-members", "list"]));
+        },
+        { timeout: 100 },
+      );
+      expect(held).toBe(true);
+    } finally {
+      gate.resolve();
+    }
+    await expect(reading).resolves.toMatchObject({ members: [], invitations: [] });
+    expect(held).toBe(false);
+  });
+
+  it("keeps the lease until both reads settle and preserves the first rejection", async () => {
+    const f = harness();
+    const originalWorkers = f.deps.workers;
+    const people: PromiseWithResolvers<void> = Promise.withResolvers();
+    const invitations: PromiseWithResolvers<void> = Promise.withResolvers();
+    const started = new Set<string>();
+    const failure = new Error("members unavailable");
+    let peopleFinished = false;
+    let held = false;
+    f.deps.withLease = async (_scope, run) => {
+      held = true;
+      try {
+        return await run(async () => {
+          expect(held).toBe(true);
+        });
+      } finally {
+        held = false;
+      }
+    };
+    f.deps.workers = (target) => {
+      const workers = originalWorkers(target);
+      return {
+        ...workers,
+        invokeAuthManagement: async (_context, input, readOnly) => {
+          expect(readOnly).toBe(true);
+          const {
+            request: { action },
+          } = z.object({ request: z.object({ action: z.string() }) }).parse(input);
+          started.add(action);
+          if (action === "list-members") {
+            try {
+              await people.promise;
+            } finally {
+              peopleFinished = true;
+            }
+          } else {
+            await invitations.promise;
+            throw new Error("invitations unavailable");
+          }
+          return await workers.invokeAuthManagement(_context, input, readOnly);
+        },
+      };
+    };
+    const result = (async () => {
+      try {
+        await f.service.read(owner);
+        return null;
+      } catch (error) {
+        return error;
+      }
+    })();
+    try {
+      await vi.waitFor(
+        () => {
+          expect(started.size).toBe(2);
+        },
+        { timeout: 100 },
+      );
+      people.reject(failure);
+      await vi.waitFor(() => {
+        expect(peopleFinished).toBe(true);
+      });
+      expect(held).toBe(true);
+    } finally {
+      people.reject(failure);
+      invitations.resolve();
+    }
+    await expect(result).resolves.toBe(failure);
+    expect(held).toBe(false);
+  });
+});
+
+it("preserves an invitation-list rejection after the members read succeeds", async () => {
+  const f = harness();
+  const originalWorkers = f.deps.workers;
+  const failure = new Error("invitations unavailable");
+  f.deps.workers = (target) => {
+    const workers = originalWorkers(target);
+    return {
+      ...workers,
+      invokeAuthManagement: async (context, input, readOnly) => {
+        const {
+          request: { action },
+        } = z.object({ request: z.object({ action: z.string() }) }).parse(input);
+        if (action === "list") {
+          throw failure;
+        }
+        return await workers.invokeAuthManagement(context, input, readOnly);
+      },
+    };
+  };
+  await expect(f.service.read(owner)).rejects.toBe(failure);
 });

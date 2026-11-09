@@ -377,10 +377,19 @@ export const createRepositoryProductionManagement = (
       }
       return await deps.withLease(scope, async (assertCurrent) => {
         const effect = readEffect(assertCurrent);
-        const people = await members(scope, effect);
-        const invites = z
-          .array(invitationSchema)
-          .parse(await auth(scope, { action: "list" }, true, effect, "list"));
+        const [peopleRead, invitationRead] = await Promise.allSettled([
+          members(scope, effect),
+          auth(scope, { action: "list" }, true, effect, "list"),
+        ]);
+        // Retain the shared lease until both read-only workers have settled.
+        if (peopleRead.status === "rejected") {
+          throw peopleRead.reason;
+        }
+        if (invitationRead.status === "rejected") {
+          throw invitationRead.reason;
+        }
+        const people = peopleRead.value;
+        const invites = z.array(invitationSchema).parse(invitationRead.value);
         const visible: AppAccessSnapshot["invitations"] = [];
         for (const item of invites) {
           if (

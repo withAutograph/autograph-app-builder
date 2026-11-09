@@ -1,10 +1,11 @@
 /* oxlint-disable eslint/require-await -- In-memory ports retain asynchronous setup and lease contracts. */
 import { randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createRepositoryProductionIntentBoundSetup,
   assertNoConflictingProductionSetup,
   completeRepositoryProductionInvitation,
+  readRepositoryProductionCreatorAccess,
 } from "./repository-production-native";
 import { PhysicalResourceLeaseBusyError } from "./postgres-physical-resource-lease";
 import {
@@ -340,4 +341,119 @@ describe("Production setup approval and lease composition", () => {
       }).toThrow();
     },
   );
+});
+
+describe("protected creator access reads", () => {
+  it("starts invitation and membership reads before either completes", async () => {
+    const f = fixture();
+    const gate: PromiseWithResolvers<void> = Promise.withResolvers();
+    const started = new Set<string>();
+    const reading = readRepositoryProductionCreatorAccess(
+      f.row(),
+      async () => {
+        started.add("identity");
+        await gate.promise;
+        return { status: "ready", email: "creator@example.test", canChooseAccount: false };
+      },
+      async () => {
+        started.add("members");
+        await gate.promise;
+        return [{ id: "creator" }];
+      },
+    );
+    try {
+      await vi.waitFor(
+        () => {
+          expect(started).toEqual(new Set(["identity", "members"]));
+        },
+        { timeout: 100 },
+      );
+    } finally {
+      gate.resolve();
+    }
+    await expect(reading).resolves.toMatchObject({
+      identity: { status: "ready" },
+      creatorRemoved: false,
+    });
+  });
+
+  it("settles both reads before preserving the original first rejection", async () => {
+    const f = fixture();
+    const identity: PromiseWithResolvers<void> = Promise.withResolvers();
+    const members: PromiseWithResolvers<void> = Promise.withResolvers();
+    const started = new Set<string>();
+    const failure = new Error("identity unavailable");
+    let identityFinished = false;
+    let settled = false;
+    const reading = readRepositoryProductionCreatorAccess(
+      f.row(),
+      async () => {
+        started.add("identity");
+        try {
+          await identity.promise;
+          return { status: "ready", email: "creator@example.test", canChooseAccount: false };
+        } finally {
+          identityFinished = true;
+        }
+      },
+      async () => {
+        started.add("members");
+        await members.promise;
+        throw new Error("membership unavailable");
+      },
+    );
+    const result = (async () => {
+      try {
+        await reading;
+        return null;
+      } catch (error) {
+        return error;
+      } finally {
+        settled = true;
+      }
+    })();
+    try {
+      await vi.waitFor(
+        () => {
+          expect(started.size).toBe(2);
+        },
+        { timeout: 100 },
+      );
+      identity.reject(failure);
+      await vi.waitFor(() => {
+        expect(identityFinished).toBe(true);
+      });
+      expect(settled).toBe(false);
+    } finally {
+      identity.reject(failure);
+      members.resolve();
+    }
+    await expect(result).resolves.toBe(failure);
+  });
+});
+
+it.each([undefined, null])(
+  "rejects an invalid protected membership read instead of claiming creator readiness",
+  async (value) => {
+    await expect(
+      readRepositoryProductionCreatorAccess(
+        fixture().row(),
+        async () => ({ status: "ready", email: "creator@example.test", canChooseAccount: false }),
+        async () => value,
+      ),
+    ).rejects.toThrow();
+  },
+);
+
+it("preserves a membership rejection after the creator identity read succeeds", async () => {
+  const failure = new Error("membership unavailable");
+  await expect(
+    readRepositoryProductionCreatorAccess(
+      fixture().row(),
+      async () => ({ status: "ready", email: "creator@example.test", canChooseAccount: false }),
+      async () => {
+        throw failure;
+      },
+    ),
+  ).rejects.toBe(failure);
 });
