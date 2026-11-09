@@ -333,9 +333,7 @@ export const createGitHubPrDeliveryProvider = (
       const readyCycle = await readReadyCycle(request, pull);
       if (readyCycle !== null) {
         result.readyAt = readyCycle.readyAt;
-        if (state === "open") {
-          Object.assign(result, await checkReadyRun(request, prefix, pull, ref.owner, readyCycle));
-        }
+        Object.assign(result, await checkReadyRun(request, prefix, pull, ref.owner, readyCycle));
       }
     }
     return { pull, pullPath, result };

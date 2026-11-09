@@ -19,6 +19,8 @@ const ref: GitHubPrDeliveryRef = {
 const harness = (
   input: {
     draft?: boolean;
+    merged?: boolean;
+    unavailableRun?: boolean;
     readyDenied?: boolean;
     previousReady?: boolean;
     headSha?: string;
@@ -31,7 +33,7 @@ const harness = (
   } = {},
 ) => {
   let draft = input.draft ?? false;
-  let merged = false;
+  let merged = input.merged ?? false;
   const effects: unknown[] = [];
   const graphql = (body: string) => {
     if (draft && body.includes("mutation ReadyForReview")) {
@@ -88,27 +90,30 @@ const harness = (
     }
     if (path.includes("/workflows/check.yml/runs?")) {
       return {
-        workflow_runs: [
-          {
-            id: 11,
-            event: "pull_request",
-            head_sha: head,
-            run_attempt: input.runAttempt ?? 1,
-            head_branch: "builder",
-            head_repository: { id: 100 },
-            path: ".github/workflows/check.yml",
-            created_at: input.runCreatedAt ?? readyAt,
-            status: "in_progress",
-            conclusion: null,
-            pull_requests: [],
-          },
-        ],
+        workflow_runs:
+          input.unavailableRun === true
+            ? []
+            : [
+                {
+                  id: 11,
+                  event: "pull_request",
+                  head_sha: head,
+                  run_attempt: input.runAttempt ?? 1,
+                  head_branch: "builder",
+                  head_repository: { id: 100 },
+                  path: ".github/workflows/check.yml",
+                  created_at: input.runCreatedAt ?? readyAt,
+                  status: "in_progress",
+                  conclusion: null,
+                  pull_requests: [],
+                },
+              ],
       };
     }
     if (path.includes("/pulls?")) {
       const window = {
         created_at: earlier,
-        closed_at: null,
+        closed_at: merged ? "2026-11-05T19:01:00Z" : null,
         head: { ref: "builder", repo: { id: 100 } },
       };
       return [
@@ -151,16 +156,62 @@ describe("GitHub pull request delivery", () => {
       checks: "passed",
     });
     await expect(provider.merge(ref, readyAt)).resolves.toMatchObject({
+      checkRunId: 11,
+      checks: "passed",
       mergeCommitSha: merge,
       state: "merged",
     });
     await expect(provider.merge(ref, readyAt)).resolves.toMatchObject({
+      checkRunId: 11,
+      checks: "passed",
       mergeCommitSha: merge,
       state: "merged",
     });
     expect(effects).toEqual([
       { body: { merge_method: "squash", sha: head }, path: "/repos/owner/app/pulls/7/merge" },
     ]);
+  });
+
+  it("reads the bound ready-cycle Check from a fresh provider after merge", async () => {
+    const { effects, provider } = harness({ merged: true });
+    await expect(provider.inspect(ref)).resolves.toMatchObject({
+      checkRunId: 11,
+      checks: "passed",
+      mergeCommitSha: merge,
+      readyAt,
+      state: "merged",
+    });
+    expect(effects).toHaveLength(0);
+  });
+
+  it.each([
+    { checkConclusion: "failure", checks: "failed" },
+    { checkConclusion: "skipped", checks: "failed" },
+    { unavailableRun: true, checks: "pending" },
+    { runCreatedAt: earlier, checks: "pending" },
+    { extraActivePr: true, checks: "pending" },
+    { runAttempt: 2, checks: "pending" },
+  ])("does not infer passed checks from a merged PR", async ({ checks, ...input }) => {
+    const { effects, provider } = harness({ ...input, merged: true });
+    await expect(provider.inspect(ref)).resolves.toMatchObject({ state: "merged", checks });
+    expect(effects).toHaveLength(0);
+  });
+
+  it("rejects a moved merged revision and an earlier ready-cycle approval", async () => {
+    const moved = harness({ merged: true, headSha: merge });
+    await expect(moved.provider.inspect(ref)).resolves.toMatchObject({
+      state: "merged",
+      checks: "pending",
+    });
+    await expect(moved.provider.merge(ref, readyAt)).rejects.toThrow(
+      "github-delivery-pull-request-changed",
+    );
+    const current = harness({ merged: true });
+    await expect(current.provider.merge(ref, earlier)).rejects.toThrow(
+      "github-delivery-ready-cycle-changed",
+    );
+    expect(moved.effects).toHaveLength(0);
+    expect(current.effects).toHaveLength(0);
   });
 
   it.each([
