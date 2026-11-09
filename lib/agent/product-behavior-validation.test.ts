@@ -178,7 +178,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     mocks.hostSource.mockRejectedValueOnce(
       new Error("The separate local planning source is unavailable."),
     );
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
     await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate-retained-application",
       // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -207,6 +207,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       const writeTextFile = vi.fn().mockResolvedValue(null);
       const getSandbox = vi.fn().mockResolvedValue({ writeTextFile });
       // SAFETY: The repair branch reads only the call identity and Sandbox file writer.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- This scenario supplies a partial tool context fixture.
       const context = { callId: "repair-preview", getSandbox, session: { id: "session" } } as never;
       const input = { implementationFiles, repairOnly: true };
       await expect(validateAppCreation.execute(input, context)).rejects.toThrow("approved build");
@@ -241,7 +242,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     const getSandbox = vi.fn();
     const result = await validateAppCreation.execute(
       { implementationFiles: [{ operation: "delete", path: "apps/app/.config/mise/tasks/check" }] },
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
       {
         callId: "delete-frozen-check",
         getSandbox,
@@ -266,7 +267,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     });
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
       await validateAppCreation.execute({ implementationFiles: [], runBrowserTests: true }, {
         callId: "validate_phases",
         // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -340,7 +341,7 @@ describe("behavior evidence invalidation during validation repair", () => {
   it("reports skipped persistent validation as unassessed and capture as requiring no repair", async () => {
     mocks.state.current = workflow("validated");
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate_static",
       // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -385,7 +386,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       const log = vi.spyOn(console, "info").mockImplementation(() => {});
       try {
         await expect(
-          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
           validateAppCreation.execute({ implementationFiles: [], runBrowserTests: true }, {
             callId: "validate_failure",
             // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -486,7 +487,7 @@ describe("behavior evidence invalidation during validation repair", () => {
         recordApprovedPrivateApply(scope, "approve");
         const result = await validateAppCreation.execute(
           { implementationFiles: [] },
-          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
           context as never,
         );
         expect(result).toMatchObject({ technicalStatus: "passed" });
@@ -531,7 +532,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       getSandbox: () => Promise.resolve(sandbox),
       session: { auth: { owned: "auth" }, id: "adapter" },
     };
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
     const result = await validateAppCreation.execute({ implementationFiles: [] }, context as never);
     expect(mocks.prepare).toHaveBeenCalledOnce();
     expect(mocks.prepare.mock.calls[0]?.[0]).not.toHaveProperty("execution");
@@ -567,7 +568,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       backend: { kind: "generated-postgres" },
       validation: { browser: { task: "test-e2e" } },
     });
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate_build",
       // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -599,7 +600,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     mocks.runtime.mockRejectedValue(new Error("auth_identity_required"));
     const result = await validateAppCreation.execute(
       { implementationFiles: [], runBrowserTests: true },
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
       {
         callId: "validate_before_auth",
         // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -644,7 +645,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       session: { auth: {}, id: "adapter" },
     };
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
     const failed = await validateAppCreation.execute({ implementationFiles: [] }, context as never);
     const lastRecord: unknown = JSON.parse(String(log.mock.calls.at(-1)?.[0]));
     expect(lastRecord).toEqual({
@@ -663,14 +664,14 @@ describe("behavior evidence invalidation during validation repair", () => {
     });
     expect(mocks.state.current.phase).toBe("validated");
     expect(JSON.stringify(failed)).not.toContain("private storage failure");
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
     await validateAppCreation.execute({ implementationFiles: [] }, context as never);
     expect(mocks.execute).toHaveBeenCalledTimes(2);
     expect(mocks.publish).toHaveBeenCalledTimes(2);
   });
   it("defers independent source assessment after successful technical validation", async () => {
     mocks.state.current = { ...workflow("validated"), phase: "applied" };
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
       // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -691,7 +692,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       ok: false,
       receipt: { commands: [], reason: "command failed" },
     });
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
     await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
       // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -703,7 +704,7 @@ describe("behavior evidence invalidation during validation repair", () => {
   it("runs current technical validation and defers source assessment without claiming runtime success", async () => {
     mocks.state.current = workflow("validated");
     mocks.review.mockResolvedValue({ findings: [], reviewCompleted: true, status: "passed" });
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
       // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -729,7 +730,7 @@ describe("behavior evidence invalidation during validation repair", () => {
         reason: "current check/build failed",
       };
       mocks.execute.mockResolvedValue({ ok: false, receipt });
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
       const result = await validateAppCreation.execute({ implementationFiles: [] }, {
         callId: "validate_current",
         // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -759,7 +760,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       mocks.browser.mockResolvedValue({ problem: "Assignment revoked", status });
       const result = await validateAppCreation.execute(
         { implementationFiles: [], runBrowserTests: true },
-        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
         {
           callId: "validate",
           // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -784,7 +785,7 @@ describe("behavior evidence invalidation during validation repair", () => {
   it("keeps preparation failure repairable before compilation", async () => {
     mocks.state.current = { ...workflow("validated"), phase: "applied" };
     mocks.prepare.mockRejectedValueOnce(new Error("Checked release differs from CUE"));
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
       // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -804,7 +805,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     async (phase) => {
       mocks.state.current = workflow(phase);
       const writeTextFile = vi.fn();
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
       const result = await validateAppCreation.execute({ implementationFiles }, {
         callId: "repair",
         // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -822,7 +823,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     mocks.state.current = workflow("validated");
     const writeTextFile = vi.fn().mockRejectedValue(new Error("write failed"));
     await expect(
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
       validateAppCreation.execute({ implementationFiles }, {
         callId: "repair",
         // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -843,7 +844,7 @@ describe("behavior evidence invalidation during validation repair", () => {
             { content: "out of scope", path: "packages/platform/src/change.ts" },
           ],
         },
-        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
         {
           callId: "repair",
           // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -864,7 +865,7 @@ describe("behavior evidence invalidation during validation repair", () => {
         .fn()
         .mockResolvedValueOnce(null)
         .mockRejectedValueOnce(new Error("second write failed"));
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
       const context = {
         callId: "repair",
         // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -914,6 +915,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
       const getSandbox = vi.fn(async () => ({ id: "validation-sandbox" }));
       // SAFETY: The existing faithful validation ports own all effects in this product-tool regression.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- This scenario supplies a partial tool context fixture.
       const result = await validateAppCreation.execute({ implementationFiles: [] }, {
         callId: "retry-after-tooling-repair",
         getSandbox,
@@ -937,6 +939,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     };
     const writeTextFile = vi.fn();
     // SAFETY: The existing faithful validation ports own all effects in this product-tool regression.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- This scenario supplies a partial tool context fixture.
     const result = await validateAppCreation.execute({ implementationFiles }, {
       callId: "explicit-repair",
       // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
@@ -990,6 +993,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       const getSandbox = vi.fn();
       const writeTextFile = vi.fn();
       // SAFETY: Scope rejection and trusted guidance both finish before any Sandbox operation.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- This scenario supplies a partial tool context fixture.
       const context = {
         callId: "reviewed-recipe",
         getSandbox,
@@ -1068,7 +1072,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       if (outcome === "local-data-failed") {
         mocks.prepare.mockRejectedValueOnce(new Error("local setup failed"));
       }
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
       const result = await validateAppCreation.execute({ implementationFiles: [] }, {
         callId: "repair_dependencies",
         // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
@@ -1106,7 +1110,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     const failed = dependencySandbox(1);
     // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
     const context = (sandbox: ReturnType<typeof dependencySandbox>) =>
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
       ({
         callId: "retry_dependencies",
         // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.

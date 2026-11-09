@@ -654,7 +654,7 @@ const reinspectGitHubSourceWorkspace = async function reinspectGitHubSourceWorks
   if (result.exitCode !== 0) {
     throw new Error("The GitHub source workspace could not be verified.");
   }
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const inspection = JSON.parse(result.stdout) as {
     remote?: unknown;
     resolvedRef?: unknown;

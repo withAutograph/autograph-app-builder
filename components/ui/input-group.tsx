@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing UI data assertion and behavior. */
 "use client";
 
 import type { ComponentProps } from "react";

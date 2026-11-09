@@ -164,10 +164,12 @@ describe("separate native operator host", () => {
   });
   it("dispatches public release through its separate canonical authority boundary", async () => {
     const dependencies = deniedDependencies();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     dependencies.publicReleaseRequest = vi.fn(() =>
       Promise.resolve(Response.json({ status: "pending" })),
     );
     const handler = createHostedOperatorNativeHandler({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       createDependencies: () => Promise.resolve(dependencies),
     });
     const response = await handler(
@@ -182,10 +184,12 @@ describe("separate native operator host", () => {
   });
   it("dispatches public release through its separate canonical authority boundary", async () => {
     const dependencies = deniedDependencies();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     dependencies.publicReleaseRequest = vi.fn(() =>
       Promise.resolve(Response.json({ status: "pending" })),
     );
     const handler = createHostedOperatorNativeHandler({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       createDependencies: () => Promise.resolve(dependencies),
     });
     const response = await handler(
@@ -200,10 +204,12 @@ describe("separate native operator host", () => {
   });
   it("dispatches optional integration capability through its separate canonical boundary", async () => {
     const dependencies = deniedDependencies();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     dependencies.appIntegrationCapabilityRequest = vi.fn(() =>
       Promise.resolve(Response.json({ status: "blocked" })),
     );
     const handler = createHostedOperatorNativeHandler({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       createDependencies: () => Promise.resolve(dependencies),
     });
     const response = await handler(

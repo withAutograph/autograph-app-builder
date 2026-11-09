@@ -28,7 +28,7 @@ export const sandboxLeaseAdvisoryKey = (principal: HostedPrincipal, adapterSessi
 
 const postgresNowEpochMs = async (database: Transaction) => {
   const rows = await database.execute(sql`select clock_timestamp() as "database_now"`);
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The driver may return either an array or a rows wrapper for this query.; Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The driver may return either an array or a rows wrapper for this query.; Preserve the existing type assertion at this boundary.
   const result = rows as unknown as
     | readonly [{ database_now: Date | string }]
     | { rows: readonly [{ database_now: Date | string }] };
@@ -70,7 +70,7 @@ const leaseValues = (lease: SandboxExecutionLease) => ({
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const parseSandboxExecutionLeaseRow = (input: unknown) => {
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const row = input as ReturnType<typeof leaseValues>;
   const lease = sandboxExecutionLeaseSchema.parse(row.record);
   const authorityMismatch =
@@ -202,6 +202,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
     });
   },
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   claimExpired(input) {
     return database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
@@ -245,6 +246,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
     });
   },
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   heartbeat(input) {
     return database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
@@ -275,6 +277,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
     });
   },
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   release(input) {
     return database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
@@ -310,6 +313,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
     });
   },
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   releaseCurrent(input) {
     return database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
@@ -351,6 +355,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
     });
   },
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   settleRecovery(input) {
     return database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);

@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 /* oxlint-disable eslint/require-await -- async fixtures implement Sandbox and browser APIs. */
 import { compileFunction } from "node:vm";
 import { describe, expect, it, vi } from "vitest";

@@ -20,7 +20,9 @@ const key = (k: SourceArtifactChunkKey) => JSON.stringify(k);
 const fixture = () => {
   const rows = new Map<string, string>();
   const store = createImmutableSourceArtifactStore({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     get: (k) => Promise.resolve(rows.get(key(k))),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     put: (k, v) => {
       const prior = rows.get(key(k));
       if (prior !== undefined && prior !== v) {
@@ -131,6 +133,7 @@ describe("owned immutable source uploads", () => {
   it("rechecks membership after an I/O boundary before acknowledging it", async () => {
     const f = fixture();
     let active = true;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const context = () => Promise.resolve(active ? { authority, store: f.store } : undefined);
     await expect(
       withSourceUploadAuthority(context, async ({ store }) => {

@@ -29,6 +29,7 @@ const createDeployment = (environment: NodeJS.ProcessEnv) => {
     audience: config.resource,
     sessions,
     handoffs: createPostgresBuilderHandoffStore(database),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     isActiveMember: (authority) => membership.isActiveMember(authority),
   });
   const operator = createAppAccessOperatorClient({

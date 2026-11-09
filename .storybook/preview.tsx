@@ -65,6 +65,7 @@ const preview: Preview = {
     async ({ parameters }) => {
       storybookQueryClient.setQueryData(
         authQueryKeys.session,
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
         (parameters.authSession ?? null) as SessionData<typeof authClient>,
       );
 

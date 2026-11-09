@@ -2439,6 +2439,7 @@ export const runRepositoryProductionFileSpool = async (
   if (bytes.length > MAX_PROTOCOL_FRAME_BYTES) {
     throw invalidContext();
   }
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   const assertCurrent = () =>
     observeRepositoryProductionPhase(
       "worker_authority",
@@ -2448,6 +2449,7 @@ export const runRepositoryProductionFileSpool = async (
   const createSandbox: CreateSandbox = async (options) => {
     const injectedCreate = dependencies.createSandbox;
     if (injectedCreate !== undefined) {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       return await observeRepositoryProductionPhase("sandbox_create", "provider_unavailable", () =>
         injectedCreate(options),
       );
@@ -2455,12 +2457,15 @@ export const runRepositoryProductionFileSpool = async (
     const token = await observeRepositoryProductionPhase(
       "sandbox_oidc_acquire",
       "workload_unavailable",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       () => getVercelOidcToken({ project: options.projectId, team: options.teamId }),
     );
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     return await observeRepositoryProductionPhase("sandbox_create", "provider_unavailable", () =>
       Sandbox.create({ ...options, token }),
     );
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   await observeRepositoryProductionPhase("worker_authority", "authorization_unavailable", () =>
     input.assertCurrent(),
   );

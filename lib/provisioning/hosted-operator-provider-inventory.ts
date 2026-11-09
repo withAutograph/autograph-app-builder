@@ -272,6 +272,7 @@ export const readHostedOperatorProviderInventory = async (input: {
         target: "inventory",
       },
       input.diagnosticSink,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       () => input.assertCurrentOwner(),
     );
     const credential = await readWithDiagnostic(
@@ -282,6 +283,7 @@ export const readHostedOperatorProviderInventory = async (input: {
         target: "inventory",
       },
       input.diagnosticSink,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       () =>
         input.readVercelCredential({
           authority,
@@ -348,6 +350,7 @@ export const readHostedOperatorProviderInventory = async (input: {
           phase: "owner",
         },
         input.diagnosticSink,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         () => input.assertCurrentOwner(),
       );
       const url = new URL(path, "https://api.vercel.com");
@@ -374,6 +377,7 @@ export const readHostedOperatorProviderInventory = async (input: {
           phase: "fetch",
         },
         input.diagnosticSink,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         () => fetcher(url, options),
       );
       if (!response.ok) {
@@ -640,6 +644,7 @@ export const readHostedOperatorProviderInventory = async (input: {
           return new HostedOperatorError("resource_mismatch");
         },
         projectId: config.operator.projectId,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         request: (path) =>
           request(
             path,

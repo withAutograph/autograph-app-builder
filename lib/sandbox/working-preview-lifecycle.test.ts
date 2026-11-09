@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 import { createReleaseSandboxComputeHook } from "../../agent/hooks/release-sandbox-compute";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { HookContext } from "eve/hooks";
@@ -38,10 +39,11 @@ const hook = createReleaseSandboxComputeHook({
 
 // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The hook fixture supplies only the session and sandbox operations under test.; Preserve the existing type assertion at this boundary.
 const context = {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   getSandbox: () => Promise.resolve({ id: "sandbox", stop: mocks.stop }),
   session: { auth: {}, id: "session" },
 } as unknown as HookContext;
-// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing unknown input contract.; Preserve the existing type assertion at this boundary.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing unknown input contract.; Preserve the existing type assertion at this boundary.
 const events = hook.events as Record<string, (event: unknown, ctx: HookContext) => Promise<void>>;
 
 describe.each([false, true])("preview completion lifecycle hosted=%s", (hosted) => {
@@ -62,6 +64,7 @@ describe.each([false, true])("preview completion lifecycle hosted=%s", (hosted) 
     };
     mocks.provider.mockResolvedValue({
       currentSession: () => ({ sessionId: "provider-session" }),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       getCommand: () => Promise.resolve({ exitCode: null }),
       status: "running",
     });
@@ -100,6 +103,7 @@ describe.each([false, true])("preview completion lifecycle hosted=%s", (hosted) 
   it("releases a stopped preview command", async () => {
     mocks.provider.mockResolvedValue({
       currentSession: () => ({ sessionId: "provider-session" }),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       getCommand: () => Promise.resolve({ exitCode: 0 }),
       status: "running",
     });

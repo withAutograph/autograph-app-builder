@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 import { describe, expect, it } from "vitest";
 import type { MessageStreamEvent } from "eve/client";
 import { publicWorkingPreviewSchema } from "../mcp/contracts";

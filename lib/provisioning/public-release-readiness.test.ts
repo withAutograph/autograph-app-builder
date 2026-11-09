@@ -28,9 +28,11 @@ const bootstrap = () => {
     },
   });
 };
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const read = (records: ReturnType<typeof bootstrap>[]) => {
   const select = () => ({
     from: () => ({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       where: () => ({ limit: () => Promise.resolve(records.map((record) => ({ record }))) }),
     }),
   });

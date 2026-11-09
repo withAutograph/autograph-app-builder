@@ -305,6 +305,7 @@ describe("Preview OAuth deployment handlers", () => {
         "lib/integrations/vercel-installation-deployment.ts",
         "lib/auth/github-app-installation-deployment.ts",
         "lib/mcp/browser-preview-deployment.ts",
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       ].map((path) => readFile(path, "utf-8")),
     );
 

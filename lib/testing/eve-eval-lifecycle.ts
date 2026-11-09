@@ -281,7 +281,7 @@ function signalExitCode(signal: NodeJS.Signals | null) {
  * shutdown hooks. The detached process group is task-owned and provides a
  * bounded final backstop for listeners or descendants left by an interruption.
  */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 export function waitForEveEvalChild(
   input: Readonly<{
     authorization: Duplex;
@@ -310,7 +310,7 @@ export function waitForEveEvalChild(
         }
       }
     };
-    // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/require-safety-comment-for-type-assertion -- Keep the existing broader shape used by this operation.; Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Keep the existing broader shape used by this operation.; Preserve the existing type assertion at this boundary. Preserve the existing assertion and its runtime behavior.
     const handlers = {} as {
       interrupt: () => void;
       terminate: () => void;

@@ -1,4 +1,4 @@
-/* oxlint-disable anti-slop/require-safety-comment-for-type-assertion -- Preserve existing assertions in JSX props. */
+/* oxlint-disable typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve existing assertions in JSX props. */
 "use client";
 
 import { useTheme } from "next-themes";

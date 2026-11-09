@@ -22,6 +22,7 @@ vi.mock("./working-preview-ownership", async (importOriginal) => {
   }>();
   return {
     ...actual,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     previewOwnershipOperation: (
       _provider: Parameters<typeof previewOwnershipOperation>[0],
       operation: Parameters<typeof previewOwnershipOperation>[1],
@@ -69,6 +70,7 @@ const setup = () => {
     extendTimeout: vi.fn(),
     fs: {
       mkdir: vi.fn(),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       readFile: vi.fn((file: string, _options?: { signal?: AbortSignal }) => {
         if (file.endsWith("listener-ready")) {
           events.push("bound");
@@ -76,6 +78,7 @@ const setup = () => {
         }
         return Promise.reject(Object.assign(new Error("missing"), { code: "ENOENT" }));
       }),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       writeFile: vi.fn((file: string) => {
         if (file.endsWith("access.json")) {
           events.push("activated");
@@ -84,10 +87,12 @@ const setup = () => {
       }),
     },
     getCommand: vi.fn<() => Promise<typeof command>>().mockResolvedValue(command),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     runCommand: vi.fn(() => {
       events.push("spawn");
       return Promise.resolve(command);
     }),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     update: vi.fn(({ ports }: { ports: number[] }) => {
       events.push(ports.length === 0 ? "closed" : "exposed");
       return Promise.resolve();
@@ -99,7 +104,7 @@ const setup = () => {
     cwd: "/workspace/repository",
     landingPath: "/example",
     port: 3000,
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The provider fixture supplies only the preview operations under test.; Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- The provider fixture supplies only the preview operations under test.; Preserve the existing type assertion at this boundary.
     provider: provider as unknown as Sandbox,
     sandboxId: "logical-1",
   };
@@ -174,6 +179,7 @@ describe("shared working preview startup", () => {
       const clock = vi.spyOn(Date, "now");
       let delayed = false;
       if (phase === "listener") {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         provider.fs.readFile.mockImplementation((file) => {
           if (file.endsWith("listener-ready")) {
             if (!delayed) {
@@ -186,6 +192,7 @@ describe("shared working preview startup", () => {
           return Promise.reject(Object.assign(new Error("missing"), { code: "ENOENT" }));
         });
       }
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       const fetcher = vi.fn<typeof fetch>((url) => {
         // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
         if (String(url).includes("/__autograph_preview_launch")) {
@@ -215,6 +222,7 @@ describe("shared working preview startup", () => {
   it("continues the same supervisor after an individual provider probe times out", async () => {
     const { options, provider, command } = setup();
     let reads = 0;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     provider.fs.readFile.mockImplementation((file, readOptions) => {
       if (file.endsWith("listener-ready")) {
         reads += 1;
@@ -224,6 +232,7 @@ describe("shared working preview startup", () => {
       }
       return Promise.reject(Object.assign(new Error("missing"), { code: "ENOENT" }));
     });
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const fetcher = vi.fn<typeof fetch>().mockImplementation((url) =>
       Promise.resolve(
         // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
@@ -241,6 +250,7 @@ describe("shared working preview startup", () => {
 
   it("replaces a retained preview whose provider command no longer exists", async () => {
     const { options, provider } = setup();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const fetcher = vi.fn<typeof fetch>().mockImplementation((url) =>
       Promise.resolve(
         // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
@@ -278,6 +288,7 @@ describe("shared working preview startup", () => {
     const lease = new AbortController();
     const clock = vi.spyOn(Date, "now").mockReturnValue(now);
     const timer = vi.spyOn(AbortSignal, "timeout").mockReturnValueOnce(lease.signal);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const fetcher = vi.fn<typeof fetch>(() => {
       // A relative timer can fire just before the wall clock reaches expiry.
       clock.mockReturnValue(expiresAt - 1);
@@ -359,6 +370,7 @@ describe("shared working preview startup", () => {
     const { command, options, provider } = setup();
     const controller = new AbortController();
     const abortReason = new Error("Preview cancelled");
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const fetcher = vi.fn<typeof fetch>(() => {
       controller.abort(abortReason);
       return Promise.reject(abortReason);
@@ -402,6 +414,7 @@ describe("safe interrupted startup diagnostics", () => {
 
   it("reports application HTTP status without copying response bodies, cookies, or URLs", async () => {
     const { options } = setup();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const fetcher = vi.fn<typeof fetch>((url) =>
       Promise.resolve(
         // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
@@ -453,6 +466,7 @@ describe("preview command termination", () => {
     const command = {
       exitCode: null,
       kill: vi.fn(async () => {}),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       wait: vi.fn(() => exited.promise),
     };
     let settled = false;
@@ -478,6 +492,7 @@ describe("preview command termination", () => {
     const cancellation = new AbortController();
     command.wait.mockRejectedValue(new Error("termination unconfirmed"));
     // Abort after the detached command has been obtained so cleanup owns it.
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     provider.runCommand.mockImplementation(() => {
       cancellation.abort();
       return Promise.resolve(command);
@@ -493,6 +508,7 @@ describe("startup ownership recovery", () => {
   it("does not launch or mutate ingress while a previous startup remains pending", async () => {
     const { options, provider } = setup();
     const response = Promise.withResolvers<Response>();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const fetcher = vi.fn<typeof fetch>(() => response.promise);
     const first = (async () => {
       try {
@@ -529,6 +545,7 @@ describe("startup ownership recovery", () => {
 
   it("cannot close replacement ingress when an old startup fails late", async () => {
     const { options, provider, command } = setup();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const fetcher = vi.fn<typeof fetch>(() => {
       ownership.current = {
         attemptId: "replacement",
@@ -553,6 +570,7 @@ describe("startup ownership recovery", () => {
 
 it("bounds each provider readiness read while cancellation ends the startup", async () => {
   const { options, provider, command } = setup();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   provider.fs.readFile.mockImplementation((file, readOptions) =>
     file.endsWith("listener-ready")
       ? delay(60_000, "ready", { signal: readOptions?.signal })
@@ -568,6 +586,7 @@ it("bounds each provider readiness read while cancellation ends the startup", as
 
 it("sanitizes startup error files and keeps the safe cause visible if cleanup fails", async () => {
   const { options, provider, command } = setup();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   provider.fs.readFile.mockImplementation((file) =>
     Promise.resolve(
       file.endsWith("listener-ready")

@@ -236,6 +236,7 @@ const context = (appId = "new-app"): HostedOperatorContext => ({
     sessionId: ownerContext.sessionId,
   },
 });
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const unavailable = (): Promise<never> => Promise.reject(new Error("Unexpected effect"));
 const dependencies = (): ProtectedHostedOperatorDependencies => ({
   assertAuthorized: unavailable,
@@ -273,6 +274,7 @@ describe("owner-authorized native target configuration", () => {
       appId: registration.appId,
       configuration: configuration(),
       invocation: ownerContext,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       readReady: () => Promise.resolve(registration),
     });
     expect(effective.sandbox.workers[registration.appId]?.sourceCapture).toEqual(
@@ -603,6 +605,7 @@ describe("ready target selected resource custody", () => {
       appId: "new-app",
       configuration: f.base,
       invocation: ownerContext,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       readReady: () => Promise.resolve(f.registration),
       selectResourceConfiguration,
     });
@@ -634,6 +637,7 @@ describe("ready target selected resource custody", () => {
         appId: "new-app",
         configuration: f.base,
         invocation: ownerContext,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         readReady: () => Promise.resolve(f.registration),
       }),
     ).rejects.toMatchObject({ code: "resource_mismatch" });
@@ -658,6 +662,7 @@ describe("ready target selected resource custody", () => {
           appId: "new-app",
           configuration: f.base,
           invocation: ownerContext,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           readReady: () => Promise.resolve(f.registration),
           selectResourceConfiguration: () => f.selected,
         }),
@@ -689,6 +694,7 @@ it.each(["auth-database", "gateway-origin"] as const)(
         appId: "new-app",
         configuration: f.base,
         invocation: ownerContext,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         readReady: () => Promise.resolve(f.registration),
         selectResourceConfiguration: () => f.selected,
       }),
@@ -735,6 +741,7 @@ it("accepts ordinary source, deployment and worker-byte changes while retaining 
     appId: "new-app",
     configuration: f.base,
     invocation: ownerContext,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     readReady: () => Promise.resolve(f.registration),
     selectResourceConfiguration: () => f.selected,
   });
@@ -763,6 +770,7 @@ it.each(["operator", "builder-callback"] as const)(
         appId: "new-app",
         configuration: f.base,
         invocation: ownerContext,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         readReady: () => Promise.resolve(f.registration),
         selectResourceConfiguration: () => f.selected,
       }),

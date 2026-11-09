@@ -20,6 +20,7 @@ import {
 const temporaryRoots: string[] = [];
 afterEach(async () => {
   await Promise.all(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
 });

@@ -47,6 +47,7 @@ try {
   await lstat(output);
   throw new Error(`Release output already exists: ${output}`);
 } catch (error) {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
     throw error;
   }

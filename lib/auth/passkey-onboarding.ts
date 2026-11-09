@@ -419,7 +419,7 @@ export function createPasskeyOnboardingPlugin(input: {
                     return;
                   }
                   const adapter = await getCurrentAdapter(
-                    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+                    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
                     ctx.context.adapter as Parameters<typeof getCurrentAdapter>[0],
                   );
                   const memberships = await adapter.findMany<{

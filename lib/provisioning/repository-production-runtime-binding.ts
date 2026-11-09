@@ -248,6 +248,7 @@ export const createRepositoryProductionRuntimeBinding = (input: {
         await observeRepositoryProductionPhase(
           "runtime_binding_write",
           "provider_unavailable",
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           () =>
             request(
               context,

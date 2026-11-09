@@ -49,6 +49,7 @@ describe("development Codex package", () => {
         installPlugin: false,
         marketplaceRoot: "/private/another-instance/marketplace",
         version: "0.0.0-development.3200",
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         runner: () => {
           commands += 1;
           return Promise.reject(

@@ -117,7 +117,9 @@ export const createAppAccessOperatorClient = (input: {
     }
   };
   return {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     read: (owner: AppAccessOwner, cursor?: string) => send(owner, undefined, cursor),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     execute: (owner: AppAccessOwner, command: AppAccessCommand) => send(owner, command),
   };
 };

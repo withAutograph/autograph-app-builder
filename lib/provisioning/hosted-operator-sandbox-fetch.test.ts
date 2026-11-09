@@ -58,6 +58,7 @@ afterEach(() => {
 
 describe("request-owned Sandbox management fetch", () => {
   it("pins the verified bearer and retains the original URL and unrelated headers/options", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const raw = vi.fn<typeof fetch>(() => Promise.resolve(response()));
     const token = vi.fn(() => "verified-builder");
     const adapted = createHostedOperatorSandboxFetch(token, raw);
@@ -93,6 +94,7 @@ describe("request-owned Sandbox management fetch", () => {
   });
 
   it("preserves Request identity/body/signal and native init header replacement semantics", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const raw = vi.fn<typeof fetch>(() => Promise.resolve(response()));
     const adapted = createHostedOperatorSandboxFetch(() => "verified-builder", raw);
     const request = new Request(management, {
@@ -121,6 +123,7 @@ describe("request-owned Sandbox management fetch", () => {
     "https://vercel.com/api/v2/sandboxes/sessions/session/cmd",
     "https://vercel.com/api/v2/sandboxes/sessions/session/fs/read",
   ])("covers the supported management namespace %s", async (url) => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const raw = vi.fn<typeof fetch>(() => Promise.resolve(response()));
     const input = new URL(url);
     await createHostedOperatorSandboxFetch(() => "verified-builder", raw)(input);
@@ -145,6 +148,7 @@ describe("request-owned Sandbox management fetch", () => {
     "wss://runtime.test/interactive",
     "/relative-input",
   ])("leaves foreign or unsupported destinations unchanged: %s", async (input) => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const raw = vi.fn<typeof fetch>(() => Promise.resolve(response()));
     const token = vi.fn(() => "verified-builder");
     const init = {
@@ -158,6 +162,7 @@ describe("request-owned Sandbox management fetch", () => {
   });
 
   it("keeps concurrent request workloads isolated and resolves only their own live carrier", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const raw = vi.fn<typeof fetch>(() => Promise.resolve(response()));
     let first = "first-builder";
     const a = createHostedOperatorSandboxFetch(() => first, raw);
@@ -191,6 +196,7 @@ describe("request-owned Sandbox management fetch", () => {
     const builder = tokenFor("builder");
     const operator = tokenFor("operator");
     vi.stubEnv("VERCEL_OIDC_TOKEN", operator);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const raw = vi.fn<typeof fetch>((input) =>
       Promise.resolve(
         requestUrl(input).includes("/fs/read")
@@ -243,6 +249,7 @@ describe("request-owned Sandbox management fetch", () => {
   });
 
   it("lets the installed SDK surface management redirects as its original APIError status", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const raw = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response(null, { status: 307, headers: { location: "https://foreign.test/target" } }),

@@ -438,6 +438,7 @@ export function getBuilderHandoffStatusDeploymentHandler(
   dependencies?: BuilderHandoffPageDependencies,
 ) {
   return createBuilderHandoffStatusRouteHandler({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     pageData: (request, handoffId) =>
       getBuilderHandoffPageData({ environment, handoffId, headers: request.headers }, dependencies),
   });
@@ -450,6 +451,7 @@ export function getBuilderHandoffRenewDeploymentHandler(environment: Environment
     try {
       const context = deploymentContext(environment);
       return await createBuilderHandoffRenewRouteHandler({
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         authorityForRequest: (innerRequest) => context.authorityForHeaders(innerRequest.headers),
         handoffs: context.handoffs,
         origin: new URL(context.preview.issuer).origin,
@@ -464,6 +466,7 @@ export function getBuilderHandoffRenewDeploymentHandler(environment: Environment
 export function getBuilderHandoffDeploymentHandler(environment: Environment) {
   const context = deploymentContext(environment);
   return createBuilderHandoffRouteHandler({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     authorityForRequest: (request) => context.authorityForHeaders(request.headers),
     handoffs: context.handoffs,
     journal: createPostgresBuilderProvisionJournalStore(context.database),

@@ -58,7 +58,7 @@ export async function isCursorClientReady(database: Reader, resource: string): P
   }
   /* oxlint-enable typescript/strict-boolean-expressions */
   const expected = cursorClientRegistration();
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   for (const key of Object.keys(expected) as (keyof typeof expected)[]) {
     const actual = client[key];
     const value = expected[key];

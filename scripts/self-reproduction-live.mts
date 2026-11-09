@@ -91,6 +91,7 @@ const run = async (
     clearTimeout(forceStop);
   }
   return {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
     code: spawnError === undefined ? (code as number | null) : null,
     stderr: spawnError === undefined ? stderr : `${stderr}${spawnError.message}`,
     stdout,
@@ -174,9 +175,10 @@ const main = async () => {
   await mkdir(candidateRoot, { mode: 0o700, recursive: true });
   await mkdir(stateRoot, { mode: 0o700, recursive: true });
   const brief = await readFile(briefPath, "utf-8");
-  const answers = (
-    JSON.parse(await readFile(answersPath, "utf-8")) as { responses: Record<string, string> }
-  ).responses;
+  const answers =
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing saved answers assertion.
+    (JSON.parse(await readFile(answersPath, "utf-8")) as { responses: Record<string, string> })
+      .responses;
   const controller = new AbortController();
   const nextPort = await availableLoopbackPort(configuredNextPort);
   const evePort = await availableDistinctLoopbackPort(nextPort, configuredEvePort);

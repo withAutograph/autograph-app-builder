@@ -50,6 +50,7 @@ const activationDatabase = async () => {
       }
       throw new Error(`Unexpected SQL client property: ${String(property)}`);
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     apply(_target, _receiver, rawArguments: unknown[]) {
       const [segments, ...parameters] = rawArguments;
       // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.

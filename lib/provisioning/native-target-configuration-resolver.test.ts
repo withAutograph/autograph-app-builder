@@ -620,6 +620,7 @@ describe("fresh normal same-project runtime assembly", () => {
     const resolve = createNativeTargetConfigurationResolver({
       configuration: base,
       environment,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       openResources: () =>
         Promise.resolve({ ...f.resources, readStandardCapture, readStandardDestination }),
     });
@@ -735,11 +736,13 @@ describe("fresh normal same-project runtime assembly", () => {
     const resolve = createNativeTargetConfigurationResolver({
       configuration: f.base,
       environment: f.environment,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       openResources: () =>
         Promise.resolve({
           ...f.resources,
           readStandardCapture: f.readStandardCapture,
           readStandardDestination: f.readStandardDestination,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           readStandardOriginSelection: () => Promise.resolve("https://different-chosen.example"),
           readStandardPublicOrigin: f.readStandardPublicOrigin,
         }),
@@ -759,6 +762,7 @@ describe("fresh normal same-project runtime assembly", () => {
     const resolve = createNativeTargetConfigurationResolver({
       configuration: f.base,
       environment: f.environment,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       openResources: () =>
         Promise.resolve({
           ...f.resources,
@@ -779,6 +783,7 @@ describe("fresh normal same-project runtime assembly", () => {
     f.readStandardPublicOrigin.mockResolvedValue("https://choice-b.example");
     const resolve = createNativeTargetConfigurationResolver({
       configuration: f.base,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       openResources: () =>
         Promise.resolve({
           ...f.resources,
@@ -1184,6 +1189,7 @@ describe("fresh normal same-project runtime assembly", () => {
     const resolve = createNativeTargetConfigurationResolver({
       configuration: base,
       environment,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       openResources: () =>
         Promise.resolve({ ...f.resources, readStandardCapture, readStandardDestination }),
     });

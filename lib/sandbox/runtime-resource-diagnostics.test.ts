@@ -12,6 +12,7 @@ const facts = (program = runtimeResourceDiagnosticProgram) => {
 };
 describe("bounded runtime resource diagnostics", () => {
   it("runs the actual fixed observation program and preserves advisory scope", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const observed = await inspectSandboxRuntimeResources({ run: () => Promise.resolve(facts()) });
     expect(observed.available).toBe(true);
     if (!observed.available) {
@@ -79,6 +80,7 @@ describe("bounded runtime resource diagnostics", () => {
   });
   it("preserves command refusal without retaining raw output or guessing capacity", async () => {
     const result = await inspectSandboxRuntimeResources({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       run: () =>
         Promise.resolve({ exitCode: 1, stdout: "private stdout", stderr: "private stderr" }),
     });

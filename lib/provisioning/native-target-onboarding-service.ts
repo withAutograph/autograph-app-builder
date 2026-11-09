@@ -181,6 +181,7 @@ export const createNativeTargetOnboardingService =
   async (request: Request, input: Invocation): Promise<Response> => {
     const workloadHeaders = new Headers(request.headers);
     const isPlan = input.action === NATIVE_TARGET_PLAN_ACTION;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     await observeNativePlan(isPlan, "native_plan_workload", () =>
       deps.verifyWorkload(new Request(request.url, { headers: workloadHeaders })),
     );
@@ -188,6 +189,7 @@ export const createNativeTargetOnboardingService =
       authorization: workloadHeaders.get("authorization"),
       signal: request.signal,
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     const owner = await observeNativePlan(isPlan, "native_plan_owner", () =>
       deps.authorize(request, input),
     );
@@ -205,6 +207,7 @@ export const createNativeTargetOnboardingService =
       if (invocation !== input || appId !== input.input.appId) {
         throw denied();
       }
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       const current = await observeNativePlan(isPlan, "native_plan_owner", () =>
         deps.authorize(request, input),
       );
@@ -217,6 +220,7 @@ export const createNativeTargetOnboardingService =
       store: deps.store,
       authorize,
       assertPlanOrigin: async (current, plan) => {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         const trusted = await observeNativePlan(isPlan, "native_plan_captured_release", () =>
           deps.readCapturedRelease(owner, plan.appId, plan.origin.appSpecDigest),
         );
@@ -245,6 +249,7 @@ export const createNativeTargetOnboardingService =
           throw mismatch();
         }
         if (retainedPlan !== undefined) {
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           const row = await observeNativePlan(isPlan, "native_plan_registry_read", () =>
             registry.read(input, appId),
           );
@@ -256,6 +261,7 @@ export const createNativeTargetOnboardingService =
           ) {
             throw mismatch();
           }
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           return await observeNativePlan(isPlan, "native_plan_captured_release", () =>
             deps.readCapturedRelease(owner, appId, row.record.plan.origin.appSpecDigest),
           );
@@ -264,20 +270,24 @@ export const createNativeTargetOnboardingService =
           throw denied();
         }
         const selected = input.selectedApp;
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         return await observeNativePlan(isPlan, "native_plan_captured_release", () =>
           deps.readCapturedRelease(owner, appId, selected.appSpecDigest),
         );
       },
       resolvePlan: async (_ctx, proposal, source) =>
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         await observeNativePlan(isPlan, "native_plan_profile_resolution", () =>
           deps.resolvePlan(owner, proposal, source),
         ),
       journal: {
         supersedePlannedScope: async (_ctx, plan, expectedPlanDigest) =>
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           await observeNativePlan(isPlan, "native_plan_supersede", () =>
             registry.supersedePlannedScope(input, plan, expectedPlanDigest),
           ),
         read: async (_ctx, appId) =>
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           await observeNativePlan(isPlan, "native_plan_registry_read", () =>
             registry.read(input, appId),
           ),
@@ -296,6 +306,7 @@ export const createNativeTargetOnboardingService =
           await registry.recordNotCreated(input, appId, attemptId, reason),
         recordReady: async (_ctx, appId, proof) => await registry.recordReady(input, appId, proof),
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       authorizeApprovalResponse: () => Promise.reject(denied()),
       readSettledApproval: async (_ctx, prepared) => {
         const row = await registry.read(input, prepared.appId);
@@ -338,6 +349,7 @@ export const createNativeTargetOnboardingService =
     switch (input.action) {
       case NATIVE_TARGET_PLAN_ACTION: {
         try {
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           output = await observeNativePlan(isPlan, "native_plan_dispatch", () =>
             runtime.plan(input.input, context, {
               phase: "planned",
@@ -354,8 +366,10 @@ export const createNativeTargetOnboardingService =
           );
           output = await inspectRetainedProviderAuthorization({
             output,
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
             read: () => registry.read(input, input.input.appId),
             inspect: deps.inspectProviderAuthorization,
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
             authorize: () => authorize(input, input.input.appId),
             signal: request.signal,
           });
@@ -387,6 +401,7 @@ export const createNativeTargetOnboardingService =
         ) {
           throw mismatch();
         }
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         const proof = await peekNativeApproval(request.signal, () =>
           deps.readApproval(owner, row.record, input.callId, workload),
         );

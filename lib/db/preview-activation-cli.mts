@@ -225,7 +225,7 @@ function createStore(sql: Sql): PreviewActivationStore {
           transaction: true,
         }),
         membership: {
-          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+          // oxlint-disable-next-line typescript/promise-function-async, eslint/require-await -- Preserve the existing promise and synchronous exception behavior. preserve Promise-returning framework or interface contract
           activeWorkspaceForUser() {
             // oxlint-disable-next-line unicorn/no-useless-undefined -- Preserve the adapter contract for a missing active workspace.
             return Promise.resolve(undefined);

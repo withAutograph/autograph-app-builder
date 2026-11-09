@@ -368,6 +368,7 @@ export const createPublicReleaseDeployment = (input: {
               await base(current);
               await heldFence?.();
             },
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
             readCredential: () => {
               const { database } = input;
               const { authority } = owner;
@@ -591,10 +592,12 @@ export const createPublicReleaseDeployment = (input: {
         throw fail();
       }
       const snapshots = await createPublicReleaseVercelBindingSnapshot({
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         assertCurrent: () => check(current, plan, consent),
         assertProjectKeys: (keys) => {
           assertOwnedAppProductionEnvironment(plan, keys);
         },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         readCredential: () => {
           const { database } = input;
           const { authority } = current;
@@ -657,8 +660,10 @@ export const createPublicReleaseDeployment = (input: {
       },
     });
     const github = createPublicReleaseGitHubProvider({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       assertCurrent: (current, plan) => verifyProductionRuntime(current, plan, true),
       readCredential: createPublicReleaseGitHubCredentialReader({
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         assertCurrent: (current, plan) => verifyProductionRuntime(current, plan, true),
         environment,
         fetch: input.fetch,
@@ -667,6 +672,7 @@ export const createPublicReleaseDeployment = (input: {
       fetch: input.fetch,
     });
     const observeAuth = createPublicReleaseAuthObservation({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       assertCurrent: (current, plan) => check(current, plan, false),
       fetch: input.fetch,
       readPrivateValues: readValues,
@@ -703,6 +709,7 @@ export const createPublicReleaseDeployment = (input: {
               publicOrigin: plan.publicOrigin,
               attachment: integrations.attachment,
               setupProofSecret: integrations.setupProofSecret,
+              // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
               assertCurrent: () => check(current, plan, false),
               signal: current.signal,
               fetch: input.fetch,
@@ -718,6 +725,7 @@ export const createPublicReleaseDeployment = (input: {
             await check(current, plan, false);
             await assertRuntimeAuthorized(runtimeContext);
           },
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           readReleaseManifest: () =>
             Promise.resolve(original.captured.files["release-manifest.json"]),
           readRuntimeUrl: async () => {
@@ -727,12 +735,14 @@ export const createPublicReleaseDeployment = (input: {
           },
         };
         if (readInstallationScopes !== undefined) {
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           readinessDependencies.readInstallationScopes = (readyContext) =>
             readInstallationScopes(readyContext, original.operator.plan);
         }
         const readiness = createHostedOperatorAppReadiness(readinessDependencies);
         const observed = await readiness({
           ...runtimeContext,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           assertCurrent: () => check(current, plan, false),
         });
         return { releaseId: observed.releaseId };
@@ -759,7 +769,9 @@ export const createPublicReleaseDeployment = (input: {
           );
         }
         const activation = await createPublicReleaseVercelActiveDeploymentSnapshot({
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           assertCurrent: () => base(current),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           readCredential: () => {
             const { database } = input;
             const { authority } = owner;
@@ -947,10 +959,12 @@ export const createPublicReleaseDeployment = (input: {
                 ],
         });
         const snapshots = await createPublicReleaseVercelBindingSnapshot({
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           assertCurrent: () => base(current),
           assertProjectKeys: (keys) => {
             assertOwnedAppProductionEnvironment(candidate, keys);
           },
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           readCredential: () => {
             const { database } = input;
             const { authority } = owner;
@@ -985,6 +999,7 @@ export const createPublicReleaseDeployment = (input: {
           const history = await readPublicReleasePlanHistory({
             database: input.database,
             candidate: plan,
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
             assertCurrentOwner: () => base(current, plan),
           });
           if (

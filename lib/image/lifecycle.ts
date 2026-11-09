@@ -387,7 +387,7 @@ export const parseLocalImageInspection = (
   if (!Array.isArray(parsed) || parsed.length !== 1) {
     throw new Error("Local image inspection returned an unexpected image set.");
   }
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const image = parsed[0] as ImageInspect;
   if (image.Os !== IMAGE_OS || image.Architecture !== IMAGE_ARCHITECTURE) {
     throw new Error("Local image platform does not match linux/arm64.");
@@ -508,7 +508,7 @@ export const parseRemoteIndexDescriptor = (
   indexDigest: string;
   indexReference: string;
 }> => {
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const descriptor = JSON.parse(descriptorRaw) as RemoteIndex;
   if (!isExactDigest(descriptor.digest)) {
     throw new Error("Remote registry inspection did not return an exact manifest digest.");
@@ -549,9 +549,9 @@ export const parseRemoteIndexInspection = (
   if (!isExactDigest(localImageId)) {
     throw new Error("Local image identity is not an exact digest.");
   }
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const descriptor = JSON.parse(descriptorRaw) as RemoteIndex;
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const index = JSON.parse(indexRaw) as RemoteIndex;
   if (!isExactDigest(descriptor.digest)) {
     throw new Error("Remote registry inspection did not return an exact manifest digest.");
@@ -573,7 +573,7 @@ export const parseRemoteIndexInspection = (
     throw new Error("Remote registry did not return the exact OCI image index.");
   }
   assertOciContentDigest(indexRaw, descriptor.digest, "Remote OCI image index");
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const entries = index.manifests as RemoteIndexEntry[];
   if (entries.length !== 2) {
     throw new Error("Remote OCI image index has an unexpected descriptor set.");
@@ -657,9 +657,9 @@ export const parseRemoteImageInspection = (
   ) {
     throw new Error("Remote platform selection is not bound to the local image identity.");
   }
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const manifest = JSON.parse(manifestRaw) as RemoteManifest;
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const image = JSON.parse(imageRaw) as RemoteImage;
   const { config } = manifest;
   const { layers } = manifest;

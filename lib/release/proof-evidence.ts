@@ -17,7 +17,7 @@ export function parseReviewedProof<const Evaluation extends ReleaseEvaluation>(
   const terminal = [...output.matchAll(/\{[^\n]+\}/gu)]
     .map(([value]) => {
       try {
-        // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
         return JSON.parse(value) as Record<string, unknown>;
       } catch {
         return null;

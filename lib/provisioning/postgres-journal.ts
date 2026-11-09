@@ -42,7 +42,7 @@ function parseRow(
     requestDigest: row.requestDigest,
     requestId: row.requestId,
     revision: row.revision,
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     state: row.state as "pending" | "settled",
     updatedAt: row.updatedAt,
   };

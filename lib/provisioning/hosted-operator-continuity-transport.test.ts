@@ -155,6 +155,7 @@ const verifyWorkload = createOperatorWorkloadVerifier(
   workloadPolicy,
   createLocalJWKSet({ keys: [publicJwk] }),
 );
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const signedWorkload = () =>
   new SignJWT({
     owner_id: workloadPolicy.ownerId,

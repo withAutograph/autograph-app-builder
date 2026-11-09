@@ -31,7 +31,7 @@ const closedObject = (value: unknown, name: string): Record<string, unknown> => 
     throw new Error(`${name} was not an object.`);
   }
   // SAFETY: The checks above exclude null, arrays, and non-object values; property values remain unknown.
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   return value as Record<string, unknown>;
 };
 
@@ -205,8 +205,10 @@ const requiredInteger = (value: Record<string, unknown>, key: string): number =>
   if (!Number.isSafeInteger(candidate)) {
     throw new TypeError(`Required ${key} was unavailable.`);
   }
+  /* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing integer guard and return. */
   // SAFETY: Number.isSafeInteger returns true only for values that are numbers.
   return candidate as number;
+  /* oxlint-enable typescript/no-unsafe-type-assertion */
 };
 
 export const parseLinkedVercelProject = (source: string): LinkedVercelProject => {

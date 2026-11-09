@@ -24,6 +24,7 @@ describe("actual operator worker source capture", () => {
       await expect(
         verifyOperatorWorkerSourceCapture({
           worker: changed,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           readFile: () =>
             Promise.resolve(Buffer.from(kind === "receipt" ? "wrong receipt" : bytes)),
         }),

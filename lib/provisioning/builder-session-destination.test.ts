@@ -145,7 +145,7 @@ const fixture = async () => {
   const readNativeTarget = vi.fn<
     Parameters<typeof createBuilderSessionDestinationService>[0]["readNativeTarget"]
   >(
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- This lookup intentionally has no native onboarding journal.
+    // oxlint-disable-next-line typescript/promise-function-async, unicorn/no-useless-undefined -- Preserve this test double's existing promise and synchronous behavior. This lookup intentionally has no native onboarding journal.
     () => Promise.resolve(undefined),
   );
   const service = createBuilderSessionDestinationService({
@@ -311,7 +311,7 @@ it("rechecks the saved epoch after real credential I/O before the Vercel POST", 
     provisioning: dependencies,
     execute: executeBuilderProvisioning,
     assertMember: f.assertMember,
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- No legacy onboarding is present in this cancellation fixture.
+    // oxlint-disable-next-line typescript/promise-function-async, unicorn/no-useless-undefined -- Preserve this test double's existing promise and synchronous behavior. No legacy onboarding is present in this cancellation fixture.
     readNativeTarget: () => Promise.resolve(undefined),
   });
   const result = await service.select({ expected, principal, request, sessionId });

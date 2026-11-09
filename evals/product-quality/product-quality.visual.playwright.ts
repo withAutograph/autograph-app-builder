@@ -24,6 +24,7 @@ async function loadPrototype(page: Page) {
   const accessibility = await page.evaluate(async () => {
     const runner =
       // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve the existing browser accessibility fixture assertion.
       (
         globalThis as typeof globalThis & {
           axe: { run: () => Promise<{ violations: unknown[] }> };
@@ -45,7 +46,7 @@ test.beforeAll(async () => {
     resolve();
   });
   await promise;
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
   const address = prototypeServer.address() as AddressInfo;
   prototypeUrl = `http://127.0.0.1:${address.port}/prototype/vendor-onboarding`;
 });

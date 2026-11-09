@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";

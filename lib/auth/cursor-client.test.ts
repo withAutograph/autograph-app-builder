@@ -39,8 +39,10 @@ function storage() {
   };
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   const selectFrom = (table: unknown) => ({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     where: () => {
       const result = Promise.resolve(rowsFor(table));
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       return Object.assign(result, { limit: () => result });
     },
   });
@@ -73,7 +75,7 @@ function storage() {
     },
   };
   return {
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The database fixture implements only the OAuth client operations under test.; Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- The database fixture implements only the OAuth client operations under test.; Preserve the existing type assertion at this boundary.
     database: database as unknown as Parameters<typeof setupCursorClient>[0],
     insert: database.insert,
     rows,

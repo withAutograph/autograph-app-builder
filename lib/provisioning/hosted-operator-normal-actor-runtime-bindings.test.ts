@@ -815,12 +815,14 @@ describe("closed runtime identity refusal diagnostics", () => {
         if (cookie === "private-base-unassigned") {
           return {
             ...client,
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
             getSession: () => rejected.promise,
           };
         }
         if (cookie === "private-scoped-0") {
           return {
             ...client,
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
             listMembers: () => {
               rejected.reject(shared);
               return rejected.promise;

@@ -9,6 +9,7 @@ export function createVercelAdapter() {
   return <ValueType, EntitiesType>(): Adapter<ValueType, EntitiesType> => ({
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
     async decide({ defaultValue }) {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
       return defaultValue as ValueType;
     },
   });

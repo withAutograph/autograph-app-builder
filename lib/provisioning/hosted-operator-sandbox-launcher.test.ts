@@ -1360,6 +1360,7 @@ describe("resource bootstrap launcher", () => {
       },
       { createSandbox: f.createSandbox, diagnosticSink: f.diagnostics },
     );
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const run = () =>
       inspect
         ? launcher.inspect(input)

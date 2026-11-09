@@ -244,7 +244,9 @@ async function deleteExpired(
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresHostedAdminStore(database: Database): HostedAdminStore {
   return {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     applyRetention(input) {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       return database.transaction((transaction) => deleteExpired(transaction, input));
     },
 

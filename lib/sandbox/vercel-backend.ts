@@ -360,10 +360,14 @@ export const createBuilderVercelProvider = (
       }
     };
     return {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       onRuntimeShutdown: () => close("stop"),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       onSessionDelete: (input) => close("delete", input?.abortSignal),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       onSessionStop: () => close("stop"),
       sandbox: createAuthorizedSandboxSession({
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         authorize: () => assertHostedSandboxCommandAuthority({ sessionId }),
         session: createVercelSdkSession(
           native,
@@ -377,6 +381,7 @@ export const createBuilderVercelProvider = (
     };
   };
   return {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     prepare(context) {
       // Only public resource targets are persisted. Preparation does not contact
       // Vercel or freeze live repository bytes into a provider snapshot.

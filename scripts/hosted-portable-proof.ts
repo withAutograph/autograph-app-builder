@@ -293,6 +293,7 @@ function jsonRpcPayload(text: string) {
     .filter((line) => line.startsWith("data:"))
     .map((line) => line.slice(5).trim())
     .find((line) => line !== "" && line !== "[DONE]");
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const payload = JSON.parse(contentTypePayload ?? text) as unknown;
   return z
     .object({

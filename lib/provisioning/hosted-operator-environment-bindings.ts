@@ -579,6 +579,7 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       }
     };
     let writeGitBranch: Promise<string | null> | undefined;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     const previewGitBranch = (diagnosticStage?: HostedEnvironmentBindingFailure["stage"]) => {
       writeGitBranch ??= (async () => {
         const project = await request(

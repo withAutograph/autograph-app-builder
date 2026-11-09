@@ -35,7 +35,7 @@ function publishResult(result?: EveSessionResult) {
 }
 
 app.addEventListener("toolresult", ({ structuredContent }) => {
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   publishResult(structuredContent as EveSessionResult | undefined);
 });
 
@@ -70,7 +70,7 @@ function SessionAppContainer() {
       name: "autograph_get",
     });
     if (response.structuredContent) {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       publishResult(response.structuredContent as EveSessionResult);
     }
   }, [capabilities?.serverTools, result]);
@@ -131,7 +131,7 @@ function SessionAppContainer() {
       );
     }
     if (response.structuredContent) {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       publishResult(response.structuredContent as EveSessionResult);
     }
   }

@@ -15,7 +15,7 @@ const publicAddresses: LookupAddress[] = [
   { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 },
 ];
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve this test double's existing promise and synchronous behavior. Preserve function declaration hoisting and initialization timing.
 function runLookup(options: LookupOptions) {
   const lookup = new EventTarget();
   let lookupAddress: string | LookupAddress[] | undefined;
@@ -55,7 +55,7 @@ function requestFixture(input: { lookupOptions: LookupOptions; responseStatus?: 
       observed.url = url;
       observed.options = options;
       // ClientRequest is a Node EventEmitter by contract.
-      // oxlint-disable-next-line unicorn/prefer-event-target, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line unicorn/prefer-event-target, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.
       const request = new EventEmitter() as ClientRequest;
       request.end = () => {
         // Node's dns.lookup contract is callback-based.
@@ -74,7 +74,7 @@ function requestFixture(input: { lookupOptions: LookupOptions; responseStatus?: 
           } else {
             expect(address).toBe(publicAddresses[0].address);
           }
-          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.
           const response = Readable.from([Buffer.from("metadata-body")]) as IncomingMessage;
           response.statusCode = input.responseStatus ?? 200;
           response.statusMessage = "Fixture";
@@ -160,6 +160,7 @@ describe("Preview CIMD transport", () => {
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
       requestHttps,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       resolveHostname: vi.fn(() => Promise.withResolvers<LookupAddress[]>().promise),
       timeoutSignal,
     });
@@ -179,6 +180,7 @@ describe("Preview CIMD transport", () => {
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
       requestHttps,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       resolveHostname: vi.fn(() => Promise.withResolvers<LookupAddress[]>().promise),
     });
 

@@ -70,7 +70,7 @@ export async function createDevelopmentApplication(input: {
       await lstat(nodePath.join(application.root, ".eve"));
       throw new Error("A development Eve application inherited stale state.");
     } catch (error) {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         throw error;
       }
@@ -150,7 +150,7 @@ export async function refreshDevelopmentApplication(input: {
       await lstat(nodePath.join(snapshot.root, ".eve"));
       throw new Error("A live development checkout cannot supply Eve state.");
     } catch (error) {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         throw error;
       }

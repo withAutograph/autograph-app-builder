@@ -528,7 +528,9 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     }
   };
   const read = async (context: HostedOperatorContext, guard?: () => Promise<void>) => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     await guarded(() => ports.assertAuthorized(context), guard);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     const row = await guarded(() => ports.store.read(context), guard);
     if (row === undefined) {
       throw new Error("normal_actor_journal_unavailable");
@@ -539,6 +541,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       return { preparation: undefined, row, state: undefined };
     }
     validateProvenance(context, preparation);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     await guarded(() => ports.assertAccountApproval(context, provenance(preparation)), guard);
     if (preparation.predecessor !== undefined) {
       const prior = readParticipantSuccessorPredecessor(
@@ -549,6 +552,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       if (prior === undefined) {
         throw new Error("normal_actor_journal_authority_mismatch");
       }
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       await guarded(() => assertPredecessorApprovals(context, prior), guard);
     }
     if (preparation.capturePredecessor !== undefined) {
@@ -560,6 +564,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       if (prior === undefined) {
         throw new Error("normal_actor_journal_authority_mismatch");
       }
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       await guarded(() => assertCapturePredecessorApprovals(context, prior), guard);
     }
     const state = decryptNormalActorState({
@@ -568,7 +573,9 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       sealed: preparation.sealedState,
     });
     assertCarriedActors(context, row, preparation, state, ports.keyring, ports.now());
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     await guarded(() => ports.assertAuthorized(context), guard);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     const latest = await guarded(() => ports.store.read(context), guard);
     if (!sameJournalAfterLeaseRenewal(row, latest, ports.now()) || latest === undefined) {
       throw new Error("normal_actor_journal_changed");
@@ -583,12 +590,17 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
   ) => {
     for (;;) {
       const { row } = await read(context, guard);
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       await guarded(() => ports.assertMutationAuthority(context, row, mode), guard);
       const preparation = normalActorAccountPreparationSchema.parse(change(row));
       validateProvenance(context, preparation);
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       await guarded(() => ports.assertAccountApproval(context, provenance(preparation)), guard);
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       await guarded(() => ports.assertAuthorized(context), guard);
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       await guarded(() => ports.assertMutationAuthority(context, row, mode), guard);
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       const latest = await guarded(() => ports.store.read(context), guard);
       if (!sameJournalAfterLeaseRenewal(row, latest, ports.now()) || latest === undefined) {
         continue;
@@ -597,6 +609,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
         return preparation;
       }
       const saved = await guarded(
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         () =>
           ports.store.compareAndSet({
             ...context,
@@ -855,6 +868,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
         input.bootstrap === undefined
           ? undefined
           : await guarded(
+              // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
               () => import("./hosted-operator-participant-bootstrap"),
               input.assertBootstrapCurrent,
             );

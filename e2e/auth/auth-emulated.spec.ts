@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 import postgres from "postgres";
 import { z } from "zod";
 import { expect, test } from "playwright/test";
@@ -216,10 +217,13 @@ test("a sign-in challenge failure stays local without invoking WebAuthn", async 
   await page.addInitScript(() => {
     window.addEventListener("e2e-credential-request", () => {
       void (
-        window as typeof window & {
-          recordCredentialRequest: () => Promise<void>;
-        }
-      ).recordCredentialRequest();
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+        (
+          window as typeof window & {
+            recordCredentialRequest: () => Promise<void>;
+          }
+        ).recordCredentialRequest()
+      );
     });
   });
   await page.route("**/api/auth/passkey/generate-authenticate-options*", async (route) => {

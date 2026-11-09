@@ -73,7 +73,7 @@ const receipts: GitHubPublicationReceiptStore = {
   async read() {},
 };
 
-// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial test double.
 const adapter = {} as GitHubPublicationAdapter;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -152,7 +152,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       dependencies: injected.dependencies,
       enabled: true,
-      // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.; preserve Promise-returning test double
       openDatabase: async () => ({}) as never,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       providerFactory: async () => ({ ...adapter, inspectInstallation, targetSourceAdapter }),
@@ -199,7 +199,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       dependencies: { ...injected.dependencies, readPreparedHandoff },
       enabled: true,
-      // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.; preserve Promise-returning test double
       openDatabase: async () => ({}) as never,
       providerFactory,
     });
@@ -248,7 +248,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
             }),
         },
         enabled: true,
-        // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.
+        // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.; preserve Promise-returning test double
         openDatabase: async () => ({}) as never,
         providerFactory,
       });
@@ -269,7 +269,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
         ...injected.dependencies,
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         readPreparedHandoff: async () =>
-          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial prepared-handoff fixture.
           ({
             provisioning: {
               github: { installationId: "123", status: "succeeded" },
@@ -277,7 +277,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
           }) as BuilderHandoffIntent,
       },
       enabled: true,
-      // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.; preserve Promise-returning test double
       openDatabase: async () => ({}) as never,
       providerFactory,
     });
@@ -287,7 +287,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
 
   it("fails before pool, stores, or provider construction if the prepared handoff is unavailable", async () => {
     const injected = dependencies();
-    // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.; preserve Promise-returning test double
     const openDatabase = vi.fn(async () => ({}) as never);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const providerFactory = vi.fn(async () => adapter);
@@ -326,7 +326,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
   });
 
   it("composes a fresh tenant runtime while caching only the database pool", async () => {
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial test double.
     const database = {} as never;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const openDatabase = vi.fn(async () => database);
@@ -375,7 +375,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       dependencies: injected.dependencies,
       enabled: true,
-      // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.; preserve Promise-returning test double
       openDatabase: async () => ({}) as never,
       providerFactory,
     });
@@ -437,7 +437,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       },
     ],
   ])("rejects %s authority before opening the pool", async (_name, auth) => {
-    // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.; preserve Promise-returning test double
     const openDatabase = vi.fn(async () => ({}) as never);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const providerFactory = vi.fn(async () => adapter);
@@ -482,7 +482,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       },
     ],
   ])("rejects current and initiator %s drift before opening the pool", async (_name, current) => {
-    // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.; preserve Promise-returning test double
     const openDatabase = vi.fn(async () => ({}) as never);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const providerFactory = vi.fn(async () => adapter);
@@ -510,7 +510,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       dependencies: injected.dependencies,
       enabled: true,
-      // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.; preserve Promise-returning test double
       openDatabase: async () => ({}) as never,
       providerFactory,
     });
@@ -530,7 +530,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       dependencies: injected.dependencies,
       enabled: true,
-      // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.; preserve Promise-returning test double
       openDatabase: async () => ({}) as never,
       providerFactory,
     });
@@ -550,7 +550,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       dependencies: injected.dependencies,
       enabled: true,
-      // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line eslint/require-await, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- preserve Promise-returning test double; Preserve the existing type assertion at this boundary.; preserve Promise-returning test double
       openDatabase: async () => ({}) as never,
       providerFactory,
     });

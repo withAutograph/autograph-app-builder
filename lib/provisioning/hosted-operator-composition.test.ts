@@ -423,6 +423,7 @@ const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) 
   });
   const readCurrentPlanningOwner = vi.fn<
     Awaited<ReturnType<typeof createHostedOperatorControlPlane>>["readCurrentPlanningOwner"]
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   >(() => Promise.resolve({ session: structuredClone(planningSession), target: context.target }));
   const controlPlane = {
     assertPlanningAuthorized: unexpectedPort,
@@ -544,6 +545,7 @@ describe("final verifier entry diagnostics", () => {
     async (stage) => {
       const f = publicationFixture();
       const error = new TypeError("private-preflight-error");
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       const assertAuthorized = vi.fn(() =>
         stage === "final_owner_authorization" ? Promise.reject(error) : Promise.resolve(),
       );
@@ -1544,12 +1546,14 @@ describe("participant plan resolution", () => {
         checkpoint: vi.fn<HostedOperatorWorkerEffectContext["checkpoint"]>().mockResolvedValue(),
         bindWorkerContext: vi
           .fn<HostedOperatorWorkerEffectContext["bindWorkerContext"]>()
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           .mockResolvedValue(() => Promise.resolve()),
       };
       let worker: HostedOperatorEffectContext | undefined;
       const stop = new Error("controlled execute transport stop");
       type Launcher = ReturnType<typeof membershipLauncher.createHostedOperatorSandboxLauncher>;
       vi.spyOn(membershipLauncher, "createHostedOperatorSandboxLauncher").mockReturnValue({
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         inspect: vi.fn<Launcher["inspect"]>((current) => {
           worker = current;
           const readback: Awaited<ReturnType<Launcher["inspect"]>> = {
@@ -1562,6 +1566,7 @@ describe("participant plan resolution", () => {
           };
           return Promise.resolve(readback);
         }),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         execute: vi.fn<Launcher["execute"]>((current) => {
           worker = current;
           return Promise.reject(stop);
@@ -1579,6 +1584,7 @@ describe("participant plan resolution", () => {
         assertAuthorized: vi
           .fn<ProtectedHostedOperatorDependencies["assertAuthorized"]>()
           .mockResolvedValue(),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         readResourceBindings: vi.fn(() =>
           Promise.resolve({
             authDatabase: { migrationUrl: "private-auth", runtimeUrl: "private-auth-runtime" },
@@ -5131,6 +5137,7 @@ it("plans same-project resource preparation without Preview effects or an enviro
   f.configuration.gateway.workload.projectId = context.target.projectId;
   const authorizedControlPlane = {
     ...f.controlPlane,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     assertPlanningAuthorized: () => Promise.resolve(),
   };
   const original = bootstrapWithGatewayOrigin("https://apps.example");
@@ -5191,7 +5198,9 @@ it("forwards all additive native delivery contracts through the actual request-s
   };
   const handler = createHostedOperatorNativeHandler({
     createRequestDependencies: createRequestScopedHostedOperatorDependencies({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       resolveConfiguration: () => Promise.resolve(f.configuration),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       openControlPlane: (input) => {
         expect(input.request).toBeInstanceOf(Request);
         return Promise.resolve({
@@ -5200,6 +5209,7 @@ it("forwards all additive native delivery contracts through the actual request-s
           appIntegrationCapabilityRequest: delegated,
           centralIntegrationHostRequest: delegated,
           centralIntegrationDeploymentReceiptRequest: delegated,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           close: () => Promise.resolve(),
         });
       },

@@ -180,6 +180,7 @@ const pinnedTransport = (pinMatches = true) => {
   };
   /* oxlint-enable typescript/strict-boolean-expressions */
   // SAFETY: The real transport consumes only these controlled SDK filesystem/process ports.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve the existing test fixture or assertion boundary.
   const createSandbox = vi.fn(async () => sandbox as never);
   return { catalogRead: () => catalogRead, command, createSandbox, request, sandbox };
 };

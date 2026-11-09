@@ -317,6 +317,7 @@ export const createNativeTargetApprovalHistoryTransport = (input: {
   }
   return createSameOriginEveTransport({
     config: { baseUrl: input.builderOrigin },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     workloadIdentity: { token: () => Promise.resolve(carrier.slice(7)) },
     fetchImplementation: createBuilderApprovalStreamFetch({
       origin: input.builderOrigin,

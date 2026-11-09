@@ -1401,7 +1401,8 @@ export const composeHostedOperatorDependencies = (
     readInstallationScopes:
       readInstallationScopes === undefined
         ? undefined
-        : (input) => readInstallationScopes(input, input.plan),
+        : // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
+          (input) => readInstallationScopes(input, input.plan),
     readReleaseManifest: async (input) => {
       const release = await readRelease(controlPlane, input);
       return release.files["release-manifest.json"];
@@ -3146,8 +3147,10 @@ export const composeHostedOperatorDependencies = (
     normalActorRuntimeBindings: async (input) =>
       await controlPlane.readNormalActorRuntimeBindings(input),
     executeEffect,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     readGatewayDeliverySource: (_context, currentPlan) =>
       Promise.resolve(gatewayDeliverySourceForPlan(configuration, currentPlan)),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     readAppProjectSettings: (context) =>
       Promise.resolve(selectedApplication(configuration, context).projectSettings),
     neonAuthorization: createHostedOperatorNeonAuthorization({
@@ -3344,6 +3347,7 @@ export const createRequestScopedHostedOperatorDependencies =
     try {
       return {
         dependencies: composeHostedOperatorDependencies(configuration, controlPlane),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         close: () => controlPlane.close(),
       };
     } catch (error) {

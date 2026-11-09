@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 import SignUpPage from "../(product)/auth/sign-up/page";
 import type { ReactElement } from "react";
 import { expect, it, vi } from "vitest";

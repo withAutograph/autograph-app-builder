@@ -80,6 +80,7 @@ const roots: string[] = [];
 afterEach(async () => {
   hooks.state.clear();
   vi.clearAllMocks();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 

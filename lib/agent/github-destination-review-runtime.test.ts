@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 /* oxlint-disable sonarjs/no-wildcard-import -- Type-only namespaces preserve the complete vi.importOriginal module contracts. */
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";

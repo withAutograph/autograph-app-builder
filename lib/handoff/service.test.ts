@@ -379,9 +379,13 @@ describe("opaque App Builder handoffs", () => {
       vi.spyOn(store, "read").mockResolvedValue(forged);
       await Promise.all(
         [
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           () => service.read(lookup),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           () => service.status(lookup),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           () => service.resolve(lookup),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         ].map((read) => expect(read()).rejects.toBeInstanceOf(BuilderHandoffUnavailableError)),
       );
       await expect(

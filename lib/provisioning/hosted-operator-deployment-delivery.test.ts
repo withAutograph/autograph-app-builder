@@ -1725,6 +1725,7 @@ it("recovers a read failure before assignment without persisting attempted inten
 it("does not await an unresolved advisory alias observer", async () => {
   const f = await readyGateway();
   const pendingDiagnostic = Promise.withResolvers<undefined>();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   f.observeAlias.mockImplementation(() => pendingDiagnostic.promise);
   const delivered = await f.writer.deliver(f.input);
   expect(delivered.status).toBe("applied");

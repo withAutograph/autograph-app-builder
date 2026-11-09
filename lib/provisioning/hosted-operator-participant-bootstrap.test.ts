@@ -825,6 +825,7 @@ describe("completed enrollment and Gateway bootstrap handoff", () => {
       inspectCompletedParticipantBootstrap(desiredPlan(), completedEnrollmentBootstrap()),
     );
     await expect(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       assertCompletedParticipantBootstrapApproval(context, selected, () =>
         Promise.resolve({
           approved: false,

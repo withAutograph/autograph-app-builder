@@ -165,6 +165,7 @@ async function main() {
           await readFile(scenarioPath, "utf-8").catch((error: unknown) => {
             if (
               !hasNonemptyOption(values.scenario) &&
+              // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
               (error as NodeJS.ErrnoException).code === "ENOENT"
             ) {
               return "[]";

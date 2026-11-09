@@ -51,6 +51,7 @@ afterEach(async () => {
   };
   await Promise.all(roots.map(makeWritable));
   await Promise.all(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     roots.splice(0).map((root) => removePath(root, { force: true, recursive: true })),
   );
 });

@@ -21,7 +21,7 @@ export type InjectedTestCapability = Readonly<{
 const exactCapabilities = (value: unknown): value is readonly TestCapability[] =>
   Array.isArray(value) &&
   new Set(value).size === value.length &&
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary. Preserve the existing assertion and its runtime behavior.
   value.every((entry) => TEST_CAPABILITIES.includes(entry as TestCapability));
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -71,7 +71,7 @@ export function hasTestCapability(
   capability: TestCapability,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): boolean {
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- The shared symbol registry is attached to process outside its declared type.; Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- The shared symbol registry is attached to process outside its declared type.; Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary. Preserve the existing assertion and its runtime behavior.
   const accessor = (process as unknown as Record<symbol, unknown>)[registryAccessor];
   return testCapabilityEnabled(
     capability,

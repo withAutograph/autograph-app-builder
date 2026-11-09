@@ -86,6 +86,7 @@ export const createHostedOperatorApprovalObserver = (input: {
         capability.signal.throwIfAborted();
         const history = createSameOriginEveTransport({
           ...options,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           workloadIdentity: { token: () => Promise.resolve(capability.token) },
           fetchImplementation: createBuilderApprovalStreamFetch({
             origin: input.builderOrigin,
@@ -112,6 +113,7 @@ export const createHostedOperatorApprovalObserver = (input: {
         capability.signal.throwIfAborted();
         const { observe } = createSameOriginEveTransport({
           ...options,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           workloadIdentity: { token: () => Promise.resolve(capability.token) },
           fetchImplementation: createBuilderApprovalStreamFetch({
             origin: input.builderOrigin,

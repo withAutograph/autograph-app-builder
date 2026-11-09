@@ -118,8 +118,11 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
     };
   }
   const store: HostedRuntimeJournalStore = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     read: () => Promise.resolve(structuredClone(row)),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     reserve: () => Promise.resolve(structuredClone(row)),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     compareAndSet: (input) => {
       if (input.expectedRevision !== row.revision) {
         // oxlint-disable-next-line unicorn/no-useless-undefined -- The journal CAS contract explicitly returns undefined on a revision conflict.
@@ -131,6 +134,7 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
       };
       return Promise.resolve(structuredClone(row));
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     reserveFenceGeneration: () => Promise.reject(new Error("Fence already allocated")),
   };
   const gate = Promise.withResolvers<undefined>();
@@ -161,14 +165,18 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
   const deps: ProtectedHostedOperatorDependencies = {
     store,
     now: clock,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     authorize: () => Promise.resolve({ authority, target }),
     assertAuthorized,
     assertCanonicalOwner,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     plan: () => Promise.resolve(plan),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     readApproval: (input) => Promise.resolve({ ...input, approvalId: "approval", approved: true }),
     withResourceLease: async (_input, run) => {
       const { leaseId } = row.record;
       try {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         return await run(() => {
           const liveExpiry =
             row.record.leaseExpiresAt !== undefined &&
@@ -184,6 +192,7 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
     // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous operator port contract.
     reconcile: async () => ({ status: "absent" }),
     executeEffect,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     verify: () =>
       Promise.resolve({
         actors: 1,
@@ -208,6 +217,7 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
     planDigest?: string;
     selection: typeof selection;
   }
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const request = (
     action: "execute" | "status",
     observe = true,
@@ -347,6 +357,7 @@ describe("canonical execution observation", () => {
     const { revision } = f;
     const expiresAt = f.record.leaseExpiresAt;
     const providerReads = f.assertAuthorized.mock.calls.length;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     await Promise.all(Array.from({ length: 100 }, () => effect.assertCurrentObservation()));
     expect(f.revision).toBe(revision);
     expect(f.record.leaseExpiresAt).toBe(expiresAt);
@@ -412,6 +423,7 @@ describe("canonical execution observation", () => {
         f.assertCanonicalOwner.mockRejectedValue(new HostedOperatorError("authorization_required"));
       }
       if (lost === "approval") {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         f.deps.readApproval = () =>
           Promise.resolve({
             approved: false,
@@ -478,7 +490,9 @@ describe("canonical execution observation", () => {
       const effect = readExecutingEffect(f);
       const { revision } = f;
       const rechecked = Promise.withResolvers<undefined>();
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       vi.spyOn(f.store, "compareAndSet").mockImplementationOnce(() => {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         f.assertCanonicalOwner.mockImplementation(() => {
           rechecked.resolve(undefined);
           return Promise.reject(new HostedOperatorError("authorization_required"));

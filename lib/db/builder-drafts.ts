@@ -210,7 +210,9 @@ export function createBuilderDraftStore(database: Database): BuilderDraftStore {
   };
   return {
     ...unlocked,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     archive: (input) => serialize(input.authority, (store) => store.archive(input)),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     saveActive: (input) => serialize(input.authority, (store) => store.saveActive(input)),
   };
 }

@@ -1896,6 +1896,7 @@ describe("continuity planning failure diagnostics", () => {
         observeContinuityPlanningStage(
           secret,
           "sandbox_resume",
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           () => Promise.reject(error),
           sink,
           controller.signal,
@@ -1921,6 +1922,7 @@ describe("continuity planning failure diagnostics", () => {
       observeContinuityPlanningStage(
         secret,
         "sandbox_resume",
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         () => Promise.reject(error),
         sink,
         controller.signal,
@@ -1936,6 +1938,7 @@ describe("continuity planning failure diagnostics", () => {
       observeContinuityPlanningStage(
         secret,
         "sandbox_resume",
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         () => Promise.reject(unknown),
         sink,
         controller.signal,
@@ -2121,6 +2124,7 @@ describe("closed export planning diagnostics", () => {
       });
     }).not.toThrow();
     expect(() => {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       reportExportPlanningFailure(secret, "release_read", new Error(secret), () =>
         Promise.reject(new Error(secret)),
       );

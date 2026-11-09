@@ -22,7 +22,7 @@ async function cachedGatewayModels() {
 
 // No session, headers, environment, or tenant input may enter the cached scope.
 // Force is a server-side retry bypass, not a new cache key or public mutation.
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 export function loadNextGatewayModels(input?: { force?: boolean }) {
   /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
   return input?.force ? loadGatewayModels() : cachedGatewayModels();

@@ -283,8 +283,10 @@ const gitOutput = async (
     });
   }
   child.stderr.pipe(diagnosticCapture.writer);
+  /* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing child-process close-event tuple assumption. */
   // SAFETY: ChildProcess close emits an exit code and termination signal, each nullable.
   const [status, signal] = (await once(child, "close")) as [number | null, NodeJS.Signals | null];
+  /* oxlint-enable typescript/no-unsafe-type-assertion */
   if (status !== 0) {
     const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
     const errorPrefix = `Git ${options.operation ?? args[0] ?? "command"} failed for ${root} (`;
@@ -315,8 +317,10 @@ const gitNullRecords = async function* gitNullRecords(
     env: gitEnvironment(),
     stdio: ["ignore", "pipe", "pipe"],
   });
+  /* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing child-process close-event tuple assumption. */
   // SAFETY: ChildProcess close emits an exit code and termination signal, each nullable.
   const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
+  /* oxlint-enable typescript/no-unsafe-type-assertion */
   child.stderr.pipe(diagnosticCapture.writer);
   let remainder = Buffer.alloc(0);
   let completed = false;
@@ -393,8 +397,10 @@ export const hashBranchPublicationSourceBlob = async (
   });
   const hash = createHash("sha256");
   const chunks: Buffer[] = [];
+  /* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing child-process close-event tuple assumption. */
   // SAFETY: ChildProcess close emits an exit code and termination signal, each nullable.
   const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
+  /* oxlint-enable typescript/no-unsafe-type-assertion */
   child.stderr.pipe(diagnosticCapture.writer);
   // SAFETY: Spawned stdout is a byte stream and no text encoding is set.
   // oxlint-disable-next-line eslint/no-await-in-loop -- hash Git blob data incrementally
@@ -445,7 +451,7 @@ const publicationRoot = (): string => {
     try {
       mkdirSync(testRoot, { mode: 0o700 });
     } catch (error: unknown) {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
         throw error;
       }
@@ -527,7 +533,7 @@ const assertContainedNoLinkPath = async (
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       state = await lstat(cursor);
     } catch (error: unknown) {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         if (
           options.leaf === undefined ||
@@ -648,7 +654,7 @@ const durableDirectory = async (path: string): Promise<void> => {
       await mkdir(cursor, { mode: 0o700 });
       created = true;
     } catch (error: unknown) {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
         throw error;
       }
@@ -673,7 +679,7 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
       throw new Error("The OS publication lock path is not a regular file.");
     }
   } catch (error: unknown) {
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
     }
@@ -692,7 +698,7 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
       }
       await syncDirectory(directory, true);
     } catch (createError: unknown) {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       if ((createError as NodeJS.ErrnoException).code !== "EEXIST") {
         throw createError;
       }
@@ -921,12 +927,12 @@ export const readBranchWorktreePublicationJournal = async (
     } finally {
       await handle.close();
     }
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const journal = JSON.parse(contents) as BranchWorktreePublicationJournal;
     assertCanonicalBranchWorktreeJournal(journal);
     return journal;
   } catch (error: unknown) {
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return undefined;
     }
@@ -941,7 +947,7 @@ const pathExists = async (path: string): Promise<boolean> => {
     await lstat(path);
     return true;
   } catch (error: unknown) {
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return false;
     }
@@ -1044,7 +1050,7 @@ const fileState = async (path: string): Promise<FileState> => {
       mode: (info.mode & 0o777).toString(8),
     };
   } catch (error: unknown) {
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return { kind: "absent" };
     }
@@ -1387,8 +1393,10 @@ const materializeAtomically = async (
             { env: gitEnvironment(), stdio: ["ignore", "pipe", "pipe"] },
           );
           const hash = createHash("sha256");
+          /* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing child-process close-event tuple assumption. */
           // SAFETY: ChildProcess close emits an exit code and termination signal, each nullable.
           const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
+          /* oxlint-enable typescript/no-unsafe-type-assertion */
           child.stderr.pipe(diagnosticCapture.writer);
           // SAFETY: Spawned stdout is a byte stream and no text encoding is set.
           // oxlint-disable-next-line eslint/no-await-in-loop -- stream Git blob bytes into the staged file

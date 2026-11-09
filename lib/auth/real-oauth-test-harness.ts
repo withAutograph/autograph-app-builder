@@ -200,7 +200,7 @@ export const registerTestCursorClient = async (harness: RealOAuthHarness) => {
 /** Complete an actual browser-cookie authorization/consent and PKCE exchange. */
 export const verifyRealOAuthToken = async (harness: RealOAuthHarness, accessToken: string) => {
   const response = await harness.customFetchImpl(`${issuer}/jwks`);
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary. Preserve the existing assertion and its runtime behavior.
   const jwks = (await response.json()) as { keys: JsonWebKey[] };
   const verification = await jwtVerify(accessToken, createLocalJWKSet(jwks), {
     algorithms: ["ES256"],
@@ -252,7 +252,7 @@ export const grantRealOAuth = async (
     if (!consent.ok) {
       throw new Error("OAuth consent failed.");
     }
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary. Preserve the existing assertion and its runtime behavior.
     const body = (await consent.json()) as {
       redirect_uri?: string;
       url?: string;
@@ -289,7 +289,7 @@ export const grantRealOAuth = async (
   if (!response.ok) {
     throw new Error("OAuth token exchange failed.");
   }
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary. Preserve the existing assertion and its runtime behavior.
   const tokens = (await response.json()) as OAuthTokens;
   const claims = await verifyRealOAuthToken(harness, tokens.access_token);
   return { claims, consentRequired, tokens };
@@ -313,7 +313,7 @@ export const refreshRealOAuth = async (
   if (!response.ok) {
     throw new Error("OAuth refresh failed.");
   }
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary. Preserve the existing assertion and its runtime behavior.
   const tokens = (await response.json()) as OAuthTokens;
   return {
     claims: await verifyRealOAuthToken(harness, tokens.access_token),

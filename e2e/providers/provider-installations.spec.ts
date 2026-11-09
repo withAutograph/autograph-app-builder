@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 import { setTimeout as delay } from "node:timers/promises";
 
 import postgres from "postgres";
@@ -351,6 +352,7 @@ for (const key of ["code", "state", "installation_id", "setup_action"] as const)
 
     await setGitHubCallbackFixture(
       page,
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       `duplicate-${key.replaceAll("_", "-")}` as GitHubCallbackFixture,
     );
     await startGitHubConnection(page);

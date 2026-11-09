@@ -234,6 +234,7 @@ const membershipInspectionFixture = () => {
       .fn<NonNullable<HostedEveStore["recordPrivateApprovalReceipts"]>>()
       .mockResolvedValue(),
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const observe = vi.fn(() =>
     Promise.resolve({
       artifactProjectionRequiresLegacyReadback: false,
@@ -243,6 +244,7 @@ const membershipInspectionFixture = () => {
       status: "waiting" as const,
     }),
   );
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const journal = { read: vi.fn(() => Promise.resolve({ record, revision: 1 })) };
   const readApproval = createHostedOperatorReadApproval({ eve, journal, observe });
   const context = {
@@ -590,6 +592,7 @@ describe("approved retained membership inspection", () => {
       readApprovedRetainedMembershipInspections({
         effect: f.context,
         organizationId: f.organizationId,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         readApproval: () => Promise.reject(failure),
         readCurrentRecord: f.readCurrentRecord,
       }),
@@ -655,6 +658,7 @@ describe("approved retained membership inspection", () => {
         readApprovedRetainedMembershipInspection({
           effect: f.context,
           readCurrentRecord: f.readCurrentRecord,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           readApproval: () => Promise.resolve(mismatch === "null" ? null : approval),
         }),
       ).rejects.toMatchObject({ code: "authorization_required" });

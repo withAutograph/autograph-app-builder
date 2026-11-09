@@ -678,6 +678,7 @@ const assertContainedStatePath = async (
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       value = await lstat(cursor);
     } catch (error: unknown) {
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve existing Node error-code access and failure behavior.
       if ((error as NodeJS.ErrnoException).code === "ENOENT" && leaf !== "directory") {
         return;
       }
@@ -861,6 +862,7 @@ const acquireLease = async (
     }
     await syncDirectory(nodePath.dirname(path));
   } catch (error: unknown) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve existing Node error-code access and failure behavior.
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
       throw error;
     }
@@ -1340,6 +1342,7 @@ const exactResultTree = async (input: {
     files.set(change.path, {
       blob,
       contentSha256: digest,
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve the existing reviewed file-mode assertion.
       mode: `100${change.after.mode}` as FreshBootstrapFile["mode"],
       path,
       readStream: verifiedFileReader(() => overlayBytes(input, path), path, digest, blob, size),
@@ -1403,6 +1406,7 @@ const inspectDestinationPrestate = async (input: {
   try {
     value = await lstat(destination);
   } catch (error: unknown) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve existing Node error-code access and failure behavior.
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
     }
@@ -1446,6 +1450,7 @@ const pathState = async (path: string): Promise<"absent" | "directory" | "other"
     const value = await lstat(path);
     return value.isDirectory() && !value.isSymbolicLink() ? "directory" : "other";
   } catch (error: unknown) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve existing Node error-code access and failure behavior.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return "absent";
     }
@@ -1642,6 +1647,7 @@ const assertPrestate = async (
   try {
     destination = await lstat(proposal.destinationPath);
   } catch (error: unknown) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve existing Node error-code access and failure behavior.
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
     }
@@ -1682,6 +1688,7 @@ const createStage = async (
   try {
     await mkdir(proposal.stagingPath, { mode: 0o700 });
   } catch (error: unknown) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve existing Node error-code access and failure behavior.
     if ((error as NodeJS.ErrnoException).code === "EEXIST") {
       throw new Error("The deterministic bootstrap stage already exists.", {
         cause: error,
@@ -1886,6 +1893,7 @@ const assertRawGitAuthority = async (
       await lstat(forbidden);
       throw new Error("The fresh repository contains forbidden Git authority.");
     } catch (error: unknown) {
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve existing Node error-code access and failure behavior.
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         throw error;
       }
@@ -1906,6 +1914,7 @@ const initializeGit = async (input: {
     const value = await lstat(gitDirectory);
     initialized = value.isDirectory() && !value.isSymbolicLink();
   } catch (error: unknown) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve existing Node error-code access and failure behavior.
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
     }
@@ -2221,6 +2230,7 @@ const assertExactRepository = async (
       await lstat(forbidden);
       throw new Error("The final repository contains forbidden Git authority.");
     } catch (error: unknown) {
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve existing Node error-code access and failure behavior.
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         throw error;
       }
@@ -2575,13 +2585,16 @@ export const readFreshBootstrapJournal = async (input: {
   try {
     bytes = await readFile(input.proposal.journalPath, "utf-8");
   } catch (error: unknown) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve existing Node error-code access and failure behavior.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return undefined;
     }
     throw error;
   }
+  /* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing journal deserialization boundary. */
   // SAFETY: The canonical journal check immediately validates the parsed value before it is used.
   const parsed = JSON.parse(bytes) as FreshBootstrapJournal;
+  /* oxlint-enable typescript/no-unsafe-type-assertion */
   assertCanonicalFreshBootstrapJournal(parsed);
   if (
     !exactFreshBootstrapProposalMatch(proposalFromFreshBootstrapJournal(parsed), input.proposal)

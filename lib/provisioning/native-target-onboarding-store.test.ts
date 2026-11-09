@@ -302,6 +302,7 @@ describe("native target registry authorization and restart", () => {
     const f = makeFixture();
     await f.creating();
     const results = await Promise.allSettled(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       [1, 2].map(() =>
         f.registry.authorizeAttempt(
           "server-invocation",
@@ -558,6 +559,7 @@ describe("native target registry authorization and restart", () => {
     const f = makeFixture();
     await f.accept();
     const ready = await f.registry.recordReady("server-invocation", f.p.appId, f.proof());
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     expect(() =>
       f.store.compareAndSet({
         ...ready,
@@ -578,6 +580,7 @@ describe("native target registry authorization and restart", () => {
     const row = await planned.registry.reservePlan("server-invocation", planned.p);
     const changed = { ...row.record, plan: { ...row.record.plan, branch: "another" } };
     changed.planDigest = nativeTargetOnboardingPlanDigest(changed.plan);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     expect(() =>
       planned.store.compareAndSet({
         ...row,

@@ -137,7 +137,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         }),
         preferredPasskeyAuthenticatorAttachment(),
       ]);
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const body = (await response.json()) as OnboardingResponse;
       if (isPasskeyOnboardingAlreadyAuthenticated(body)) {
         navigate({ replace: true, to: resolvedRedirectTo });

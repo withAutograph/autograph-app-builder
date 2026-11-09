@@ -78,10 +78,12 @@ export function gateAEvalWorkflowBodyTimeout(profile: unknown): string | undefin
   }
   if (
     Object.keys(profile).toSorted().join(",") !== "image,profile,sourceRoot,version" ||
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     (profile as { version?: unknown }).version !== 1
   ) {
     return undefined;
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const name = (profile as { profile?: unknown }).profile;
   return name === "sandbox" || name === "hosted-artifact" ? "360000" : undefined;
 }
@@ -135,6 +137,7 @@ function exactParentArguments(): readonly string[] {
       "parts=parts[next(i for i,v in enumerate(parts) if v):]",
       "print(json.dumps([v.decode('utf-8') for v in parts[:argc]]))",
     ].join(";");
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const observed = JSON.parse(
       execFileSync("/usr/bin/python3", ["-I", "-c", python, String(pid)], {
         encoding: "utf-8",
@@ -253,6 +256,7 @@ export async function runWithTestCapability(options: {
     },
     stdio: ["inherit", "inherit", "inherit", "pipe"],
   });
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
   const authorization = child.stdio[3] as Duplex | null | undefined;
   if (authorization === null || authorization === undefined) {
     throw new Error("The structural test authorization pipe was not created.");
@@ -282,6 +286,7 @@ export async function runWithTestCapability(options: {
       return;
     }
     try {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
       const request = JSON.parse(buffered) as {
         version?: unknown;
         nonce?: unknown;

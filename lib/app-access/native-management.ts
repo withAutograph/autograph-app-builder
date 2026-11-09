@@ -77,6 +77,7 @@ const readEffect = (assertCurrent: () => Promise<void>): AppAccessEffectContext 
   operationRef: randomUUID(),
   createdAt: new Date().toISOString(),
   assertCurrent,
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   checkpoint: () => Promise.resolve(),
   readCheckpoints: () => [],
 });

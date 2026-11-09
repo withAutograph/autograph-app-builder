@@ -68,7 +68,7 @@ export async function fingerprintDevelopmentRuntime(repositoryRoot: string): Pro
     } catch (error) {
       // A file may disappear between Git's listing and the read while a live
       // edit is being saved. The next watcher pass observes the settled tree.
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         continue;
       }
@@ -80,7 +80,7 @@ export async function fingerprintDevelopmentRuntime(repositoryRoot: string): Pro
   return hash.digest("hex");
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 export function waitForDevelopmentRuntimeChange(input: {
   repositoryRoot: string;
   expectedFingerprint: string;

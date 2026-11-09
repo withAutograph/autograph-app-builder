@@ -481,6 +481,7 @@ export const openNativeTargetConfigurationResources = async (
     const owner = createHostedOperatorAppOwnerAuthority(ownerDependencies);
     return {
       owner,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       readStandardDestination: (context) =>
         readStandardBuilderDestination(
           {
@@ -489,6 +490,7 @@ export const openNativeTargetConfigurationResources = async (
             findProvisioningForAppRepository:
               createPostgresBuilderProvisionJournalStore(database).findSettledAppRepository,
 
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
             readVercelCredential: (credential) =>
               readActiveVercelInstallationToken({
                 ...credential,
@@ -498,6 +500,7 @@ export const openNativeTargetConfigurationResources = async (
           },
           context,
         ),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       readStandardOriginSelection: (context, destination) =>
         createBuilderPublicOriginStore(database).read({
           authority: context.authority,
@@ -516,6 +519,7 @@ export const openNativeTargetConfigurationResources = async (
           readProvisioning: createPostgresBuilderProvisionJournalStore(database).read,
           findProvisioningForAppRepository:
             createPostgresBuilderProvisionJournalStore(database).findSettledAppRepository,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           readVercelCredential: (credential: { authority: unknown; installationId: string }) =>
             readActiveVercelInstallationToken({ ...credential, config: tokenKeyring, database }),
         };
@@ -627,6 +631,7 @@ export const createNativeTargetRequestDependencies =
           dependencies: composeHostedOperatorAuthorizationDependencies(
             readNeonAuthorizationConfiguration(environment),
           ),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           close: () => Promise.resolve(),
         };
       } catch (error) {

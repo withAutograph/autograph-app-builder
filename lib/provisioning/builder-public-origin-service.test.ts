@@ -44,6 +44,7 @@ const setup = () => {
   const store: BuilderPublicOriginStore = {
     read: vi
       .fn<BuilderPublicOriginStore["read"]>()
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       .mockImplementation(({ authority: selected }) => {
         hostedTenantAuthoritySchema.parse(selected);
         return Promise.resolve(choice);
@@ -135,6 +136,7 @@ describe("public origin Server Action boundary", () => {
     const refresh = vi.fn<() => void>();
     const action = createBuilderPublicOriginAction({
       origin: "https://builder.example",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       enabled: () => Promise.resolve(true),
       open,
       refresh,
@@ -155,7 +157,9 @@ describe("public origin Server Action boundary", () => {
     const select = vi.fn().mockRejectedValue(new Error("metadata acknowledgment interrupted"));
     const action = createBuilderPublicOriginAction({
       origin: "https://builder.example",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       enabled: () => Promise.resolve(true),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       open: () => Promise.resolve({ principal, publicOrigins: { select } }),
       refresh: vi.fn<() => void>(),
     });

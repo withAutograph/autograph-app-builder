@@ -123,6 +123,7 @@ export async function runImageLifecycleTask(action: ImageLifecycleAction, args: 
 
 const [, entrypoint] = process.argv;
 if (entrypoint !== undefined && import.meta.url === pathToFileURL(entrypoint).href) {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const action = process.argv[2] as ImageLifecycleAction | undefined;
   if (
     action === undefined ||

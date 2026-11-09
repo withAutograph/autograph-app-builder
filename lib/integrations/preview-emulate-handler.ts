@@ -53,7 +53,9 @@ export function createPreviewEmulateHandler(input: {
   let persistenceRevision = 0;
   const emulateHandler = createEmulateHandler({
     persistence: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       load: () => persistence.load(),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       save(state) {
         persistenceRevision += 1;
         pendingPersistence = persistence.save(state);
@@ -71,7 +73,7 @@ export function createPreviewEmulateHandler(input: {
       },
     },
   });
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const durableHandler = {} as Handler;
   const methods = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
   const createDurableHandler =
@@ -134,7 +136,7 @@ export async function invokePreviewEmulateRequest(request: Request) {
     return new Response("Not found", { status: 404 });
   }
   const path = url.pathname.slice(prefix.length).split("/").filter(Boolean);
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const method = request.method as keyof Handler;
   const selectedMethod = selected[method];
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.

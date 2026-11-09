@@ -748,6 +748,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         .parse(await request(`/v10/projects/${encodeURIComponent(projectId)}/env`)).envs;
     };
     let previewGitBranch: Promise<string | null> | undefined;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     const newRowGitBranch = () => {
       previewGitBranch ??= (async () => {
         const raw = await request(

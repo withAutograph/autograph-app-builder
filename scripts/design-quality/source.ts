@@ -244,7 +244,7 @@ function exportedEntries(source: ts.SourceFile): ts.Node[] {
   const entries: ts.Node[] = [];
   for (const statement of source.statements) {
     const exported = Boolean(
-      // oxlint-disable-next-line eslint/no-bitwise, anti-slop/no-chained-type-assertions -- Intentional bitmask or binary-flag operation.; Preserve the existing TypeScript AST modifier inspection boundary.
+      // oxlint-disable-next-line eslint/no-bitwise, anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Intentional bitmask or binary-flag operation.; Preserve the existing TypeScript AST modifier inspection boundary; Preserve the existing assertion at this boundary. Preserve the existing assertion and its runtime behavior.
       ts.getCombinedModifierFlags(statement as unknown as ts.Declaration) & ts.ModifierFlags.Export,
     );
     if (

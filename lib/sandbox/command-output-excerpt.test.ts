@@ -19,7 +19,9 @@ it("drops oversized secret lines completely before retaining a redacted diagnost
       `https://user:password@private.example/${"x".repeat(5900)}`,
       `${"x".repeat(900) + suffix}\nThe recorded Auth origin cannot change\n`,
     ]),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     wait: () => Promise.resolve({ exitCode: 1 }),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     kill: () => Promise.resolve(),
   });
   const result = await runSandboxCommandWithExcerpt({

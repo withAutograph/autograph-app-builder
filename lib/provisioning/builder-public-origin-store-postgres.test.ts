@@ -51,6 +51,7 @@ const scope = {
   provisioningDigest: "a".repeat(64),
 };
 const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const current = () => Promise.resolve();
 let root: string | undefined;
 let started = false;
@@ -173,6 +174,7 @@ describe.skipIf(tools === undefined)(
       const target = { ...scope, appId: "concurrent-app" };
       const choices = ["https://one.example", "https://two.example"];
       const results = await Promise.allSettled(
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         choices.map((publicOrigin) =>
           store.select({
             assertCurrent: current,
@@ -329,6 +331,7 @@ describe.skipIf(tools === undefined)(
       let checks = 0;
       await expect(
         store.select({
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           assertCurrent: () => {
             checks += 1;
             return checks === 2 ? Promise.reject(new Error("revoked")) : Promise.resolve();

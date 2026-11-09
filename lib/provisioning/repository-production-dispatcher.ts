@@ -194,6 +194,7 @@ export const createRepositoryProductionHandler =
       const setup = await observeRepositoryProductionPhase(
         "setup_prepare",
         "setup_unavailable",
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         () => resolved.setup.prepare(resolved.scope, resolved.intent),
         request.signal,
       );

@@ -56,6 +56,7 @@ const stream = () =>
 const setup = (authorized = true) => {
   const ambientToken = vi.fn<() => Promise<string>>().mockResolvedValue("operator-token");
   const verifyReadAuthority = vi.fn<() => Promise<boolean>>().mockResolvedValue(authorized);
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const fetchImplementation = vi.fn<typeof fetch>(() => Promise.resolve(stream()));
   const observer = createHostedOperatorApprovalObserver({
     builderOrigin: "https://builder.example.test",
@@ -133,6 +134,7 @@ describe("request-owned approval observation", () => {
   it("does not follow a Builder stream redirect to a foreign host", async () => {
     const f = setup();
     const owned = context();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     f.fetchImplementation.mockImplementation(() =>
       Promise.resolve(
         new Response(null, {
@@ -155,6 +157,7 @@ describe("Builder approval stream credential boundary", () => {
     "https://builder.example.test/eve/v1/session/wrun_1/stream-extra",
     "https://user@builder.example.test/eve/v1/session/wrun_1/stream",
   ])("does not forward stream credentials to %s", async (url) => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const raw = vi.fn<typeof fetch>(() => Promise.resolve(stream()));
     const guarded = createBuilderApprovalStreamFetch({
       adapterSessionId: "wrun_1",
@@ -171,6 +174,7 @@ describe("Builder approval stream credential boundary", () => {
   it("preserves request and init semantics while combining cancellation and forcing manual redirects", async () => {
     const requestAbort = new AbortController();
     const deadline = new AbortController();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const raw = vi.fn<typeof fetch>(() => Promise.resolve(stream()));
     const guarded = createBuilderApprovalStreamFetch({
       adapterSessionId: "wrun_1",

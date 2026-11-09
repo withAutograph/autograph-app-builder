@@ -31,13 +31,8 @@ export default defineConfig({
   },
   rules: {
     ...reactDoctorAdvisories,
-    // Temporary migration baseline; remove these as findings are fixed.
-    "typescript/promise-function-async": "off",
-    "anti-slop/require-safety-comment-for-type-assertion": "off",
     "sonarjs/cognitive-complexity": "off",
-    "typescript/no-unsafe-type-assertion": "off",
     "eslint/complexity": "off",
-    // Temporary migration items: re-enable after the existing findings are fixed.
     "eslint/sort-keys": "off",
   },
   overrides: [

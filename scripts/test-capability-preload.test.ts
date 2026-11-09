@@ -44,7 +44,7 @@ function inspectAmbientPreload(environment: NodeJS.ProcessEnv) {
 
 describe("test capability preload", () => {
   it("uses the actual trusted wrapper lineage for this Vitest worker", async () => {
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/no-unknown-returns -- The capability registry accessor may return arbitrary stored data. The process registry is stored under a shared symbol outside the Node process type.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/no-unknown-returns, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- The capability registry accessor may return arbitrary stored data. The process registry is stored under a shared symbol outside the Node process type; Preserve the existing assertion at this boundary.
     const accessor = (process as unknown as Record<symbol, (() => unknown) | undefined>)[
       Symbol.for("withAutograph.autograph-app-builder.test-capability-registry.v2")
     ];
@@ -138,7 +138,7 @@ describe("test capability preload", () => {
     // Keep process-inspection helpers scoped to this preload fixture.
     // oxlint-disable-next-line unicorn/consistent-function-scoping
     const activeHandles = () =>
-      // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Node exposes this active-handle diagnostic outside its public process type.
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Node exposes this active-handle diagnostic outside its public process type; Preserve the existing assertion at this boundary.
       (process as unknown as { _getActiveHandles: () => readonly unknown[] })._getActiveHandles();
     // oxlint-disable-next-line unicorn/consistent-function-scoping, anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     const isMessagePort = (handle: unknown) =>

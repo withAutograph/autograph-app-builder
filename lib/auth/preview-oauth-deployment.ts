@@ -52,7 +52,7 @@ function getPreviewOAuthDeploymentRuntime(
             .map((issue) =>
               // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
               typeof issue === "object" && issue !== null && "path" in issue
-                ? // oxlint-disable-next-line typescript/no-base-to-string, anti-slop/require-safety-comment-for-type-assertion -- Preserve string coercion of arbitrary validation-path values.; Preserve the existing type assertion at this boundary.
+                ? // oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/no-base-to-string, anti-slop/require-safety-comment-for-type-assertion -- Preserve string coercion of arbitrary validation-path values.; Preserve the existing type assertion at this boundary.
                   String((issue as { path: unknown[] }).path[0] ?? "unknown")
                 : "unknown",
             )
@@ -134,7 +134,7 @@ export function getPreviewOAuthDeploymentOrigin(
   return getPreviewOAuthDeploymentRuntime(environment).origin;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 export function getPreviewOAuthDeploymentSession(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   headers: Headers;
@@ -226,7 +226,7 @@ export async function ensurePreviewSessionOrganization(input: {
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 export function ensurePreviewOAuthDeploymentSessionOrganization(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   headers: Headers;
@@ -262,7 +262,7 @@ export function createPreviewOAuthRequestHandler(input: {
       if (new URL(request.url).pathname === "/api/auth/sign-in/social") {
         let hasRedirect = false;
         try {
-          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+          // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
           const payload = (await response.clone().json()) as { url?: unknown };
           // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           hasRedirect = typeof payload.url === "string";
@@ -307,6 +307,7 @@ export function createPreviewOAuthWellKnownHandler(input: {
   getAuth?: PreviewOAuthAuthProvider;
 }) {
   const requestHandler = createPreviewOAuthRequestHandler(input);
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   return (request: Request) => {
     const url = new URL(request.url);
     url.pathname = "/api/auth/.well-known/oauth-authorization-server";

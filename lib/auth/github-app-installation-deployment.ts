@@ -406,7 +406,8 @@ export function getGitHubAppInstallationDeploymentHandlers(
   const emulation = readProviderEmulation(resolvedEnvironment);
   const installations = createPostgresHostedGitHubInstallationStore(database);
   const providerFetch = emulation
-    ? (resource: string | URL | Request, init?: RequestInit) => {
+    ? // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
+      (resource: string | URL | Request, init?: RequestInit) => {
         const url = new URL(resource instanceof Request ? resource.url : resource);
         return providerEmulationFetch(
           `${emulation.githubOrigin}${url.pathname}${url.search}`,
@@ -420,11 +421,12 @@ export function getGitHubAppInstallationDeploymentHandlers(
     credentialStore,
     emulation,
     fetch: emulation
-      ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      ? // oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/promise-function-async, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing promise and synchronous exception behavior. Preserve the existing type assertion at this boundary.
         (resource, init) => providerEmulationFetch(resource as string | URL, init, emulation)
       : undefined,
     installationStore: installations,
     membership: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       isActiveMember: (authority) => membership.isActiveMember(authority),
     },
     stateStore: createPostgresGitHubInstallationAuthorizationStateStore(database),
@@ -435,6 +437,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
   const builderDrafts = createBuilderDraftService({
     store: createBuilderDraftStore(database),
   });
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   const classify = (value: {
     authority: Authority;
     repository: string;
@@ -490,10 +493,12 @@ export function getGitHubAppInstallationDeploymentHandlers(
     },
     origin: new URL(config.issuer).origin,
     repositoryAccess: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       authorize: (value) => repositoryAccessContinuations.authorize(value),
       classify,
       hasBuilderDraft: async ({ authority, draftId }) =>
         (await builderDrafts.read(authority, draftId)) !== undefined,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       inspect: (value) => repositoryAccessContinuations.inspect(value),
     },
   });
