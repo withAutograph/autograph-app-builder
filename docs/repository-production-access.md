@@ -255,6 +255,19 @@ settle before request resources or the shared lease are released; a rejection
 preserves the original error and first-read priority. Access writes and their
 required ordering remain serialized.
 
+An accepted invitation whose enrollment acknowledgement was interrupted is
+reconciled without replaying membership, grant or acceptance writes. The protected
+Production adapter reads current Auth membership and app grants plus the owned
+app runtime's actor bindings through `kernel_read_actor_binding`. The exact
+actor/app/organization/role tuples must be active with matching positive grant
+generations, bounded by the current control lease. A historical grant generation
+never replaces that lease's authority. Missing or revoked access stays nonready;
+unreadable or conflicting readback stays unknown. Frontend-only apps use current
+Auth access without allocating a database, and role-less apps require their
+explicit admission. Owner and cancellation checks still precede the journal-only
+acknowledgement. This reuses native read-only metadata; it adds no Preview,
+worker snapshot, pin or qualification requirement.
+
 Automatic Auth callbacks try the same physical PostgreSQL transaction lock
 without waiting. A callback returns pending when another continuation holds the
 app slot, before starting another Auth worker or setup reconciliation. Explicit

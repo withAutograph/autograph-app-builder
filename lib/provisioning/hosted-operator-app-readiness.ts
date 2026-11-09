@@ -139,6 +139,17 @@ export interface OperatorAppMetadataScope {
   organizationId: string;
   role: string;
 }
+export type OperatorActorBindingScope = Omit<OperatorAppMetadataScope, "role"> & {
+  role?: string;
+};
+export type ActorBindingRecordReadback =
+  | {
+      status: "present";
+      binding: OperatorActorBindingScope & { active: boolean; fenceGeneration: number };
+    }
+  | { status: "absent" }
+  | { status: "principal_scope_denied" };
+
 const actorBindingSchema = z.strictObject({
   active: z.literal(true),
   actorId: z.string(),
@@ -200,6 +211,10 @@ export interface AppRuntimeSnapshotReader {
   readActorBinding?: (
     scope: OperatorAppMetadataScope,
   ) => Promise<z.infer<typeof appTenantBindingStatusSchema>>;
+  /** Native record metadata only; callers independently establish current coordinated access. */
+  readActorBindingRecord?: (
+    scope: OperatorActorBindingScope,
+  ) => Promise<ActorBindingRecordReadback>;
   readIdentity: () => Promise<z.infer<typeof identitySchema>>;
   readOrganization: (
     scope: OperatorAppMetadataScope,
@@ -223,6 +238,64 @@ export const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl,
       "isolation level repeatable read",
       async (tx) => {
         const reader: AppRuntimeSnapshotReader = {
+          readActorBindingRecord: async (scope) => {
+            const rows = await tx.unsafe(readActorBindingSql, [
+              tx.json({
+                actor_id: scope.actorId,
+                app_id: scope.appId,
+                customer_id: scope.organizationId,
+                role: scope.role ?? null,
+              }),
+            ]);
+            if (rows.length !== 1) {
+              throw reject();
+            }
+            const value: unknown = rows[0]?.binding;
+            const denied = z
+              .object({
+                ok: z.literal(false),
+                error: z.object({
+                  code: z.literal("authorization_denied"),
+                  details: z.array(z.object({ code: z.literal("scope_mismatch") })).min(1),
+                }),
+              })
+              .safeParse(value);
+            if (denied.success) {
+              return { status: "principal_scope_denied" };
+            }
+            const envelope = z
+              .object({
+                ok: z.literal(true),
+                data: actorBindingSchema
+                  .extend({
+                    active: z.boolean(),
+                    fenceGeneration: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+                    role: z.string().nullish(),
+                  })
+                  .nullable(),
+              })
+              .parse(value);
+            if (envelope.data === null) {
+              return { status: "absent" };
+            }
+            const { role, ...binding } = envelope.data;
+            if (
+              binding.actorId !== scope.actorId ||
+              binding.appId !== scope.appId ||
+              binding.organizationId !== scope.organizationId
+            ) {
+              throw reject();
+            }
+            if ((role ?? undefined) !== scope.role) {
+              throw reject();
+            }
+            const record: OperatorActorBindingScope & { active: boolean; fenceGeneration: number } =
+              binding;
+            if (role !== null && role !== undefined) {
+              record.role = role;
+            }
+            return { status: "present", binding: record };
+          },
           readActorBinding: async (scope) => {
             const rows = await tx.unsafe(readActorBindingSql, [
               tx.json({

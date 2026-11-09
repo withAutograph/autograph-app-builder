@@ -2,6 +2,8 @@
 /* oxlint-disable eslint/complexity, sonarjs/cognitive-complexity, sonarjs/max-union-size -- The closed worker protocol keeps each resource, command, and private startup file binding explicit. */
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
+import type { AcceptedInviteeReadbackInput } from "./repository-production-invitee-readback";
+import { readAcceptedProductionInviteeAccess } from "./repository-production-invitee-readback";
 import { repositoryProductionGatewayVerification } from "./repository-production-app-boundary";
 import {
   observeRepositoryProductionPhase,
@@ -132,6 +134,7 @@ export interface RepositoryProductionWorkerDependencies {
     ) => Promise<RepositoryProductionObservation>;
   };
   runWorker?: typeof runRepositoryProductionFileSpool;
+  readAcceptedAccess?: typeof readAcceptedProductionInviteeAccess;
 }
 const associatedData = (row: RepositoryProductionRow) =>
   `repository-production-credentials-v1:${repositoryProductionOperationRef(row.record.scope)}:${repositoryProductionDigest(row.record.scope)}`;
@@ -586,6 +589,32 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       access: { actorId: string; roles: string[]; active: boolean },
     ) {
       return observe(await run(context, "access", true, access));
+    },
+    async inspectAcceptedAppAccess(
+      context: RepositoryProductionEffectContext,
+      access: { actorId: string; roles: string[] },
+    ) {
+      await assertCurrent(context);
+      const { row } = context;
+      const { lease, resource, scope, intent } = row.record;
+      if (!lease || (intent.storage.kind === "postgres" && !resource)) {
+        throw new Error("repository_production_access_readback_unavailable");
+      }
+      const connections = await deps.readConnections(context);
+      await assertCurrent(context);
+      const readback: AcceptedInviteeReadbackInput = {
+        scope,
+        ...access,
+        controlGeneration: lease.fenceGeneration,
+        profile: deps.profile,
+        authUrl: connections.authOperator,
+        assertCurrent: context.assertCurrent,
+        signal: deps.signal,
+      };
+      if (intent.storage.kind === "postgres" && resource) {
+        readback.runtime = { url: appConnections(row).appRuntime, resource };
+      }
+      return await (deps.readAcceptedAccess ?? readAcceptedProductionInviteeAccess)(readback);
     },
     invokeAuthManagement,
     // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.

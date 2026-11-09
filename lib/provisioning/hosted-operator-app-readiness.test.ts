@@ -8,12 +8,20 @@ import {
   createHostedOperatorTenantBindingReadback,
   classifyActorBinding,
   readActiveAppInstallationCustomerIds,
+  readAppRuntimeSnapshot,
 } from "./hosted-operator-app-readiness";
 import type {
   AppRuntimeSnapshotReader,
   ReadAppRuntimeSnapshot,
   OperatorAppMetadataScope,
+  OperatorActorBindingScope,
+  ActorBindingRecordReadback,
+  ObservedAppTenant,
 } from "./hosted-operator-app-readiness";
+
+const snapshotDatabase = vi.hoisted(() => ({ connect: vi.fn() }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Own the SQL transport only: the real snapshot reader, fixed query, transaction and cleanup run against this controlled connection without provider effects.
+vi.mock("postgres", () => ({ default: snapshotDatabase.connect }));
 
 const authority = {
   audience: "https://builder.example/mcp",
@@ -696,4 +704,137 @@ it("withholds partial bindings when owner authorization changes during a snapsho
   await expect(createHostedOperatorTenantBindingReadback(f.deps)(f.input)).rejects.toThrow(
     "owner revoked",
   );
+});
+
+const actorRecord = {
+  actorId: "reader-actor",
+  appId: "reader-app",
+  organizationId: "reader-org",
+  role: "reader",
+  active: true,
+  fenceGeneration: 3,
+};
+interface NativeBindingEnvelope {
+  ok: boolean;
+  data?: (Omit<typeof actorRecord, "role"> & { role: string | null }) | null;
+  error?: { code: string; details?: { code: string }[] };
+}
+const actorBindingScope: OperatorActorBindingScope = {
+  actorId: actorRecord.actorId,
+  appId: actorRecord.appId,
+  organizationId: actorRecord.organizationId,
+  role: actorRecord.role,
+};
+const actorBindingPort = async (
+  envelope: NativeBindingEnvelope,
+  scope: OperatorActorBindingScope = actorBindingScope,
+  rowCount = 1,
+) => {
+  const tx = {
+    json: vi.fn((value: Record<string, string | null>) => value),
+    unsafe: vi.fn(async () => Array.from({ length: rowCount }, () => ({ binding: envelope }))),
+  };
+  const end = vi.fn(async () => {});
+  snapshotDatabase.connect.mockReturnValue({
+    begin: async (
+      _isolation: string,
+      read: (connection: typeof tx) => Promise<ObservedAppTenant[]>,
+    ) => await read(tx),
+    end,
+  });
+  let result: ActorBindingRecordReadback | undefined;
+  try {
+    await readAppRuntimeSnapshot(
+      "postgresql://runtime:fixture@localhost/owned_reader_fixture",
+      async (reader) => {
+        expect(reader.readActorBindingRecord).toBeTypeOf("function");
+        result = await reader.readActorBindingRecord?.(scope);
+        return [];
+      },
+    );
+    return { end, result, tx };
+  } finally {
+    expect(end).toHaveBeenCalledOnce();
+  }
+};
+
+it("reads the exact actor binding record through the existing fixed SQL and connection", async () => {
+  const f = await actorBindingPort({ ok: true, data: actorRecord });
+  expect(f.result).toEqual({ status: "present", binding: actorRecord });
+  expect(f.tx.unsafe).toHaveBeenCalledExactlyOnceWith(
+    "select public.kernel_read_actor_binding($1::jsonb) as binding",
+    [{ actor_id: "reader-actor", app_id: "reader-app", customer_id: "reader-org", role: "reader" }],
+  );
+});
+
+it("normalizes the native role-less null binding without inventing an app role", async () => {
+  const scope = {
+    actorId: actorRecord.actorId,
+    appId: actorRecord.appId,
+    organizationId: actorRecord.organizationId,
+  };
+  const f = await actorBindingPort({ ok: true, data: { ...actorRecord, role: null } }, scope);
+  expect(f.result).toEqual({
+    status: "present",
+    binding: { ...scope, active: true, fenceGeneration: 3 },
+  });
+  expect(f.tx.json).toHaveBeenCalledWith({
+    actor_id: actorRecord.actorId,
+    app_id: actorRecord.appId,
+    customer_id: actorRecord.organizationId,
+    role: null,
+  });
+});
+
+it("retains inactive native records for the caller's independent reconciliation decision", async () => {
+  const row = { ...actorRecord, active: false, fenceGeneration: 0 };
+  const observed = await actorBindingPort({ ok: true, data: row });
+  expect(observed.result).toEqual({
+    status: "present",
+    binding: row,
+  });
+});
+
+it("distinguishes absent actor rows from explicit principal scope denial", async () => {
+  const absent = await actorBindingPort({ ok: true, data: null });
+  expect(absent.result).toEqual({ status: "absent" });
+  const denied = await actorBindingPort({
+    ok: false,
+    error: { code: "authorization_denied", details: [{ code: "scope_mismatch" }] },
+  });
+  expect(denied.result).toEqual({ status: "principal_scope_denied" });
+});
+
+it.each(["actorId", "appId", "organizationId", "role"] as const)(
+  "refuses a native actor record for another %s",
+  async (field) => {
+    await expect(
+      actorBindingPort({ ok: true, data: { ...actorRecord, [field]: "foreign" } }),
+    ).rejects.toThrow("hosted_app_runtime_readiness_unconfirmed");
+  },
+);
+
+it("does not treat role-less admission as a named-role binding", async () => {
+  await expect(
+    actorBindingPort({ ok: true, data: { ...actorRecord, role: null } }),
+  ).rejects.toThrow("hosted_app_runtime_readiness_unconfirmed");
+});
+
+it.each([-1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+  "refuses invalid native actor generation %s",
+  async (fenceGeneration) => {
+    await expect(
+      actorBindingPort({ ok: true, data: { ...actorRecord, fenceGeneration } }),
+    ).rejects.toThrow();
+  },
+);
+
+it.each([0, 2])("does not classify an invalid %s-row SQL read as absent", async (rowCount) => {
+  await expect(actorBindingPort({ ok: true, data: null }, undefined, rowCount)).rejects.toThrow(
+    "hosted_app_runtime_readiness_unconfirmed",
+  );
+});
+
+it("does not classify unknown kernel errors as a principal denial", async () => {
+  await expect(actorBindingPort({ ok: false, error: { code: "query_failed" } })).rejects.toThrow();
 });

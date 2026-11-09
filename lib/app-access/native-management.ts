@@ -17,7 +17,8 @@ type Json = z.infer<ReturnType<typeof z.json>>;
 type Workers = Pick<
   ReturnType<typeof createRepositoryProductionWorkers>,
   "invokeAuthManagement" | "mutateAppAccess" | "inspectAppAccess"
->;
+> &
+  Partial<Pick<ReturnType<typeof createRepositoryProductionWorkers>, "inspectAcceptedAppAccess">>;
 export interface RepositoryProductionManagementDependencies extends Pick<
   AppAccessManagementDependencies,
   // oxlint-disable-next-line sonarjs/max-union-size -- This enumerates required service ports, not alternative runtime states.
@@ -554,8 +555,14 @@ export const createRepositoryProductionManagement = (
       );
       await setAccess(scope, actorId, roles, true, effect, "invitee-grant");
     },
-    reconcileInvitee: async (scope, _id, actorId, roles, effect) =>
-      await accessState(scope, actorId, roles, true, effect),
+    reconcileInvitee: async (scope, _id, actorId, roles, effect, accepted) => {
+      const workers = deps.workers(scope);
+      if (accepted === true && workers.inspectAcceptedAppAccess) {
+        const context = await contextFor(scope, effect, `inspect-accepted:${actorId}`);
+        return await workers.inspectAcceptedAppAccess(context, { actorId, roles });
+      }
+      return await accessState(scope, actorId, roles, true, effect);
+    },
     acceptInvitation: async (scope, id, actorId, effect) => {
       const found = await invitation(scope, id, effect);
       if (!found || found.verifiedActorId !== actorId) {
