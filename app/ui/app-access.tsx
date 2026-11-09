@@ -273,39 +273,76 @@ const CreatorAccountForm = ({
   );
 };
 
-const CreatorAccess = ({
-  now,
+const CreatorSignIn = ({
+  creator,
+  disabled,
+  onAction,
+  signInUrl,
+}: {
+  creator: AppAccessSnapshot["creator"];
+  disabled: boolean;
+  onAction: ActionHandler;
+  signInUrl: string | undefined;
+}) => {
+  const hasSignInUrl = signInUrl !== undefined;
+  const hasRecoveryUrl = creator.recoveryUrl !== undefined;
+  return (
+    <>
+      <h2 className="font-medium">Connect your app account</h2>
+      <p className="text-sm text-muted-foreground">
+        Sign in or create your app account once. Builder will set up your access and continue this
+        saved build automatically.
+      </p>
+      {hasSignInUrl ? (
+        <a className="underline" href={signInUrl} target="_blank" rel="noopener noreferrer">
+          Sign in or create account
+        </a>
+      ) : (
+        <>
+          <p role="status">Your sign-in link expired. Your app and setup progress are saved.</p>
+          <Button
+            disabled={disabled}
+            onClick={() => {
+              onAction({ action: "renew-sign-in" });
+            }}
+          >
+            Get a new sign-in link
+          </Button>
+        </>
+      )}
+      {hasRecoveryUrl ? (
+        <p>
+          <a
+            className="text-sm underline"
+            href={creator.recoveryUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Recover your app account
+          </a>
+        </p>
+      ) : null}
+    </>
+  );
+};
+
+const CreatorAccessStatus = ({
   data,
   disabled,
+  now,
   onAction,
 }: {
   data: AppAccessSnapshot;
-  now: number;
   disabled: boolean;
+  now: number;
   onAction: ActionHandler;
 }) => {
   const { creator } = data;
   const expired = creator.expiresAt !== undefined && Date.parse(creator.expiresAt) <= now;
   const signInUrl = expired ? undefined : creator.signInUrl;
   const hasAppUrl = data.appUrl !== undefined;
-  const hasSignInUrl = signInUrl !== undefined;
-  const hasRecoveryUrl = creator.recoveryUrl !== undefined;
-  const hasCreatorEmail = creator.email !== undefined;
   return (
-    <section aria-label="Your app access" className="space-y-3 rounded-lg border p-4">
-      {hasCreatorEmail ? (
-        <p className="text-sm">
-          App account: <span className="font-medium">{creator.email}</span>
-        </p>
-      ) : null}
-      {data.canManage && creator.canChooseAccount === true ? (
-        <CreatorAccountForm
-          key={creator.email ?? "unselected"}
-          email={creator.email}
-          disabled={disabled}
-          onAction={onAction}
-        />
-      ) : null}
+    <>
       {creator.status === "ready" ? (
         <>
           <p role="status">Your access is ready.</p>
@@ -317,42 +354,12 @@ const CreatorAccess = ({
         </>
       ) : null}
       {creator.status === "sign_in_required" ? (
-        <>
-          <h2 className="font-medium">Connect your app account</h2>
-          <p className="text-sm text-muted-foreground">
-            Sign in or create your app account once. Builder will set up your access and continue
-            this saved build automatically.
-          </p>
-          {hasSignInUrl ? (
-            <a className="underline" href={signInUrl} target="_blank" rel="noopener noreferrer">
-              Sign in or create account
-            </a>
-          ) : (
-            <>
-              <p role="status">Your sign-in link expired. Your app and setup progress are saved.</p>
-              <Button
-                disabled={disabled}
-                onClick={() => {
-                  onAction({ action: "renew-sign-in" });
-                }}
-              >
-                Get a new sign-in link
-              </Button>
-            </>
-          )}
-          {hasRecoveryUrl ? (
-            <p>
-              <a
-                className="text-sm underline"
-                href={creator.recoveryUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Recover your app account
-              </a>
-            </p>
-          ) : null}
-        </>
+        <CreatorSignIn
+          creator={creator}
+          disabled={disabled}
+          onAction={onAction}
+          signInUrl={signInUrl}
+        />
       ) : null}
       {creator.status === "setting_up" ? (
         <p role="status">{creator.message ?? "Setting up your app’s access and data…"}</p>
@@ -375,6 +382,39 @@ const CreatorAccess = ({
           ) : null}
         </>
       ) : null}
+    </>
+  );
+};
+
+const CreatorAccess = ({
+  now,
+  data,
+  disabled,
+  onAction,
+}: {
+  data: AppAccessSnapshot;
+  now: number;
+  disabled: boolean;
+  onAction: ActionHandler;
+}) => {
+  const { creator } = data;
+  const hasCreatorEmail = creator.email !== undefined;
+  return (
+    <section aria-label="Your app access" className="space-y-3 rounded-lg border p-4">
+      {hasCreatorEmail ? (
+        <p className="text-sm">
+          App account: <span className="font-medium">{creator.email}</span>
+        </p>
+      ) : null}
+      {data.canManage && creator.canChooseAccount === true ? (
+        <CreatorAccountForm
+          key={creator.email ?? "unselected"}
+          email={creator.email}
+          disabled={disabled}
+          onAction={onAction}
+        />
+      ) : null}
+      <CreatorAccessStatus data={data} disabled={disabled} now={now} onAction={onAction} />
     </section>
   );
 };
