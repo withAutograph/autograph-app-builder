@@ -99,4 +99,59 @@ describe("GitHub provisioning revocation webhook", () => {
     expect(response.status).toBe(401);
     expect(store.updates).toHaveLength(0);
   });
+
+  it.each([
+    { size: 1024 * 1024, status: 202, updates: 1 },
+    { size: 1024 * 1024 + 1, status: 401, updates: 0 },
+  ])("enforces the byte limit on a signed $size-byte event", async ({ size, status, updates }) => {
+    const store = database();
+    const handler = createGitHubProvisioningWebhookHandler({ database: store.value, secret });
+    const event = { action: "revoked", sender: { id: 77 }, padding: "" };
+    event.padding = "x".repeat(size - Buffer.byteLength(JSON.stringify(event)));
+    const request = signedRequest("github_app_authorization", event);
+    expect(Buffer.byteLength(await request.clone().text())).toBe(size);
+    expect(request.headers.get("content-length")).toBeNull();
+    const response = await handler(request);
+    expect(response.status).toBe(status);
+    expect(store.updates).toHaveLength(updates);
+  });
+
+  it("propagates a source stream error without updating durable state", async () => {
+    const store = database();
+    const handler = createGitHubProvisioningWebhookHandler({ database: store.value, secret });
+    const failure = new Error("webhook source stream failed");
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(failure);
+      },
+    });
+    const requestInit = { method: "POST", body, duplex: "half" };
+    const request = new Request("https://builder.example.test/api/github/webhooks", requestInit);
+    await expect(handler(request)).rejects.toBe(failure);
+    expect(store.updates).toHaveLength(0);
+  });
+
+  it("stops reading an oversized streamed body before processing the event", async () => {
+    const store = database();
+    const handler = createGitHubProvisioningWebhookHandler({ database: store.value, secret });
+    let pulls = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        controller.enqueue(new Uint8Array(512 * 1024));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const requestInit = { method: "POST", body, duplex: "half" };
+    const response = await handler(
+      new Request("https://builder.example.test/api/github/webhooks", requestInit),
+    );
+    expect(response.status).toBe(401);
+    expect(cancelled).toBe(true);
+    expect(pulls).toBeLessThanOrEqual(4);
+    expect(store.updates).toHaveLength(0);
+  });
 });

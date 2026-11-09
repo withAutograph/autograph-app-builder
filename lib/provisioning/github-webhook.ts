@@ -32,6 +32,36 @@ const authorizationEvent = z
   })
   .loose();
 
+const MAX_WEBHOOK_BODY_BYTES = 1024 * 1024;
+const webhookBodyTooLarge = new Error("GitHub webhook body exceeded its size limit.");
+
+const readWebhookBody = async (request: Request): Promise<Uint8Array | null> => {
+  if (request.body === null) {
+    return new Uint8Array();
+  }
+  let size = 0;
+  const limited = request.body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        size += chunk.byteLength;
+        if (size > MAX_WEBHOOK_BODY_BYTES) {
+          controller.error(webhookBodyTooLarge);
+          return;
+        }
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+  try {
+    return new Uint8Array(await new Response(limited).arrayBuffer());
+  } catch (error) {
+    if (error === webhookBodyTooLarge) {
+      return null;
+    }
+    throw error;
+  }
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubProvisioningWebhookHandler(input: {
   database: Database;
@@ -48,13 +78,13 @@ export function createGitHubProvisioningWebhookHandler(input: {
     if (
       declaredLength !== null &&
       declaredLength !== "" &&
-      (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > 1024 * 1024)
+      (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > MAX_WEBHOOK_BODY_BYTES)
     ) {
       return new Response(null, { status: 413 });
     }
-    const body = new Uint8Array(await request.arrayBuffer());
+    const body = await readWebhookBody(request);
     if (
-      body.byteLength > 1024 * 1024 ||
+      body === null ||
       !verify({
         body,
         secret,

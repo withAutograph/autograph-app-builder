@@ -460,7 +460,7 @@ export const readActiveAppInstallationCustomerIds = async (input: {
         if (scope.appId !== input.plan.selection.appId) {
           throw reject();
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each current actor binding is read under its exact approved tenant scope.
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Each current actor binding is read under its exact approved tenant scope.
         const result = await reader.readActiveOrganization(scope);
         if (result === null) {
           continue;
@@ -596,9 +596,9 @@ const readInstalledAppOrganization = async (
     throw reject();
   }
   for (const scope of scopes.filter((candidate) => candidate.organizationId === organizationId)) {
-    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Recheck authority before each actor scope on the same locking snapshot.
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Recheck authority before each actor scope on the same locking snapshot.
     await guard();
-    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Only closed inactive bindings may be skipped; unknown metadata must fail.
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Only closed inactive bindings may be skipped; unknown metadata must fail.
     const result = await reader.readActiveOrganization(scope);
     if (result !== null) {
       return result;
@@ -691,7 +691,7 @@ export const createHostedOperatorAppReadiness =
             let result: z.infer<typeof observationSchema> | null = null;
             if (installationOnly) {
               observeStage("runtime_release");
-              // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each exact installed tenant needs its own current actor-bound release observation.
+              // oxlint-disable-next-line eslint/no-await-in-loop -- Each exact installed tenant needs its own current actor-bound release observation.
               result = await readInstalledAppOrganization(
                 reader,
                 installationScopes,

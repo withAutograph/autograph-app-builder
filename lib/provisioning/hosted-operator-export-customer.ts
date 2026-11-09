@@ -109,22 +109,22 @@ export const resolveExportOwnerOrganization = async (input: {
     seen.add(identity);
     // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Canonical owner and original settlement checks share the protected journal.
     await input.assertCurrent();
-    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/server-sequential-independent-await -- Read each original approval under the preceding fresh owner guard.
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Read each original approval under the preceding fresh owner guard.
     const approved = await input.readApproval(candidate);
     if (!approved) {
       continue;
     }
     let claims: z.infer<typeof realmLinkClaimsSchema>;
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/server-sequential-independent-await -- Verify only after the exact original owner approval has been established.
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Verify only after the exact original owner approval has been established.
       claims = await input.verifyProof(candidate);
     } catch {
       // An unavailable historical witness cannot authorize a tenant or hide another valid witness.
       continue;
     }
-    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/server-sequential-independent-await -- Historical verification never catches fresh owner failures.
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Historical verification never catches fresh owner failures.
     await input.assertCurrent();
-    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/server-sequential-independent-await -- Confirm the exact typed witness still exists after asynchronous verification.
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Confirm the exact typed witness still exists after asynchronous verification.
     const fresh = ownerWitnesses(await input.readCurrentRecord(), input.context, input.prepared);
     if (!fresh.some((entry) => witnessIdentity(entry) === identity)) {
       throw new HostedOperatorError("reconciliation_required");

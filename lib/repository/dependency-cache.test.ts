@@ -1236,17 +1236,16 @@ describe("linked package dependency views", () => {
       "node_modules",
       "linked-runtime",
     );
-    for (const directory of [
-      physicalPackage,
-      join(rootModules, "@fixture"),
-      join(appModules, "@fixture"),
-      join(source, "packages", "local"),
-      join(candidate, "packages", "local"),
-      join(candidate, "apps", "example"),
-    ]) {
-      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Build the owned fixture directories before writing their contents.
-      await mkdir(directory, { recursive: true });
-    }
+    await Promise.all(
+      [
+        physicalPackage,
+        join(rootModules, "@fixture"),
+        join(appModules, "@fixture"),
+        join(source, "packages", "local"),
+        join(candidate, "packages", "local"),
+        join(candidate, "apps", "example"),
+      ].map(async (directory) => await mkdir(directory, { recursive: true })),
+    );
     const rootManifest = '{"workspaces":["apps/*","packages/*"]}';
     const localManifest = '{"name":"@fixture/local","main":"index.cjs"}';
     await Promise.all([
