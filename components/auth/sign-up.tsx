@@ -78,6 +78,211 @@ interface SignUpFormProps {
 }
 
 /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
+const renderSignUpSocial = (
+  position: "top" | "bottom",
+  socialProviders: ReturnType<typeof useAuth>["socialProviders"],
+  socialLayout: SocialLayout | undefined,
+  showSeparator: boolean | null | undefined,
+  localization: ReturnType<typeof useAuth>["localization"],
+) => {
+  if (position === "top") {
+    return (
+      <>
+        {socialProviders && socialProviders.length > 0 && (
+          <ProviderButtons socialLayout={socialLayout} view="signUp" />
+        )}
+        {showSeparator === true && (
+          <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card text-xs flex items-center">
+            {localization.auth.or}
+          </FieldSeparator>
+        )}
+      </>
+    );
+  }
+  return (
+    <>
+      {showSeparator === true && (
+        <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card text-xs flex items-center">
+          {localization.auth.or}
+        </FieldSeparator>
+      )}
+      {socialProviders && socialProviders.length > 0 && (
+        <ProviderButtons socialLayout={socialLayout} view="signUp" />
+      )}
+    </>
+  );
+};
+
+const renderSignUpPasswordFields = ({
+  emailAndPassword,
+  fieldErrors,
+  isConfirmPasswordVisible,
+  isPasswordVisible,
+  isPending,
+  localization,
+  password,
+  confirmPassword,
+  setConfirmPassword,
+  setFieldErrors,
+  setIsConfirmPasswordVisible,
+  setIsPasswordVisible,
+  setPassword,
+}: Pick<
+  SignUpFormProps,
+  | "emailAndPassword"
+  | "fieldErrors"
+  | "isConfirmPasswordVisible"
+  | "isPasswordVisible"
+  | "isPending"
+  | "localization"
+  | "password"
+  | "confirmPassword"
+  | "setConfirmPassword"
+  | "setFieldErrors"
+  | "setIsConfirmPasswordVisible"
+  | "setIsPasswordVisible"
+  | "setPassword"
+>) => (
+  <>
+    <Field data-invalid={(fieldErrors.password ?? "") !== ""}>
+      <FieldLabel htmlFor="password">{localization.auth.password}</FieldLabel>
+
+      <InputGroup>
+        <InputGroupInput
+          id="password"
+          name="password"
+          type={isPasswordVisible ? "text" : "password"}
+          autoComplete="new-password"
+          value={password}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            setFieldErrors((prev) => ({
+              ...prev,
+              password: undefined,
+            }));
+          }}
+          placeholder={localization.auth.passwordPlaceholder}
+          required
+          minLength={emailAndPassword?.minPasswordLength}
+          maxLength={emailAndPassword?.maxPasswordLength}
+          disabled={isPending}
+          onInvalid={(e) => {
+            e.preventDefault();
+            // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+            const el = e.target as HTMLInputElement;
+            const min = emailAndPassword?.minPasswordLength;
+            const max = emailAndPassword?.maxPasswordLength;
+            let msg = localization.auth.tooLong.replace("{{max}}", String(max));
+            if (el.validity.valueMissing) {
+              msg = localization.auth.fieldRequired;
+            } else if (el.validity.tooShort) {
+              msg = localization.auth.tooShort.replace("{{min}}", String(min));
+            }
+
+            setFieldErrors((prev) => ({
+              ...prev,
+              password: msg,
+            }));
+          }}
+          aria-invalid={(fieldErrors.password ?? "") !== ""}
+        />
+
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton
+            size="icon-xs"
+            aria-label={
+              isPasswordVisible ? localization.auth.hidePassword : localization.auth.showPassword
+            }
+            title={
+              isPasswordVisible ? localization.auth.hidePassword : localization.auth.showPassword
+            }
+            onClick={() => {
+              setIsPasswordVisible((visible) => !visible);
+            }}
+          >
+            {isPasswordVisible ? <EyeOff /> : <Eye />}
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
+
+      <FieldError>{fieldErrors.password}</FieldError>
+
+      <PasswordStrengthMeter password={password} />
+    </Field>
+
+    {emailAndPassword?.confirmPassword === true && (
+      <Field data-invalid={(fieldErrors.confirmPassword ?? "") !== ""}>
+        <FieldLabel htmlFor="confirmPassword">{localization.auth.confirmPassword}</FieldLabel>
+
+        <InputGroup>
+          <InputGroupInput
+            id="confirmPassword"
+            name="confirmPassword"
+            type={isConfirmPasswordVisible ? "text" : "password"}
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => {
+              setConfirmPassword(e.target.value);
+
+              setFieldErrors((prev) => ({
+                ...prev,
+                confirmPassword: undefined,
+              }));
+            }}
+            placeholder={localization.auth.confirmPasswordPlaceholder}
+            required
+            minLength={emailAndPassword?.minPasswordLength}
+            maxLength={emailAndPassword?.maxPasswordLength}
+            disabled={isPending}
+            onInvalid={(e) => {
+              e.preventDefault();
+              // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+              const el = e.target as HTMLInputElement;
+              const min = emailAndPassword?.minPasswordLength;
+              const max = emailAndPassword?.maxPasswordLength;
+              let msg = localization.auth.tooLong.replace("{{max}}", String(max));
+              if (el.validity.valueMissing) {
+                msg = localization.auth.fieldRequired;
+              } else if (el.validity.tooShort) {
+                msg = localization.auth.tooShort.replace("{{min}}", String(min));
+              }
+
+              setFieldErrors((prev) => ({
+                ...prev,
+                confirmPassword: msg,
+              }));
+            }}
+            aria-invalid={(fieldErrors.confirmPassword ?? "") !== ""}
+          />
+
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              size="icon-xs"
+              aria-label={
+                isConfirmPasswordVisible
+                  ? localization.auth.hidePassword
+                  : localization.auth.showPassword
+              }
+              title={
+                isConfirmPasswordVisible
+                  ? localization.auth.hidePassword
+                  : localization.auth.showPassword
+              }
+              onClick={() => {
+                setIsConfirmPasswordVisible((visible) => !visible);
+              }}
+            >
+              {isConfirmPasswordVisible ? <EyeOff /> : <Eye />}
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+
+        <FieldError>{fieldErrors.confirmPassword}</FieldError>
+      </Field>
+    )}
+  </>
+);
+
 const SignUpForm = ({
   additionalFields,
   emailAndPassword,
@@ -184,142 +389,21 @@ const SignUpForm = ({
           ),
       )}
 
-      <Field data-invalid={(fieldErrors.password ?? "") !== ""}>
-        <FieldLabel htmlFor="password">{localization.auth.password}</FieldLabel>
-
-        <InputGroup>
-          <InputGroupInput
-            id="password"
-            name="password"
-            type={isPasswordVisible ? "text" : "password"}
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              setFieldErrors((prev) => ({
-                ...prev,
-                password: undefined,
-              }));
-            }}
-            placeholder={localization.auth.passwordPlaceholder}
-            required
-            minLength={emailAndPassword?.minPasswordLength}
-            maxLength={emailAndPassword?.maxPasswordLength}
-            disabled={isPending}
-            onInvalid={(e) => {
-              e.preventDefault();
-              // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
-              const el = e.target as HTMLInputElement;
-              const min = emailAndPassword?.minPasswordLength;
-              const max = emailAndPassword?.maxPasswordLength;
-              let msg = localization.auth.tooLong.replace("{{max}}", String(max));
-              if (el.validity.valueMissing) {
-                msg = localization.auth.fieldRequired;
-              } else if (el.validity.tooShort) {
-                msg = localization.auth.tooShort.replace("{{min}}", String(min));
-              }
-
-              setFieldErrors((prev) => ({
-                ...prev,
-                password: msg,
-              }));
-            }}
-            aria-invalid={(fieldErrors.password ?? "") !== ""}
-          />
-
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton
-              size="icon-xs"
-              aria-label={
-                isPasswordVisible ? localization.auth.hidePassword : localization.auth.showPassword
-              }
-              title={
-                isPasswordVisible ? localization.auth.hidePassword : localization.auth.showPassword
-              }
-              onClick={() => {
-                setIsPasswordVisible((visible) => !visible);
-              }}
-            >
-              {isPasswordVisible ? <EyeOff /> : <Eye />}
-            </InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
-
-        <FieldError>{fieldErrors.password}</FieldError>
-
-        <PasswordStrengthMeter password={password} />
-      </Field>
-
-      {emailAndPassword?.confirmPassword === true && (
-        <Field data-invalid={(fieldErrors.confirmPassword ?? "") !== ""}>
-          <FieldLabel htmlFor="confirmPassword">{localization.auth.confirmPassword}</FieldLabel>
-
-          <InputGroup>
-            <InputGroupInput
-              id="confirmPassword"
-              name="confirmPassword"
-              type={isConfirmPasswordVisible ? "text" : "password"}
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(e) => {
-                setConfirmPassword(e.target.value);
-
-                setFieldErrors((prev) => ({
-                  ...prev,
-                  confirmPassword: undefined,
-                }));
-              }}
-              placeholder={localization.auth.confirmPasswordPlaceholder}
-              required
-              minLength={emailAndPassword?.minPasswordLength}
-              maxLength={emailAndPassword?.maxPasswordLength}
-              disabled={isPending}
-              onInvalid={(e) => {
-                e.preventDefault();
-                // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
-                const el = e.target as HTMLInputElement;
-                const min = emailAndPassword?.minPasswordLength;
-                const max = emailAndPassword?.maxPasswordLength;
-                let msg = localization.auth.tooLong.replace("{{max}}", String(max));
-                if (el.validity.valueMissing) {
-                  msg = localization.auth.fieldRequired;
-                } else if (el.validity.tooShort) {
-                  msg = localization.auth.tooShort.replace("{{min}}", String(min));
-                }
-
-                setFieldErrors((prev) => ({
-                  ...prev,
-                  confirmPassword: msg,
-                }));
-              }}
-              aria-invalid={(fieldErrors.confirmPassword ?? "") !== ""}
-            />
-
-            <InputGroupAddon align="inline-end">
-              <InputGroupButton
-                size="icon-xs"
-                aria-label={
-                  isConfirmPasswordVisible
-                    ? localization.auth.hidePassword
-                    : localization.auth.showPassword
-                }
-                title={
-                  isConfirmPasswordVisible
-                    ? localization.auth.hidePassword
-                    : localization.auth.showPassword
-                }
-                onClick={() => {
-                  setIsConfirmPasswordVisible((visible) => !visible);
-                }}
-              >
-                {isConfirmPasswordVisible ? <EyeOff /> : <Eye />}
-              </InputGroupButton>
-            </InputGroupAddon>
-          </InputGroup>
-
-          <FieldError>{fieldErrors.confirmPassword}</FieldError>
-        </Field>
-      )}
+      {renderSignUpPasswordFields({
+        emailAndPassword,
+        fieldErrors,
+        isConfirmPasswordVisible,
+        isPasswordVisible,
+        isPending,
+        localization,
+        password,
+        confirmPassword,
+        setConfirmPassword,
+        setFieldErrors,
+        setIsConfirmPasswordVisible,
+        setIsPasswordVisible,
+        setPassword,
+      })}
 
       {additionalFields?.map(
         (field) =>
@@ -346,6 +430,85 @@ const SignUpForm = ({
   </form>
 );
 /* oxlint-enable typescript/strict-boolean-expressions */
+
+interface SignUpSubmissionOptions {
+  additionalFields: ReturnType<typeof useAuth>["additionalFields"];
+  emailAndPassword: ReturnType<typeof useAuth>["emailAndPassword"];
+  password: string;
+  confirmPassword: string;
+  localization: ReturnType<typeof useAuth>["localization"];
+  setPassword: Dispatch<SetStateAction<string>>;
+  setConfirmPassword: Dispatch<SetStateAction<string>>;
+  signUpEmail: ReturnType<
+    typeof useSignUpEmail<ReturnType<typeof useAuth>["authClient"]>
+  >["mutate"];
+  fetchOptions: ReturnType<typeof useFetchOptions>["fetchOptions"];
+}
+
+const createSignUpSubmitHandler =
+  ({
+    additionalFields,
+    emailAndPassword,
+    password,
+    confirmPassword,
+    localization,
+    setPassword,
+    setConfirmPassword,
+    signUpEmail,
+    fetchOptions,
+  }: SignUpSubmissionOptions) =>
+  async (e: SyntheticEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    const formData = new FormData(e.currentTarget);
+    // `emailAndPassword.name === false` hides the name field and submits "".
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+    const name = (formData.get("name") as string | null) ?? "";
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+    const email = formData.get("email") as string;
+
+    if (emailAndPassword?.confirmPassword === true && password !== confirmPassword) {
+      toast.error(localization.auth.passwordsDoNotMatch);
+      setPassword("");
+      setConfirmPassword("");
+      return;
+    }
+
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+    const additionalFieldValues: Record<string, unknown> = {};
+
+    for (const field of additionalFields ?? []) {
+      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
+      if (!field.signUp || field.readOnly === true) {
+        continue;
+      }
+      /* oxlint-enable typescript/strict-boolean-expressions */
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+      const value = parseAdditionalFieldValue(field, formData.get(field.name) as string | null);
+
+      if (field.validate) {
+        try {
+          // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Validate fields in order and preserve the first failure.
+          await field.validate(value);
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : String(error));
+          return;
+        }
+      }
+
+      if (value !== undefined) {
+        additionalFieldValues[field.name] = value;
+      }
+    }
+
+    signUpEmail({
+      email,
+      fetchOptions,
+      name,
+      password,
+      ...additionalFieldValues,
+    });
+  };
 
 /**
  * Renders a sign-up form with name, email, and password fields, optional social provider buttons, and submission handling.
@@ -438,58 +601,17 @@ export function SignUp({
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
 
-  const handleSubmit = async (e: SyntheticEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
-    const formData = new FormData(e.currentTarget);
-    // `emailAndPassword.name === false` hides the name field and submits "".
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
-    const name = (formData.get("name") as string | null) ?? "";
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
-    const email = formData.get("email") as string;
-
-    if (emailAndPassword?.confirmPassword === true && password !== confirmPassword) {
-      toast.error(localization.auth.passwordsDoNotMatch);
-      setPassword("");
-      setConfirmPassword("");
-      return;
-    }
-
-    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
-    const additionalFieldValues: Record<string, unknown> = {};
-
-    for (const field of additionalFields ?? []) {
-      /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
-      if (!field.signUp || field.readOnly === true) {
-        continue;
-      }
-      /* oxlint-enable typescript/strict-boolean-expressions */
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
-      const value = parseAdditionalFieldValue(field, formData.get(field.name) as string | null);
-
-      if (field.validate) {
-        try {
-          // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Validate fields in order and preserve the first failure.
-          await field.validate(value);
-        } catch (error) {
-          toast.error(error instanceof Error ? error.message : String(error));
-          return;
-        }
-      }
-
-      if (value !== undefined) {
-        additionalFieldValues[field.name] = value;
-      }
-    }
-
-    signUpEmail({
-      email,
-      fetchOptions,
-      name,
-      password,
-      ...additionalFieldValues,
-    });
-  };
+  const handleSubmit = createSignUpSubmitHandler({
+    additionalFields,
+    emailAndPassword,
+    password,
+    confirmPassword,
+    localization,
+    setPassword,
+    setConfirmPassword,
+    signUpEmail,
+    fetchOptions,
+  });
 
   const showSeparator = emailAndPassword?.enabled && socialProviders && socialProviders.length > 0;
   const alternateRedirectTo =
@@ -521,20 +643,8 @@ export function SignUp({
                 <AuthButton key={`${plugin.id}-${index.toString()}`} view="signUp" />
               )),
             )}
-            {/* oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing social sign-in conditions. */}
-            {socialPosition === "top" && (
-              <>
-                {socialProviders && socialProviders.length > 0 && (
-                  <ProviderButtons socialLayout={socialLayout} view="signUp" />
-                )}
-
-                {showSeparator === true && (
-                  <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card text-xs flex items-center">
-                    {localization.auth.or}
-                  </FieldSeparator>
-                )}
-              </>
-            )}
+            {socialPosition === "top" &&
+              renderSignUpSocial("top", socialProviders, socialLayout, showSeparator, localization)}
 
             {emailAndPassword?.enabled && (
               <SignUpForm
@@ -557,20 +667,14 @@ export function SignUp({
               />
             )}
 
-            {/* oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing social sign-in conditions. */}
-            {socialPosition === "bottom" && (
-              <>
-                {showSeparator === true && (
-                  <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card text-xs flex items-center">
-                    {localization.auth.or}
-                  </FieldSeparator>
-                )}
-
-                {socialProviders && socialProviders.length > 0 && (
-                  <ProviderButtons socialLayout={socialLayout} view="signUp" />
-                )}
-              </>
-            )}
+            {socialPosition === "bottom" &&
+              renderSignUpSocial(
+                "bottom",
+                socialProviders,
+                socialLayout,
+                showSeparator,
+                localization,
+              )}
           </div>
         </CardContent>
       </Card>
