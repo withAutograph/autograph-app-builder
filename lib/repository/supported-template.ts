@@ -3,7 +3,10 @@ import { inspectDevelopmentSourceGeneration } from "./development-source-generat
 import type { PreparedSourceFile } from "./development-source-generation";
 
 import { retainPreparedLocalSourceBaseline } from "./local-source-baseline-retention";
-import { recoverPreparedSourceManifest } from "./prepared-source-manifest-recovery";
+import {
+  recoverPreparedSourceManifest,
+  verifyPreparedSourceManifestAgainstGit,
+} from "./prepared-source-manifest-recovery";
 import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -1083,8 +1086,18 @@ export const readPreparedSandboxSourceManifest = async function readPreparedSand
       cause: error,
     });
   }
-  if (sha256(JSON.stringify(files)) !== workspace.workspaceDigest) {
-    throw new Error("The prepared workspace manifest no longer matches its receipt.");
+  const manifestDigest = sha256(JSON.stringify(files));
+  if (manifestDigest !== workspace.workspaceDigest) {
+    const sourceIdentityDigest = sha256(
+      JSON.stringify({ sourceSha: workspace.sourceSha, sourceTree: workspace.sourceTree }),
+    );
+    if (
+      workspace.workspaceDigest !== sourceIdentityDigest ||
+      workspace.eligibilityDigest !== sourceIdentityDigest
+    ) {
+      throw new Error("The prepared workspace manifest no longer matches its receipt.");
+    }
+    await verifyPreparedSourceManifestAgainstGit(sandbox, workspace, manifestDigest);
   }
   return files;
 };
@@ -1332,9 +1345,9 @@ export const assertPreparedSandboxReleasePolicy =
   };
 
 /**
- * Seal an already materialized workspace after the producer has written the
- * exact source manifest and checksum receipt.  Canonical remote clones use
- * this instead of serializing a host checkout into an archive.
+ * Record the selected producer's workspace identity. Canonical fresh clones
+ * retain their commit/tree digest and derive the original file manifest when
+ * needed; file-list producers retain their exact manifest digest instead.
  */
 export const recordPreparedSandboxWorkspace = async function recordPreparedSandboxWorkspace(input: {
   sandbox: SandboxSession;

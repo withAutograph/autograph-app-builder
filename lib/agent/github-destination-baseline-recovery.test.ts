@@ -5,10 +5,18 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import { initialDraftCandidatePaths } from "../../agent/tools/prepare_github_draft_review";
+import {
+  acquireCanonicalArrustedTemplate,
+  ARRUSTED_TEMPLATE_REPOSITORY,
+} from "../repository/arrusted-template";
 import { sandboxGitHubSourceManifestProgram } from "../repository/sandbox-github-source";
-import { readPreparedSandboxSourceManifest } from "../repository/supported-template";
+import {
+  readPreparedSandboxSourceManifest,
+  readPreparedSandboxWorkspaceRecord,
+} from "../repository/supported-template";
 import type { PreparedSandboxWorkspace } from "../repository/supported-template";
 import { createVercelSdkSession } from "../sandbox/vercel-sdk-session";
 import type { VercelSdkSessionNative } from "../sandbox/vercel-sdk-session";
@@ -66,7 +74,13 @@ const fixture = () => {
     workspaceId: "same-owned-workspace",
     workspacePath: "/workspace/repository",
   };
-  const mapped = (name: string) => name.replaceAll("/workspace", workspace);
+  const mapped = (name: string) =>
+    name
+      .replaceAll("/workspace", workspace)
+      .replaceAll(
+        "PATH=/usr/local/bin:/usr/bin:/bin",
+        `PATH=${path.dirname(process.execPath)}:/usr/bin:/bin`,
+      );
   const native = (beforeCommand?: () => void): VercelSdkSessionNative => ({
     name: record.workspaceId,
     expiresAt: new Date(Date.now() + 600_000),
@@ -86,8 +100,15 @@ const fixture = () => {
     readFile: async () => {
       throw new Error("Unexpected stream read");
     },
-    writeFiles: async () => {
-      throw new Error("Unexpected source write");
+    writeFiles: async (files) => {
+      for (const file of files) {
+        const target = mapped(file.path);
+        if (!target.startsWith(`${metadata}${path.sep}`)) {
+          throw new Error("Unexpected source write");
+        }
+        mkdirSync(path.dirname(target), { recursive: true });
+        writeFileSync(target, file.content);
+      }
     },
     update: async () => {
       /* The fixture has no provider configuration. */
@@ -128,11 +149,30 @@ const fixture = () => {
   return { root, repository, metadata, git, manifest, record, native };
 };
 
+const freshTemplateFixture = async () => {
+  const f = fixture();
+  rmSync(path.join(f.metadata, "source-files.json"));
+  rmSync(path.join(f.metadata, "source-checksums.sha256"));
+  f.git("remote", "add", "origin", ARRUSTED_TEMPLATE_REPOSITORY);
+  f.git("update-ref", "refs/remotes/origin/main", f.record.sourceSha);
+  const sandbox = createVercelSdkSession(f.native());
+  await acquireCanonicalArrustedTemplate({
+    sandbox,
+    callId: "acquire-fresh-template",
+    reader: { acquire: async () => ({ token: "unused-fixture-source-token" }) },
+  });
+  const record = await readPreparedSandboxWorkspaceRecord(sandbox);
+  if (record === undefined) {
+    throw new Error("Expected the fresh-template producer's record");
+  }
+  return { ...f, record };
+};
+
 describe("destination review after retained workspace metadata loss", () => {
   it.each(["same-baseline", "new-baseline"])(
     "preserves metadata restored after the initial missing-file read: %s",
     async (winner) => {
-      const f = fixture();
+      const f = await freshTemplateFixture();
       try {
         const manifestPath = path.join(f.metadata, "source-files.json");
         const checksumsPath = path.join(f.metadata, "source-checksums.sha256");
@@ -145,8 +185,8 @@ describe("destination review after retained workspace metadata loss", () => {
         const winningManifest = `${JSON.stringify(files, null, 4)}\n`;
         const checksumLines = files.map((file) => `${file.sha256}  repository/${file.path}`);
         const winningChecksums = [...checksumLines, ""].join("\n");
-        rmSync(manifestPath);
-        rmSync(checksumsPath);
+        rmSync(manifestPath, { force: true });
+        rmSync(checksumsPath, { force: true });
         const sandbox = createVercelSdkSession(
           f.native(() => {
             writeFileSync(manifestPath, winningManifest);
@@ -188,10 +228,13 @@ describe("destination review after retained workspace metadata loss", () => {
   });
 
   it("restores the original Git baseline through a reattached SDK reader without losing repaired app or registration", async () => {
-    const f = fixture();
+    const f = await freshTemplateFixture();
     try {
-      const original = createVercelSdkSession(f.native());
-      await expect(readPreparedSandboxSourceManifest(original, f.record)).resolves.toHaveLength(5);
+      expect(f.record.workspaceDigest).toBe(
+        hash(JSON.stringify({ sourceSha: f.record.sourceSha, sourceTree: f.record.sourceTree })),
+      );
+      expect(f.record.eligibilityDigest).toBe(f.record.workspaceDigest);
+      expect(existsSync(path.join(f.metadata, "source-files.json"))).toBe(false);
       const appDirectory = path.join(f.repository, "apps/example/app");
       mkdirSync(appDirectory, { recursive: true });
       const authored = {
@@ -206,8 +249,6 @@ describe("destination review after retained workspace metadata loss", () => {
         writeFileSync(path.join(f.repository, name), content);
       }
       const before = f.git("status", "--porcelain=v1");
-      rmSync(path.join(f.metadata, "source-files.json"));
-      rmSync(path.join(f.metadata, "source-checksums.sha256"));
       // A stopped/rebound provider retains its filesystem and logical identity.
       const resumed = createVercelSdkSession(f.native());
       const files = Object.entries(authored).map(([name, content]) => ({
@@ -276,6 +317,108 @@ describe("destination review after retained workspace metadata loss", () => {
       }
     },
   );
+
+  it.each(["sha256", "objectId", "mode", "path", "omitted-file", "checksum"] as const)(
+    "checks the exact original Git baseline for an existing source-identity manifest: %s",
+    async (changed) => {
+      const f = await freshTemplateFixture();
+      try {
+        const files = z
+          .array(
+            z.object({
+              mode: z.string(),
+              objectId: z.string(),
+              path: z.string(),
+              sha256: z.string(),
+            }),
+          )
+          .parse(JSON.parse(f.manifest));
+        const [first] = files;
+        if (first === undefined) {
+          throw new Error("Expected original fixture files");
+        }
+        if (changed === "sha256") {
+          first.sha256 = "f".repeat(64);
+        } else if (changed === "objectId") {
+          first.objectId = "f".repeat(40);
+        } else if (changed === "mode") {
+          first.mode = "100755";
+        } else if (changed === "path") {
+          first.path = "another-original-file";
+        } else if (changed === "omitted-file") {
+          files.shift();
+        }
+        const manifest = JSON.stringify(files);
+        const checksums =
+          files.map((file) => `${file.sha256}  repository/${file.path}\n`).join("") +
+          (changed === "checksum" ? "foreign checksum\n" : "");
+        writeFileSync(path.join(f.metadata, "source-files.json"), manifest);
+        writeFileSync(path.join(f.metadata, "source-checksums.sha256"), checksums);
+        const appFile = path.join(f.repository, "private-app-edit.txt");
+        writeFileSync(appFile, "retain private app edit");
+        await expect(
+          readPreparedSandboxSourceManifest(createVercelSdkSession(f.native()), f.record),
+        ).rejects.toThrow("no longer matches its receipt");
+        expect(readFileSync(appFile, "utf-8")).toBe("retain private app edit");
+        expect(readFileSync(path.join(f.metadata, "source-files.json"), "utf-8")).toBe(manifest);
+        expect(readFileSync(path.join(f.metadata, "source-checksums.sha256"), "utf-8")).toBe(
+          checksums,
+        );
+      } finally {
+        rmSync(f.root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("preserves fresh-template source and receipts when an original Git blob is missing", async () => {
+    const f = await freshTemplateFixture();
+    try {
+      const appFile = path.join(f.repository, "private-app-edit.txt");
+      writeFileSync(appFile, "retain private app edit");
+      const original = f.git("rev-parse", `${f.record.sourceSha}:shared.txt`);
+      rmSync(path.join(f.repository, ".git/objects", original.slice(0, 2), original.slice(2)));
+      await expect(
+        readPreparedSandboxSourceManifest(createVercelSdkSession(f.native()), f.record),
+      ).rejects.toThrow("app and session are preserved");
+      expect(readFileSync(appFile, "utf-8")).toBe("retain private app edit");
+      expect(existsSync(path.join(f.metadata, "source-files.json"))).toBe(false);
+      expect(await readPreparedSandboxWorkspaceRecord(createVercelSdkSession(f.native()))).toEqual(
+        f.record,
+      );
+    } finally {
+      rmSync(f.root, { recursive: true, force: true });
+    }
+  });
+
+  it("repairs only missing checksums after proving an existing fresh-template manifest", async () => {
+    const f = await freshTemplateFixture();
+    try {
+      writeFileSync(path.join(f.metadata, "source-files.json"), f.manifest);
+      const original = f.git("status", "--porcelain=v1");
+      await expect(
+        readPreparedSandboxSourceManifest(createVercelSdkSession(f.native()), f.record),
+      ).resolves.toHaveLength(5);
+      expect(readFileSync(path.join(f.metadata, "source-files.json"), "utf-8")).toBe(f.manifest);
+      expect(readFileSync(path.join(f.metadata, "source-checksums.sha256"), "utf-8")).toContain(
+        "  repository/shared.txt\n",
+      );
+      expect(f.git("status", "--porcelain=v1")).toBe(original);
+    } finally {
+      rmSync(f.root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps existing full-list receipt verification unchanged", async () => {
+    const f = fixture();
+    try {
+      expect(
+        await readPreparedSandboxSourceManifest(createVercelSdkSession(f.native()), f.record),
+      ).toHaveLength(5);
+      expect(f.record.workspaceDigest).toBe(hash(JSON.stringify(JSON.parse(f.manifest))));
+    } finally {
+      rmSync(f.root, { recursive: true, force: true });
+    }
+  });
 
   it("cannot reconstruct another session's baseline in the current workspace", async () => {
     const f = fixture();
