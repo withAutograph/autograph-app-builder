@@ -362,6 +362,14 @@ Builder includes the retained registration and dependency changes against the
 original starter manifest. If the destination has independently changed one of
 those shared files, reconcile that file against the current destination before
 publishing.
+If retained workspace metadata is missing after recovery, Builder reconstructs
+that original manifest from the saved source commit's Git blobs and verifies it
+against the existing source tree and workspace digest. It restores only the
+manifest and checksum metadata, never the app, checkout or index. App-authored
+changes therefore remain intact, and metadata loss does not require another
+Build approval. If the original objects cannot establish the saved baseline,
+Builder preserves the app and session and reports a service recovery issue;
+the changed working tree is never substituted as the original baseline.
 
 After an owned app's PR merges, Builder can prepare its next PR in the same
 session and private workspace. Approved repair history supplies only the prior

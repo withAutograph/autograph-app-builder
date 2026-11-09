@@ -3,6 +3,7 @@ import { inspectDevelopmentSourceGeneration } from "./development-source-generat
 import type { PreparedSourceFile } from "./development-source-generation";
 
 import { retainPreparedLocalSourceBaseline } from "./local-source-baseline-retention";
+import { recoverPreparedSourceManifest } from "./prepared-source-manifest-recovery";
 import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -1061,11 +1062,17 @@ export const readPreparedSandboxSourceManifest = async function readPreparedSand
   sandbox: SandboxSession,
   workspace: PreparedSandboxWorkspace,
 ): Promise<PreparedSourceFile[]> {
-  const manifestContent = await sandbox.readTextFile({
+  let manifestContent = await sandbox.readTextFile({
     path: sandboxSourceFilesPath,
   });
   if (manifestContent === null) {
-    throw new Error("The prepared workspace manifest is missing.");
+    await recoverPreparedSourceManifest(sandbox, workspace);
+    manifestContent = await sandbox.readTextFile({ path: sandboxSourceFilesPath });
+    if (manifestContent === null) {
+      throw new Error(
+        "Builder restored the app's source metadata but could not read it back. The app and session are preserved; retry Builder service recovery.",
+      );
+    }
   }
   let files: PreparedSourceFile[];
   try {
