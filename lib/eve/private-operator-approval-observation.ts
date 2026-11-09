@@ -13,6 +13,7 @@ const requestSchema = z.strictObject({
     "native-target",
     "public-release",
     "repository-production",
+    "auth-schema-rollout",
     "app-integration-capability",
     "central-integration-host",
     "normal-platform-integrations",

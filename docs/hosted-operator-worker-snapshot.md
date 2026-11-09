@@ -1,5 +1,9 @@
 # Immutable operator worker snapshots
 
+Existing shared Production Auth schema maintenance uses the separate private
+[service rollout contract](production-auth-schema-rollout.md), retaining exact
+catalog descriptors for saved operations without adding an app delivery gate.
+
 The operator's deployment-owned `sandbox` configuration accepts exactly one
 filesystem source. Existing image configurations retain `image`, preferably an
 actual digest-pinned VCR image reference. Snapshot configurations supply the
