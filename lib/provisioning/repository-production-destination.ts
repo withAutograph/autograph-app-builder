@@ -1,3 +1,4 @@
+import type { ExistingRepositoryDestination } from "./builder-session-destination-contract";
 import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
 import type {
   AppPublicationDestination,
@@ -39,9 +40,13 @@ export const resolveRepositoryProductionDestination = <Profile extends Destinati
   source?: ApprovedBuildDecision["existingRepositorySource"];
   selection?: CompiledOperatorReleaseSelection;
   destination?: AppPublicationDestination;
+  repositoryDestination?: ExistingRepositoryDestination;
   repositories: readonly Profile[];
 }) => {
-  const { source, selection, destination } = input;
+  const { source, selection, destination, repositoryDestination } = input;
+  if (repositoryDestination !== undefined && repositoryDestination.appId !== input.appId) {
+    throw new Error("repository_production_scope_denied");
+  }
   assertAppSpecification(input, selection);
   assertAppSpecification(input, destination);
   if (
@@ -59,18 +64,35 @@ export const resolveRepositoryProductionDestination = <Profile extends Destinati
   ) {
     throw new Error("repository_production_scope_denied");
   }
-  const repositoryId = published?.repositoryId ?? source?.repository.repositoryId;
+  const repositoryId =
+    published?.repositoryId ??
+    source?.repository.repositoryId ??
+    repositoryDestination?.repository.repositoryId;
+  if (
+    repositoryDestination !== undefined &&
+    repositoryId !== repositoryDestination.repository.repositoryId
+  ) {
+    throw new Error("repository_production_scope_denied");
+  }
   const sourceSha = published?.gitSha ?? source?.repository.headSha;
   if (repositoryId === undefined || sourceSha === undefined) {
     throw new RepositoryProductionDestinationRequiredError();
   }
-  const profiles = input.repositories.filter(
-    (profile) =>
-      profile.workspaceId === input.workspaceId &&
-      profile.repositoryId === repositoryId &&
-      (source === undefined ||
-        profile.repositoryFullName === `${source.repository.owner}/${source.repository.name}`),
-  );
+  const profiles = input.repositories.filter((profile) => {
+    const matchesDestination =
+      repositoryDestination === undefined ||
+      profile.repositoryFullName ===
+        `${repositoryDestination.repository.owner}/${repositoryDestination.repository.name}`;
+    const matchesSource =
+      source === undefined ||
+      profile.repositoryFullName === `${source.repository.owner}/${source.repository.name}`;
+    return [
+      profile.workspaceId === input.workspaceId,
+      profile.repositoryId === repositoryId,
+      matchesDestination,
+      matchesSource,
+    ].every(Boolean);
+  });
   if (profiles.length !== 1) {
     throw new Error("repository_production_scope_denied");
   }

@@ -427,7 +427,17 @@ retains its separate approval.
 If the user explicitly chose an existing repository for a fresh-template app,
 pass it as `destination: { repository: "owner/name", selectedInstallationId? }`.
 Preparation observes the actual repository and installation through the ordinary
-session-owned GitHub connection. A later refresh can reuse that exact destination.
+session-owned GitHub connection. The creator may supply a GitHub repository URL or
+`owner/name`; Builder resolves its connected installation and numeric repository
+identity. It saves that selection in the private session’s `builderDestination`
+metadata before preparing review, independently of the acquired starter source.
+The saved destination page offers the same existing-repository selection even
+when creating new repositories/projects is disabled. Selecting an existing
+repository does not create a repository or Vercel project and needs no per-app
+resource-provisioning journal. Existing journal-backed destination records remain
+supported. A later refresh or recovered child session retains the same selection;
+normal GitHub access is checked again before publication. Selection grants no
+publication or merge approval.
 Keep the starter checkout, original source receipt, app files and validation.
 
 After accepting the destination diff, fresh-template sealing uses

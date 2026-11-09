@@ -1,8 +1,21 @@
 import { z } from "zod";
 
 const resumeKeySchema = z.uuid();
+const savedDestinationReturnSchema = z.string().refine((value) => {
+  if (!/^\/builds\/[A-Za-z0-9_-]+\/destination(?:\?|$)/u.test(value)) {
+    return false;
+  }
+  const url = new URL(value, "https://builder.invalid");
+  return (
+    url.origin === "https://builder.invalid" &&
+    /^\/builds\/[A-Za-z0-9_-]+\/destination$/u.test(url.pathname) &&
+    url.hash === "" &&
+    [...url.searchParams.keys()].every((key) => key === "repository")
+  );
+});
 export const providerConnectionReturnToSchema = z.union([
   z.literal("/"),
+  savedDestinationReturnSchema,
   z
     .string()
     .refine((value) => value.startsWith("/handoff/") && z.uuid().safeParse(value.slice(9)).success)

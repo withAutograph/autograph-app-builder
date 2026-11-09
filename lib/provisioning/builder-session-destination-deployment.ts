@@ -1,3 +1,7 @@
+import { isExistingRepositoryDestination } from "./builder-session-destination-contract";
+import { resolveExistingBuilderDestinationReference } from "./builder-existing-destination";
+import { createExistingRepositoryDestinationSelector } from "./builder-existing-repository-selection";
+import { repositoryAccessRuntimeForPrincipal } from "../agent/deployment-repository-access-runtime";
 import { z } from "zod";
 import type { BuilderProvisionResponse } from "./contracts";
 import type { DurableHostedSessionRecord } from "../eve/hosted-store";
@@ -125,7 +129,11 @@ export const openBuilderSessionDestination = async (
         let receipt;
         if (session.sourceHandoffId === undefined) {
           const reference = session.builderDestination;
-          if (reference === undefined || reference.appId !== session.appId) {
+          if (
+            reference === undefined ||
+            isExistingRepositoryDestination(reference) ||
+            reference.appId !== session.appId
+          ) {
             throw new Error("Select this app's normal destination first.");
           }
           const row = await journal.read({
@@ -213,6 +221,17 @@ export const openBuilderSessionDestination = async (
     authority,
     sessions,
     service: {
+      selectExisting: async (
+        input: Parameters<ReturnType<typeof createExistingRepositoryDestinationSelector>>[0],
+      ) =>
+        await createExistingRepositoryDestinationSelector({
+          sessions,
+          assertMember,
+          classify: async (selection) => {
+            const access = await repositoryAccessRuntimeForPrincipal({ authority, principal });
+            return await access.classify(selection);
+          },
+        })(input),
       // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       select: (
         input: Parameters<ReturnType<typeof createBuilderSessionDestinationService>["select"]>[0],
@@ -234,7 +253,12 @@ export const openBuilderSessionDestination = async (
       if (session.appId === undefined) {
         throw new Error("Choose an app before selecting its destination.");
       }
-      let reference = session.builderDestination;
+      let reference = await resolveExistingBuilderDestinationReference({
+        session,
+        authority,
+        appId: session.appId,
+        findProvisioningForAppRepository: journal.findSettledAppRepository,
+      });
       if (reference === undefined && session.sourceHandoffId !== undefined) {
         const handoff = await createPostgresBuilderHandoffStore(database).read({
           authority,
@@ -251,10 +275,14 @@ export const openBuilderSessionDestination = async (
         };
       }
       const row =
-        reference === undefined
+        reference === undefined || isExistingRepositoryDestination(reference)
           ? undefined
           : await journal.read({ authority, requestId: reference.requestId });
-      if (reference !== undefined && row?.requestDigest !== reference.requestDigest) {
+      if (
+        reference !== undefined &&
+        !isExistingRepositoryDestination(reference) &&
+        row?.requestDigest !== reference.requestDigest
+      ) {
         throw new Error("This build's saved destination is unavailable.");
       }
       const integrations = await loadBuilderIntegrationState({
@@ -274,6 +302,10 @@ export const openBuilderSessionDestination = async (
           cancellationRevision: session.cancellationRevision ?? 0,
           checkpointDigest: session.checkpointDigest,
         },
+        existingRepository:
+          reference !== undefined && isExistingRepositoryDestination(reference)
+            ? reference
+            : undefined,
         request: row?.record.request,
         ready: row?.record.response.vercel.status === "succeeded",
         selectable: session.status === "waiting" && session.sourceHandoffId === undefined,

@@ -175,3 +175,33 @@ describe("Production destination authority", () => {
     ).toThrow("repository_production_scope_denied");
   });
 });
+
+it("retains the selected existing repository when resolving a fresh app's published release", () => {
+  const repositoryDestination = {
+    kind: "existing-repository" as const,
+    version: 1 as const,
+    appId: "requests",
+    repository: { repositoryId: "123", owner: "team", name: "apps", defaultBranch: "main" },
+    installationId: "456",
+    confirmedByCallId: "selected",
+  };
+  expect(resolveRepositoryProductionDestination({ ...input(), repositoryDestination })).toEqual({
+    profile,
+    sourceSha: selection.publishedSource?.gitSha,
+  });
+  expect(() =>
+    resolveRepositoryProductionDestination({
+      ...input(),
+      repositoryDestination: {
+        ...repositoryDestination,
+        repository: { ...repositoryDestination.repository, repositoryId: "999" },
+      },
+    }),
+  ).toThrow("scope_denied");
+  expect(() =>
+    resolveRepositoryProductionDestination({
+      ...input(),
+      repositoryDestination: { ...repositoryDestination, appId: "foreign" },
+    }),
+  ).toThrow("scope_denied");
+});

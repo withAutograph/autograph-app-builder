@@ -1,9 +1,13 @@
 import {
+  builderSessionDestinationSchema,
+  isExistingRepositoryDestination,
+  sameBuilderDestination,
+} from "../provisioning/builder-session-destination-contract";
+import {
   preapprovalAuthoringDecisionSchema,
   internalAuthoringContinuationSchema,
 } from "../agent/preapproval-authoring";
 import type { PreapprovalAuthoringDecision } from "../agent/preapproval-authoring";
-import { builderSessionDestinationSchema } from "../provisioning/builder-session-destination-contract";
 import type {
   BuilderSessionDestination,
   BuilderDestinationEpoch,
@@ -1231,13 +1235,18 @@ export const attachBuilderDestinationRecord = (
   input: {
     expected: BuilderDestinationEpoch;
     destination: BuilderSessionDestination;
+    /** Internal authenticated build continuation; never accepted by web input. */
+    activeBuild?: boolean;
     nowEpochMs: number;
   },
 ): DurableHostedSessionRecord => {
   const current = toDurableHostedSessionRecord(value);
   const destination = builderSessionDestinationSchema.parse(input.destination);
   const matches = [
-    current.status === "waiting",
+    current.status === "waiting" ||
+      (input.activeBuild === true &&
+        isExistingRepositoryDestination(destination) &&
+        current.status === "working"),
     current.appId === destination.appId,
     current.sourceHandoffId === undefined,
     current.adapterSessionId === input.expected.adapterSessionId,
@@ -1251,19 +1260,12 @@ export const attachBuilderDestinationRecord = (
     throw new Error("Builder destination selection is stale or unavailable.");
   }
   const existing = current.builderDestination;
-  if (
-    existing !== undefined &&
-    [
-      existing.appId !== destination.appId,
-      existing.requestId !== destination.requestId,
-      existing.requestDigest !== destination.requestDigest,
-    ].some(Boolean)
-  ) {
+  if (existing !== undefined && !sameBuilderDestination(existing, destination)) {
     throw new Error("Builder destination is already selected.");
   }
   return durableHostedSessionRecordSchema.parse({
     ...current,
-    builderDestination: destination,
+    builderDestination: existing ?? destination,
     updatedAtEpochMs: Math.max(current.updatedAtEpochMs, input.nowEpochMs),
   });
 };
@@ -1274,6 +1276,8 @@ export interface HostedEveStore {
     sessionId: string;
     expected: BuilderDestinationEpoch;
     destination: BuilderSessionDestination;
+    /** Internal authenticated build continuation; never accepted by web input. */
+    activeBuild?: boolean;
     nowEpochMs: number;
   }) => Promise<HostedSessionRecord>;
 

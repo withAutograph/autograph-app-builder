@@ -1,3 +1,8 @@
+import {
+  existingRepositoryDestinationSchema,
+  isExistingRepositoryDestination,
+} from "../provisioning/builder-session-destination-contract";
+import type { RepositoryAccessReceipt } from "./repository-access-state";
 /* oxlint-disable sonarjs/expression-complexity -- Destination authority requires all exact recorded repository, installation and provider project comparisons. */
 import { isDeepStrictEqual } from "node:util";
 import { resolveExistingBuilderDestinationReference } from "../provisioning/builder-existing-destination";
@@ -34,6 +39,22 @@ export const createBuilderPublicationDestinationReader =
     const ref = selected.destination;
     if (ref === undefined) {
       return { publicSessionId: selected.publicSessionId };
+    }
+    if (isExistingRepositoryDestination(ref)) {
+      if (
+        ref.appId !== selected.appId ||
+        !isDeepStrictEqual(await deps.readSelection(), selected)
+      ) {
+        throw new Error(DESTINATION_UNAVAILABLE);
+      }
+      return {
+        publicSessionId: selected.publicSessionId,
+        destination: {
+          repository: `${ref.repository.owner}/${ref.repository.name}`,
+          repositoryId: ref.repository.repositoryId,
+          selectedInstallationId: ref.installationId,
+        } satisfies OwnedDestination,
+      };
     }
     const row = await deps.readProvisioning({
       authority: selected.authority,
@@ -135,4 +156,91 @@ export const readBuilderPublicationDestinationForTool = async (
       return { authority, appId, owner, destination, publicSessionId: session.sessionId };
     },
   })();
+};
+
+/** Metadata-only persistence after the normal GitHub access flow; grants no publication approval. */
+export const recordBuilderPublicationDestinationForTool = async (
+  ctx: ToolContext,
+  appId: string,
+  receipt: RepositoryAccessReceipt,
+): Promise<void> => {
+  if (process.env.EVE_HOSTED_ADAPTER !== "1") {
+    return;
+  }
+  if (receipt.sessionId !== ctx.session.id) {
+    throw new Error(DESTINATION_UNAVAILABLE);
+  }
+  const [
+    { exactForwardedSessionAuthority },
+    { resolveHostedOperatorOwnerContext },
+    { readPreviewOAuthRuntimeConfig },
+    { openHostedPostgresDatabase },
+    { createPostgresHostedEveStore },
+  ] = await Promise.all([
+    import("../hosted/session-authority"),
+    import("../provisioning/hosted-operator-owner-context"),
+    import("../auth/preview-oauth-runtime"),
+    import("../mcp/hosted-route"),
+    import("../eve/postgres-hosted-store"),
+  ]);
+  const execution = hostedOperatorCallbackExecution(ctx.session);
+  const { authority, principal } = exactForwardedSessionAuthority(ctx.session.auth, {
+    realmContinuation: { adapterSessionId: execution.ownerAnchorRunId ?? ctx.session.id },
+  });
+  const config = readPreviewOAuthRuntimeConfig(process.env);
+  if (authority.issuer !== config.issuer || authority.audience !== config.resource) {
+    throw new Error(DESTINATION_UNAVAILABLE);
+  }
+  const sessions = createPostgresHostedEveStore(openHostedPostgresDatabase(config.databaseUrl));
+  const owner = await resolveHostedOperatorOwnerContext({
+    adapterSessionId: ctx.session.id,
+    authority,
+    principal,
+    sessionAuth: ctx.session.auth,
+    environment: process.env,
+    execution,
+  });
+  const { currentSession: session } = await readHostedOperatorCallbackSessions({
+    store: sessions,
+    owner,
+    execution,
+  });
+  if (session.appId !== appId || sessions.attachBuilderDestination === undefined) {
+    throw new Error(DESTINATION_UNAVAILABLE);
+  }
+  // Legacy provisioned destinations retain their resource operation identity.
+  if (
+    session.builderDestination !== undefined &&
+    !isExistingRepositoryDestination(session.builderDestination)
+  ) {
+    return;
+  }
+  const { repository } = receipt;
+  const destination = existingRepositoryDestinationSchema.parse({
+    kind: "existing-repository",
+    version: 1,
+    appId,
+    repository: {
+      repositoryId: repository.repositoryId,
+      owner: repository.owner,
+      name: repository.name,
+      defaultBranch: repository.defaultBranch,
+    },
+    installationId: receipt.scope.installationId,
+    confirmedByCallId: receipt.confirmedByCallId,
+  });
+  await sessions.attachBuilderDestination({
+    principal: owner.principal,
+    sessionId: session.sessionId,
+    destination,
+    activeBuild: true,
+    expected: {
+      adapterSessionId: session.adapterSessionId,
+      adapterGeneration: session.adapterGeneration,
+      cancellationRevision: session.cancellationRevision ?? 0,
+      checkpointDigest: session.checkpointDigest,
+    },
+    nowEpochMs: Date.now(),
+  });
+  await readHostedOperatorCallbackSessions({ store: sessions, owner, execution });
 };

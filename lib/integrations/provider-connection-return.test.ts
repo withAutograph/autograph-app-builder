@@ -60,3 +60,26 @@ describe("provider return routing", () => {
     ).toBe(`https://builder.example${handoff}?vercel=failed&vercelReason=callback-invalid`);
   });
 });
+
+it("returns GitHub connection to the same saved app without losing its editable repository input", () => {
+  const returnTo = "/builds/ses_saved-app/destination?repository=team%2Fapps";
+  const url = new URL(
+    providerConnectionRedirect({
+      origin: "https://builder.example",
+      provider: "github",
+      status: "connected",
+      returnState: parseProviderConnectionReturn({ returnTo }),
+    }),
+  );
+  expect(url.pathname).toBe("/builds/ses_saved-app/destination");
+  expect(url.searchParams.get("repository")).toBe("team/apps");
+  expect(url.searchParams.get("github")).toBe("connected");
+  for (const invalid of [
+    "/builds/ses_saved-app/destination?next=https://evil.example",
+    "/builds/../destination",
+    "/builds/ses_saved-app/destination#secret",
+    "/builds/ses_saved-app/destination/extra",
+  ]) {
+    expect(() => parseProviderConnectionReturn({ returnTo: invalid })).toThrow();
+  }
+});

@@ -56,7 +56,9 @@ describe("saved build destination form", () => {
     const container = await render(props);
     expect(container.textContent).toContain("Store in");
     expect(container.textContent).toContain("Deploy to");
-    const button = container.querySelector<HTMLButtonElement>('button[type="submit"]');
+    const button = container.querySelector<HTMLButtonElement>(
+      'form[aria-label="Create app destination"] button[type="submit"]',
+    );
     expect(button?.disabled).toBe(true);
     expect(actions.select).not.toHaveBeenCalled();
   });
@@ -97,4 +99,46 @@ describe("saved build destination form", () => {
     expect(container.querySelector("form")).toBeNull();
     expect(actions.select).not.toHaveBeenCalled();
   });
+});
+
+it("selects an existing repository while new resource creation is disabled", async () => {
+  actions.select.mockResolvedValue({ status: "ready", message: "Repository selected." });
+  const container = await render({ ...props, enabled: false });
+  const form = container.querySelector<HTMLFormElement>(
+    'form[aria-label="Use existing repository"]',
+  );
+  const field = form?.querySelector<HTMLInputElement>('input[name="repository"]');
+  if (!form || !field) {
+    throw new Error("Expected existing repository form");
+  }
+  expect(form.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+  field.value = "https://github.com/team/apps";
+  await act(async () => {
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await Promise.resolve();
+  });
+  expect(actions.select).toHaveBeenCalledWith({
+    kind: "existing-repository",
+    sessionId: props.sessionId,
+    expected: props.expected,
+    repository: "https://github.com/team/apps",
+  });
+  expect(container.textContent).toContain("Repository selected.");
+});
+
+it("shows the saved existing repository instead of creating new resources", async () => {
+  const container = await render({
+    ...props,
+    enabled: false,
+    existingRepository: {
+      kind: "existing-repository",
+      version: 1,
+      appId: props.appId,
+      repository: { repositoryId: "123", owner: "team", name: "apps", defaultBranch: "main" },
+      installationId: "456",
+      confirmedByCallId: "selected",
+    },
+  });
+  expect(container.textContent).toContain("Delivery repository: team/apps");
+  expect(container.querySelector("form")).toBeNull();
 });

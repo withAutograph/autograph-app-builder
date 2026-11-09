@@ -5,11 +5,15 @@ import { beforeEach, expect, it, vi } from "vitest";
 import type { ImmutableGitHubSourceReceipt } from "../repository/github-publication";
 import { recordRepositoryAccessReceipt } from "./repository-access-state";
 import { resolvePublicationTargetForTool } from "./github-publication-destination";
-import { readBuilderPublicationDestinationForTool } from "./builder-publication-destination";
+import {
+  readBuilderPublicationDestinationForTool,
+  recordBuilderPublicationDestinationForTool,
+} from "./builder-publication-destination";
 import { resolveRepositoryAccessForTool } from "./repository-access-tool";
 
 vi.mock("./builder-publication-destination", () => ({
   readBuilderPublicationDestinationForTool: vi.fn(),
+  recordBuilderPublicationDestinationForTool: vi.fn(),
 }));
 vi.mock("./repository-access-tool", () => ({ resolveRepositoryAccessForTool: vi.fn() }));
 vi.mock("./deployment-repository-access-runtime", () => ({
@@ -152,4 +156,9 @@ it("keeps the explicit existing-repository selector for a fresh app with no save
   ).toMatchObject({ kind: "ready", target: { destination: { repositoryId: "123" } } });
   expect(resolveRepositoryAccessForTool).toHaveBeenCalledOnce();
   expect(vi.mocked(resolveRepositoryAccessForTool).mock.calls[0]?.[0]).toEqual(destination);
+  expect(recordBuilderPublicationDestinationForTool).toHaveBeenCalledWith(
+    ctx,
+    "app",
+    access("456").receipt,
+  );
 });

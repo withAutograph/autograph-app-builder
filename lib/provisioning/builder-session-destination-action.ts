@@ -4,15 +4,30 @@ import type { createBuilderSessionDestinationService } from "./builder-session-d
 import { builderDestinationEpochSchema } from "./builder-session-destination-contract";
 import { builderProvisionRequestSchema } from "./contracts";
 
-export const builderSessionDestinationSelectionSchema = z.strictObject({
+const newDestinationSelectionSchema = z.strictObject({
   sessionId: z.string().min(1),
   expected: builderDestinationEpochSchema,
   request: builderProvisionRequestSchema,
 });
+export const builderExistingRepositorySelectionSchema = z.strictObject({
+  kind: z.literal("existing-repository"),
+  sessionId: z.string().min(1),
+  expected: builderDestinationEpochSchema,
+  repository: z.string().trim().min(3).max(221),
+  selectedInstallationId: z
+    .string()
+    .regex(/^[1-9][0-9]*$/u)
+    .optional(),
+});
+export const builderSessionDestinationSelectionSchema = z.union([
+  newDestinationSelectionSchema,
+  builderExistingRepositorySelectionSchema,
+]);
 export interface BuilderSessionDestinationActionState {
   // oxlint-disable-next-line sonarjs/max-union-size -- Four distinct product action outcomes.
   status: "idle" | "ready" | "pending" | "error";
   message?: string;
+  connectionUrl?: string;
 }
 export const createBuilderSessionDestinationAction =
   (ports: {
@@ -20,7 +35,13 @@ export const createBuilderSessionDestinationAction =
     enabled: () => Promise<boolean>;
     open: (headers: Headers) => Promise<{
       principal: HostedPrincipal;
-      service: Pick<ReturnType<typeof createBuilderSessionDestinationService>, "select">;
+      service: Pick<ReturnType<typeof createBuilderSessionDestinationService>, "select"> & {
+        selectExisting?: (
+          input: z.infer<typeof builderExistingRepositorySelectionSchema> & {
+            principal: HostedPrincipal;
+          },
+        ) => Promise<BuilderSessionDestinationActionState>;
+      };
     }>;
     refresh: () => void;
   }) =>
@@ -30,13 +51,27 @@ export const createBuilderSessionDestinationAction =
   ): Promise<BuilderSessionDestinationActionState> => {
     try {
       const parsed = builderSessionDestinationSelectionSchema.parse(input);
-      if (incoming.get("origin") !== ports.origin || !(await ports.enabled())) {
+      if (
+        incoming.get("origin") !== ports.origin ||
+        (!("kind" in parsed) && !(await ports.enabled()))
+      ) {
         return {
           status: "error",
           message: "Destination setup is unavailable. Your build is preserved.",
         };
       }
       const context = await ports.open(incoming);
+      if ("kind" in parsed) {
+        if (context.service.selectExisting === undefined) {
+          throw new Error("Existing destination selection is unavailable.");
+        }
+        const result = await context.service.selectExisting({
+          ...parsed,
+          principal: context.principal,
+        });
+        ports.refresh();
+        return result;
+      }
       const result = await context.service.select({ ...parsed, principal: context.principal });
       ports.refresh();
       return result.provisioning.vercel.status === "succeeded"

@@ -1,3 +1,4 @@
+import { isExistingRepositoryDestination } from "./builder-session-destination-contract";
 /* oxlint-disable eslint/complexity -- Owner verification keeps every durable session, native lineage and cancellation comparison explicit. */
 import type { BuilderProvisionResponse } from "./contracts";
 import type { BuilderProvisionJournalStore } from "./journal";
@@ -731,7 +732,11 @@ const readDirectStandardBuilderDestination = async (
 ) => {
   await readCanonicalAppOwnerSession(deps, input);
   const reference = await readOwnedStandardBuilderDestinationReference(deps, input);
-  if (reference === undefined || deps.readProvisioning === undefined) {
+  if (
+    reference === undefined ||
+    isExistingRepositoryDestination(reference) ||
+    deps.readProvisioning === undefined
+  ) {
     // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit absent destination is part of this async result.
     return undefined;
   }

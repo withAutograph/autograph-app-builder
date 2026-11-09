@@ -1,4 +1,7 @@
-import { readBuilderPublicationDestinationForTool } from "./builder-publication-destination";
+import {
+  readBuilderPublicationDestinationForTool,
+  recordBuilderPublicationDestinationForTool,
+} from "./builder-publication-destination";
 import { withBuilderDestinationGuidance } from "../provisioning/builder-destination-guidance";
 
 import type { GitHubPublicationDestinationIdentity } from "./github-publication-runtime";
@@ -60,6 +63,11 @@ interface PublicationResolverPorts<Context> {
     ctx: Context,
     appId: string,
   ) => ReturnType<typeof readBuilderPublicationDestinationForTool>;
+  persistDestination?: (
+    ctx: Context,
+    appId: string,
+    receipt: RepositoryAccessReceipt,
+  ) => Promise<void>;
   resolveAccess: (
     destination: PublicationDestinationSelector,
     ctx: Context,
@@ -178,12 +186,14 @@ export const createPublicationTargetResolver =
         throw new Error("The saved Builder app destination changed during publication review.");
       }
     }
+    await ports.persistDestination?.(input.ctx, input.appId, access.receipt);
     return { kind: "ready", target: { destination: selected } };
   };
 
 // oxlint-disable-next-line eslint/complexity -- Canonical app destination checks preserve the existing fresh, revision, retained-review and access-selection branches.
 export const resolvePublicationTargetForTool = createPublicationTargetResolver<ToolContext>({
   readOwnedDestination: readBuilderPublicationDestinationForTool,
+  persistDestination: recordBuilderPublicationDestinationForTool,
   resolveAccess: async (destination, ctx) =>
     await resolveRepositoryAccessForTool(
       {
