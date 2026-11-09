@@ -83,6 +83,7 @@ import type {
   RepositoryProductionEffectContext,
   RepositoryProductionSetupPorts,
 } from "./repository-production-setup";
+import { createRepositoryProductionCaptureReader } from "./repository-production-capture";
 import { createRepositoryProductionConnectionReader } from "./repository-production-connections";
 import { createRepositoryProductionRuntimeBinding } from "./repository-production-runtime-binding";
 
@@ -375,26 +376,18 @@ export const createRepositoryProductionNativeHandler =
         },
         store,
         resolveCurrent: resolve,
-        readCapture: async (artifactContext, storage, assertCurrentOwner) => {
-          const selections = createPostgresOperatorArtifactSelections({
-            assertCurrentOwner,
-            database,
-          });
-          const selection = await selections.readExact?.(artifactContext, {
-            artifactRef: storage.artifactRef,
-          });
-          if (
-            !selection ||
-            selection.releaseId !== storage.releaseId ||
-            selection.manifestSha256 !== storage.manifestSha256
-          ) {
-            throw new Error("repository_production_capture_unavailable");
-          }
-          return await createOperatorArtifactPublication({
-            assertCurrentOwner,
-            store: createPostgresOperatorArtifactStore({ assertCurrentOwner, database }),
-          }).readGeneratedRelease(artifactContext, selection);
-        },
+        readCapture: createRepositoryProductionCaptureReader({
+          readSelection: async (artifactContext, storage, assertCurrentOwner) =>
+            await createPostgresOperatorArtifactSelections({
+              assertCurrentOwner,
+              database,
+            }).readExact?.(artifactContext, { artifactRef: storage.artifactRef }),
+          readRelease: async (artifactContext, selection, assertCurrentOwner) =>
+            await createOperatorArtifactPublication({
+              assertCurrentOwner,
+              store: createPostgresOperatorArtifactStore({ assertCurrentOwner, database }),
+            }).readGeneratedRelease(artifactContext, selection),
+        }),
       });
       const managed = async (owner: RepositoryProductionRequestOwner) => {
         const result = await resolveManagement(owner);
@@ -439,12 +432,11 @@ export const createRepositoryProductionNativeHandler =
         requestedIntent?: RepositoryProductionIntent,
         tryAcquire = false,
       ) => {
-        const known = await current(scope);
         const saved = await store.read(scope);
         return await createRepositoryProductionLease({
           assertAuthorized,
           databaseUrl: environment.PROTECTED_RESOURCE_LOCK_DATABASE_URL ?? settings.databaseUrl,
-          intent: requestedIntent ?? saved?.record.intent ?? known.intent,
+          intent: requestedIntent ?? saved?.record.intent ?? (await current(scope)).intent,
           store,
           tryAcquire,
         })(scope, run);

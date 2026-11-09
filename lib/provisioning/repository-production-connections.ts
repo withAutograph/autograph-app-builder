@@ -2,6 +2,7 @@ import { getToken } from "@vercel/connect";
 import { getVercelOidcToken, verifyVercelOidcToken } from "@vercel/oidc";
 import { z } from "zod";
 import {
+  observeRepositoryProductionConnectionTiming,
   observeRepositoryProductionPhase,
   reportRepositoryProductionFailure,
   reportRepositoryProductionProgress,
@@ -19,6 +20,16 @@ import type {
 } from "./repository-production-configuration";
 
 type ConnectionTarget = "maintenance" | "auth_operator" | "auth_runtime";
+
+const observeConnectionPhase = async <T>(
+  phase: Parameters<typeof observeRepositoryProductionConnectionTiming>[0],
+  code: Parameters<typeof observeRepositoryProductionPhase>[1],
+  run: () => Promise<T>,
+) =>
+  await observeRepositoryProductionConnectionTiming(
+    phase,
+    async () => await observeRepositoryProductionPhase(phase, code, run),
+  );
 
 /** Workspace-owned provider connection; never selected from an app creator's request. */
 export type RepositoryProductionConnectionProfile = (
@@ -67,11 +78,11 @@ export const createRepositoryProductionConnectionReader =
     // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     const assertCurrent = () =>
       // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
-      observeRepositoryProductionPhase("connection_authority", "authorization_unavailable", () =>
+      observeConnectionPhase("connection_authority", "authorization_unavailable", () =>
         input.assertCurrent(),
       );
     await assertCurrent();
-    const oidcToken = await observeRepositoryProductionPhase(
+    const oidcToken = await observeConnectionPhase(
       "workload_oidc_acquire",
       "workload_unavailable",
       // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
@@ -82,7 +93,7 @@ export const createRepositoryProductionConnectionReader =
         }),
     );
     // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
-    await observeRepositoryProductionPhase("workload_oidc_verify", "workload_unavailable", () =>
+    await observeConnectionPhase("workload_oidc_verify", "workload_unavailable", () =>
       io.verifyOidc(oidcToken, input.connection.operator),
     );
     const { authOperatorRole, authResource } = input.resources;
@@ -126,19 +137,21 @@ export const createRepositoryProductionConnectionReader =
       target: ConnectionTarget,
     ) => {
       await assertCurrent();
-      let identity: Awaited<ReturnType<typeof io.readIdentity>>;
-      try {
-        identity = await io.readIdentity(url);
-      } catch (error) {
-        // Driver errors can contain connection values. Keep them inside the credential boundary.
-        reportRepositoryProductionFailure(`${target}_identity`, "provider_unavailable", error);
-        // oxlint-disable-next-line eslint/preserve-caught-error -- Driver causes contain credentials and must remain inside this boundary.
-        throw new Error("repository_production_provider_unavailable");
-      }
-      if (identity.database !== database || identity.role !== role) {
-        reportRepositoryProductionFailure(`${target}_identity`, "scope_mismatch");
-        throw new Error("repository_production_provider_scope_mismatch");
-      }
+      await observeRepositoryProductionConnectionTiming(`${target}_identity`, async () => {
+        let identity: Awaited<ReturnType<typeof io.readIdentity>>;
+        try {
+          identity = await io.readIdentity(url);
+        } catch (error) {
+          // Driver errors can contain connection values. Keep them inside the credential boundary.
+          reportRepositoryProductionFailure(`${target}_identity`, "provider_unavailable", error);
+          // oxlint-disable-next-line eslint/preserve-caught-error -- Driver causes contain credentials and must remain inside this boundary.
+          throw new Error("repository_production_provider_unavailable");
+        }
+        if (identity.database !== database || identity.role !== role) {
+          reportRepositoryProductionFailure(`${target}_identity`, "scope_mismatch");
+          throw new Error("repository_production_provider_scope_mismatch");
+        }
+      });
       await assertCurrent();
       return url;
     };

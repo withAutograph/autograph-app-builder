@@ -1,5 +1,6 @@
 /* oxlint-disable eslint/require-await -- Fixture ports preserve the asynchronous production boundary. */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { createRepositoryProductionConnectionReader } from "./repository-production-connections";
 import type { RepositoryProductionConnectionProfile } from "./repository-production-connections";
 import { repositoryProductionSecretConnectionSchema } from "./repository-production-configuration";
@@ -98,6 +99,19 @@ const fixture = (
   };
 };
 
+const readConnectionTimings = () => {
+  const schema = z.strictObject({
+    event: z.literal("builder.repository_production_connection_timing"),
+    phase: z.string(),
+    state: z.enum(["started", "completed", "failed"]),
+    elapsedMs: z.number().int().nonnegative(),
+  });
+  return vi.mocked(console.info).mock.calls.flatMap(([value]) => {
+    const parsed = schema.safeParse(JSON.parse(String(value)));
+    return parsed.success ? [parsed.data] : [];
+  });
+};
+
 describe("Production repository connection bindings", () => {
   beforeEach(() => {
     vi.spyOn(console, "info").mockImplementation(() => {});
@@ -187,6 +201,52 @@ describe("Production repository connection bindings", () => {
     expect(progress).toContain('"phase":"connections"');
     expect(progress).toContain('"state":"started"');
     expect(progress).toContain('"state":"completed"');
+  });
+
+  it("times each fresh authority, OIDC and SQL identity step without logging private bindings", async () => {
+    const h = fixture();
+    await h.read();
+    const timing = readConnectionTimings();
+    const finished = timing.filter((event) => event.state === "completed");
+    expect(finished.filter((event) => event.phase === "connection_authority")).toHaveLength(8);
+    for (const phase of [
+      "workload_oidc_acquire",
+      "workload_oidc_verify",
+      "maintenance_identity",
+      "auth_operator_identity",
+      "auth_runtime_identity",
+    ]) {
+      expect(finished.filter((event) => event.phase === phase)).toHaveLength(1);
+    }
+    for (const event of timing) {
+      expect(Object.keys(event).toSorted()).toEqual(["elapsedMs", "event", "phase", "state"]);
+      expect(Number.isSafeInteger(event.elapsedMs) && event.elapsedMs >= 0).toBe(true);
+    }
+    const output = JSON.stringify(timing);
+    for (const privateValue of [
+      "private-fixture-password",
+      "current-production-oidc",
+      "postgresql:",
+      resources.neon.endpoint,
+      "APP_PRODUCTION_",
+    ]) {
+      expect(output).not.toContain(privateValue);
+    }
+  });
+
+  it("records failed SQL identity scope validation without changing the sanitized exception", async () => {
+    const h = fixture();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    h.io.readIdentity.mockResolvedValue({
+      database: "private-wrong-db",
+      role: "private-wrong-role",
+    });
+    await expect(h.read()).rejects.toThrow(/^repository_production_provider_scope_mismatch$/u);
+    const timing = readConnectionTimings();
+    expect(
+      timing.some((event) => event.phase === "maintenance_identity" && event.state === "failed"),
+    ).toBe(true);
+    expect(JSON.stringify(timing)).not.toContain("private");
   });
 
   it("continues successful connection reads even when progress logging fails", async () => {

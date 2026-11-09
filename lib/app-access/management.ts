@@ -281,21 +281,20 @@ export const createAppAccessManagementService = (deps: AppAccessManagementDepend
       sessionId: saved.record.ownerContext.sessionId,
       ownerContext: saved.record.ownerContext,
     };
-    await deps.assertAuthorized(owner, scope, true);
     await deps.withLease(scope, async (assertFence) => {
       const found = await deps.journal.findInvitation(invitationId);
       if (!found || found.record.command.action !== "invite") {
         throw new AppAccessError("app_access_denied");
       }
       let row: AppAccessOperationRow = found;
-      if (row.record.enrollment?.state === "applied") {
-        return;
-      }
       const assertCurrent = async () => {
         await assertFence();
         await deps.assertAuthorized(owner, scope, true);
       };
       await assertCurrent();
+      if (row.record.enrollment?.state === "applied") {
+        return;
+      }
       const { command } = found.record;
       const invitation = await deps.readVerifiedInvitation(scope, invitationId, {
         operationRef: invitationId,
