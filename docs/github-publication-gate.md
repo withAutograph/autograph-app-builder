@@ -594,7 +594,10 @@ checks the retained approved reconciliation against GitHub's current commit
 before offering a new delivery approval for that head. The Ready cycle and
 required Check then bind to that reconciled head. After merge, Builder can
 verify the retained commit from the closed, merged PR even if GitHub deleted
-its source branch.
+its source branch. The status read continues to inspect the same exact-head,
+Ready-cycle `Check` after merge, so a successful merge does not reset its display
+to pending. Merge state alone never establishes a passing check; failed or
+unavailable check evidence remains nonpassing.
 
 When hosted GitHub publication is enabled, an eligible reviewed publication
 can return an input for `finish-github-pr-delivery`. Operators can explicitly
