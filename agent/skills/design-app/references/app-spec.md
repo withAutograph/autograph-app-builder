@@ -85,6 +85,16 @@ repository publication, deployment, or other outward effects.
 
 Define roles, permissions, data sensitivity, and tenant/app scope.
 
+Production apps default to private creator and invited-user access. When the
+brief asks for self-signup, describe its eligibility and intended nonprivileged
+app roles, then record that choice with `accept_app_spec.access`. Omit the
+argument on an ordinary revision to retain the app's existing choice; use an
+explicit private mode to stop new signup. This product intent does not grant
+access: the Production operator validates the app's role catalog and obtains
+the existing resource/access approval. Both modes use normal Production
+delivery and the shared Auth/sender setup; they do not require a special Preview
+or a separate Auth database for each app.
+
 ## Agent behavior
 
 Define agent jobs, evidence, tools, limits, and human confirmation points,

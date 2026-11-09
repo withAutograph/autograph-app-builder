@@ -12,6 +12,7 @@ import type { PrivateApplyScope } from "./private-apply-authority";
 import type { EveSessionResult } from "../mcp/contracts";
 import type { TargetApplyFailureReceipt } from "../repository/target-apply";
 import type { TargetValidationFailureReceipt } from "../repository/target-validation";
+import { appAccessIntentFields, appAccessIntentSchema } from "./app-access-intent";
 
 const COMMAND_FAILED = "command-failed";
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -28,6 +29,7 @@ export const approvedBuildDecisionSchema = z.strictObject({
     .strictObject({
       appId: z.string(),
       appSpecDigest: digest,
+      access: appAccessIntentSchema.optional(),
       proposalDigest: digest.optional(),
       sessionId: z.string(),
       // Repository execution workspace, distinct from the authenticated tenant workspace.
@@ -186,6 +188,7 @@ export const decideApprovedBuildContinuation = (input: {
     const currentSpec: NonNullable<ApprovedBuildDecision["currentSpec"]> = {
       appId: state.appSpec.appId,
       appSpecDigest: state.appSpec.digest,
+      ...appAccessIntentFields(state.appSpec.access),
       sessionId: input.adapterSessionId,
       workspaceId: state.workspace.workspaceId,
     };

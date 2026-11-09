@@ -19,6 +19,11 @@ import {
 } from "@/lib/agent/workflow-state";
 import { planAcceptedAppSpec as continueAcceptedAppSpec } from "@/lib/agent/accepted-spec-planning";
 import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
+import {
+  appAccessIntentSchema,
+  resolveAppAccessIntent,
+  sameAppAccessIntent,
+} from "@/lib/agent/app-access-intent";
 import type { ExistingAppChange } from "@/lib/agent/existing-app-changes";
 
 import { prepareAppCreation } from "@/lib/agent/prepare-app-creation";
@@ -127,6 +132,7 @@ export default defineTool({
       expectedArtifactRevision,
       existingAppChanges,
       frameworkUpgrade,
+      access,
     },
     ctx,
   ) {
@@ -144,6 +150,10 @@ export default defineTool({
     if (current.phase === "empty") {
       throw new Error("Start a workspace before creating an implementation plan.");
     }
+    const selectedAccess = resolveAppAccessIntent(
+      access,
+      "appSpec" in current && current.appSpec.appId === appId ? current.appSpec.access : undefined,
+    );
     const path = `prototype/${appId}/app-spec.md`;
     const artifact = current.artifacts.find((candidate) => {
       if (candidate.path !== path || candidate.sessionId !== ctx.session.id) {
@@ -164,10 +174,12 @@ export default defineTool({
     // draft recording must not rewrite an already accepted snapshot or
     // invalidate its preparation, apply, validation, or publication receipts.
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Retained artifact identity and access authority must both match before resuming.
       "appSpec" in current &&
       current.appSpec.appId === appId &&
       current.appSpec.artifactPath === artifact.path &&
-      current.appSpec.artifactRevision === artifact.revision
+      current.appSpec.artifactRevision === artifact.revision &&
+      sameAppAccessIntent(current.appSpec.access, selectedAccess)
     ) {
       await planAcceptedAppSpec(ctx, existingAppChanges, frameworkUpgrade);
       await emitCurrentBuildWorkflowProjection(ctx);
@@ -200,9 +212,12 @@ export default defineTool({
       }
       digest = sha256(content);
     }
-    const acceptance: Pick<AcceptedAppSpec, "acceptedByCallId" | "frameworkUpgrade"> = {
+    const acceptance: Pick<AcceptedAppSpec, "acceptedByCallId" | "frameworkUpgrade" | "access"> = {
       acceptedByCallId: ctx.callId,
     };
+    if (selectedAccess !== undefined) {
+      acceptance.access = selectedAccess;
+    }
     if (frameworkUpgrade !== undefined) {
       acceptance.frameworkUpgrade = frameworkUpgrade;
     }
@@ -221,7 +236,8 @@ export default defineTool({
     if (
       "appSpec" in current &&
       current.appSpec.digest === accepted.digest &&
-      current.appSpec.appId === accepted.appId
+      current.appSpec.appId === accepted.appId &&
+      sameAppAccessIntent(current.appSpec.access, accepted.access)
     ) {
       await planAcceptedAppSpec(ctx, existingAppChanges, frameworkUpgrade);
       await emitCurrentBuildWorkflowProjection(ctx);
@@ -257,6 +273,11 @@ export default defineTool({
   },
   inputSchema: z.strictObject({
     appId: z.string().min(1),
+    access: appAccessIntentSchema
+      .optional()
+      .describe(
+        "Record the app brief's access choice. Omit for private creator/invitation access on new apps or to retain an existing choice on revision. Self-signup must name only the app's intended nonprivileged roles; the Production operator validates them and separately obtains approval. This does not grant access or publish anything.",
+      ),
     frameworkUpgrade: z
       .literal("latest")
       .optional()

@@ -7,6 +7,7 @@ import { resolveHostedOperatorOwnerContext } from "../provisioning/hosted-operat
 import { repositoryProductionApprovalInputSchema } from "../provisioning/repository-production-approval";
 import type { RepositoryProductionApprovalInput } from "../provisioning/repository-production-approval";
 import { appAccessSnapshotSchema } from "../app-access/contracts";
+import { describeAppAccessIntent } from "./app-access-intent";
 
 const setupSchema = z.object({
   operationRef: z.uuid(),
@@ -124,7 +125,10 @@ export const repositoryProductionClientForContext = async (ctx: WorkflowStepTool
       ) {
         throw new Error("app_setup_scope_mismatch");
       }
-      return result;
+      return {
+        ...result,
+        accessSummary: describeAppAccessIntent(result.plan.scope.appId, result.plan.intent.access),
+      };
     },
     prepare: async (input: RepositoryProductionApprovalInput) => {
       const plan = repositoryProductionApprovalInputSchema.parse(input);

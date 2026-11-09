@@ -211,6 +211,26 @@ describe("Builder-owned Production setup", () => {
     expect(f.calls.filter((call) => call === "allocate-storage")).toHaveLength(1);
     expect(f.read()?.record.effects["install-schema"].state).toBe("pending");
   });
+  it("keeps policy revisions and disablement separate from existing grants and storage", async () => {
+    const f = fixture();
+    const publicIntent: RepositoryProductionIntent = {
+      ...intent,
+      access: { mode: "self-signup", eligibility: "public", appRoles: ["requester"] },
+      entryPath: "/request-log",
+    };
+    await f.service.prepare(scope, publicIntent);
+    const original = structuredClone(f.read()?.record);
+    expect(f.calls.at(-1)).toBe("signup-policy");
+    f.actual.delete("signup-policy");
+    await f.service.prepare(scope, { ...intent, access: { mode: "private" } });
+    expect(f.calls.filter((call) => call === "signup-policy")).toHaveLength(2);
+    expect(f.calls.filter((call) => call === "creator-access")).toHaveLength(1);
+    expect(f.calls.filter((call) => call === "allocate-storage")).toHaveLength(1);
+    expect(f.read()?.record.resource).toEqual(original?.resource);
+    expect(f.read()?.record.privateState).toEqual(original?.privateState);
+    expect(f.read()?.record.creatorActorId).toEqual(original?.creatorActorId);
+    expect(f.read()?.record.effects["creator-access"]).toEqual(original?.effects["creator-access"]);
+  });
 
   it.each([true, false])(
     "adds storage for existing compatible members without restoring a removed creator (creator active: %s)",

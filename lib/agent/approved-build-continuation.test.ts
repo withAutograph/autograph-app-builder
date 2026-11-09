@@ -10,7 +10,10 @@ import {
   requestPrivateApplyApproval,
   recordApprovedPrivateApply,
 } from "./private-apply-authority";
-import { decideApprovedBuildContinuation } from "./approved-build-continuation";
+import {
+  approvedBuildDecisionSchema,
+  decideApprovedBuildContinuation,
+} from "./approved-build-continuation";
 import { appBuilderWorkflowState } from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import type { HookContext } from "eve/hooks";
@@ -86,6 +89,22 @@ const approveBuild = () => {
   requestPrivateApplyApproval(scope, "approve");
   recordApprovedPrivateApply(scope, "approve");
 };
+
+describe("app access intent in the private Production decision", () => {
+  it("preserves the accepted policy for the Production resolver", () => {
+    const access = {
+      mode: "self-signup" as const,
+      eligibility: "public" as const,
+      appRoles: ["member"],
+    };
+    const decision = decide({ ...failed, appSpec: { ...failed.appSpec, access } });
+    expect(approvedBuildDecisionSchema.parse(decision).currentSpec?.access).toEqual(access);
+  });
+
+  it("keeps legacy private decisions readable without adding a signup choice", () => {
+    expect(approvedBuildDecisionSchema.parse(decide()).currentSpec).not.toHaveProperty("access");
+  });
+});
 
 describe("approved apply and review continuation", () => {
   it("continues an approved plan before apply and a validated app before review", () => {

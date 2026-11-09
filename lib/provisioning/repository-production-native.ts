@@ -1,5 +1,4 @@
 import { isExistingRepositoryDestination } from "./builder-session-destination-contract";
-import { sameRepositoryProductionSetupEffects } from "./repository-production-intent";
 /* oxlint-disable sonarjs/no-nested-functions -- Request-scoped management factories share the held app lease without reacquiring it. */
 /* oxlint-disable eslint/no-nested-ternary, sonarjs/no-nested-conditional -- Progress projection retains the four distinct creator states and explicit removal status. */
 /* oxlint-disable sonarjs/expression-complexity, react-doctor/server-sequential-independent-await -- Owner authorization is re-read before examining the saved approval; the full configured destination must match. */
@@ -69,7 +68,6 @@ import {
   repositoryProductionApprovalDigest,
 } from "./repository-production-approval";
 import {
-  initialRepositoryProductionRecord,
   repositoryProductionScopeSchema,
   repositoryProductionRecordSchema,
   repositoryProductionOperationRef,
@@ -94,6 +92,9 @@ import type {
 import { createRepositoryProductionCaptureReader } from "./repository-production-capture";
 import { createRepositoryProductionConnectionReader } from "./repository-production-connections";
 import { createRepositoryProductionRuntimeBinding } from "./repository-production-runtime-binding";
+import { resolveRepositoryProductionSignupIntent } from "./repository-production-signup-policy";
+import { createRepositoryProductionSignupNative } from "./repository-production-signup-native";
+import { retainRepositoryProductionApproval } from "./repository-production-approval-retention";
 
 const creatorAccessEffect = "creator-access";
 const retrySetupAction = "retry-setup";
@@ -348,7 +349,9 @@ export const createRepositoryProductionNativeHandler =
           publicOrigin: profile.publicOrigin,
           environment: "production",
         });
+        const savedAccess = (await store.read(scope))?.record.intent.access;
         const intent: RepositoryProductionIntent = {
+          ...resolveRepositoryProductionSignupIntent(spec, description, savedAccess),
           sessionId: owner.sessionId,
           sourceSha,
           creatorRoles:
@@ -616,7 +619,10 @@ export const createRepositoryProductionNativeHandler =
         createRepositoryProductionIntentBoundSetup(
           {
             store,
-            assertAuthorized,
+            assertAuthorized: async (target, intent) => {
+              await assertAuthorized(target, intent);
+              await signup.assertNoPending(target, intent);
+            },
             ...workers(scope),
             // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
             prepareCreatorIdentity: (context) => creator.prepare(context),
@@ -783,6 +789,19 @@ export const createRepositoryProductionNativeHandler =
           request.signal.throwIfAborted();
         },
       });
+      const signup = createRepositoryProductionSignupNative({
+        database,
+        builderOrigin,
+        readSetup: store.read,
+        withLease,
+        workers,
+        realm,
+        assertAuthorized,
+        hasPendingAccess: async (scope) => {
+          const pending = await accessJournal.pending(scope);
+          return pending.length > 0;
+        },
+      });
       const managementFor = (
         held?: () => Promise<void>,
         command?: AppAccessCommand,
@@ -874,6 +893,7 @@ export const createRepositoryProductionNativeHandler =
               throw new Error("repository_production_scope_denied");
             }
             if (mutating && !roleUpdate) {
+              await signup.assertNoPending(scope);
               const row = await store.read(scope);
               const commandId = command?.clientRequestId;
               const pendingCommandIds = (await accessJournal.pending(scope)).map(
@@ -1062,35 +1082,47 @@ export const createRepositoryProductionNativeHandler =
             ...approved,
             planDigest: repositoryProductionApprovalDigest(found.scope, found.intent),
           };
-          // Retain proof before provider work; the CAS cannot move the app or overwrite any worker state.
-          const row =
-            (await store.read(found.scope)) ??
-            (await store.reserve(initialRepositoryProductionRecord(found.scope, found.intent)));
-          if (
-            (row.record.creatorRoleUpdate?.state === "pending" ||
-              row.record.appAccessUpgrade?.state === "pending" ||
-              Object.values(row.record.effects).some((effect) => effect.state === "pending")) &&
-            !sameRepositoryProductionSetupEffects(row.record.intent, found.intent)
-          ) {
-            throw new Error("repository_production_reconciliation_required");
-          }
-          if (
-            !sameRepositoryProductionSetupEffects(row.record.intent, found.intent) &&
-            (await accessJournal.pending(found.scope)).length > 0
-          ) {
-            throw new Error("repository_production_access_reconciliation_required");
-          }
-          if (
-            !(await store.compareAndSet(row, {
-              ...row.record,
-              ownerContext: owner.ownerContext,
-              creatorOwnerContext: row.record.creatorOwnerContext ?? owner.ownerContext,
-              approval,
-            }))
-          ) {
-            throw new Error("repository_production_conflict");
-          }
+          await retainRepositoryProductionApproval({
+            scope: found.scope,
+            intent: found.intent,
+            ownerContext: owner.ownerContext,
+            approval,
+            store,
+            assertNoPendingAccess: async (scope) => {
+              await signup.assertNoPending(scope);
+              const pending = await accessJournal.pending(scope);
+              if (pending.length > 0) {
+                throw new Error("repository_production_access_reconciliation_required");
+              }
+            },
+            withLease: createRepositoryProductionLease({
+              databaseUrl: environment.PROTECTED_RESOURCE_LOCK_DATABASE_URL ?? settings.databaseUrl,
+              store,
+              intent: found.intent,
+              assertAuthorized: async (scope, intent) => {
+                const canonical = await resolve(owner);
+                await selectCreatorEmail(canonical, found.intent.creatorEmail);
+                await readSession(canonical.owner);
+                if (
+                  !isDeepStrictEqual(canonical.scope, scope) ||
+                  repositoryProductionApprovalDigest(scope, canonical.intent) !==
+                    approval.planDigest ||
+                  repositoryProductionApprovalDigest(scope, intent) !== approval.planDigest
+                ) {
+                  throw new Error("repository_production_approval_required");
+                }
+              },
+            }),
+          });
           return { scope: found.scope, intent: found.intent, setup: setup(found.scope) };
+        },
+        completeSignup: async (policyId, claimId) => {
+          const work = signup.complete(policyId, claimId);
+          if (!waitUntil) {
+            return await work;
+          }
+          deferredCleanup = true;
+          return await observeRepositoryProductionCompletion(work, waitUntil, dispose);
         },
         management: {
           ...management,

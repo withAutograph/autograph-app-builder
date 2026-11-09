@@ -7,6 +7,7 @@ import { BUILD_READY_APP_SPEC } from "../../evals/support/app-spec";
 import { normalizeBuildReadyAppSpec } from "./app-spec-validation";
 import { APP_BUILDER_WORKFLOW_VERSION, appBuilderWorkflowState, sha256 } from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
+import type { AppAccessIntent } from "./app-access-intent";
 
 const mocks = vi.hoisted(() => ({ prepare: vi.fn(), projection: vi.fn() }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Acceptance state reuse is isolated from the private transport persistence port; projection routing has separate actual-profile tests.
@@ -106,6 +107,116 @@ describe("accepted AppSpec resume", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.prepare.mockResolvedValue(null);
+  });
+
+  it("records explicitly requested signup as product intent without granting access", async () => {
+    seed("planned");
+    const access: AppAccessIntent = {
+      mode: "self-signup",
+      eligibility: "approved-email",
+      allowedEmails: ["Pilot@example.test"],
+      appRoles: ["member"],
+    };
+    const result = await acceptAppSpec.execute({ appId: artifact.appId, access }, context);
+    expect(result).toMatchObject({
+      access: { ...access, allowedEmails: ["pilot@example.test"] },
+      reused: false,
+    });
+    const state = appBuilderWorkflowState.get();
+    expect(state.phase).toBe("app_spec_accepted");
+    expect("appSpec" in state && state.appSpec.access).toEqual({
+      ...access,
+      allowedEmails: ["pilot@example.test"],
+    });
+    expect(state).not.toHaveProperty("applyReceipt");
+    expect(getSandbox).not.toHaveBeenCalled();
+  });
+
+  it("retains the existing signup choice on a normal product revision", async () => {
+    const before = seed("planned");
+    const access: AppAccessIntent = {
+      mode: "self-signup",
+      eligibility: "public",
+      appRoles: ["member"],
+    };
+    const revised = {
+      ...artifact,
+      content: `${legacyContent}\nA revised user workflow.`,
+      revision: "b".repeat(64),
+    };
+    appBuilderWorkflowState.update(
+      () =>
+        // SAFETY: The seeded workflow retains all phase-required fields; this fixture changes only its accepted access and artifact.
+        ({
+          ...before,
+          appSpec: { ...accepted, access },
+          artifacts: [revised],
+        }) as AppBuilderWorkflowState,
+    );
+    expect(await acceptAppSpec.execute({ appId: artifact.appId }, context)).toMatchObject({
+      access,
+      artifactRevision: revised.revision,
+      reused: false,
+    });
+  });
+
+  it("records an explicit switch back to private rather than silently retaining signup", async () => {
+    const before = seed("planned");
+    appBuilderWorkflowState.update(
+      () =>
+        // SAFETY: The seeded workflow retains its phase-required fields while the fixture selects an explicit signup policy.
+        ({
+          ...before,
+          appSpec: {
+            ...accepted,
+            access: { mode: "self-signup", eligibility: "public", appRoles: ["member"] },
+          },
+        }) as AppBuilderWorkflowState,
+    );
+    expect(
+      await acceptAppSpec.execute({ appId: artifact.appId, access: { mode: "private" } }, context),
+    ).toMatchObject({
+      access: { mode: "private" },
+      reused: false,
+    });
+  });
+
+  it("rejects an ambiguous email eligibility list before accepting signup intent", async () => {
+    const before = seed("planned");
+    await expect(
+      acceptAppSpec.execute(
+        {
+          appId: artifact.appId,
+          access: {
+            mode: "self-signup",
+            eligibility: "approved-email",
+            allowedEmails: ["pilot@example.test", "PILOT@example.test"],
+            appRoles: ["member"],
+          },
+        },
+        context,
+      ),
+    ).rejects.toThrow("must be unique");
+    expect(appBuilderWorkflowState.get()).toBe(before);
+  });
+
+  it("keeps private setup unchanged when a signup request mixes public and restricted eligibility", async () => {
+    const before = seed("planned");
+    await expect(
+      acceptAppSpec.execute(
+        {
+          appId: artifact.appId,
+          access: {
+            mode: "self-signup",
+            eligibility: "public",
+            allowedEmails: ["pilot@example.test"],
+            appRoles: ["member"],
+          },
+        },
+        context,
+      ),
+    ).rejects.toThrow("cannot also declare");
+    expect(appBuilderWorkflowState.get()).toBe(before);
   });
 
   it.each([

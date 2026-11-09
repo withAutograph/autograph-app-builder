@@ -67,6 +67,7 @@ const fixture = () => {
     "install-schema": { state: "applied" },
     "creator-access": { state: "applied" },
     "bind-runtime": { state: "applied" },
+    "signup-policy": { state: "idle" },
   };
   initial.creatorActorId = "creator";
   initial.privateState = { retainedCredential: "encrypted-fixture" };

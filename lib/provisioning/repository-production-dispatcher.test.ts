@@ -115,6 +115,35 @@ const fixture = () => {
     );
   return { deps, prepared, send };
 };
+it("authenticates the saved signup policy before completing a claim without accepting identity fields", async () => {
+  const test = fixture();
+  const complete = vi.fn(async () => "ready" as const);
+  test.deps.completeSignup = complete;
+  const callback = {
+    version: 1,
+    kind: "signup",
+    policyId: "11111111-1111-4111-a111-111111111111",
+    claimId: "22222222-2222-4222-a222-222222222222",
+  };
+  expect((await test.send(callback, "auth", repositoryProductionCompletionPath)).status).toBe(200);
+  expect(complete).toHaveBeenCalledWith(callback.policyId, callback.claimId);
+  expect(test.deps.verifyAuthWorkload).toHaveBeenCalledWith(expect.any(Request), callback.policyId);
+  expect((await test.send(callback, "builder", repositoryProductionCompletionPath)).status).toBe(
+    403,
+  );
+  expect(
+    (
+      await test.send(
+        { ...callback, actorId: "forged" },
+        "auth",
+        repositoryProductionCompletionPath,
+      )
+    ).status,
+  ).toBe(400);
+  expect(complete).toHaveBeenCalledTimes(1);
+  expect(test.deps.management.completeInvitation).not.toHaveBeenCalled();
+});
+
 describe("protected repository Production dispatcher", () => {
   it("carries the selected creator account through normal protected planning and preparation", async () => {
     const f = fixture();
