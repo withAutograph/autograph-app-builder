@@ -1024,9 +1024,9 @@ type SendFixtureOperationRow = Omit<
   state: HostedOperationRecord["state"];
 };
 
-const queuedSendFixture = () => {
+const queuedSendFixture = (owner = principal) => {
   const dialect = new PgDialect();
-  const session = ownedCheckpointRow();
+  const session = ownedCheckpointRow(checkpointA, owner);
   const operations: SendFixtureOperationRow[] = [];
   const locks: string[] = [];
   const writes: { locks: string[]; values: Partial<SendFixtureOperationRow> }[] = [];
@@ -1050,6 +1050,9 @@ const queuedSendFixture = () => {
   ): (SendFixtureOperationRow | typeof session)[] => {
     if (getTableName(table) === "agent_session") {
       return [session];
+    }
+    if (getTableName(table) === "builder_provisioning_journal") {
+      return [];
     }
     const { params, sql } = dialect.sqlToQuery(predicate);
     const equalities = [...sql.matchAll(/"(?<column>[a-z_]+)" = \$(?<parameter>\d+)/gu)];
@@ -1093,6 +1096,7 @@ const queuedSendFixture = () => {
   };
   const select = () => ({
     from: (table: PgTable) => ({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve Drizzle's fluent thenable query methods in the terminal fixture.
       where: (predicate: SQL) => {
         let selected = selectedRows(table, predicate);
         const query = {
@@ -1129,7 +1133,7 @@ const queuedSendFixture = () => {
             });
           },
         };
-        return query;
+        return Object.assign(Promise.resolve(selected), query);
       },
     }),
   });
@@ -1163,6 +1167,7 @@ const queuedSendFixture = () => {
   const add = (overrides: Partial<HostedOperationRecord> = {}, baseline: number | null = null) => {
     const record = hostedOperationRecordSchema.parse({
       ...operationRecord,
+      principal: owner,
       kind: "send",
       operationId: `send_${operations.length}`,
       sessionId: session.sessionId,
@@ -1204,7 +1209,7 @@ const queuedSendFixture = () => {
       delivery,
       nowEpochMs: 3000,
       operationId: row.operationId,
-      principal,
+      principal: owner,
     });
   };
   // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
@@ -1222,7 +1227,7 @@ const queuedSendFixture = () => {
     }
     return store.readUnsettledSendAcknowledgements({
       limit: 2,
-      principal,
+      principal: owner,
       sessionId: session.sessionId,
       ...input,
     });
@@ -1231,6 +1236,75 @@ const queuedSendFixture = () => {
 };
 
 describe("PostgreSQL queued SEND acknowledgement sidecar", () => {
+  it("saves internal destination metadata under the session lock only when every pending SEND is bound", async () => {
+    const owner = {
+      ...principal,
+      issuer: "https://builder.example/api/auth",
+      audience: "https://builder.example/mcp",
+    };
+    const f = queuedSendFixture(owner);
+    f.session.record = { ...f.session.record, appId: "notes" };
+    const destination = {
+      kind: "existing-repository" as const,
+      version: 1 as const,
+      appId: "notes",
+      repository: { repositoryId: "123", owner: "team", name: "apps", defaultBranch: "main" },
+      installationId: "456",
+      confirmedByCallId: "verified-access",
+    };
+    const attach = {
+      principal: owner,
+      sessionId: f.session.sessionId,
+      destination,
+      activeBuild: true,
+      expected: {
+        adapterSessionId: f.session.adapterSessionId,
+        adapterGeneration: f.session.record.adapterGeneration,
+        cancellationRevision: 0,
+        checkpointDigest: f.session.checkpointDigest,
+      },
+      nowEpochMs: 4000,
+    };
+    const pending = f.add();
+    await expect(f.store.attachBuilderDestination?.(attach)).rejects.toThrow("settled");
+    await f.acknowledge(pending, 0);
+    await expect(
+      f.store.attachBuilderDestination?.({ ...attach, activeBuild: false }),
+    ).rejects.toThrow("settled");
+    const unbound = f.add({
+      operationId: "unbound",
+      state: "submission_unknown",
+      safeErrorCode: "unknown",
+    });
+    await expect(f.store.attachBuilderDestination?.(attach)).rejects.toThrow("settled");
+    expect(f.session.record.builderDestination).toBeUndefined();
+    unbound.state = "rejected";
+    unbound.record = hostedOperationRecordSchema.parse({
+      ...unbound.record,
+      state: "rejected",
+      safeErrorCode: "rejected",
+    });
+    await expect(f.store.attachBuilderDestination?.(attach)).resolves.toMatchObject({
+      builderDestination: destination,
+    });
+    expect(f.writes.at(-1)?.locks).toContain("agent_session");
+    expect(pending.record.state).toBe("reserved");
+    await expect(
+      f.store.attachBuilderDestination?.({
+        ...attach,
+        expected: { ...attach.expected, checkpointDigest: `sha256:${"f".repeat(64)}` },
+      }),
+    ).rejects.toThrow("stale");
+    await expect(
+      f.store.attachBuilderDestination?.({
+        ...attach,
+        destination: {
+          ...destination,
+          repository: { ...destination.repository, repositoryId: "789" },
+        },
+      }),
+    ).rejects.toThrow("already selected");
+  });
   it("atomically records the original dispatch revision with the ACK under both row locks", async () => {
     const f = queuedSendFixture();
     const row = f.add();

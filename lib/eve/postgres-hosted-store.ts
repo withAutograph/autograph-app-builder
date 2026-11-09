@@ -2,6 +2,7 @@ import { preapprovalAuthoringDecisionSchema } from "../agent/preapproval-authori
 import { isDeepStrictEqual } from "node:util";
 import {
   attachBuilderDestinationRecord,
+  assertBuilderDestinationPendingOperations,
   isProvedSessionLimitResponse,
   isProvedResourceApprovalResponse,
   isProvedSendDelivery,
@@ -705,7 +706,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           throw new Error(SESSION_NOT_FOUND);
         }
         const pending = await transaction
-          .select({ operationId: agentOperations.operationId })
+          .select()
           .from(agentOperations)
           .where(
             and(
@@ -719,11 +720,15 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
               ),
               inArray(agentOperations.state, ["reserved", "submission_unknown"]),
             ),
-          )
-          .limit(1);
-        if (pending.length !== 0) {
-          throw new Error("Builder destination selection requires settled session operations.");
-        }
+          );
+        assertBuilderDestinationPendingOperations(
+          current,
+          input,
+          pending.map((row) => ({
+            operation: parseHostedOperationRow(row),
+            cancellationRevisionAtDispatch: row.sendCancellationRevisionAtDispatch,
+          })),
+        );
         // Lock the existing legacy owner/app journal after the session fence. A concurrent
         // legacy claim either precedes this read (and blocks attachment), or sees the
         // selected destination in its mandatory owner recheck before provider dispatch.

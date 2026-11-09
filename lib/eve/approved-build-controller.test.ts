@@ -1,7 +1,12 @@
 /* oxlint-disable anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- The fixture supplies only the controller transport ports; canonical reservations and delivery receipts use the real store. */
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { InMemoryHostedEveStore, toDurableHostedSessionRecord } from "./hosted-store";
+import {
+  InMemoryHostedEveStore,
+  toDurableHostedSessionRecord,
+  assertBuilderDestinationPendingOperations,
+  hostedOperationRecordSchema,
+} from "./hosted-store";
 import { continueApprovedHostedBuild } from "./approved-build-controller";
 import { hostedEveOperationScopes } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
@@ -94,6 +99,143 @@ const fixture = async () => {
   };
 };
 describe("canonical approved private build continuation", () => {
+  it("saves the same repository during its claimed automatic Build turn before operation settlement", async () => {
+    const f = await fixture();
+    const turn = { id: "delivered-build-turn", sequence: decision.turnSequence + 1 };
+    const destination = {
+      kind: "existing-repository" as const,
+      version: 1 as const,
+      appId: decision.scope.appId,
+      repository: { repositoryId: "123", owner: "team", name: "apps", defaultBranch: "main" },
+      installationId: "456",
+      confirmedByCallId: "verified-access",
+    };
+    await f.store.observeSession({
+      principal,
+      sessionId: f.sessionId,
+      checkpoint: { version: 1, capturedAtEpochMs: 2, events: [], status: "waiting" },
+      stage: "planning",
+      resumability: "live",
+      appId: destination.appId,
+      nowEpochMs: 2,
+    });
+    let callbackCompleted = false;
+    f.sendAccepted.mockImplementationOnce(async (input) => {
+      const marker = readInternalBuildMarker(input.message);
+      if (marker?.operationId === undefined || marker.nonce === undefined) {
+        throw new Error("Expected canonical automatic Build marker");
+      }
+      const saved = await f.store.getSession(principal, f.sessionId);
+      if (saved === null) {
+        throw new Error("Missing owned build");
+      }
+      const current = toDurableHostedSessionRecord(saved);
+      const attach = {
+        principal,
+        sessionId: f.sessionId,
+        destination,
+        activeBuild: true,
+        activeBuildTurn: turn,
+        expected: {
+          adapterSessionId: current.adapterSessionId,
+          adapterGeneration: current.adapterGeneration,
+          cancellationRevision: current.cancellationRevision ?? 0,
+          checkpointDigest: current.checkpointDigest,
+        },
+        nowEpochMs: 3,
+      };
+      await expect(f.store.attachBuilderDestination(attach)).rejects.toThrow("settled");
+      await expect(
+        f.store.claimInternalBuildMessage({
+          principal,
+          sessionId: f.sessionId,
+          operationId: marker.operationId,
+          nonce: marker.nonce,
+          turnId: turn.id,
+          turnSequence: turn.sequence,
+          messageSequence: 7,
+        }),
+      ).resolves.toBe(true);
+      // The real turn.started hook replaces the prior runnable decision with this working projection.
+      await f.store.recordPrivateBuildDecision({
+        principal,
+        sessionId: f.sessionId,
+        decision: {
+          ...decision,
+          decision: "working",
+          turnId: turn.id,
+          turnSequence: turn.sequence,
+          currentSpec: { ...decision.scope },
+        },
+      });
+      await expect(
+        f.store.attachBuilderDestination({
+          ...attach,
+          activeBuildTurn: { ...turn, id: "old-turn" },
+        }),
+      ).rejects.toThrow("settled");
+      await expect(
+        f.store.attachBuilderDestination({ ...attach, activeBuild: false }),
+      ).rejects.toThrow("settled");
+      const operation = await f.store.getPrivateOperation(principal, marker.operationId);
+      const working = await f.store.getSession(principal, f.sessionId);
+      if (operation?.internalBuildContinuation === undefined || working === null) {
+        throw new Error("Missing claimed Build operation");
+      }
+      const claimed = operation.internalBuildContinuation;
+      const invalidBindings = [
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Legacy records omit this optional dispatch binding.
+        { dispatchBinding: undefined },
+        {
+          dispatchBinding: {
+            adapterGeneration: current.adapterGeneration + 1,
+            cancellationRevision: 0,
+          },
+        },
+        {
+          dispatchBinding: {
+            adapterGeneration: current.adapterGeneration,
+            cancellationRevision: 1,
+          },
+        },
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- An absent delivery receipt must not authorize active attachment.
+        { deliveredMessageSequence: undefined },
+        { decision: { ...claimed.decision, scope: { ...decision.scope, appId: "another-app" } } },
+      ];
+      for (const invalid of invalidBindings) {
+        const stale = hostedOperationRecordSchema.parse({
+          ...operation,
+          internalBuildContinuation: { ...claimed, ...invalid },
+        });
+        expect(() => {
+          assertBuilderDestinationPendingOperations(working, attach, [
+            { operation: stale, cancellationRevisionAtDispatch: null },
+          ]);
+        }).toThrow("settled");
+      }
+      await f.store.attachBuilderDestination(attach);
+      await f.store.attachBuilderDestination(attach);
+      expect(await f.store.getPrivateOperation(principal, marker.operationId)).toMatchObject({
+        state: "reserved",
+        internalBuildContinuation: {
+          deliveredTurnId: turn.id,
+          deliveredMessageSequence: 7,
+          dispatchBinding: {
+            adapterGeneration: current.adapterGeneration,
+            cancellationRevision: 0,
+          },
+        },
+      });
+      await f.store.recordCancellationIntent({ principal, sessionId: f.sessionId, nowEpochMs: 4 });
+      await expect(f.store.attachBuilderDestination(attach)).rejects.toThrow("settled");
+      callbackCompleted = true;
+    });
+    await continueApprovedHostedBuild(f);
+    expect(callbackCompleted).toBe(true);
+    expect(f.sendAccepted).toHaveBeenCalledOnce();
+    const saved = await f.store.getSession(principal, f.sessionId);
+    expect(saved?.version === 2 && saved.builderDestination).toEqual(destination);
+  });
   it("reports a settled internal turn without dispatching unchanged work again", async () => {
     const f = await fixture();
     await f.store.recordPrivateBuildDecision({
