@@ -98,6 +98,7 @@ export interface AppAccessManagementDependencies {
     actorId: string,
     roles: string[],
     context: AppAccessEffectContext,
+    accepted?: boolean,
   ) => Promise<"applied" | "absent" | "unknown">;
   acceptInvitation: (
     scope: RepositoryProductionScope,
@@ -348,17 +349,26 @@ export const createAppAccessManagementService = (deps: AppAccessManagementDepend
         }
         row = next;
       };
-      const reconciled = row.record.enrollment
-        ? await deps.reconcileInvitee(
-            scope,
-            invitationId,
-            invitation.actorId,
-            command.roles,
-            context,
-          )
-        : "absent";
+      const reconciled =
+        row.record.enrollment || invitation.accepted
+          ? await deps.reconcileInvitee(
+              scope,
+              invitationId,
+              invitation.actorId,
+              command.roles,
+              context,
+              invitation.accepted,
+            )
+          : "absent";
       if (reconciled === "unknown") {
         throw new AppAccessError("app_access_unknown");
+      }
+      if (invitation.accepted) {
+        if (reconciled !== "applied") {
+          throw new AppAccessError("app_access_denied");
+        }
+        await saveEnrollment("applied");
+        return;
       }
       if (reconciled === "absent") {
         await saveEnrollment("pending");

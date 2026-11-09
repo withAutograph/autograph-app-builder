@@ -17,7 +17,8 @@ type Json = z.infer<ReturnType<typeof z.json>>;
 type Workers = Pick<
   ReturnType<typeof createRepositoryProductionWorkers>,
   "invokeAuthManagement" | "mutateAppAccess" | "inspectAppAccess"
->;
+> &
+  Partial<Pick<ReturnType<typeof createRepositoryProductionWorkers>, "inspectAcceptedAppAccess">>;
 export interface RepositoryProductionManagementDependencies extends Pick<
   AppAccessManagementDependencies,
   // oxlint-disable-next-line sonarjs/max-union-size -- This enumerates required service ports, not alternative runtime states.
@@ -377,10 +378,19 @@ export const createRepositoryProductionManagement = (
       }
       return await deps.withLease(scope, async (assertCurrent) => {
         const effect = readEffect(assertCurrent);
-        const people = await members(scope, effect);
-        const invites = z
-          .array(invitationSchema)
-          .parse(await auth(scope, { action: "list" }, true, effect, "list"));
+        const [peopleRead, invitationRead] = await Promise.allSettled([
+          members(scope, effect),
+          auth(scope, { action: "list" }, true, effect, "list"),
+        ]);
+        // Retain the shared lease until both read-only workers have settled.
+        if (peopleRead.status === "rejected") {
+          throw peopleRead.reason;
+        }
+        if (invitationRead.status === "rejected") {
+          throw invitationRead.reason;
+        }
+        const people = peopleRead.value;
+        const invites = z.array(invitationSchema).parse(invitationRead.value);
         const visible: AppAccessSnapshot["invitations"] = [];
         for (const item of invites) {
           if (
@@ -545,8 +555,14 @@ export const createRepositoryProductionManagement = (
       );
       await setAccess(scope, actorId, roles, true, effect, "invitee-grant");
     },
-    reconcileInvitee: async (scope, _id, actorId, roles, effect) =>
-      await accessState(scope, actorId, roles, true, effect),
+    reconcileInvitee: async (scope, _id, actorId, roles, effect, accepted) => {
+      const workers = deps.workers(scope);
+      if (accepted === true && workers.inspectAcceptedAppAccess) {
+        const context = await contextFor(scope, effect, `inspect-accepted:${actorId}`);
+        return await workers.inspectAcceptedAppAccess(context, { actorId, roles });
+      }
+      return await accessState(scope, actorId, roles, true, effect);
+    },
     acceptInvitation: async (scope, id, actorId, effect) => {
       const found = await invitation(scope, id, effect);
       if (!found || found.verifiedActorId !== actorId) {

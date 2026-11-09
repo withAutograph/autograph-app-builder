@@ -116,6 +116,8 @@ const authWorkerAuthorityFrame = (
 const fixture = async (
   staticApp = false,
   readCreator?: RepositoryProductionWorkerDependencies["readCreator"],
+  workerReply?: RepositoryProductionWorkerDependencies["runWorker"],
+  readAcceptedAccess?: RepositoryProductionWorkerDependencies["readAcceptedAccess"],
 ) => {
   const record = initialRepositoryProductionRecord(scope, {
     sessionId: "session",
@@ -265,7 +267,8 @@ const fixture = async (
         throw new Error("unexpected legacy identity");
       },
     },
-    runWorker,
+    runWorker: workerReply ?? runWorker,
+    readAcceptedAccess,
   });
   const context: RepositoryProductionEffectContext = {
     row: { operationRef: repositoryProductionOperationRef(scope), revision: 1, record },
@@ -602,3 +605,72 @@ describe("concrete protected Production worker composition", () => {
     expect(f.calls).toEqual([]);
   });
 });
+
+it.each(["retryable", "absent"] as const)(
+  "normalizes frozen access %s readback without changing current control authority",
+  async (status) => {
+    const currentFence = 429;
+    const f = await fixture(false, undefined, async (_config, input) => {
+      expect(input.context.operation.fence_generation).toBe(currentFence);
+      expect(input.readOnly).toBe(true);
+      expect(input.operation).toBe("access");
+      expect(planFrom(input.startupFiles["approved-access-plan.json"]).access).toEqual([
+        {
+          actorId: "invitee",
+          actorKind: "human",
+          organizationId: scope.organizationId,
+          roles: ["reader"],
+        },
+      ]);
+      return {
+        version: 1,
+        operation_id: input.context.operation.operation_id,
+        context_digest: "a".repeat(64),
+        fence_generation: currentFence,
+        status,
+        readback_sha256: "b".repeat(64),
+        result: null,
+      };
+    });
+    defined(f.context.row.record.lease).fenceGeneration = currentFence;
+    await expect(
+      f.workers.inspectAppAccess(f.context, {
+        actorId: "invitee",
+        roles: ["reader"],
+        active: true,
+      }),
+    ).resolves.toEqual({ state: "not-applied" });
+  },
+);
+
+it.each([false, true])(
+  "wires accepted readback to current owned resources without workers (frontend=%s)",
+  async (frontend) => {
+    let reads = 0;
+    const f = await fixture(frontend, undefined, undefined, async (input) => {
+      reads += 1;
+      expect(input.controlGeneration).toBe(429);
+      expect(input.actorId).toBe("invitee");
+      expect(input.roles).toEqual(["reader"]);
+      expect(input.scope).toEqual(scope);
+      if (frontend) {
+        expect(input.runtime).toBeUndefined();
+      } else {
+        expect(input.runtime?.resource).toEqual(f.context.row.record.resource);
+      }
+      await input.assertCurrent();
+      return "applied";
+    });
+    defined(f.context.row.record.lease).fenceGeneration = 429;
+    await expect(
+      f.workers.inspectAcceptedAppAccess(f.context, { actorId: "invitee", roles: ["reader"] }),
+    ).resolves.toBe("applied");
+    expect(reads).toBe(1);
+    expect(f.calls).toHaveLength(0);
+    f.revoke();
+    await expect(
+      f.workers.inspectAcceptedAppAccess(f.context, { actorId: "invitee", roles: ["reader"] }),
+    ).rejects.toThrow("revoked");
+    expect(reads).toBe(1);
+  },
+);

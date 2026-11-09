@@ -12,9 +12,9 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createServer } from "node:net";
+import { createServer, Socket } from "node:net";
 import { once } from "node:events";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createDevelopmentCycle } from "./application-root";
 import { resumeDevelopmentCycle } from "./resume-cycle";
@@ -274,6 +274,16 @@ it("rejects stale per-package Eve resolution outside the selected installed tree
 
 it("rejects a non-link retained dependency directory before replacing authored or native files", async () => {
   const f = await fixture();
+  // Another parallel fixture can reuse this released ephemeral port. Own the stopped
+  // precondition here; the running/stopped TCP controls above retain real sockets.
+  const stoppedConnection = vi
+    .spyOn(Socket.prototype, "connect")
+    .mockImplementation(function connectStoppedFixture(this: Socket) {
+      queueMicrotask(() => {
+        this.destroy(Object.assign(new Error("Stopped fixture"), { code: "ECONNREFUSED" }));
+      });
+      return this;
+    });
   try {
     const closed = once(f.server, "close");
     f.server.close();
@@ -304,6 +314,7 @@ it("rejects a non-link retained dependency directory before replacing authored o
     const after = await stat(stateFile);
     expect(after.ino).toBe(before.ino);
   } finally {
+    stoppedConnection.mockRestore();
     await rm(f.root, { force: true, recursive: true });
   }
 });

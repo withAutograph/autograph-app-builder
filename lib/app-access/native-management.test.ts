@@ -1,6 +1,6 @@
 /* oxlint-disable eslint/require-await -- In-memory adapters preserve asynchronous production ports. */
-import { randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { createHash, randomUUID } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   initialRepositoryProductionRecord,
@@ -67,6 +67,7 @@ const harness = (roleless = false, generated = false) => {
   const cancellations: string[] = [];
   const creatorChoices: string[] = [];
   const accessWrites: { actorId: string; roles: string[]; active: boolean }[] = [];
+  let ownerFailure: Error | undefined;
   let loseAfterRevoke = false;
   let loseAfterSend = false;
   let loseAfterCancel = false;
@@ -132,7 +133,11 @@ const harness = (roleless = false, generated = false) => {
   };
   const deps: RepositoryProductionManagementDependencies = {
     appUrl: async () => "https://apps.test/test-app",
-    assertAuthorized: async () => {},
+    assertAuthorized: async () => {
+      if (ownerFailure) {
+        throw ownerFailure;
+      }
+    },
     builderOrigin: "https://builder.test",
     journal: {
       findInvitation: async (id) => {
@@ -299,6 +304,9 @@ const harness = (roleless = false, generated = false) => {
   const service = createRepositoryProductionManagement(deps);
   return {
     deps,
+    revokeOwner: (error: Error) => {
+      ownerFailure = error;
+    },
     setup,
     creatorChoices,
     accessWrites,
@@ -685,4 +693,384 @@ describe("native app access recovery", () => {
     expect(h.invites.get(creator.id)?.status).toBe("pending");
     expect(h.sends).toEqual([]);
   });
+});
+
+describe("protected People reads", () => {
+  it("starts members and invitations together under the same held lease", async () => {
+    const f = harness();
+    const originalWorkers = f.deps.workers;
+    const gate: PromiseWithResolvers<void> = Promise.withResolvers();
+    const started = new Set<string>();
+    let held = false;
+    f.deps.withLease = async (_scope, run) => {
+      held = true;
+      try {
+        return await run(async () => {
+          expect(held).toBe(true);
+        });
+      } finally {
+        held = false;
+      }
+    };
+    f.deps.workers = (target) => {
+      const workers = originalWorkers(target);
+      return {
+        ...workers,
+        invokeAuthManagement: async (context, input, readOnly) => {
+          expect(readOnly).toBe(true);
+          expect(held).toBe(true);
+          const {
+            request: { action },
+          } = z.object({ request: z.object({ action: z.string() }) }).parse(input);
+          started.add(action);
+          await gate.promise;
+          return await workers.invokeAuthManagement(context, input, readOnly);
+        },
+      };
+    };
+    const reading = f.service.read(owner);
+    try {
+      await vi.waitFor(
+        () => {
+          expect(started).toEqual(new Set(["list-members", "list"]));
+        },
+        { timeout: 100 },
+      );
+      expect(held).toBe(true);
+    } finally {
+      gate.resolve();
+    }
+    await expect(reading).resolves.toMatchObject({ members: [], invitations: [] });
+    expect(held).toBe(false);
+  });
+
+  it("keeps the lease until both reads settle and preserves the first rejection", async () => {
+    const f = harness();
+    const originalWorkers = f.deps.workers;
+    const people: PromiseWithResolvers<void> = Promise.withResolvers();
+    const invitations: PromiseWithResolvers<void> = Promise.withResolvers();
+    const started = new Set<string>();
+    const failure = new Error("members unavailable");
+    let peopleFinished = false;
+    let held = false;
+    f.deps.withLease = async (_scope, run) => {
+      held = true;
+      try {
+        return await run(async () => {
+          expect(held).toBe(true);
+        });
+      } finally {
+        held = false;
+      }
+    };
+    f.deps.workers = (target) => {
+      const workers = originalWorkers(target);
+      return {
+        ...workers,
+        invokeAuthManagement: async (_context, input, readOnly) => {
+          expect(readOnly).toBe(true);
+          const {
+            request: { action },
+          } = z.object({ request: z.object({ action: z.string() }) }).parse(input);
+          started.add(action);
+          if (action === "list-members") {
+            try {
+              await people.promise;
+            } finally {
+              peopleFinished = true;
+            }
+          } else {
+            await invitations.promise;
+            throw new Error("invitations unavailable");
+          }
+          return await workers.invokeAuthManagement(_context, input, readOnly);
+        },
+      };
+    };
+    const result = (async () => {
+      try {
+        await f.service.read(owner);
+        return null;
+      } catch (error) {
+        return error;
+      }
+    })();
+    try {
+      await vi.waitFor(
+        () => {
+          expect(started.size).toBe(2);
+        },
+        { timeout: 100 },
+      );
+      people.reject(failure);
+      await vi.waitFor(() => {
+        expect(peopleFinished).toBe(true);
+      });
+      expect(held).toBe(true);
+    } finally {
+      people.reject(failure);
+      invitations.resolve();
+    }
+    await expect(result).resolves.toBe(failure);
+    expect(held).toBe(false);
+  });
+});
+
+it("preserves an invitation-list rejection after the members read succeeds", async () => {
+  const f = harness();
+  const originalWorkers = f.deps.workers;
+  const failure = new Error("invitations unavailable");
+  f.deps.workers = (target) => {
+    const workers = originalWorkers(target);
+    return {
+      ...workers,
+      invokeAuthManagement: async (context, input, readOnly) => {
+        const {
+          request: { action },
+        } = z.object({ request: z.object({ action: z.string() }) }).parse(input);
+        if (action === "list") {
+          throw failure;
+        }
+        return await workers.invokeAuthManagement(context, input, readOnly);
+      },
+    };
+  };
+  await expect(f.service.read(owner)).rejects.toBe(failure);
+});
+
+describe("accepted invitation enrollment recovery reproduction", () => {
+  it.each([
+    "active-old",
+    "database-missing-auth-active",
+    "database-revoked-auth-active",
+    "missing-everywhere",
+  ] as const)(
+    "reconciles only valid accepted access under a newer control lease: %s",
+    async (binding) => {
+      const f = harness(false, true);
+      const id = randomUUID();
+      const actorId = "verified-invitee";
+      const originalWorkers = f.deps.workers;
+      const actions: string[] = [];
+      const historicalFence = 426;
+      const currentFence = 429;
+      f.setup.record.lease.fenceGeneration = currentFence;
+      f.invites.set(id, { ...f.invitation(id), status: "accepted", verifiedActorId: actorId });
+      if (binding !== "missing-everywhere") {
+        f.people.set(actorId, {
+          id: actorId,
+          name: "Invitee",
+          email: "guest@example.test",
+          roles: ["reader"],
+        });
+      }
+      const digest = createHash("sha256").update(`${id}:complete`).digest("hex");
+      const completeId = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-5${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
+      f.rows.set(id, {
+        revision: 9,
+        record: {
+          kind: "app-access-operation-v1",
+          scope,
+          ownerContext: owner.ownerContext,
+          command: {
+            action: "invite",
+            clientRequestId: id,
+            email: "guest@example.test",
+            roles: ["reader"],
+          },
+          state: "applied",
+          dispatched: true,
+          createdAt: new Date().toISOString(),
+          enrollment: { actorId, state: "pending" },
+          workerCheckpoints: [
+            {
+              operationId: completeId,
+              effectId: "auth-app-invitation",
+              fenceGeneration: historicalFence,
+              contextDigest: "a".repeat(64),
+              resourceId: "auth",
+              tenantId: null,
+              sequence: 1,
+              receipt: { state: "applied", readbackSha256: "b".repeat(64) },
+            },
+          ],
+        },
+      });
+      f.deps.workers = (target) => {
+        const workers = originalWorkers(target);
+        return {
+          ...workers,
+          inspectAcceptedAppAccess: async (context, access) => {
+            expect(context.row.record.lease?.fenceGeneration).toBe(currentFence);
+            expect(access).toEqual({ actorId, roles: ["reader"] });
+            return binding === "active-old" ? "applied" : "absent";
+          },
+          inspectAppAccess: async (context, access) => {
+            expect(context.row.record.lease?.fenceGeneration).toBe(currentFence);
+            expect(access).toEqual({ actorId, active: true, roles: ["reader"] });
+            // Frozen Arrusted5f7 inspectAccess: an old active grant is retryable;
+            // missing/revoked grants also cannot qualify as applied. The real
+            // worker adapter normalization is exercised in its companion test.
+            return { state: "not-applied" };
+          },
+          invokeAuthManagement: async (context, input, readOnly) => {
+            const {
+              request: { action },
+            } = z.object({ request: z.object({ action: z.string() }) }).parse(input);
+            actions.push(action);
+            expect(context.row.record.lease?.fenceGeneration).toBe(currentFence);
+            // Exact frozen5f7 Auth startup guard; an accepted invitation is no
+            // longer eligible for prepare-member, even after a completed grant.
+            if (action === "prepare-member" && f.invites.get(id)?.status !== "verified") {
+              throw new Error("app_invitation_identity_required");
+            }
+            return await workers.invokeAuthManagement(context, input, readOnly);
+          },
+        };
+      };
+      if (binding === "active-old") {
+        // Desired recovery: acknowledge already accepted valid access, without
+        // treating the historical grant generation as the current control lease.
+        await expect(f.service.completeInvitation(id)).resolves.toBeUndefined();
+        expect(f.rows.get(id)?.record.enrollment).toEqual({ actorId, state: "applied" });
+        expect(actions).not.toContain("prepare-member");
+      } else {
+        await expect(f.service.completeInvitation(id)).rejects.toMatchObject({
+          code: "app_access_denied",
+        });
+        expect(f.rows.get(id)?.record.enrollment).toEqual({ actorId, state: "pending" });
+      }
+      expect(f.invites.get(id)?.status).toBe("accepted");
+      expect(actions).not.toContain("prepare-member");
+      expect(actions).not.toContain("complete");
+      expect(f.accessWrites).toHaveLength(0);
+    },
+  );
+
+  it("can settle the same accepted pending enrollment when access readback is applied", async () => {
+    const f = harness(false, true);
+    const id = randomUUID();
+    const actorId = "verified-invitee";
+    f.invites.set(id, { ...f.invitation(id), status: "accepted", verifiedActorId: actorId });
+    f.people.set(actorId, {
+      id: actorId,
+      name: "Invitee",
+      email: "guest@example.test",
+      roles: ["reader"],
+    });
+    f.rows.set(id, {
+      revision: 9,
+      record: {
+        kind: "app-access-operation-v1",
+        scope,
+        ownerContext: owner.ownerContext,
+        command: {
+          action: "invite",
+          clientRequestId: id,
+          email: "guest@example.test",
+          roles: ["reader"],
+        },
+        state: "applied",
+        dispatched: true,
+        createdAt: new Date().toISOString(),
+        enrollment: { actorId, state: "pending" },
+        workerCheckpoints: [],
+      },
+    });
+    await f.service.completeInvitation(id);
+    expect(f.rows.get(id)?.record.enrollment).toEqual({ actorId, state: "applied" });
+    expect(f.accessWrites).toHaveLength(0);
+  });
+});
+
+it.each(["actor", "role", "tenant", "app", "email"] as const)(
+  "refuses accepted invitation %s changes before journal acknowledgement",
+  async (field) => {
+    const f = harness(false, true);
+    const id = randomUUID();
+    const actorId = "invitee";
+    const invitation = {
+      ...f.invitation(id),
+      status: "accepted" as const,
+      verifiedActorId: actorId,
+    };
+    if (field === "actor") {
+      invitation.verifiedActorId = "other";
+    }
+    if (field === "role") {
+      invitation.roles = ["editor"];
+    }
+    if (field === "tenant") {
+      invitation.organizationId = "other";
+    }
+    if (field === "app") {
+      invitation.appId = "other";
+    }
+    if (field === "email") {
+      invitation.email = "other@example.test";
+    }
+    f.invites.set(id, invitation);
+    f.rows.set(id, {
+      revision: 1,
+      record: {
+        kind: "app-access-operation-v1",
+        scope,
+        ownerContext: owner.ownerContext,
+        command: {
+          action: "invite",
+          clientRequestId: id,
+          email: "guest@example.test",
+          roles: ["reader"],
+        },
+        state: "applied",
+        dispatched: true,
+        createdAt: new Date().toISOString(),
+        enrollment: { actorId, state: "pending" },
+        workerCheckpoints: [],
+      },
+    });
+    await expect(f.service.completeInvitation(id)).rejects.toMatchObject({
+      code: "app_access_denied",
+    });
+    expect(f.rows.get(id)?.record.enrollment?.state).toBe("pending");
+    expect(f.accessWrites).toHaveLength(0);
+  },
+);
+
+it("rechecks current owner before acknowledging accepted enrollment", async () => {
+  const f = harness(false, true);
+  const id = randomUUID();
+  const actorId = "invitee";
+  const originalWorkers = f.deps.workers;
+  const failure = new Error("current owner changed");
+  f.invites.set(id, { ...f.invitation(id), status: "accepted", verifiedActorId: actorId });
+  f.rows.set(id, {
+    revision: 1,
+    record: {
+      kind: "app-access-operation-v1",
+      scope,
+      ownerContext: owner.ownerContext,
+      command: {
+        action: "invite",
+        clientRequestId: id,
+        email: "guest@example.test",
+        roles: ["reader"],
+      },
+      state: "applied",
+      dispatched: true,
+      createdAt: new Date().toISOString(),
+      enrollment: { actorId, state: "pending" },
+      workerCheckpoints: [],
+    },
+  });
+  f.deps.workers = (target) => ({
+    ...originalWorkers(target),
+    inspectAcceptedAppAccess: async () => {
+      f.revokeOwner(failure);
+      return "applied";
+    },
+  });
+  await expect(f.service.completeInvitation(id)).rejects.toBe(failure);
+  expect(f.rows.get(id)?.record.enrollment?.state).toBe("pending");
+  expect(f.accessWrites).toHaveLength(0);
 });
