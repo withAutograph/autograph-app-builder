@@ -9,6 +9,9 @@ import type {
 } from "./repository-production-contract";
 import type { RepositoryProductionEffectContext } from "./repository-production-setup";
 
+import type { CompletedProductionInvitation } from "./repository-production-completion-status";
+import { repositoryProductionSetupComplete } from "./repository-production-setup";
+
 type Json = z.infer<ReturnType<typeof z.json>>;
 export class RepositoryProductionCreatorRecipientLockedError extends Error {
   constructor() {
@@ -626,6 +629,39 @@ export const createRepositoryProductionCreator = (
         expiresAt: value?.expiresAt ?? frame.renewal?.expiresAt ?? frame.expiresAt,
         message:
           "Use the secure sign-in link in your email. Builder will finish setting up your app when you return.",
+      };
+    },
+    async readCompleted(invitationId: string): Promise<CompletedProductionInvitation | undefined> {
+      if (!z.uuid().safeParse(invitationId).success) {
+        return undefined;
+      }
+      const row = await deps.findInvitation(invitationId);
+      if (row === undefined || !repositoryProductionSetupComplete(row.record)) {
+        return undefined;
+      }
+      const frame = frameFor(row);
+      const ownerContext = row.record.creatorOwnerContext ?? row.record.ownerContext;
+      const actorId = row.record.creatorActorId;
+      if (frame === undefined || frame.invitationId !== invitationId) {
+        return undefined;
+      }
+      if (
+        ownerContext === undefined ||
+        ownerContext.sessionId !== frame.sessionId ||
+        actorId === undefined ||
+        actorId.length === 0
+      ) {
+        return undefined;
+      }
+      if (frame.linkedCreator !== undefined && frame.linkedCreator.actorId !== actorId) {
+        return undefined;
+      }
+      return {
+        kind: "creator",
+        invitationId,
+        actorId,
+        scope: row.record.scope,
+        owner: { appId: row.record.scope.appId, sessionId: frame.sessionId, ownerContext },
       };
     },
     async complete(invitationId: string): Promise<"not-owned" | "ready" | "pending"> {

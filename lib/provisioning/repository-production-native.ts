@@ -53,7 +53,14 @@ import type {
 } from "./repository-production-dispatcher";
 import { readRepositoryProductionConfiguration } from "./repository-production-configuration";
 import type { RepositoryProductionRepository } from "./repository-production-configuration";
-import { createRepositoryProductionManagementResolver } from "./repository-production-management-subject";
+import {
+  createRepositoryProductionManagementResolver,
+  readRepositoryProductionManagementRecord,
+} from "./repository-production-management-subject";
+import {
+  createRepositoryProductionCompletionStatus,
+  completeRepositoryProductionFromStatus,
+} from "./repository-production-completion-status";
 import type { RepositoryProductionManagementSubject } from "./repository-production-management-subject";
 import { resolveRepositoryProductionDestination } from "./repository-production-destination";
 import {
@@ -746,6 +753,30 @@ export const createRepositoryProductionNativeHandler =
           );
         },
       });
+      const readCompletedStatus = createRepositoryProductionCompletionStatus({
+        readInvitee: accessJournal.findInvitation,
+        readCreator: async (id) => await creator.readCompleted(id),
+        readPending: accessJournal.pending,
+        assertAuthorized: async ({ owner, scope }) => {
+          request.signal.throwIfAborted();
+          configured(scope);
+          const row = await readRepositoryProductionManagementRecord(
+            {
+              readSession: async (currentOwner) => {
+                await readSession(currentOwner);
+              },
+              store,
+            },
+            owner,
+            scope,
+          );
+          // Status has no mutating command to resume; pending IDs cannot exempt it.
+          const state = { row, pendingCommandIds: [] };
+          assertNoConflictingProductionSetup(state);
+          assertNoConflictingCreatorRoleUpdate(state);
+          request.signal.throwIfAborted();
+        },
+      });
       const managementFor = (
         held?: () => Promise<void>,
         command?: AppAccessCommand,
@@ -1070,20 +1101,24 @@ export const createRepositoryProductionNativeHandler =
             }
             return await managementFor(undefined, command).execute(owner, command);
           },
-          completeInvitation: async (id) => {
-            const complete = async () =>
-              await completeRepositoryProductionInvitation({
-                creator: async () => await creator.complete(id),
-                invitee: async () => {
-                  await managementFor(undefined, undefined, false, true).completeInvitation(id);
-                },
-              });
-            if (!waitUntil) {
-              return await complete();
-            }
-            deferredCleanup = true;
-            return await observeRepositoryProductionCompletion(complete(), waitUntil, dispose);
-          },
+          completeInvitation: async (id) =>
+            await completeRepositoryProductionFromStatus(
+              async () => await readCompletedStatus(id),
+              async () => {
+                const complete = async () =>
+                  await completeRepositoryProductionInvitation({
+                    creator: async () => await creator.complete(id),
+                    invitee: async () => {
+                      await managementFor(undefined, undefined, false, true).completeInvitation(id);
+                    },
+                  });
+                if (!waitUntil) {
+                  return await complete();
+                }
+                deferredCleanup = true;
+                return await observeRepositoryProductionCompletion(complete(), waitUntil, dispose);
+              },
+            ),
         },
       });
       return await handler(request);

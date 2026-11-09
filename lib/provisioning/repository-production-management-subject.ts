@@ -6,6 +6,7 @@ import type { RepositoryProductionRequestOwner } from "./repository-production-d
 import type {
   RepositoryProductionIntent,
   RepositoryProductionScope,
+  RepositoryProductionRow,
 } from "./repository-production-contract";
 import type { RepositoryProductionStore } from "./repository-production-setup";
 import {
@@ -67,6 +68,48 @@ const routingUnavailable = (error: unknown) => {
   );
 };
 
+/** Fresh saved intent/approval authority shared by management and completion acknowledgement. */
+export const assertRepositoryProductionManagementRecord = (
+  owner: RepositoryProductionRequestOwner,
+  scope: RepositoryProductionScope,
+  row: RepositoryProductionRow,
+): void => {
+  const savedOwner = row.record.ownerContext;
+  const changed = [
+    owner.appId !== scope.appId,
+    !isDeepStrictEqual(scope.authority, owner.ownerContext.authority),
+    !isDeepStrictEqual(row.record.scope, scope),
+    row.operationRef !== repositoryProductionOperationRef(scope),
+    row.record.intent.sessionId !== owner.sessionId,
+    savedOwner?.sessionId !== owner.sessionId,
+    !isDeepStrictEqual(savedOwner?.authority, owner.ownerContext.authority),
+  ].some(Boolean);
+  if (changed) {
+    throw new Error("repository_production_owner_changed");
+  }
+  if (
+    row.record.approval?.planDigest !== repositoryProductionApprovalDigest(scope, row.record.intent)
+  ) {
+    throw new Error("repository_production_approval_required");
+  }
+};
+
+/** Metadata-only proof; never loads immutable release content or performs setup effects. */
+export const readRepositoryProductionManagementRecord = async (
+  deps: Pick<ManagementResolverDependencies<ManagementProfile>, "readSession" | "store">,
+  owner: RepositoryProductionRequestOwner,
+  scope: RepositoryProductionScope,
+): Promise<RepositoryProductionRow> => {
+  await deps.readSession(owner);
+  const row = await deps.store.read(scope);
+  if (row === undefined) {
+    throw new Error("repository_production_setup_required");
+  }
+  assertRepositoryProductionManagementRecord(owner, scope, row);
+  await deps.readSession(owner);
+  return row;
+};
+
 /** Saved app management retains approved effects; a new draft is only planning input. */
 export const createRepositoryProductionManagementResolver =
   <Profile extends ManagementProfile>(deps: ManagementResolverDependencies<Profile>) =>
@@ -98,23 +141,7 @@ export const createRepositoryProductionManagementResolver =
           // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing setup is the optional store-read result.
           return undefined;
         }
-        const savedOwner = row.record.ownerContext;
-        const changed = [
-          !isDeepStrictEqual(row.record.scope, scope),
-          row.operationRef !== repositoryProductionOperationRef(scope),
-          row.record.intent.sessionId !== owner.sessionId,
-          savedOwner?.sessionId !== owner.sessionId,
-          !isDeepStrictEqual(savedOwner?.authority, owner.ownerContext.authority),
-        ].some(Boolean);
-        if (changed) {
-          throw new Error("repository_production_owner_changed");
-        }
-        if (
-          row.record.approval?.planDigest !==
-          repositoryProductionApprovalDigest(scope, row.record.intent)
-        ) {
-          throw new Error("repository_production_approval_required");
-        }
+        assertRepositoryProductionManagementRecord(owner, scope, row);
         return { profile, row, scope };
       }),
     );

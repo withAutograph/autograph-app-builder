@@ -873,3 +873,84 @@ describe("Production creator continuation", () => {
     );
   });
 });
+
+const completedCreator = async (persistent: boolean) => {
+  const h = harness({ persistent });
+  await h.bridge.prepare(h.context());
+  const { record } = h.row();
+  record.creatorActorId = "verified-creator";
+  record.ownerContext = {
+    kind: "direct",
+    authority: scope.authority,
+    principal: { ...scope.authority, scopes: ["autograph:session"] },
+    sessionId: "original-session",
+    adapterSessionId: "adapter",
+    adapterGeneration: 1,
+  };
+  if (persistent) {
+    for (const effect of Object.values(record.effects)) {
+      effect.state = "applied";
+    }
+  } else {
+    record.effects["creator-access"] = { state: "applied" };
+  }
+  return h;
+};
+
+describe("durable creator completion acknowledgement", () => {
+  it.each([false, true])(
+    "reads completed creator metadata without Auth or lease work (persistent=%s)",
+    async (persistent) => {
+      const h = await completedCreator(persistent);
+      const reads = h.invitationReads();
+      const requests = h.requests.length;
+      h.unknownRead();
+      h.setCompletionBusy();
+      expect(await h.bridge.readCompleted(h.row().operationRef)).toEqual({
+        kind: "creator",
+        invitationId: h.row().operationRef,
+        actorId: "verified-creator",
+        scope,
+        owner: {
+          appId: scope.appId,
+          sessionId: "original-session",
+          ownerContext: h.row().record.ownerContext,
+        },
+      });
+      expect(h.invitationReads()).toBe(reads);
+      expect(h.requests).toHaveLength(requests);
+      expect(h.resumes).toEqual([]);
+      expect(h.completionFenceChecks()).toBe(0);
+    },
+  );
+
+  it("does not acknowledge an unfinished schema, missing actor or foreign creator session", async () => {
+    const h = await completedCreator(true);
+    h.row().record.effects["install-schema"] = { state: "idle" };
+    expect(await h.bridge.readCompleted(h.row().operationRef)).toBeUndefined();
+    h.row().record.effects["install-schema"] = { state: "applied" };
+    delete h.row().record.creatorActorId;
+    expect(await h.bridge.readCompleted(h.row().operationRef)).toBeUndefined();
+    h.row().record.creatorActorId = "verified-creator";
+    const owner = h.row().record.ownerContext;
+    if (owner === undefined) {
+      throw new Error("Expected controlled creator owner");
+    }
+    owner.sessionId = "different-session";
+    expect(await h.bridge.readCompleted(h.row().operationRef)).toBeUndefined();
+  });
+
+  it("keeps pending creator role changes and corrupt scope frames nonready", async () => {
+    const h = await completedCreator(false);
+    h.row().record.creatorRoleUpdate = {
+      commandId: randomUUID(),
+      roles: ["reader"],
+      state: "pending",
+    };
+    expect(await h.bridge.readCompleted(h.row().operationRef)).toBeUndefined();
+    delete h.row().record.creatorRoleUpdate;
+    h.corruptScope();
+    await expect(h.bridge.readCompleted(h.row().operationRef)).rejects.toThrow();
+    expect(await h.bridge.readCompleted(randomUUID())).toBeUndefined();
+  });
+});
