@@ -26,6 +26,11 @@ import {
 
 import { reduceIdentityInvitations } from "../mcp/session-app/identity-invitation";
 import { sessionAuthorizationRefreshKey } from "../mcp/session-app/automatic-refresh";
+import {
+  owner as rolloutOwner,
+  profile as rolloutProfile,
+  rolloutFixture,
+} from "../provisioning/production-auth-schema-rollout.test-fixture";
 
 const recordedRequestSchema = z.object({
   data: z.object({
@@ -1138,6 +1143,80 @@ describe("installed Eve 0.68 projection", () => {
       type: "input_required",
     });
     expect(JSON.stringify(projected.map(toPublicEvent))).not.toContain("apply_app_creation");
+  });
+
+  it("projects the one-time shared sign-in approval with the enrolled resource and effects", async () => {
+    const { plan } = await rolloutFixture().service.plan(rolloutOwner, rolloutProfile.id);
+    const events = projectInstalledEveEvent(
+      installedEvent({
+        type: "input.requested",
+        data: {
+          requests: [
+            {
+              kind: "tool-approval",
+              requestId: "auth-rollout-approval",
+              prompt: "Approve internal schema rollout call",
+              action: {
+                kind: "tool-call",
+                toolName: "apply-production-auth-schema-rollout",
+                input: plan,
+              },
+            },
+          ],
+        },
+      }),
+      4,
+    ).map(toPublicEvent);
+    const required = events.find((event) => event?.type === "input_required");
+    expect(required).toMatchObject({
+      type: "input_required",
+      request: {
+        kind: "approval",
+        requestId: "auth-rollout-approval",
+        title: "Approve this one-time shared sign-in service update?",
+      },
+    });
+    const displayed = z.object({ request: z.object({ description: z.string() }) }).parse(required);
+    expect(displayed.request.description).toContain(rolloutProfile.label);
+    const visible = JSON.stringify(events);
+    expect(visible).toContain("operator-privileges");
+    for (const privateValue of [
+      plan.resource.hostname,
+      plan.resource.resourceId,
+      plan.resource.neon.projectId,
+      plan.resource.neon.branchId,
+      plan.planDigest,
+      "apply-production-auth-schema-rollout",
+      "Approve internal schema rollout call",
+    ]) {
+      expect(visible).not.toContain(privateValue);
+    }
+  });
+
+  it("hides an invalid shared sign-in approval instead of exposing its internal prompt", () => {
+    const events = projectInstalledEveEvent(
+      installedEvent({
+        type: "input.requested",
+        data: {
+          requests: [
+            {
+              kind: "tool-approval",
+              requestId: "invalid-auth-rollout",
+              prompt: "Private unreviewed schema action",
+              action: {
+                kind: "tool-call",
+                toolName: "apply-production-auth-schema-rollout",
+                input: { operationRef: "incomplete-plan", migrationUrl: "private-credential" },
+              },
+            },
+          ],
+        },
+      }),
+      4,
+    ).map(toPublicEvent);
+    expect(events.some((event) => event?.type === "input_required")).toBe(false);
+    expect(JSON.stringify(events)).not.toContain("private-credential");
+    expect(JSON.stringify(events)).not.toContain("Private unreviewed schema action");
   });
 
   it("shows the selected private compute footprint and ephemeral billing on the ordinary Build card", () => {
