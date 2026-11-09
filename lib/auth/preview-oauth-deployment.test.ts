@@ -254,14 +254,13 @@ describe("Preview OAuth deployment handlers", () => {
   });
 
   it("binds every browser interaction surface to no-store anti-clickjacking headers", async () => {
-    const [config, deployment, runtime, providers, authClient, signIn, providerButton, settingUp] =
+    const [config, deployment, runtime, providers, authClient, providerButton, settingUp] =
       await Promise.all([
         readFile("next.config.ts", "utf-8"),
         readFile("lib/auth/preview-oauth-deployment.ts", "utf-8"),
         readFile("lib/auth/preview-oauth-runtime.ts", "utf-8"),
         readFile("components/providers.tsx", "utf-8"),
         readFile("lib/auth-client.ts", "utf-8"),
-        readFile("components/auth/sign-in.tsx", "utf-8"),
         readFile("components/auth/provider-button.tsx", "utf-8"),
         readFile("app/(product)/auth/setting-up/page.tsx", "utf-8"),
       ]);
@@ -284,10 +283,6 @@ describe("Preview OAuth deployment handlers", () => {
     expect(providers).toContain('["github"] as const');
     expect(providers).toContain("emailAndPassword={{ enabled: false }}");
     expect(authClient).toContain("oauthProviderClient()");
-    expect(signIn).toContain("<ProviderButtons");
-    expect(signIn).not.toContain("SignUp");
-    expect(signIn).not.toContain("/oauth2/continue");
-    expect(signIn).toContain('<ProviderButtons socialLayout={socialLayout} view="signIn" />');
     expect(providerButton).not.toContain("Setting up your workspace…");
     expect(settingUp).toContain("Setting up your workspace…");
     await expect(readFile("app/auth/workspace/page.tsx", "utf-8")).rejects.toMatchObject({

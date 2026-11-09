@@ -475,7 +475,7 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   await page.locator("#app-brief").fill("Build a support operations console.");
   await page.getByLabel("App Name").fill("Support Console");
   await page.locator("#repository-name").fill("support-console");
-  await page.getByLabel("Private repository").uncheck();
+  await page.getByRole("checkbox", { name: "Private repository" }).uncheck();
   await completeHandoff(page);
 
   const initialBrowserState = await browserBoundaryState(page);

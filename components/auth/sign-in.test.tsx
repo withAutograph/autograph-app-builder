@@ -24,7 +24,7 @@ afterEach(() => {
   sessionStorage.clear();
 });
 
-const setup = (response: Response) => {
+const setup = (response: Response, socialOnly = false) => {
   const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response);
   const authClient = createAuthClient({
     baseURL: "http://localhost:3000/api/auth",
@@ -44,7 +44,9 @@ const setup = (response: Response) => {
         navigate={navigate}
         queryClient={queryClient}
         Link={({ href, children }) => <a href={href}>{children}</a>}
-        emailAndPassword={{ enabled: true, rememberMe: true }}
+        emailAndPassword={{ enabled: !socialOnly, rememberMe: true }}
+        redirectTo="/auth/setting-up?callbackURL=%2F"
+        socialProviders={socialOnly ? ["github"] : []}
       >
         <SignIn />
       </AuthProvider>,
@@ -52,6 +54,40 @@ const setup = (response: Response) => {
   });
   return { view: container, fetch, navigate };
 };
+
+it("starts GitHub sign-in without exposing email and password fields when disabled", async () => {
+  const { view, fetch } = setup(Response.json({ redirect: false }), true);
+  expect(view.querySelector('input[type="email"]')).toBeNull();
+  expect(view.querySelector('input[type="password"]')).toBeNull();
+  const button = [...view.querySelectorAll("button")].find((item) =>
+    item.textContent?.includes("GitHub"),
+  );
+  expect(button).toBeDefined();
+  await act(async () => {
+    button?.click();
+    await vi.waitFor(() => {
+      expect(fetch).toHaveBeenCalled();
+    });
+  });
+  const call = fetch.mock.calls.find(([input]) =>
+    new Request(input).url.includes("/sign-in/social"),
+  );
+  expect(call).toBeDefined();
+  const body = z.string().parse(call?.[1]?.body);
+  const request = z
+    .object({
+      callbackURL: z.string(),
+      provider: z.string(),
+      requestSignUp: z.boolean().optional(),
+    })
+    .parse(JSON.parse(body));
+  expect(request.provider).toBe("github");
+  expect(request.requestSignUp).toBeUndefined();
+  expect(new URL(request.callbackURL)).toMatchObject({
+    origin: window.location.origin,
+    pathname: "/auth/setting-up",
+  });
+});
 
 it("shows required errors and submits the selected email", async () => {
   const { view, fetch } = setup(
