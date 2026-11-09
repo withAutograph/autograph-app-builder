@@ -47,8 +47,11 @@ cache all app data. Choose private browser-cache lifetimes per feature, keep
 session authority and form tokens request-specific, and check account/tenant
 switches. Shared caches require genuinely shareable data. Use richer prefetches
 for a useful fixed link set, or hover/focus/touch intent for long lists. Defer
-expensive secondary content with `navigation()` outside the cached function
-when it is intentionally unnecessary before a click.
+expensive secondary content with `await navigation()` before starting its read,
+outside cached functions in a Suspense child, when it should wait for a click.
+Use `await prefetch()` instead when that work should be excluded from the App
+Shell but included in a selected per-link prefetch. Keep boundaries below shared
+layouts so they cover client transitions as well as direct loads.
 
 Use stable React View Transitions for meaningful content continuity with
 short animations, reduced-motion handling, and unsupported-browser fallback.
@@ -76,6 +79,11 @@ fresh, and successful mutations invalidate the affected views immediately.
 - [App-like experiences with Next.js 16.3](https://nextjs.org/blog/building-app-like-experiences-with-nextjs-16-3)
 - [Improving navigation in v0 with 16.4](https://nextjs.org/blog/improving-navigation-experience-in-v0-with-nextjs-16-4)
 - [Next.js 16.4](https://nextjs.org/blog/next-16-4)
+- [Instant navigation](https://nextjs.org/docs/app/guides/instant-navigation)
+- [Optimizing prefetching](https://nextjs.org/docs/app/guides/optimizing-prefetching)
+- [prefetch()](https://nextjs.org/docs/app/api-reference/functions/prefetch)
+- [navigation()](https://nextjs.org/docs/app/api-reference/functions/navigation)
+- [Cache Components](https://nextjs.org/docs/app/getting-started/cache-components)
 - [React 19.3](https://react.dev/blog/2026/09/09/react-19-3)
 
 The upstream workflow lock identifies the official Next.js source revision.
