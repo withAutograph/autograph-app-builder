@@ -980,8 +980,11 @@
   font-weight: 650;
   letter-spacing: -0.03em;
 }
-.sectionField legend > span {
+.sectionField legend > h2 {
   display: block;
+  margin: 0;
+  font: inherit;
+  letter-spacing: inherit;
 }
 .sectionField > p {
   margin: 0;
@@ -1374,7 +1377,8 @@
 .configureFields {
   padding: 10px 24px 0;
 }
-.configureFields > label {
+.configureFields > label,
+.configureFields > .accountField {
   display: grid;
   gap: 8px;
   margin-bottom: 22px;

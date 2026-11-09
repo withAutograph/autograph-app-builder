@@ -684,7 +684,7 @@ describe("Vercel-faithful App Builder flow", () => {
     ).toEqual(["app-details", "build-with", "store-in", "deploy-to", "connections"]);
     expect(
       Array.from(
-        view.querySelectorAll<HTMLElement>('[role="heading"][aria-level="2"]'),
+        view.querySelectorAll<HTMLElement>("[data-create-app-section] legend h2"),
         (heading) => heading.textContent,
       ),
     ).toEqual(["Build with", "Store in", "Deploy to", "Connections"]);
@@ -1201,6 +1201,7 @@ describe("Vercel-faithful App Builder flow", () => {
 
     const appName = requireElement(view.querySelector<HTMLInputElement>("#app-name"));
     const repository = requireElement(view.querySelector<HTMLInputElement>("#repository-name"));
+    expect(repository.labels?.[0]?.textContent).toContain("Repository Name");
     expect(appName.value).toBe("Vendor Onboarding");
     expect(repository.value).toBe(repositoryNameFromAppName(appName.value));
 
@@ -1592,6 +1593,17 @@ describe("Vercel-faithful App Builder flow", () => {
       ),
     );
     expect(view.textContent).toContain("Connection Name");
+    const accountButton = requireElement(
+      view.querySelector<HTMLButtonElement>(
+        '[aria-labelledby="connection-account-label connection-account-value"]',
+      ),
+    );
+    expect(accountButton.textContent).toContain("Autograph");
+    expect(view.querySelector("#connection-account-label")?.textContent).toBeTruthy();
+    const configurationAccessibility = await axe.run(view, {
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(configurationAccessibility.violations).toEqual([]);
 
     await click(
       requireElement(

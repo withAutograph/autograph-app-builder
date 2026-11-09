@@ -220,10 +220,10 @@ export function StoreInSection({
                     /
                   </span>
                   <div className={styles.repoLabel}>
-                    <span className={styles.fieldLabel}>
+                    <label className={styles.fieldLabel} htmlFor="repository-name">
                       {privateRepository ? "Private" : "Public"} Repository Name{" "}
                       <small aria-hidden="true">Optional</small>
-                    </span>
+                    </label>
                     <div className={styles.lockedInput}>
                       <input
                         id="repository-name"

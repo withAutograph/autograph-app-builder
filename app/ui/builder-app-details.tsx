@@ -54,24 +54,24 @@ export function AppDetailsSection({
         <span className={styles.fieldLabel}>
           App Brief <small aria-hidden="true">Required</small>
         </span>
-        <div className={styles.briefField}>
-          <textarea
-            id="app-brief"
-            name="app-brief"
-            aria-label="App Brief"
-            autoComplete="off"
-            {...(briefRegistration ?? { value: brief })}
-            onChange={(event) => {
-              void briefRegistration?.onChange(event);
-              onBriefChange(event.target.value);
-            }}
-            placeholder="Describe the app you want to build…"
-          />
-          <button type="button" aria-label="Try another app brief example" onClick={onCycleBrief}>
-            <RefreshCw size={16} aria-hidden="true" />
-          </button>
-        </div>
       </label>
+      <div className={styles.briefField}>
+        <textarea
+          id="app-brief"
+          name="app-brief"
+          aria-label="App Brief"
+          autoComplete="off"
+          {...(briefRegistration ?? { value: brief })}
+          onChange={(event) => {
+            void briefRegistration?.onChange(event);
+            onBriefChange(event.target.value);
+          }}
+          placeholder="Describe the app you want to build…"
+        />
+        <button type="button" aria-label="Try another app brief example" onClick={onCycleBrief}>
+          <RefreshCw size={16} aria-hidden="true" />
+        </button>
+      </div>
       <p className={styles.helpText}>
         Define this app’s users, workflow, constraints, and desired outcome.{" "}
         <Link href="/docs">Read the App Builder docs</Link>.

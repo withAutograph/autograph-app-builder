@@ -326,7 +326,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       // oxlint-disable-next-line react-doctor/nextjs-no-client-side-redirect -- Follow the replacement handoff only after renewal succeeds.
       router.replace(`/handoff/${encodeURIComponent(renewal.handoff.handoffId)}`);
     }
-  }, [data.handoffId, destination, renewal, renewalPending, router]);
+  }, [data.handoffId, destination, dispatchHandoffView, renewal, renewalPending, router]);
 
   const copyPrompt = async () => {
     try {

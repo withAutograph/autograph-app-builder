@@ -71,9 +71,7 @@ export function SectionShell({
   return (
     <fieldset className={className} data-create-app-section={section}>
       <legend>
-        <span role="heading" aria-level={2}>
-          {title}
-        </span>
+        <h2>{title}</h2>
       </legend>
       <p>{description}</p>
       {children}
