@@ -62,6 +62,7 @@ async function configureLoginRole(
     throw new Error("Runtime database role statement was invalid.");
   }
   try {
+    // react-doctor-disable-next-line react-doctor/raw-sql-injection-risk -- PostgreSQL format quotes the bound role identifier and password as %I and %L.
     await sql.unsafe(statement);
   } catch {
     throw new Error("Runtime database role configuration failed.");

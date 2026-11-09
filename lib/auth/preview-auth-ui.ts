@@ -20,6 +20,7 @@ export function serializeAuthPageSearchParams(searchParams: AuthPageSearchParams
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function resolveAuthCallbackURL(defaultURL: string, search: string, sameOrigin?: string) {
+  // react-doctor-disable-next-line react-doctor/url-prefilled-privileged-action -- The callback is restricted below to safe root-relative or same-origin paths.
   const callbackURL = new URLSearchParams(search).get("callbackURL");
   if (callbackURL === null || callbackURL === "") {
     return defaultURL;
