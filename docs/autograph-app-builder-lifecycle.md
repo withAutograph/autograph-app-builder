@@ -55,6 +55,17 @@ Ordinary build validation skips authenticated browser preparation and browser
 tasks. Builder can opt into a declared app browser task with `runBrowserTests`
 when that task serves the app’s testing needs.
 
+Browser and continuity check progress reflects the returned check outcome,
+not merely completion of the tool call. A failed, cancelled, missing or
+unassessed check outcome is never a pass. Successful technical validation
+does not establish product acceptance when that acceptance remains unassessed.
+Private browser failures retain the test location and bounded allowlisted
+access stage or failure category when available. Builder uses those facts to
+distinguish access setup, browser launch, navigation, assertion and timeout
+repairs. Unknown diagnostics remain unclassified; they do not justify weaker
+authorization or changed test expectations. Private traces, page contents,
+credential values and raw protected browser errors remain withheld.
+
 Private preview and browser checks can use the retained validated artifact
 while a draft remains unapplied. Keep the selected app, owner, workspace and
 artifact identity bound to that action. When identifying retained source for a

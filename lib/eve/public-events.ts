@@ -26,6 +26,7 @@ import type {
 import type { MessageStreamEvent } from "eve/client";
 import { z } from "zod";
 import { publicApprovalDescription } from "../agent/approval-receipt";
+import { continuityStatusSchema } from "../provisioning/hosted-operator-continuity-contract";
 import {
   githubRepositoryAccessSchema,
   githubRepositoryAccessViewModel,
@@ -34,6 +35,9 @@ import {
 const preparingAppDataModelLabel = "Preparing the app's data model";
 const prepareHostedRuntimeTool = "prepare-app-hosted-runtime";
 const prepareAppProductionTool = "prepare-app-production";
+const runAppBrowserTestsTool = "run-app-browser-tests";
+const runAppContinuityTestsTool = "run-app-continuity-tests";
+const validateAppCreationTool = "validate-app-creation";
 const actionsRequestedEvent = "actions.requested";
 const actionResultEvent = "action.result";
 const toolResultKind = "tool-result";
@@ -87,9 +91,9 @@ const authorizationRequestId = (data: unknown): string | undefined => {
   );
 };
 
+type ProgressState = "started" | "completed" | "failed";
 const progressStates = new Set(["started", "completed", "failed"]);
-const isProgressState = (value: string): value is "started" | "completed" | "failed" =>
-  progressStates.has(value);
+const isProgressState = (value: string): value is ProgressState => progressStates.has(value);
 const visibleOperations = new Map([
   ["apply_app_creation", "Building the app in its private workspace"],
   ["compile-app-schema-release", preparingAppDataModelLabel],
@@ -101,11 +105,11 @@ const visibleOperations = new Map([
   ["get-app-production", "Checking your app’s setup"],
   ["cleanup-app-hosted-runtime", "Removing the app's Preview resources"],
   ["export-app-hosted-data", "Exporting approved app data privately"],
-  ["run-app-continuity-tests", "Checking that the app stays connected after restart"],
-  ["run-app-browser-tests", "Running the app's browser tests"],
+  [runAppContinuityTestsTool, "Checking that the app stays connected after restart"],
+  [runAppBrowserTestsTool, "Running the app's browser tests"],
   ["start_app_preview", "Starting the app preview"],
   ["validate_app_creation", "Validating the app changes"],
-  ["validate-app-creation", "Validating the app changes"],
+  [validateAppCreationTool, "Validating the app changes"],
   ["validate_github_draft_pr_reconciliation", "Checking changes proposed for the draft PR"],
   ["reconcile_github_draft_pr", "Updating the draft pull request"],
 ]);
@@ -118,6 +122,35 @@ const visibleOperationLabels = new Set([
   "Checking the app's workflow",
   "Preparing local app data",
 ]);
+
+// These tools return check outcomes normally; Eve completing the call does not
+// mean that the check passed. Keep each tool's result vocabulary explicit.
+const successfulCheckStatuses = new Map([
+  [runAppBrowserTestsTool, new Set(["passed"])],
+  ["validate_app_creation", new Set(["validated", "repair_applied"])],
+  [validateAppCreationTool, new Set(["validated", "repair_applied"])],
+]);
+
+const continuityProgressSchema = continuityStatusSchema
+  .pick({ state: true, outcome: true, failure: true })
+  .loose();
+
+// Continuity may return while its suite is still running. Its journal state is
+// not a browser check's status, and runtime readiness is not suite success.
+const continuityProgressState = (
+  result: ReturnType<typeof continuityProgressSchema.safeParse>,
+): ProgressState => {
+  if (!result.success || result.data.failure !== undefined) {
+    return "failed";
+  }
+  if (result.data.state === "settled") {
+    return result.data.outcome?.exitCode === 0 ? "completed" : "failed";
+  }
+  if (result.data.state === "revoked" || result.data.state === "reconciliation-required") {
+    return "failed";
+  }
+  return "started";
+};
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const draftValidationCommandLabel = (value: unknown): string | undefined => {
@@ -1541,12 +1574,19 @@ export const projectInstalledEveEvent = (
         false,
       );
       const returnedStatus = recordStringField(event.data.result.output, "status");
+      const successfulStatuses = successfulCheckStatuses.get(event.data.result.toolName);
+      const completedState =
+        event.data.result.toolName === runAppContinuityTestsTool
+          ? continuityProgressState(continuityProgressSchema.safeParse(event.data.result.output))
+          : "completed";
       const commandFailed =
         // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
         (event.data.result.toolName === prepareHostedRuntimeTool && returnedStatus === "blocked") ||
         (event.data.result.toolName === "validate_github_draft_pr_reconciliation" &&
           (returnedStatus === "needs_repair" || returnedStatus === "needs_resolution")) ||
-        (event.data.result.toolName === "install-app-integrations" && returnedStatus === "failed");
+        (event.data.result.toolName === "install-app-integrations" &&
+          returnedStatus === "failed") ||
+        (successfulStatuses !== undefined && !successfulStatuses.has(returnedStatus ?? ""));
       const progress: InternalEveEvent[] =
         label === undefined
           ? []
@@ -1558,7 +1598,7 @@ export const projectInstalledEveEvent = (
                   event.data.status === "completed" &&
                   event.data.result.isError !== true &&
                   !commandFailed
-                    ? "completed"
+                    ? completedState
                     : "failed",
                 type: "progress",
               },
