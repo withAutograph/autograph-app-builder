@@ -11,6 +11,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { tmpdir } = require("node:os");
 const expected = JSON.parse(process.argv[1]);
+const directory = path.resolve(expected.workspacePath, "../.app-builder");
+const manifestTarget = path.join(directory, "source-files.json");
+if (fs.existsSync(manifestTarget)) process.exit(0);
 const temporary = fs.mkdtempSync(path.join(tmpdir(), "builder-source-baseline-"));
 const gitArguments = ["-c", "protocol.allow=never", "-c", "credential.helper=", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-C", expected.workspacePath];
 const git = (arguments_, target, input) => {
@@ -88,17 +91,42 @@ try {
   } finally { fs.closeSync(descriptor); }
   const digest = createHash("sha256").update(JSON.stringify(files)).digest("hex");
   if (files.length === 0 || digest !== expected.workspaceDigest) throw new Error("The original Git baseline does not match the saved source metadata.");
-  const directory = path.resolve(expected.workspacePath, "../.app-builder");
   fs.mkdirSync(directory, {recursive:true});
-  // Checksum first, then atomically restore the missing manifest. App bytes and
-  // Git checkout/index are never written by metadata recovery.
+  // Exclusive links publish complete metadata without replacing a preparation
+  // that won the race after the original null read. The caller validates it.
+  const publishAbsent = (source, destination) => {
+    try { fs.linkSync(source, destination); return true; }
+    catch (error) { if (error.code === "EEXIST") return false; throw error; }
+  };
   const staging = fs.mkdtempSync(path.join(directory, ".source-files-recovery-"));
   try {
-    fs.writeFileSync(path.join(staging, "checksums"), files.map(file => file.sha256 + "  repository/" + file.path).join("\n") + "\n");
+    const checksums = files.map(file => file.sha256 + "  repository/" + file.path).join("\n") + "\n";
+    const stagedChecksums = path.join(staging, "checksums");
+    const checksumTarget = path.join(directory, "source-checksums.sha256");
+    fs.writeFileSync(stagedChecksums, checksums);
     fs.writeFileSync(path.join(staging, "manifest"), JSON.stringify(files, null, 2) + "\n");
-    fs.renameSync(path.join(staging, "checksums"), path.join(directory, "source-checksums.sha256"));
-    fs.renameSync(path.join(staging, "manifest"), path.join(directory, "source-files.json"));
+    if (!fs.existsSync(manifestTarget)) {
+      const createdChecksum = publishAbsent(stagedChecksums, checksumTarget);
+      if (!createdChecksum && fs.readFileSync(checksumTarget, "utf8") !== checksums) {
+        if (!fs.existsSync(manifestTarget)) throw new Error("Another preparation's checksum metadata is already present.");
+      } else if (!publishAbsent(path.join(staging, "manifest"), manifestTarget) && createdChecksum) {
+        let winnerMatches = false;
+        try {
+          const winner = JSON.parse(fs.readFileSync(manifestTarget, "utf8"));
+          winnerMatches = createHash("sha256").update(JSON.stringify(winner)).digest("hex") === expected.workspaceDigest;
+        } catch { /* The caller will report an unreadable or invalid winning manifest. */ }
+        if (!winnerMatches) {
+          const owned = fs.statSync(stagedChecksums);
+          const current = fs.lstatSync(checksumTarget);
+          if (owned.dev === current.dev && owned.ino === current.ino) fs.unlinkSync(checksumTarget);
+        }
+      }
+    }
   } finally { fs.rmSync(staging, {recursive:true, force:true}); }
+} catch (error) {
+  // A concurrent preparation may already have repaired the missing metadata.
+  // Do not discard its result because our reconstruction lost its source race.
+  if (!fs.existsSync(manifestTarget)) throw error;
 } finally { fs.rmSync(temporary, {recursive:true, force:true}); }
 `;
 

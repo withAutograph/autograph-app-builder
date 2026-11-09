@@ -370,6 +370,9 @@ changes therefore remain intact, and metadata loss does not require another
 Build approval. If the original objects cannot establish the saved baseline,
 Builder preserves the app and session and reports a service recovery issue;
 the changed working tree is never substituted as the original baseline.
+Restoration publishes missing metadata exclusively. If another preparation has
+already restored or refreshed it, recovery preserves that result and validates
+the winning manifest against the saved source binding instead of replacing it.
 
 After an owned app's PR merges, Builder can prepare its next PR in the same
 session and private workspace. Approved repair history supplies only the prior

@@ -67,7 +67,7 @@ const fixture = () => {
     workspacePath: "/workspace/repository",
   };
   const mapped = (name: string) => name.replaceAll("/workspace", workspace);
-  const native = (): VercelSdkSessionNative => ({
+  const native = (beforeCommand?: () => void): VercelSdkSessionNative => ({
     name: record.workspaceId,
     expiresAt: new Date(Date.now() + 600_000),
     extendTimeout: async () => {
@@ -97,6 +97,7 @@ const fixture = () => {
       if (typeof options === "string") {
         throw new TypeError("The SDK session must provide a structured native command.");
       }
+      beforeCommand?.();
       const output = spawnSync(options.cmd, options.args?.map(mapped) ?? [], {
         cwd: mapped(options.cwd ?? "/workspace"),
         encoding: "utf-8",
@@ -128,6 +129,64 @@ const fixture = () => {
 };
 
 describe("destination review after retained workspace metadata loss", () => {
+  it.each(["same-baseline", "new-baseline"])(
+    "preserves metadata restored after the initial missing-file read: %s",
+    async (winner) => {
+      const f = fixture();
+      try {
+        const manifestPath = path.join(f.metadata, "source-files.json");
+        const checksumsPath = path.join(f.metadata, "source-checksums.sha256");
+        // SAFETY: The production manifest generator produced this controlled fixture.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Retain the fixture's known file records to construct the competing preparation.
+        const files = JSON.parse(f.manifest) as { path: string; sha256: string }[];
+        if (winner === "new-baseline") {
+          files[0].sha256 = "f".repeat(64);
+        }
+        const winningManifest = `${JSON.stringify(files, null, 4)}\n`;
+        const checksumLines = files.map((file) => `${file.sha256}  repository/${file.path}`);
+        const winningChecksums = [...checksumLines, ""].join("\n");
+        rmSync(manifestPath);
+        rmSync(checksumsPath);
+        const sandbox = createVercelSdkSession(
+          f.native(() => {
+            writeFileSync(manifestPath, winningManifest);
+            writeFileSync(checksumsPath, winningChecksums);
+          }),
+        );
+        const read = readPreparedSandboxSourceManifest(sandbox, f.record);
+        await (winner === "same-baseline"
+          ? expect(read).resolves.toHaveLength(5)
+          : expect(read).rejects.toThrow("no longer matches its receipt"));
+        expect(readFileSync(manifestPath, "utf-8")).toBe(winningManifest);
+        expect(readFileSync(checksumsPath, "utf-8")).toBe(winningChecksums);
+      } finally {
+        rmSync(f.root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("does not replace a checksum belonging to another incomplete preparation", async () => {
+    const f = fixture();
+    try {
+      const manifestPath = path.join(f.metadata, "source-files.json");
+      const checksumsPath = path.join(f.metadata, "source-checksums.sha256");
+      rmSync(manifestPath);
+      const competingChecksum = "another preparation's checksums\n";
+      const sandbox = createVercelSdkSession(
+        f.native(() => {
+          writeFileSync(checksumsPath, competingChecksum);
+        }),
+      );
+      await expect(readPreparedSandboxSourceManifest(sandbox, f.record)).rejects.toThrow(
+        "app and session are preserved",
+      );
+      expect(readFileSync(checksumsPath, "utf-8")).toBe(competingChecksum);
+      expect(existsSync(manifestPath)).toBe(false);
+    } finally {
+      rmSync(f.root, { recursive: true, force: true });
+    }
+  });
+
   it("restores the original Git baseline through a reattached SDK reader without losing repaired app or registration", async () => {
     const f = fixture();
     try {
