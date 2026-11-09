@@ -2590,8 +2590,9 @@ export const runProductionAuthSchemaFileSpool = async (
     throw resourceMismatch();
   }
   // URL identity is checked independently of the worker before any credential transport.
-  const { assertAuthProposalMigrationUrl } = await import("./hosted-operator-auth-proposal");
-  assertAuthProposalMigrationUrl(input.directDatabaseUrl, resource);
+  const { normalizeProductionAuthMigrationUrl } =
+    await import("./production-auth-schema-rollout-connection");
+  const directDatabaseUrl = normalizeProductionAuthMigrationUrl(input.directDatabaseUrl, resource);
   await input.assertCurrent();
   const createSandbox: CreateSandbox =
     dependencies.createSandbox ??
@@ -2604,7 +2605,7 @@ export const runProductionAuthSchemaFileSpool = async (
     configuration,
     createSandbox,
     {
-      directDatabaseUrl: input.directDatabaseUrl,
+      directDatabaseUrl,
       readbackOnly: input.readOnly ? true : undefined,
       fenceGeneration: context.operation.fence_generation,
       signal: input.signal,

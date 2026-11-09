@@ -26,8 +26,15 @@ import {
 } from "./production-auth-schema-rollout-store";
 import { createProductionAuthSchemaProposal } from "./production-auth-schema-rollout-proposal";
 import { createAuthSchemaRollout } from "./production-auth-schema-rollout";
-import type { AuthSchemaRolloutPorts } from "./production-auth-schema-rollout";
+import type {
+  AuthSchemaRolloutPorts,
+  AuthSchemaRolloutStore,
+} from "./production-auth-schema-rollout";
 import type { AuthSchemaRolloutRow } from "./production-auth-schema-rollout-contract";
+import {
+  observeAuthSchemaRolloutPhase,
+  observeAuthSchemaRolloutPhaseSync,
+} from "./production-auth-schema-rollout-diagnostic";
 
 const ownerFields = {
   version: z.literal(1),
@@ -84,31 +91,99 @@ export const authSchemaRolloutWorkerContext = (
  * trusted Builder workload and the canonical, deployment-enrolled administrator.
  */
 export const createAuthSchemaRolloutNativeHandler =
-  (environment: Readonly<Record<string, string | undefined>> = process.env) =>
+  (
+    environment: Readonly<Record<string, string | undefined>> = process.env,
+    dependencies: {
+      consent?: Parameters<typeof createHostedOperatorConsentOwner>[2];
+      propose?: ReturnType<typeof createProductionAuthSchemaProposal>;
+      openJournal?: (databaseUrl: string) => Promise<{
+        store: AuthSchemaRolloutStore;
+        close: () => Promise<void>;
+      }>;
+    } = {},
+  ) =>
   async (request: Request) => {
     if (request.method !== "POST") {
       return Response.json({ code: "not_found" }, { status: 404 });
     }
-    const configuration = readAuthSchemaRolloutConfiguration(environment);
-    const input = authSchemaRolloutRequestSchema.parse(await request.json());
-    const consent = createHostedOperatorConsentOwner(configuration.builderWorkload, environment);
-    const current = await consent.authorize(request, input.sessionId, input.ownerContext);
+    const configuration = observeAuthSchemaRolloutPhaseSync("configuration", () =>
+      readAuthSchemaRolloutConfiguration(environment),
+    );
+    const input = await observeAuthSchemaRolloutPhase("request_validation", async () =>
+      authSchemaRolloutRequestSchema.parse(await request.json()),
+    );
+    const { consent, current } = await observeAuthSchemaRolloutPhase(
+      "canonical_owner",
+      async () => {
+        const selected = createHostedOperatorConsentOwner(
+          configuration.builderWorkload,
+          environment,
+          dependencies.consent,
+        );
+        return {
+          consent: selected,
+          current: await selected.authorize(request, input.sessionId, input.ownerContext),
+        };
+      },
+    );
     const owner = current.ownerContext;
     const assertOwner: AuthSchemaRolloutPorts["assertOwner"] = async (expected) => {
-      request.signal.throwIfAborted();
-      if (!isDeepStrictEqual(expected, owner)) {
-        throw new HostedOperatorError("authorization_required");
-      }
-      await consent.assertCurrent(current);
+      await observeAuthSchemaRolloutPhase("owner_recheck", async () => {
+        request.signal.throwIfAborted();
+        if (!isDeepStrictEqual(expected, owner)) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        await consent.assertCurrent(current);
+      });
     };
-    const settings = readHostedOperatorOwnerReaderConfiguration(environment);
-    const client = postgres(settings.databaseUrl, hostedRuntimePostgresOptions);
+    const settings = observeAuthSchemaRolloutPhaseSync("owner_reader_configuration", () =>
+      readHostedOperatorOwnerReaderConfiguration(environment),
+    );
+    const journalConnection = await observeAuthSchemaRolloutPhase(
+      "journal_initialize",
+      async () => {
+        if (dependencies.openJournal) {
+          return await dependencies.openJournal(settings.databaseUrl);
+        }
+        const client = postgres(settings.databaseUrl, hostedRuntimePostgresOptions);
+        try {
+          return {
+            store: createPostgresAuthSchemaRolloutStore(drizzle(client, { schema })),
+            close: async () => {
+              await client.end({ timeout: 5 });
+            },
+          };
+        } catch (error) {
+          await client.end({ timeout: 5 });
+          throw error;
+        }
+      },
+    );
     try {
-      const store = createPostgresAuthSchemaRolloutStore(drizzle(client, { schema }));
+      const journal = journalConnection.store;
+      const store: AuthSchemaRolloutStore = {
+        read: async (scope, operationRef) =>
+          await observeAuthSchemaRolloutPhase(
+            "journal_read",
+            async () => await journal.read(scope, operationRef),
+          ),
+        reserve: async (record) =>
+          await observeAuthSchemaRolloutPhase(
+            "journal_save",
+            async () => await journal.reserve(record),
+          ),
+        compareAndSet: async (row, record) =>
+          await observeAuthSchemaRolloutPhase(
+            "journal_save",
+            async () => await journal.compareAndSet(row, record),
+          ),
+      };
       const profile: AuthSchemaRolloutPorts["profile"] = (scope, record) =>
-        record
-          ? assertAuthSchemaRolloutEnrollment(configuration, record)
-          : resolveAuthSchemaRolloutProfile(configuration, scope);
+        observeAuthSchemaRolloutPhaseSync("profile_selection", () =>
+          record
+            ? assertAuthSchemaRolloutEnrollment(configuration, record)
+            : resolveAuthSchemaRolloutProfile(configuration, scope),
+        );
       const readMigrationUrl = async (
         row: AuthSchemaRolloutRow,
         assertCurrent: () => Promise<void>,
@@ -155,7 +230,7 @@ export const createAuthSchemaRolloutNativeHandler =
         assertOwner,
         profile,
         propose: async (selected, assertCurrent) =>
-          await createProductionAuthSchemaProposal()({
+          await (dependencies.propose ?? createProductionAuthSchemaProposal())({
             profile: selected,
             assertCurrent,
             readMigrationUrl: async () => {
@@ -255,6 +330,8 @@ export const createAuthSchemaRolloutNativeHandler =
       }
       return Response.json(result, { headers: { "cache-control": "no-store" } });
     } finally {
-      await client.end({ timeout: 5 });
+      await observeAuthSchemaRolloutPhase("journal_cleanup", async () => {
+        await journalConnection.close();
+      });
     }
   };
