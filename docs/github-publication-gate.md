@@ -370,6 +370,11 @@ changes therefore remain intact, and metadata loss does not require another
 Build approval. If the original objects cannot establish the saved baseline,
 Builder preserves the app and session and reports a service recovery issue;
 the changed working tree is never substituted as the original baseline.
+Fresh canonical clone receipts retain a digest of the original commit and tree
+instead of the file list. Their manifests are derived and verified against that
+exact Git tree and its blob bytes, including existing manifests and checksums;
+the saved source identity and workspace receipt are not rewritten. Full-list
+receipts continue requiring their original exact manifest digest.
 Restoration publishes missing metadata exclusively. If another preparation has
 already restored or refreshed it, recovery preserves that result and validates
 the winning manifest against the saved source binding instead of replacing it.
