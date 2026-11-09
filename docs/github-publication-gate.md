@@ -362,6 +362,17 @@ Builder includes the retained registration and dependency changes against the
 original starter manifest. If the destination has independently changed one of
 those shared files, reconcile that file against the current destination before
 publishing.
+If retained workspace metadata is missing after recovery, Builder reconstructs
+that original manifest from the saved source commit's Git blobs and verifies it
+against the existing source tree and workspace digest. It restores only the
+manifest and checksum metadata, never the app, checkout or index. App-authored
+changes therefore remain intact, and metadata loss does not require another
+Build approval. If the original objects cannot establish the saved baseline,
+Builder preserves the app and session and reports a service recovery issue;
+the changed working tree is never substituted as the original baseline.
+Restoration publishes missing metadata exclusively. If another preparation has
+already restored or refreshed it, recovery preserves that result and validates
+the winning manifest against the saved source binding instead of replacing it.
 
 After an owned app's PR merges, Builder can prepare its next PR in the same
 session and private workspace. Approved repair history supplies only the prior
@@ -416,7 +427,17 @@ retains its separate approval.
 If the user explicitly chose an existing repository for a fresh-template app,
 pass it as `destination: { repository: "owner/name", selectedInstallationId? }`.
 Preparation observes the actual repository and installation through the ordinary
-session-owned GitHub connection. A later refresh can reuse that exact destination.
+session-owned GitHub connection. The creator may supply a GitHub repository URL or
+`owner/name`; Builder resolves its connected installation and numeric repository
+identity. It saves that selection in the private session’s `builderDestination`
+metadata before preparing review, independently of the acquired starter source.
+The saved destination page offers the same existing-repository selection even
+when creating new repositories/projects is disabled. Selecting an existing
+repository does not create a repository or Vercel project and needs no per-app
+resource-provisioning journal. Existing journal-backed destination records remain
+supported. A later refresh or recovered child session retains the same selection;
+normal GitHub access is checked again before publication. Selection grants no
+publication or merge approval.
 Keep the starter checkout, original source receipt, app files and validation.
 
 After accepting the destination diff, fresh-template sealing uses

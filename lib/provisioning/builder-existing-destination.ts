@@ -1,3 +1,4 @@
+import { existingRepositoryDestinationSchema } from "./builder-session-destination-contract";
 import type { toDurableHostedSessionRecord } from "../eve/hosted-store";
 import type { BuilderProvisionAuthority, BuilderProvisionJournalStore } from "./journal";
 import { HostedOperatorError } from "./hosted-operator-contract";
@@ -30,21 +31,35 @@ export const resolveExistingBuilderDestinationReference = async (input: {
     // oxlint-disable-next-line unicorn/no-useless-undefined -- Absence leaves ordinary new-app creation available.
     return undefined;
   }
-  if (
-    ![session.adapterSessionId, session.originAdapterSessionId].includes(source.sessionId) ||
-    input.findProvisioningForAppRepository === undefined
-  ) {
+  if (![session.adapterSessionId, session.originAdapterSessionId].includes(source.sessionId)) {
     throw new HostedOperatorError("builder_destination_configuration_required");
   }
-  const rows = await input.findProvisioningForAppRepository({
-    authority: input.authority,
-    appId: input.appId,
-    repositoryId: source.repository.repositoryId,
-    githubInstallationId: source.scope.installationId,
-  });
+  const rows =
+    (await input.findProvisioningForAppRepository?.({
+      authority: input.authority,
+      appId: input.appId,
+      repositoryId: source.repository.repositoryId,
+      githubInstallationId: source.scope.installationId,
+    })) ?? [];
   const row = rows.length === 1 ? rows[0] : undefined;
   const github = row?.record.response.github;
   const project = row?.record.response.vercel;
+  if (rows.length === 0) {
+    const { repository } = source;
+    return existingRepositoryDestinationSchema.parse({
+      version: 1,
+      kind: "existing-repository",
+      appId: input.appId,
+      repository: {
+        repositoryId: repository.repositoryId,
+        owner: repository.owner,
+        name: repository.name,
+        defaultBranch: repository.defaultBranch,
+      },
+      installationId: source.scope.installationId,
+      confirmedByCallId: source.confirmedByCallId,
+    });
+  }
   if (row === undefined || github?.status !== "succeeded" || project?.status !== "succeeded") {
     throw new HostedOperatorError("builder_destination_configuration_required");
   }

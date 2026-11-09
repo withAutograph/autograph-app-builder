@@ -11,14 +11,23 @@ import {
   selectBuilderSessionDestination,
 } from "@/app/actions/builder-session-destination";
 import { SavedSessionDestinationForm } from "@/app/ui/saved-session-destination-form";
+import { parseRepositoryReference } from "@/lib/integrations/repository-access";
 import { appAccessPath } from "@/lib/app-access/contracts";
 
 export default async function SavedSessionDestinationPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ sessionId: string }>;
+  searchParams: Promise<{ repository?: string }>;
 }) {
-  const [{ sessionId }, incoming] = await Promise.all([params, headers()]);
+  const [{ sessionId }, incoming, query] = await Promise.all([params, headers(), searchParams]);
+  let repositoryHint;
+  try {
+    repositoryHint = parseRepositoryReference(query.repository ?? "").fullName;
+  } catch {
+    // A return hint is editable input, never repository authority.
+  }
   let context;
   try {
     context = await openBuilderSessionDestination(new Headers(incoming));
@@ -58,6 +67,7 @@ export default async function SavedSessionDestinationPage({
       <SavedSessionDestinationForm
         key={data.request?.requestId ?? data.sessionId}
         submit={selectBuilderSessionDestination}
+        repositoryHint={repositoryHint}
         {...data}
         requestId={data.request?.requestId ?? randomUUID()}
       />

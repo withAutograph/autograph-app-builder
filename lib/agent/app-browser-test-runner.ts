@@ -9,6 +9,10 @@ import {
   browserTestSelectionSchema,
 } from "./browser-test-selection";
 import type { BrowserTestSelection } from "./browser-test-selection";
+import {
+  privateBrowserFailureDiagnostic,
+  privateBrowserFailureRecovery,
+} from "./browser-test-diagnostic";
 
 const privatePreviewPrerequisiteLine =
   "[private browser prerequisite] private-preview-refresh-required";
@@ -90,6 +94,7 @@ export const runAppBrowserTests = async (input: {
   const command =
     appBrowserTestCommand(input.appId) + (selection === undefined ? "" : " (focused selection)");
   try {
+    input.signal?.throwIfAborted();
     const runtime = input.runtime ?? (input.resolveRuntime ? await input.resolveRuntime() : null);
     if (runtime?.browserTestEntryPath === null) {
       return {
@@ -151,6 +156,7 @@ export const runAppBrowserTests = async (input: {
           });
     };
     let result = await runTask();
+    input.signal?.throwIfAborted();
     if (await needsBrowserDependencies(input, result)) {
       const dependencyCommand =
         'sudo env PATH="$PATH" ./node_modules/.bin/playwright install-deps chromium';
@@ -170,6 +176,7 @@ export const runAppBrowserTests = async (input: {
         };
       }
       result = await runTask();
+      input.signal?.throwIfAborted();
     }
     const stdout = safeOutput(result.stdout);
     const stderr = safeOutput(result.stderr);
@@ -187,10 +194,12 @@ export const runAppBrowserTests = async (input: {
           stderr,
         };
       }
+      const diagnostic = privateBrowserFailureDiagnostic(result.stdout);
       return {
         command,
+        diagnostic,
         exitCode: result.exitCode,
-        problem: `The selected app's browser test task exited with status ${result.exitCode}. Read the test name, assertion, server startup error, or missing browser/runtime dependency in the output. Fix that cause, then rerun this task in the private sandbox. A ready preview alone does not establish the requested behavior.`,
+        problem: `The selected app's browser test task exited with status ${result.exitCode}. ${privateBrowserFailureRecovery(diagnostic)}`,
         status: "failed" as const,
         stderr,
         stdout,
@@ -204,6 +213,7 @@ export const runAppBrowserTests = async (input: {
       stdout,
     };
   } catch (error) {
+    input.signal?.throwIfAborted();
     const detail = safeOutput(error instanceof Error ? error.message : String(error));
     return {
       command,

@@ -683,11 +683,15 @@ interface RepositoryAccessRuntimeConfiguration {
 }
 let runtimeInput: RepositoryAccessRuntimeConfiguration | undefined;
 
-// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
-export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
-  const { authority, principal } = exactForwardedSessionAuthority(sessionAuth);
-  const { readPreparedHandoffContext } = await import("./handoff-context");
-  const preparedIntent = await readPreparedHandoffContext(sessionAuth);
+/** Server-only adapter for an already authenticated web principal; all normal membership and provider checks remain. */
+// eslint-disable-next-line eslint/func-style -- The shared server adapter preserves the existing runtime factory initialization.
+export async function repositoryAccessRuntimeForPrincipal(
+  value: ReturnType<typeof exactForwardedSessionAuthority> & {
+    preparedIntent?: Parameters<typeof createRepositoryAccessRuntime>[0]["preparedIntent"];
+    returnTo?: ProviderConnectionReturn["returnTo"];
+  },
+) {
+  const { authority, principal, preparedIntent } = value;
   if (!runtimeInput) {
     const environment = providerEmulationEnvironment(process.env);
     const installation = readGitHubAppInstallationEnvironment(environment);
@@ -762,6 +766,19 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
         },
         fetch: input.providerFetch,
       }),
+    returnTo: value.returnTo,
+  });
+}
+
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
+export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
+  const { authority, principal } = exactForwardedSessionAuthority(sessionAuth);
+  const { readPreparedHandoffContext } = await import("./handoff-context");
+  const preparedIntent = await readPreparedHandoffContext(sessionAuth);
+  return await repositoryAccessRuntimeForPrincipal({
+    authority,
+    principal,
+    preparedIntent,
     returnTo: preparedIntent ? preparedHandoffReturnPath(sessionAuth) : undefined,
   });
 }

@@ -466,6 +466,93 @@ describe("installed Eve 0.68 projection", () => {
     expect(pendingBuilderOperation(events)).toBe("Running the app's browser tests");
   });
   it.each([
+    ["run-app-browser-tests", "failed", "failed"],
+    ["run-app-browser-tests", "passed", "completed"],
+    ["run-app-browser-tests", "unassessed", "failed"],
+    ["run-app-browser-tests", undefined, "failed"],
+    ["validate_app_creation", "needs_repair", "failed"],
+    ["validate_app_creation", "blocked", "failed"],
+    ["validate_app_creation", "validated", "completed"],
+    ["validate-app-creation", "repair_applied", "completed"],
+  ])("reports %s outcome %s as %s independently of tool completion", (toolName, status, state) => {
+    const events = projectInstalledEveEvents([
+      installedEvent({
+        data: {
+          result: {
+            callId: "check_1",
+            isError: false,
+            kind: "tool-result",
+            output: { status, problem: "private diagnostic", productAcceptance: "unassessed" },
+            toolName,
+          },
+          status: "completed",
+        },
+        type: "action.result",
+      }),
+    ]);
+    expect(events).toContainEqual(expect.objectContaining({ state, type: "progress" }));
+    expect(JSON.stringify(events)).not.toContain("private diagnostic");
+    expect(JSON.stringify(events)).not.toContain("productAcceptance");
+  });
+
+  it.each([
+    { output: { state: "ready" }, state: "started" },
+    {
+      output: { state: "settled", outcome: { exitCode: 0, completedAt: "2026-11-09T00:00:00Z" } },
+      state: "completed",
+    },
+    {
+      output: { state: "settled", outcome: { exitCode: 1, completedAt: "2026-11-09T00:00:00Z" } },
+      state: "failed",
+    },
+    { output: { state: "settled" }, state: "failed" },
+    { output: { state: "revoked" }, state: "failed" },
+    { output: { state: "reconciliation-required" }, state: "failed" },
+    { output: { status: "passed" }, state: "failed" },
+  ])("projects the actual continuity outcome ($output)", ({ output, state }) => {
+    const events = projectInstalledEveEvents([
+      installedEvent({
+        data: {
+          result: {
+            callId: "continuity_1",
+            kind: "tool-result",
+            output,
+            toolName: "run-app-continuity-tests",
+          },
+          status: "completed",
+        },
+        type: "action.result",
+      }),
+    ]);
+    expect(events).toContainEqual(expect.objectContaining({ state, type: "progress" }));
+  });
+
+  it.each([
+    { actionStatus: "cancelled", isError: false },
+    { actionStatus: "failed", isError: false },
+    { actionStatus: "completed", isError: true },
+  ])(
+    "does not report a passed check after an unsuccessful action ($actionStatus, $isError)",
+    ({ actionStatus, isError }) => {
+      const events = projectInstalledEveEvents([
+        installedEvent({
+          data: {
+            result: {
+              callId: "check_1",
+              isError,
+              kind: "tool-result",
+              output: { status: "passed" },
+              toolName: "run-app-browser-tests",
+            },
+            status: actionStatus,
+          },
+          type: "action.result",
+        }),
+      ]);
+      expect(events).toContainEqual(expect.objectContaining({ state: "failed", type: "progress" }));
+    },
+  );
+  it.each([
     ["mise run --skip-tools app:test spend-review 1/1", "Running app tests"],
     ["mise run --no-deps --skip-tools app:test spend-review 1/1", "Running app tests"],
     ["mise run app:compile spend-review", "Preparing the app's data model"],

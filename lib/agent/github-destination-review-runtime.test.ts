@@ -387,6 +387,7 @@ const ownedRevisionTool = async (published = true, marker = true) => {
     ],
   };
   const readTextFile = vi.fn().mockResolvedValue(null);
+  const run = vi.fn().mockResolvedValue({ exitCode: 1 });
   const cancellation = new AbortController();
   // SAFETY: The real tool needs only these session and Sandbox read ports.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The controlled resolver replaces hosted credentials; every tool context port used here is supplied.
@@ -395,10 +396,10 @@ const ownedRevisionTool = async (published = true, marker = true) => {
     // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     session: { id: "original-session", auth: undefined, turn: { id: "revision-turn" } },
     // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
-    getSandbox: () => Promise.resolve({ readTextFile }),
+    getSandbox: () => Promise.resolve({ id: state.workspace.workspaceId, readTextFile, run }),
     abortSignal: cancellation.signal,
   } as unknown as Parameters<typeof prepareDraftReview.execute>[1];
-  return { ...f, proposal, receipt, state, readTextFile, context, cancellation };
+  return { ...f, proposal, receipt, state, readTextFile, run, context, cancellation };
 };
 
 describe("same-session post-merge destination review", () => {
@@ -629,9 +630,12 @@ describe("same-session post-merge destination review", () => {
     });
   });
 
-  it("does not bypass a missing manifest for an unpublished initial app", async () => {
+  it("keeps an unpublished initial app blocked when its original metadata cannot be recovered", async () => {
     const f = await ownedRevisionTool(false, false);
-    await expect(prepareDraftReview.execute({}, f.context)).rejects.toThrow("manifest is missing");
+    await expect(prepareDraftReview.execute({}, f.context)).rejects.toThrow(
+      "could not recover this app's original source metadata",
+    );
+    expect(f.run).toHaveBeenCalledOnce();
     expect(toolPorts.state).toBe(f.state);
     expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
     expect(f.inspectPr).not.toHaveBeenCalled();

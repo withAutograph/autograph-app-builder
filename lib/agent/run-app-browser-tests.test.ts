@@ -413,6 +413,119 @@ describe("private app browser tests", () => {
     expect(JSON.stringify(result)).not.toContain("secret");
   });
 
+  it.each([
+    {
+      reporterLine: "[private browser stage] auth-session",
+      stages: ["auth-session"],
+      categories: [],
+      instruction: "access setup",
+    },
+    {
+      reporterLine: "[private browser category] browser-launch",
+      stages: [],
+      categories: ["browser-launch"],
+      instruction: "browser could not launch",
+    },
+    {
+      reporterLine: "[private browser category] navigation",
+      stages: [],
+      categories: ["navigation"],
+      instruction: "navigation failed",
+    },
+    {
+      reporterLine: "[private browser category] assertion",
+      stages: [],
+      categories: ["assertion"],
+      instruction: "application assertion failed",
+    },
+    {
+      reporterLine: "[private browser category] timeout",
+      stages: [],
+      categories: ["timeout"],
+      instruction: "operation timed out",
+    },
+    {
+      reporterLine: "[private browser category] unknown",
+      stages: [],
+      categories: [],
+      instruction: "did not identify",
+    },
+    {
+      reporterLine: "test title [private browser stage] auth-session",
+      stages: [],
+      categories: [],
+      instruction: "did not identify",
+    },
+    {
+      reporterLine: "\u001B[private browser category] assertion",
+      stages: [],
+      categories: [],
+      instruction: "did not identify",
+    },
+  ])(
+    "returns safe recovery for $reporterLine",
+    async ({ reporterLine, stages, categories, instruction }) => {
+      const result = await runResolvedAppBrowserTests({
+        appId: "notes",
+        root: "/workspace/repository",
+        sandbox: {
+          run: vi.fn().mockResolvedValue({
+            exitCode: 1,
+            stdout: `${reporterLine}\r\n[private browser failure] tests/notes.spec.ts:12\n`,
+            stderr: "token=private-token https://private.example/?secret=value",
+          }),
+        },
+      });
+      expect(result).toMatchObject({
+        status: "failed",
+        diagnostic: { categories, stages },
+      });
+      expect(result.problem).toContain(instruction);
+      expect(result.stdout).toContain("tests/notes.spec.ts:12");
+      expect(JSON.stringify(result)).not.toContain("private-token");
+      expect(JSON.stringify(result)).not.toContain("private.example");
+      expect(JSON.stringify(result)).not.toContain("secret=value");
+    },
+  );
+
+  it("keeps access setup failures distinct from assertions", async () => {
+    const result = await runResolvedAppBrowserTests({
+      appId: "notes",
+      root: "/workspace/repository",
+      sandbox: {
+        run: vi.fn().mockResolvedValue({
+          exitCode: 1,
+          stdout: "[private browser category] assertion\n[private browser stage] auth-ui\n",
+          stderr: "",
+        }),
+      },
+    });
+    expect(result.problem).toContain("access setup");
+  });
+
+  it.each(["throw", "return"])(
+    "preserves cancellation when the sandbox %s completes",
+    async (completion) => {
+      const controller = new AbortController();
+      const cancellation = new Error("browser run cancelled");
+      const run = vi.fn().mockImplementation(() => {
+        controller.abort(cancellation);
+        if (completion === "throw") {
+          throw cancellation;
+        }
+        return { exitCode: 0, stdout: "passed", stderr: "" };
+      });
+      await expect(
+        runResolvedAppBrowserTests({
+          appId: "notes",
+          root: "/workspace/repository",
+          sandbox: { run },
+          signal: controller.signal,
+        }),
+      ).rejects.toBe(cancellation);
+    },
+  );
+
   it("repairs missing Chromium libraries once and reruns the browser journey", async () => {
     const run = vi
       .fn()

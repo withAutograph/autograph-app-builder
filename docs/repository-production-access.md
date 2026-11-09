@@ -132,8 +132,12 @@ and a publication destination are separate authorities: a new app built from a
 fresh template can use its owner/session/app/spec-bound compiled release's
 verified `publishedSource.repositoryId`. The operator resolves that identity
 through the exact configured workspace mapping. It does not change the acquired
-source. If an acquired repository is also present, both repository identities
-must agree. Missing, foreign, or ambiguous destinations do not authorize setup;
+source. An authenticated existing-repository selection stored in the session’s
+`builderDestination` is retained independently of source acquisition or new-resource
+provisioning. Production checks that selection against the published app repository
+and configured workspace profile; it does not create a new project or infer a
+repository from an app name. If an acquired repository is also present, all
+repository identities must agree. Missing, foreign, or ambiguous destinations do not authorize setup;
 a configured profile alone is insufficient. Frontend-only apps retain the same trusted publication destination through a
 generic owner/session/app/spec marker in the existing artifact store; they do
 not need a SQL release or source acquisition. Normal publication and retained

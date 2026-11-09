@@ -136,3 +136,35 @@ it("rejects cancellation or recovery generation drift during review selection", 
   f.drift();
   await expect(f.read()).rejects.toThrow("changed during publication review");
 });
+
+it("reads a selected existing repository without a resource provisioning journal", async () => {
+  const selected = {
+    authority: {
+      issuer: "https://builder.example/auth",
+      audience: "https://builder.example/mcp",
+      workspaceId: "workspace",
+      ownerUserId: "owner",
+    },
+    appId: "notes",
+    publicSessionId: "saved",
+    owner: { generation: 1 },
+    destination: {
+      kind: "existing-repository" as const,
+      version: 1 as const,
+      appId: "notes",
+      repository: { repositoryId: "123", owner: "team", name: "apps", defaultBranch: "main" },
+      installationId: "456",
+      confirmedByCallId: "selected",
+    },
+  };
+  const read = createBuilderPublicationDestinationReader({
+    readSelection: async () => selected,
+    readProvisioning: async () => {
+      throw new Error("Existing repositories do not create resources");
+    },
+  });
+  await expect(read()).resolves.toEqual({
+    publicSessionId: "saved",
+    destination: { repository: "team/apps", repositoryId: "123", selectedInstallationId: "456" },
+  });
+});

@@ -1,3 +1,4 @@
+import { isExistingRepositoryDestination } from "./builder-session-destination-contract";
 import { sameRepositoryProductionSetupEffects } from "./repository-production-intent";
 /* oxlint-disable sonarjs/no-nested-functions -- Request-scoped management factories share the held app lease without reacquiring it. */
 /* oxlint-disable eslint/no-nested-ternary, sonarjs/no-nested-conditional -- Progress projection retains the four distinct creator states and explicit removal status. */
@@ -309,6 +310,11 @@ export const createRepositoryProductionNativeHandler =
           appSpecDigest,
           destination,
           repositories,
+          repositoryDestination:
+            session.builderDestination !== undefined &&
+            isExistingRepositoryDestination(session.builderDestination)
+              ? session.builderDestination
+              : undefined,
           selection,
           source,
           workspaceId,
