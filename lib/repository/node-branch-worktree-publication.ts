@@ -816,7 +816,7 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
   };
   // This derived promise intentionally races the terminal lease signal.
   // oxlint-disable-next-line promise/prefer-await-to-then
-  // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
+  // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then -- Preserve the terminal rejection promise used by the existing lock-loss race.
   const lost = terminalPromise.then(() => {
     throw lockLostError();
   });

@@ -68,8 +68,7 @@ const scenario = hostedProofScenarioSchema.parse({
 // oxlint-disable-next-line eslint/func-style, unicorn/consistent-function-scoping -- Preserve function declaration hoisting and initialization timing.
 function jwt(subject: string, workspaceId: string) {
   // Keep JWT encoding local to this fixture.
-  // oxlint-disable-next-line unicorn/consistent-function-scoping
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping, anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   return `${encode({ alg: "RS256", kid: "proof" })}.${encode({
     aud: scenario.oauth.audience,

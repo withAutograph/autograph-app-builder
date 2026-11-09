@@ -140,8 +140,7 @@ describe("test capability preload", () => {
     const activeHandles = () =>
       // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Node exposes this active-handle diagnostic outside its public process type; Preserve the existing assertion at this boundary.
       (process as unknown as { _getActiveHandles: () => readonly unknown[] })._getActiveHandles();
-    // oxlint-disable-next-line unicorn/consistent-function-scoping
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+    // oxlint-disable-next-line unicorn/consistent-function-scoping, anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     const isMessagePort = (handle: unknown) =>
       // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof handle === "object" && handle !== null && handle.constructor.name === "MessagePort";

@@ -27,6 +27,10 @@ reproduction is impractical, state the evidence gap and use a targeted diagnosti
 deployment to resolve it. This does not require exhaustive local proof before a
 release or add a mandatory qualification gate to generated apps.
 
+Eve derives and persists tool identifiers from `agent/tools/*.ts` filenames.
+Keep existing kebab-case and snake_case tool names stable when updating source;
+the lint configuration enforces those two conventions only in that directory.
+
 ## Run and use the local Builder
 
 1. Open the Builder checkout/worktree you are developing. Use its installed

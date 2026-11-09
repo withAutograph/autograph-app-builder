@@ -81,8 +81,7 @@ async function createDeploymentPreparedHandoffReader() {
 // and provider credentials are always resolved anew for each invocation.
 let deploymentReader: ReturnType<typeof createDeploymentPreparedHandoffReader> | undefined;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 export async function readPreparedHandoffContext(sessionAuth: unknown) {
   if (sourceHandoffIdForSessionAuth(sessionAuth) === undefined) {
     return;
@@ -92,7 +91,7 @@ export async function readPreparedHandoffContext(sessionAuth: unknown) {
   // oxlint-disable-next-line promise/prefer-await-to-callbacks
   // Preserve the shared lazy promise while clearing it after a failed creation.
   // oxlint-disable-next-line promise/prefer-await-to-then
-  // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
+  // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then, anti-slop/no-unknown-parameters -- Preserve the shared initialization promise and its unknown rejection boundary.
   deploymentReader ??= createDeploymentPreparedHandoffReader().catch((error: unknown) => {
     // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     deploymentReader = undefined;

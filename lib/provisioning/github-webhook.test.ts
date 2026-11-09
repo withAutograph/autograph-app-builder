@@ -8,8 +8,7 @@ import { createGitHubProvisioningWebhookHandler } from "./github-webhook";
 
 const secret = "github-webhook-secret-that-is-long-enough";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function signedRequest(event: string, body: unknown, signatureSecret = secret) {
   const bytes = JSON.stringify(body);
   const signature = `sha256=${createHmac("sha256", signatureSecret).update(bytes).digest("hex")}`;

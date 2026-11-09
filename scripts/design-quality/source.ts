@@ -187,8 +187,7 @@ function staticLiteral(attribute: ts.JsxAttribute): string | undefined {
   return jsxAttributeText(attribute);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
+// oxlint-disable-next-line eslint/func-style, sonarjs/max-union-size -- Preserve declaration hoisting and the existing literal result alternatives.
 function literalKind(attribute: ts.JsxAttribute): "string" | "number" | "boolean" | undefined {
   if (!attribute.initializer) {
     return "boolean";

@@ -22,14 +22,16 @@ async function loadPrototype(page: Page) {
   await page.addScriptTag({ content: axe.source });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
   const accessibility = await page.evaluate(async () => {
+    /* oxlint-disable typescript/no-unsafe-type-assertion -- This test injected axe.source before reading its declared browser runner. */
+    // SAFETY: This test injected axe.source into the page before reading its declared runner.
     const runner =
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve the existing browser accessibility fixture assertion.
+      // Read the runner installed by the test's browser script.
       (
         globalThis as typeof globalThis & {
           axe: { run: () => Promise<{ violations: unknown[] }> };
         }
       ).axe;
+    /* oxlint-enable typescript/no-unsafe-type-assertion */
     return await runner.run();
   });
   expect(accessibility.violations).toEqual([]);

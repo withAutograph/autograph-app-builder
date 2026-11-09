@@ -85,8 +85,7 @@ const defaultDependencies: RuntimeDependencies = {
 
 let dependencies = defaultDependencies;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function errorWithCleanupEvidence(error: unknown, evidence: SandboxCleanupEvidence) {
   const preserved =
     error instanceof Error
@@ -102,8 +101,7 @@ function errorWithCleanupEvidence(error: unknown, evidence: SandboxCleanupEviden
   return preserved;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 export function sandboxCleanupEvidence(error: unknown) {
   return error instanceof Error
     ? // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions, anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Cleanup evidence is attached to errors under a private symbol.; Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
@@ -122,7 +120,7 @@ async function stopWithin(
   const stop = Promise.resolve(sandbox.stop());
   // Intentionally observe stop failure without awaiting it before the timeout race.
   // oxlint-disable-next-line promise/prefer-await-to-then
-  // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+  // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then -- Observe stop rejection without waiting before the existing timeout race.
   stop.catch(() => null);
   const timeout = delay(timeoutMs, "timeout" as const, {
     ref: false,

@@ -216,8 +216,9 @@ test("a sign-in challenge failure stays local without invoking WebAuthn", async 
   });
   await page.addInitScript(() => {
     window.addEventListener("e2e-credential-request", () => {
+      // SAFETY: The test exposed recordCredentialRequest on this page before installing the event listener.
       void (
-        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+        // Invoke the page function exposed by this test.
         (
           window as typeof window & {
             recordCredentialRequest: () => Promise<void>;

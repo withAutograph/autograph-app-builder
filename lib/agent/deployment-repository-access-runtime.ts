@@ -683,8 +683,7 @@ interface RepositoryAccessRuntimeConfiguration {
 }
 let runtimeInput: RepositoryAccessRuntimeConfiguration | undefined;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
   const { authority, principal } = exactForwardedSessionAuthority(sessionAuth);
   const { readPreparedHandoffContext } = await import("./handoff-context");

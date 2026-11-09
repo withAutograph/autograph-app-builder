@@ -1,5 +1,6 @@
 /* oxlint-disable anti-slop/no-module-mocking, typescript/no-unsafe-type-assertion -- Isolate Eve state and trusted publication/recording ports while exercising the production tool execute boundaries. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { isDeepStrictEqual } from "node:util";
 import type { DraftReconciliationCompletion } from "./draft-reconciliation-state";
 import type { approvalReceiptSchema as ActualApprovalReceiptSchema } from "./approval-receipt";
 
@@ -81,6 +82,8 @@ const hooks = vi.hoisted(() => {
     reconcile: vi.fn(),
     state: {
       phase: "reviewed",
+      // SAFETY: This test-owned state starts without a publication marker and later records only a verified proposal digest.
+      publishedGitHubDraftProposalDigest: undefined as string | undefined,
       appBackendKind: "static",
       appSpec: { appId: "spend-review", digest: "c".repeat(64) },
       applyReceipt: { applyRoot: "/workspace/applied" },
@@ -128,7 +131,21 @@ vi.mock("./deployment-github-publication-runtime", () => ({
 vi.mock("./github-publication-content-source", () => ({
   publicationContentSourceForReviewedWorkflow: hooks.content,
 }));
-vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: () => hooks.state } }));
+vi.mock("./workflow-state", () => ({
+  appBuilderWorkflowState: { get: () => hooks.state },
+  updateExactWorkflow: ({
+    expected,
+    transition,
+  }: {
+    expected: typeof hooks.state;
+    transition: () => typeof hooks.state;
+  }) => {
+    if (!isDeepStrictEqual(hooks.state, expected)) {
+      throw new Error("The reviewed publication changed during recording.");
+    }
+    hooks.state = transition();
+  },
+}));
 vi.mock("./app-baseline-state", () => ({ appBaselineState: { get: () => null } }));
 vi.mock("../repository/reviewed-change-set", () => ({ assertExistingAppReviewScope: () => {} }));
 vi.mock("./draft-reconciliation-state", () => ({
@@ -232,6 +249,78 @@ describe("publication records actual source for its compiled app release", () =>
     // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     hooks.candidate.publishedReconciliation = undefined;
   });
+
+  it("records the successful current initial publication without discarding old candidate work", async () => {
+    const candidateBefore = structuredClone(hooks.candidate);
+    hooks.publish.mockResolvedValue({
+      status: "succeeded",
+      proposalDigest: input.expectedProposalDigest,
+      repositoryId: "repository",
+      branchSha: "verified-head",
+    });
+    // SAFETY: This minimal Eve context supplies the exercised ports; the fixture controls owner, approval, state and publication dependencies.
+    await publishTool.execute(input, ctx as never);
+    expect(hooks.state).toHaveProperty(
+      "publishedGitHubDraftProposalDigest",
+      input.expectedProposalDigest,
+    );
+    expect(hooks.candidate).toEqual(candidateBefore);
+  });
+
+  it.each(["pending", "failed", "foreign"])(
+    "never marks a fresh publication from an unverified %s result",
+    async (kind) => {
+      hooks.publish.mockResolvedValue({
+        status: kind === "foreign" ? "succeeded" : kind,
+        proposalDigest: kind === "foreign" ? "f".repeat(64) : input.expectedProposalDigest,
+        repositoryId: "repository",
+      });
+      // SAFETY: This minimal Eve context supplies the exercised ports while controlled publication results test refusal to record unverified markers.
+      await publishTool.execute(input, ctx as never);
+      expect(hooks.state.publishedGitHubDraftProposalDigest).toBeUndefined();
+    },
+  );
+
+  it.each(["owner", "cancelled", "changed"])(
+    "preserves a successful outward result without marking local lineage when %s authority moves",
+    async (reason) => {
+      const cancellation = new AbortController();
+      hooks.publish.mockResolvedValue({
+        status: "succeeded",
+        proposalDigest: input.expectedProposalDigest,
+        repositoryId: "repository",
+      });
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this controlled port's Promise identity and synchronous cancellation/state-change timing.
+      hooks.record.mockImplementation(() => {
+        if (reason === "owner") {
+          return Promise.reject(new Error("owner revoked"));
+        }
+        if (reason === "cancelled") {
+          cancellation.abort();
+        }
+        if (reason === "changed") {
+          hooks.state = {
+            ...hooks.state,
+            githubDraftProposal: {
+              proposal: { ...hooks.state.githubDraftProposal.proposal, digest: "f".repeat(64) },
+            },
+          };
+        }
+        return Promise.resolve({ status: "recorded" });
+      });
+      // SAFETY: This controlled Eve context adds the real AbortSignal to test cancellation while all state and outward-effect ports remain test-owned.
+      const result = await publishTool.execute(input, {
+        ...ctx,
+        abortSignal: cancellation.signal,
+      } as never);
+      expect(result).toMatchObject({
+        status: "succeeded",
+        appSourceRecording: { status: "unavailable", recoveryRequired: true },
+      });
+      expect(hooks.state.publishedGitHubDraftProposalDigest).toBeUndefined();
+      expect(hooks.publish).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("rejects a retained old initial proposal after a new publication proposal is selected", async () => {
     hooks.state.githubDraftProposal = {

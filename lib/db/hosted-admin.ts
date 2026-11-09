@@ -190,8 +190,7 @@ interface HostedAdminRetentionDigest {
   deleteBeforeDigest?: ReturnType<typeof digest>;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 export function planHostedAdminRequest(input: unknown) {
   const request = hostedAdminPlanRequestSchema.parse(input);
   const plan = {

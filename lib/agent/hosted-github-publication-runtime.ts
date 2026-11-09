@@ -43,8 +43,7 @@ export interface HostedGitHubPublicationRuntimeResolver {
   ) => Promise<GitHubPublicationRuntime>;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function exactGitHubPublicationAuthority(sessionAuth: unknown) {
   try {
     return exactForwardedSessionAuthority(sessionAuth);
@@ -145,7 +144,7 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
     // oxlint-disable-next-line promise/prefer-await-to-callbacks
     // Preserve the shared lazy promise while clearing it after a failed open.
     // oxlint-disable-next-line promise/prefer-await-to-then
-    // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
+    // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then, anti-slop/no-unknown-parameters -- Preserve the shared database initialization promise and its unknown rejection boundary.
     databasePromise ??= Promise.resolve(input.openDatabase()).catch((error: unknown) => {
       // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
       databasePromise = undefined;

@@ -16,8 +16,7 @@ import {
 import { withFreshBootstrapTestCapability } from "@/lib/agent/fresh-bootstrap-capability";
 import type { FreshBootstrapFaultHooks } from "@/lib/repository/node-fresh-bootstrap";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
+// oxlint-disable-next-line eslint/func-style, typescript/promise-function-async -- Preserve function declaration hoisting and initialization timing. Preserve the returned promise and synchronous throw behavior.
 export function withFreshBootstrapEvalCapability<T>(
   capability: FreshBootstrapCapability,
   operation: () => Promise<T>,

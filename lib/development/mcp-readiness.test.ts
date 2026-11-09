@@ -14,8 +14,7 @@ vi.mock("node:timers/promises", async (importOriginal) => {
   return { ...timers, setTimeout: vi.fn(timers.setTimeout) };
 });
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
 function response(body: unknown, status = 200, sessionId?: string) {
   return new Response(body === undefined ? undefined : JSON.stringify(body), {
     // oxlint-disable-next-line typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness.

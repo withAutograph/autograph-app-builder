@@ -519,7 +519,7 @@ function consumeResponse(
       state.recoveryRequired.add(sessionId);
       // Cancellation cleanup is deliberately fire-and-forget from the timer.
       // oxlint-disable-next-line promise/prefer-await-to-then
-      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+      // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then -- Keep timeout-triggered cancellation nonblocking and retain its rejection handler.
       void settleLocalCancellation(options.cancelTurn(modelTurnId)).catch(() => null);
     }, modelTurnTimeoutMs);
     modelTurnTimer.unref?.();
