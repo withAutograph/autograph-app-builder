@@ -57,6 +57,12 @@ export const approvedBuildDecisionSchema = z.strictObject({
 export type ApprovedBuildDecision = z.infer<typeof approvedBuildDecisionSchema>;
 export const internalBuildContinuationSchema = z.strictObject({
   decision: approvedBuildDecisionSchema,
+  dispatchBinding: z
+    .strictObject({
+      adapterGeneration: z.number().int().positive(),
+      cancellationRevision: z.number().int().nonnegative(),
+    })
+    .optional(),
   deliveredMessageSequence: z.number().int().nonnegative().optional(),
   deliveredTurnId: z.string().min(1).optional(),
   nonce: z.string().regex(/^[a-f0-9]{64}$/u),

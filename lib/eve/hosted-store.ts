@@ -1237,6 +1237,8 @@ export const attachBuilderDestinationRecord = (
     destination: BuilderSessionDestination;
     /** Internal authenticated build continuation; never accepted by web input. */
     activeBuild?: boolean;
+    /** Trusted framework callback turn; never accepted by web or model input. */
+    activeBuildTurn?: { id: string; sequence: number };
     nowEpochMs: number;
   },
 ): DurableHostedSessionRecord => {
@@ -1270,6 +1272,86 @@ export const attachBuilderDestinationRecord = (
   });
 };
 
+/**
+ * An authenticated build callback may save metadata during its accepted SEND.
+ * This neither settles that SEND nor authorizes another native/provider write.
+ */
+export const assertBuilderDestinationPendingOperations = (
+  value: HostedSessionRecord,
+  input: Pick<
+    Parameters<typeof attachBuilderDestinationRecord>[1],
+    "activeBuild" | "activeBuildTurn" | "destination"
+  >,
+  pending: readonly UnsettledSendAcknowledgement[],
+): void => {
+  const current = toDurableHostedSessionRecord(value);
+  const deliveredCurrentBuild = (operation: HostedOperationRecord): boolean => {
+    const marker = operation.internalBuildContinuation;
+    const turn = input.activeBuildTurn;
+    if (marker === undefined || turn === undefined || current.privateBuildDecision === undefined) {
+      return false;
+    }
+    const { decision, dispatchBinding } = marker;
+    const projection = current.privateBuildDecision;
+    const spec = projection.currentSpec;
+    const currentTurnProjection =
+      spec !== undefined &&
+      [
+        projection.decision === "working",
+        projection.turnId === turn.id,
+        projection.turnSequence === turn.sequence,
+        projection.adapterSessionId === current.adapterSessionId,
+        spec.appId === current.appId,
+        spec.sessionId === current.adapterSessionId,
+        spec.workspaceId === decision.scope?.workspaceId,
+      ].every(Boolean);
+    return [
+      marker.deliveredTurnId === turn.id,
+      marker.deliveredMessageSequence !== undefined,
+      turn.sequence > decision.turnSequence,
+      decision.decision === "runnable",
+      decision.adapterSessionId === current.adapterSessionId,
+      decision.scope?.appId === current.appId,
+      decision.scope?.sessionId === current.adapterSessionId,
+      digest(decision) === digest(projection) || currentTurnProjection,
+      dispatchBinding?.adapterGeneration === current.adapterGeneration,
+      dispatchBinding?.cancellationRevision === (current.cancellationRevision ?? 0),
+    ].every(Boolean);
+  };
+  const acknowledgedCurrentSend = ({
+    operation,
+    cancellationRevisionAtDispatch,
+  }: UnsettledSendAcknowledgement): boolean => {
+    const marker = operation.sendDelivery;
+    const ordinary =
+      marker !== undefined &&
+      [
+        !hasInternalSendPurpose(operation),
+        marker.sessionId === current.sessionId,
+        marker.requestDigest === operation.requestDigest,
+        marker.adapterSessionId === current.adapterSessionId,
+        marker.adapterGeneration === current.adapterGeneration,
+        cancellationRevisionAtDispatch === (current.cancellationRevision ?? 0),
+      ].every(Boolean);
+    return [
+      operation.kind === "send",
+      operation.resumeSessionId === undefined,
+      operation.state === "reserved" || operation.state === "submission_unknown",
+      tenantKeyFor(operation.principal) === tenantKeyFor(current.principal),
+      operation.sessionId === current.sessionId,
+      ordinary || deliveredCurrentBuild(operation),
+    ].every(Boolean);
+  };
+  if (
+    pending.length !== 0 &&
+    (input.activeBuild !== true ||
+      !isExistingRepositoryDestination(input.destination) ||
+      !pending.every(acknowledgedCurrentSend))
+  ) {
+    throw new Error("Builder destination selection requires settled session operations.");
+  }
+};
+
 export interface HostedEveStore {
   attachBuilderDestination?: (input: {
     principal: HostedPrincipal;
@@ -1278,6 +1360,8 @@ export interface HostedEveStore {
     destination: BuilderSessionDestination;
     /** Internal authenticated build continuation; never accepted by web input. */
     activeBuild?: boolean;
+    /** Trusted framework callback turn; never accepted by web or model input. */
+    activeBuildTurn?: { id: string; sequence: number };
     nowEpochMs: number;
   }) => Promise<HostedSessionRecord>;
 
@@ -2114,16 +2198,24 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     if (current === undefined) {
       throw new Error(SESSION_NOT_FOUND);
     }
-    const pending = [...this.operations.values()].some(
-      (operation) =>
+    const pending: UnsettledSendAcknowledgement[] = [];
+    for (const operation of this.operations.values()) {
+      if (
         tenantKeyFor(operation.principal) === tenantKeyFor(input.principal) &&
         (operation.sessionId === input.sessionId ||
           operation.resumeSessionId === input.sessionId) &&
-        ["reserved", "submission_unknown"].includes(operation.state),
-    );
-    if (pending) {
-      throw new Error("Builder destination selection requires settled session operations.");
+        ["reserved", "submission_unknown"].includes(operation.state)
+      ) {
+        pending.push({
+          operation,
+          cancellationRevisionAtDispatch:
+            this.sendCancellationRevisions.get(
+              InMemoryHostedEveStore.operationKey(input.principal, operation.operationId),
+            ) ?? null,
+        });
+      }
     }
+    assertBuilderDestinationPendingOperations(current, input, pending);
     const updated = attachBuilderDestinationRecord(current, input);
     this.sessions.set(key, structuredClone(updated));
     return await Promise.resolve(structuredClone(updated));
