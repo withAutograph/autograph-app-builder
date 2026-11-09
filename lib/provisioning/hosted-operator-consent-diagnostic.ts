@@ -938,7 +938,7 @@ export const projectOperatorGatewayProviderFailure = (payload: unknown) => {
       }
     }
     const terms = gatewayProviderTerm.options.filter((term) =>
-      messages.some((text) => new RegExp(`\\b${term}\\b`, "iu").test(text)),
+      messages.some((text) => new RegExp(`\\b${RegExp.escape(term)}\\b`, "iu").test(text)),
     );
     if (terms.length !== 0) {
       result.providerTerms = terms;
