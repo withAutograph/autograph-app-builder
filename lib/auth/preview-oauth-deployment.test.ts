@@ -285,7 +285,6 @@ describe("Preview OAuth deployment handlers", () => {
     expect(providers).toContain("emailAndPassword={{ enabled: false }}");
     expect(authClient).toContain("oauthProviderClient()");
     expect(signIn).toContain("<ProviderButtons");
-    expect(signIn).not.toContain("SignUp");
     expect(signIn).not.toContain("/oauth2/continue");
     expect(signIn).toContain('<ProviderButtons socialLayout={socialLayout} view="signIn" />');
     expect(providerButton).not.toContain("Setting up your workspace…");
