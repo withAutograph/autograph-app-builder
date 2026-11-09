@@ -11,7 +11,7 @@ export default defineWorkflowTool({
   approval: approveGitHubPrDelivery,
   availableInSubagents: false,
   description:
-    "After explicit approval, mark the reviewed pull request ready and merge that exact revision once its required checks pass. Pass the approval input returned by read_github_pr_delivery. Changes to the reviewed revision or ready cycle stop this operation. Hosted verification has its own result.",
+    "After normal managed Production data/access/runtime setup and explicit PR approval, mark the reviewed pull request ready and merge that exact revision once required checks pass. Pass the approval returned by read_github_pr_delivery. Before merge, Builder independently checks required setup for this exact app and repository; follow production-setup-required through its existing normal setup tools. Reviewed revision and ready cycle remain bound. Native activation and hosted behavior have separate results.",
   inputSchema: githubPrDeliveryApprovalSchema,
   async execute(input, ctx) {
     "use workflow";

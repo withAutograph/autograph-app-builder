@@ -343,6 +343,38 @@ access setup. Code publication, Ready, and merge remain tied to the reviewed
 revision through the existing delivery flow. Setup status does not claim that
 the native deployment is active or that app behavior has been tested.
 
+For a managed existing-repository destination, publish the reviewed draft first,
+then finish required normal data/access/runtime binding setup before the approved
+merge triggers native Production delivery. Vercel project environment writes do
+not update a deployment already created without those variables. The internal
+`delivery-status` read on the existing protected endpoint binds the canonical
+owner, saved app and reviewed repository identity. It projects existing setup
+journal/effect and runtime-binding receipt readiness without launching People or
+Auth workers, acquiring an effect lease, changing resources, or testing the app.
+
+`read_github_pr_delivery` returns the normal plan/preparation continuation when
+required setup is missing or changed, or the saved status continuation while an
+existing setup is progressing. It exposes the existing PR approval once those
+requirements are ready. The merge step independently repeats the bound read
+immediately before its GitHub merge effect, retaining exact revision, native
+approval, required-check and ready-cycle protections. A passing Check alone
+cannot merge an app whose required runtime binding is still absent.
+
+An authoritative configured-service response may classify an unrelated repository
+as unmanaged. A GitHub-only deployment with no managed operator capability keeps
+its generic flow; authorization/transport/unknown failures never mean unmanaged.
+After the session observes a managed requirement or obtains a normal setup plan,
+it retains that fact so losing the endpoint/profile cannot bypass preparation.
+Frontend-only apps keep `storage:none`; their applicable shared Auth setup never
+allocates a business database. Source-only revisions reuse the same completed
+setup and data; actual schema, role or access changes use existing preparation.
+
+If an older merge preceded its runtime bindings, recover in the same Builder
+session through the ordinary reviewed app repair/revision and provider-owned
+native Git delivery. Preserve its destination, database, records and setup.
+This adds no manual deployment, promotion, alias writer, synthetic runtime,
+external qualification or mandatory app-test gate.
+
 A missing saved destination is reported explicitly. Failed plan and status reads
 do not claim that setup was started or saved by that read. An uncertain
 preparation still requires status reconciliation before any retry.

@@ -5,6 +5,7 @@ import { resolveDraftReviewedWorkflow } from "./draft-reviewed-lineage";
 import { currentDraftCandidateSource, draftCandidateInstallation } from "./published-draft-repair";
 
 interface GitHubPrDeliverySubject {
+  appId: string;
   proposalDigest: string;
   installationId?: string;
   reconciliation?: ExistingDraftReconciliationProposal;
@@ -41,6 +42,7 @@ export const resolveGitHubPrDeliverySubject = (
       : draftCandidateInstallation(currentCandidate)?.selectedInstallationId) ??
     reviewed.githubDestinationReview?.installation.installationId;
   return {
+    appId: reviewed.appSpec.appId,
     proposalDigest,
     installationId,
     reconciliation: currentCandidate?.publishedReconciliation,

@@ -8,6 +8,9 @@ import { repositoryProductionApprovalInputSchema } from "../provisioning/reposit
 import type { RepositoryProductionApprovalInput } from "../provisioning/repository-production-approval";
 import { appAccessSnapshotSchema } from "../app-access/contracts";
 import { describeAppAccessIntent } from "./app-access-intent";
+import { repositoryProductionDeliveryStatusSchema } from "../provisioning/repository-production-delivery";
+import type { RepositoryProductionDeliveryTarget } from "../provisioning/repository-production-delivery";
+import { retainManagedProductionDeliveryRequirement } from "./production-delivery-requirement";
 
 const setupSchema = z.object({
   operationRef: z.uuid(),
@@ -21,11 +24,13 @@ const setupSchema = z.object({
   signInUrl: z.url().optional(),
   expiresAt: z.iso.datetime({ offset: true }).optional(),
 });
+// oxlint-disable-next-line sonarjs/max-union-size -- These are the four closed app setup/read actions on the existing protected service.
+type RepositoryProductionAction = "plan" | "prepare" | "setup-status" | "delivery-status";
 
 /** A failed read is not evidence that preparation ran or changed a resource. */
 export const repositoryProductionResponseError = async (
   response: Response,
-  action: "plan" | "prepare" | "setup-status",
+  action: RepositoryProductionAction,
 ): Promise<Error> => {
   let code = "";
   try {
@@ -81,9 +86,14 @@ export const repositoryProductionClientForContext = async (ctx: WorkflowStepTool
   });
   const send = async <T>(
     appId: string,
-    action: "plan" | "prepare" | "setup-status",
+    action: RepositoryProductionAction,
     schema: z.ZodType<T>,
-    extra: { approvedByCallId?: string; creatorEmail?: string } = {},
+    extra: {
+      approvedByCallId?: string;
+      creatorEmail?: string;
+      repositoryId?: string;
+      repositoryFullName?: string;
+    } = {},
   ) => {
     ctx.abortSignal.throwIfAborted();
     const workload = await createVercelWorkloadIdentity().token();
@@ -125,6 +135,12 @@ export const repositoryProductionClientForContext = async (ctx: WorkflowStepTool
       ) {
         throw new Error("app_setup_scope_mismatch");
       }
+      retainManagedProductionDeliveryRequirement({
+        appId,
+        repositoryId: result.plan.scope.repositoryId,
+        repositoryFullName: result.plan.scope.repositoryFullName,
+        operationRef: result.plan.operationRef,
+      });
       return {
         ...result,
         accessSummary: describeAppAccessIntent(result.plan.scope.appId, result.plan.intent.access),
@@ -154,9 +170,31 @@ export const repositoryProductionClientForContext = async (ctx: WorkflowStepTool
       ) {
         throw new Error("app_setup_scope_mismatch");
       }
+      retainManagedProductionDeliveryRequirement({
+        appId: plan.scope.appId,
+        repositoryId: plan.scope.repositoryId,
+        repositoryFullName: plan.scope.repositoryFullName,
+        operationRef: result.setup.operationRef,
+      });
       return result;
     },
     status: async (appId: string) =>
       await send(appId, "setup-status", setupSchema.extend({ version: z.literal(1) })),
+    deliveryStatus: async (appId: string, target: RepositoryProductionDeliveryTarget) => {
+      const result = await send(
+        appId,
+        "delivery-status",
+        repositoryProductionDeliveryStatusSchema,
+        target,
+      );
+      if (
+        result.appId !== appId ||
+        result.repositoryId !== target.repositoryId ||
+        result.repositoryFullName !== target.repositoryFullName
+      ) {
+        throw new Error("app_setup_scope_mismatch");
+      }
+      return result;
+    },
   };
 };
