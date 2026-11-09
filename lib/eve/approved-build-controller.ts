@@ -344,7 +344,14 @@ export const continueApprovedHostedBuild = async (
   const candidate = hostedOperationRecordSchema.parse({
     clientRequestId,
     createdAtEpochMs: now,
-    internalBuildContinuation: { decision, nonce },
+    internalBuildContinuation: {
+      decision,
+      nonce,
+      dispatchBinding: {
+        adapterGeneration: session.adapterGeneration,
+        cancellationRevision: session.cancellationRevision ?? 0,
+      },
+    },
     kind: "send",
     operationId,
     principal,

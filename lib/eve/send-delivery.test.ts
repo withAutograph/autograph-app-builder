@@ -256,6 +256,167 @@ const queuedFixture = async () => {
   return { ...f, ...attachPagedTransport(f) };
 };
 
+const appDestination = {
+  appId: "notes",
+  confirmedByCallId: "verified-repository-access",
+  installationId: "456",
+  kind: "existing-repository" as const,
+  repository: {
+    defaultBranch: "main",
+    name: "apps",
+    owner: "team",
+    repositoryId: "123",
+  },
+  version: 1 as const,
+};
+const destinationFixture = async (options: Parameters<typeof fixture>[0] = {}) => {
+  const f = await fixture(options);
+  await f.store.observeSession({
+    appId: appDestination.appId,
+    checkpoint: { capturedAtEpochMs: Date.now(), events: [], status: "waiting", version: 1 },
+    nowEpochMs: Date.now(),
+    principal,
+    resumability: "live",
+    sessionId: f.request.sessionId,
+    stage: "planning",
+  });
+  const attachment = async () => {
+    const saved = await f.store.getSession(principal, f.request.sessionId);
+    if (saved === null) {
+      throw new Error("Expected the current owned Builder session");
+    }
+    const current = toDurableHostedSessionRecord(saved);
+    return {
+      activeBuild: true,
+      destination: appDestination,
+      expected: {
+        adapterGeneration: current.adapterGeneration,
+        adapterSessionId: current.adapterSessionId,
+        cancellationRevision: current.cancellationRevision ?? 0,
+        checkpointDigest: current.checkpointDigest,
+      },
+      nowEpochMs: Date.now(),
+      principal,
+      sessionId: current.sessionId,
+    };
+  };
+  return { ...f, attachment };
+};
+
+describe("Builder destination selection during ordinary SEND", () => {
+  it("attaches owned metadata after ACK while preserving the web guard and selected repository", async () => {
+    const f = await destinationFixture();
+    f.send.mockImplementationOnce(async (input) => {
+      await input.onAccepted?.("ack");
+      expect(await f.operation()).toMatchObject({
+        kind: "send",
+        sendDelivery: { deliveryId: "ack" },
+        state: "reserved",
+      });
+      const attachment = await f.attachment();
+      await expect(
+        f.store.attachBuilderDestination({ ...attachment, activeBuild: false }),
+      ).rejects.toThrow("settled");
+      await expect(f.store.attachBuilderDestination(attachment)).resolves.toMatchObject({
+        builderDestination: appDestination,
+      });
+      await expect(f.store.attachBuilderDestination(attachment)).resolves.toMatchObject({
+        builderDestination: appDestination,
+      });
+      await expect(
+        f.store.attachBuilderDestination({
+          ...attachment,
+          destination: {
+            ...appDestination,
+            repository: { ...appDestination.repository, name: "other", repositoryId: "789" },
+          },
+        }),
+      ).rejects.toThrow("already selected");
+      return snapshot([turnEvent("turn.started", "current", ["ack"])]);
+    });
+    await expect(f.create().send(f.request)).resolves.toMatchObject({ status: "working" });
+    expect(await f.operation()).toMatchObject({ state: "succeeded" });
+    expect(await f.store.getSession(principal, f.request.sessionId)).toMatchObject({
+      appId: appDestination.appId,
+      builderDestination: appDestination,
+      status: "working",
+    });
+  });
+
+  it("retains the same destination across an acknowledged unknown SEND without replaying it", async () => {
+    const f = await destinationFixture({ failReadback: true });
+    await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    expect(await f.operation()).toMatchObject({
+      sendDelivery: { deliveryId: "ack" },
+      state: "submission_unknown",
+    });
+    await expect(f.store.attachBuilderDestination(await f.attachment())).resolves.toMatchObject({
+      builderDestination: appDestination,
+    });
+    f.setEvents([turnEvent("turn.started", "current", ["ack"])]);
+    await expect(f.create().send(f.request)).resolves.toMatchObject({ status: "working" });
+    expect(f.send).toHaveBeenCalledOnce();
+    expect(await f.operation()).toMatchObject({ state: "succeeded" });
+    expect(await f.store.getSession(principal, f.request.sessionId)).toMatchObject({
+      builderDestination: appDestination,
+    });
+  });
+
+  it("rejects unacknowledged SEND metadata and leaves the session unchanged", async () => {
+    const f = await destinationFixture({ acknowledge: false });
+    let checkedUnacknowledgedOperation = false;
+    f.send.mockImplementationOnce(async () => {
+      await expect(f.store.attachBuilderDestination(await f.attachment())).rejects.toThrow(
+        "settled",
+      );
+      checkedUnacknowledgedOperation = true;
+      return snapshot([waiting()]);
+    });
+    await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    expect(checkedUnacknowledgedOperation).toBe(true);
+    expect(await f.store.getSession(principal, f.request.sessionId)).not.toHaveProperty(
+      "builderDestination",
+    );
+  });
+
+  it("preserves owner, epoch, checkpoint and Stop boundaries after an actual SEND ACK", async () => {
+    const f = await destinationFixture({ failReadback: true });
+    await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    expect(await f.operation()).toMatchObject({
+      sendDelivery: { deliveryId: "ack" },
+      state: "submission_unknown",
+    });
+    const attachment = await f.attachment();
+    await expect(
+      f.store.attachBuilderDestination({
+        ...attachment,
+        principal: { ...principal, ownerUserId: "foreign" },
+      }),
+    ).rejects.toThrow("not found");
+    await expect(
+      f.store.attachBuilderDestination({
+        ...attachment,
+        expected: { ...attachment.expected, adapterGeneration: 2 },
+      }),
+    ).rejects.toThrow("stale");
+    await expect(
+      f.store.attachBuilderDestination({
+        ...attachment,
+        expected: { ...attachment.expected, checkpointDigest: `sha256:${"f".repeat(64)}` },
+      }),
+    ).rejects.toThrow("stale");
+    await f.store.recordCancellationIntent({
+      nowEpochMs: Date.now(),
+      principal,
+      sessionId: f.request.sessionId,
+    });
+    await expect(f.store.attachBuilderDestination(attachment)).rejects.toThrow();
+    expect(await f.store.getSession(principal, f.request.sessionId)).not.toHaveProperty(
+      "builderDestination",
+    );
+  });
+});
+
 describe("canonical SEND delivery acknowledgement", () => {
   it("acknowledges saved queued SEND and keeps GET working until exact native start without replay", async () => {
     const f = await queuedFixture();

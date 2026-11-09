@@ -443,6 +443,15 @@ resource-provisioning journal. Existing journal-backed destination records remai
 supported. A later refresh or recovered child session retains the same selection;
 normal GitHub access is checked again before publication. Selection grants no
 publication or merge approval.
+The authenticated current build may save this metadata while its ordinary SEND
+has a durable acknowledgement, or while its approved automatic Build continuation
+has claimed the exact executing turn. Both paths retain the current owner,
+adapter generation, cancellation revision and checkpoint fences. The automatic
+path also binds the captured approved app scope and dispatch epoch. Saving a
+destination does not settle, replay or approve a pending operation. Unknown
+operations without that delivery binding, recovery transfers and unrelated
+mutations still block attachment. The web destination action continues to require
+settled session operations.
 Keep the starter checkout, original source receipt, app files and validation.
 
 After accepting the destination diff, fresh-template sealing uses

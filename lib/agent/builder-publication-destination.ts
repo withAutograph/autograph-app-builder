@@ -234,6 +234,7 @@ export const recordBuilderPublicationDestinationForTool = async (
     sessionId: session.sessionId,
     destination,
     activeBuild: true,
+    activeBuildTurn: ctx.session.turn,
     expected: {
       adapterSessionId: session.adapterSessionId,
       adapterGeneration: session.adapterGeneration,
