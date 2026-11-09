@@ -8,13 +8,12 @@ import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function ItemGroup({ className, ...props }: ComponentProps<"div">) {
+function ItemGroup({ className, ...props }: ComponentProps<"ul">) {
   return (
-    <div
-      role="list"
+    <ul
       data-slot="item-group"
       className={cn(
-        "group/item-group flex w-full flex-col gap-4 has-data-[size=sm]:gap-2.5 has-data-[size=xs]:gap-2",
+        "group/item-group m-0 flex w-full list-none flex-col gap-4 p-0 has-data-[size=sm]:gap-2.5 has-data-[size=xs]:gap-2",
         className,
       )}
       {...props}

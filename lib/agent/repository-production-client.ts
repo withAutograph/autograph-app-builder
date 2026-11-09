@@ -53,6 +53,7 @@ export const repositoryProductionClientForContext = async (ctx: WorkflowStepTool
   if (value === undefined || value === "") {
     throw new Error("protected_operator_required");
   }
+  // react-doctor-disable-next-line react-doctor/no-unguarded-throwing-parse-call -- Invalid operator configuration must fail before any protected request.
   const endpoint = new URL(value);
   const validOrigin = [
     endpoint.protocol === "https:",

@@ -7,57 +7,18 @@ const renderPreviewApprovalDescription = (text: string) =>
     text
   );
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function ApprovalRequest({
-  description,
-  isSubmitting = false,
-  onAnswer,
-  title,
-  primaryLabel: primaryLabelOverride,
-  secondaryLabel: secondaryLabelOverride,
+const ApprovalDescription = ({
+  supportingCopy,
+  previewApproval,
 }: {
-  description?: string;
-  isSubmitting?: boolean;
-  onAnswer: (answer: SessionAnswer) => void;
-  primaryLabel?: string;
-  secondaryLabel?: string;
-  title: string;
-}) {
-  const readyToBuild = title === "Build this app?";
-  const publishDraft = title === "Publish the reviewed changes?";
-  const previewApproval = title === "Do you approve creating a preview?";
+  supportingCopy?: string;
+  previewApproval: boolean;
+}) => {
   const renderApprovalDescription = (text: string) =>
     previewApproval ? renderPreviewApprovalDescription(text) : text;
-  const supportingCopy =
-    description ??
-    (readyToBuild
-      ? "Build and validate the app shown above in your private workspace. This does not publish or deploy it."
-      : undefined);
-  const hint = readyToBuild ? "Keep chatting to refine your app." : "Cancel and return to chat.";
-  let defaultPrimaryLabel = "Accept";
-  if (readyToBuild) {
-    defaultPrimaryLabel = "Build app";
-  } else if (publishDraft) {
-    defaultPrimaryLabel = "Publish draft PR";
-  }
-  const primaryLabel = primaryLabelOverride ?? (previewApproval ? "Approve" : defaultPrimaryLabel);
-  const secondaryLabel = secondaryLabelOverride ?? (readyToBuild ? "Make changes" : "Cancel");
-
-  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
-    <div className={`approval-request${previewApproval ? " approval-request--preview" : ""}`}>
-      {previewApproval ? (
-        <>
-          <h2 className="approval-request__label">Approval required</h2>
-          <p className="approval-request__supporting-title">{title}</p>
-        </>
-      ) : (
-        <>
-          <p className="approval-request__eyebrow">Approval required</p>
-          <h2>{readyToBuild ? "Ready to build your app?" : title}</h2>
-        </>
-      )}
-      {supportingCopy ? (
+    <>
+      {supportingCopy !== undefined && supportingCopy !== null && supportingCopy !== "" ? (
         <div className="approval-request__description">
           {supportingCopy.split("\n\n").map((section) => {
             const lines = section.split("\n");
@@ -88,6 +49,59 @@ export function ApprovalRequest({
           })}
         </div>
       ) : null}
+    </>
+  );
+};
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function ApprovalRequest({
+  description,
+  isSubmitting = false,
+  onAnswer,
+  title,
+  primaryLabel: primaryLabelOverride,
+  secondaryLabel: secondaryLabelOverride,
+}: {
+  description?: string;
+  isSubmitting?: boolean;
+  onAnswer: (answer: SessionAnswer) => void;
+  primaryLabel?: string;
+  secondaryLabel?: string;
+  title: string;
+}) {
+  const readyToBuild = title === "Build this app?";
+  const publishDraft = title === "Publish the reviewed changes?";
+  const previewApproval = title === "Do you approve creating a preview?";
+  const supportingCopy =
+    description ??
+    (readyToBuild
+      ? "Build and validate the app shown above in your private workspace. This does not publish or deploy it."
+      : undefined);
+  const hint = readyToBuild ? "Keep chatting to refine your app." : "Cancel and return to chat.";
+  let defaultPrimaryLabel = "Accept";
+  if (readyToBuild) {
+    defaultPrimaryLabel = "Build app";
+  } else if (publishDraft) {
+    defaultPrimaryLabel = "Publish draft PR";
+  }
+  const primaryLabel = primaryLabelOverride ?? (previewApproval ? "Approve" : defaultPrimaryLabel);
+  const secondaryLabel = secondaryLabelOverride ?? (readyToBuild ? "Make changes" : "Cancel");
+
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
+  return (
+    <div className={`approval-request${previewApproval ? " approval-request--preview" : ""}`}>
+      {previewApproval ? (
+        <>
+          <h2 className="approval-request__label">Approval required</h2>
+          <p className="approval-request__supporting-title">{title}</p>
+        </>
+      ) : (
+        <>
+          <p className="approval-request__eyebrow">Approval required</p>
+          <h2>{readyToBuild ? "Ready to build your app?" : title}</h2>
+        </>
+      )}
+      <ApprovalDescription supportingCopy={supportingCopy} previewApproval={previewApproval} />
       <div className="approval-request__actions">
         <div>
           <button

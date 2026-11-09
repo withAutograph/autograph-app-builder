@@ -16,6 +16,59 @@ interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Keep the existing declaration style.
+function providerDetails(
+  provider: string,
+  emulation: NonNullable<ReturnType<typeof readProviderEmulation>>,
+) {
+  return provider === "github"
+    ? [
+        { label: "Organization", value: "Autograph Local" },
+        { label: "Repository", value: emulation.githubRepository },
+      ]
+    : [
+        { label: "Team", value: "Autograph Local" },
+        {
+          label: "Team slug",
+          value: process.env.EMULATE_VERCEL_TEAM_ID ?? EMULATED_VERCEL_TEAM_ID,
+        },
+        {
+          label: "Configuration",
+          value: process.env.EMULATE_VERCEL_CONFIGURATION_ID ?? EMULATED_VERCEL_CONFIGURATION_ID,
+        },
+      ];
+}
+
+// eslint-disable-next-line eslint/func-style -- Keep the existing declaration style.
+function EmulationApprovalForm({
+  provider,
+  query,
+  authorizing,
+  forwarded,
+  actionLabel,
+}: {
+  provider: string;
+  query: Record<string, string | string[] | undefined>;
+  authorizing: boolean;
+  forwarded: string[];
+  actionLabel: string;
+}) {
+  return (
+    <form method="post" action={`/local-connections/${provider}/complete`}>
+      <input type="hidden" name="state" value={query.state} />
+      {authorizing ? <input type="hidden" name="phase" value="authorize" /> : null}
+      {forwarded.map((name) =>
+        typeof query[name] === "string" ? (
+          <input key={name} type="hidden" name={name} value={query[name]} />
+        ) : null,
+      )}
+      <button className={emulationApprovalStyles.button} type="submit">
+        {actionLabel}
+      </button>
+    </form>
+  );
+}
+
 /** Development-only consent surface; real provider installation pages remain external. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
@@ -40,23 +93,7 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
     : `Connect emulated ${providerName}`;
   const environment =
     emulation.mode === "preview" ? ("Preview deployment" as const) : ("Local development" as const);
-  const details =
-    provider === "github"
-      ? [
-          { label: "Organization", value: "Autograph Local" },
-          { label: "Repository", value: emulation.githubRepository },
-        ]
-      : [
-          { label: "Team", value: "Autograph Local" },
-          {
-            label: "Team slug",
-            value: process.env.EMULATE_VERCEL_TEAM_ID ?? EMULATED_VERCEL_TEAM_ID,
-          },
-          {
-            label: "Configuration",
-            value: process.env.EMULATE_VERCEL_CONFIGURATION_ID ?? EMULATED_VERCEL_CONFIGURATION_ID,
-          },
-        ];
+  const details = providerDetails(provider, emulation);
   const forwarded = authorizing
     ? ["client_id", "redirect_uri", "code_challenge", "code_challenge_method"]
     : [];
@@ -78,18 +115,13 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
       actionLabel={actionLabel}
       backHref={resumeKey ? `/?resume=${encodeURIComponent(resumeKey)}` : "/"}
       action={
-        <form method="post" action={`/local-connections/${provider}/complete`}>
-          <input type="hidden" name="state" value={query.state} />
-          {authorizing ? <input type="hidden" name="phase" value="authorize" /> : null}
-          {forwarded.map((name) =>
-            typeof query[name] === "string" ? (
-              <input key={name} type="hidden" name={name} value={query[name]} />
-            ) : null,
-          )}
-          <button className={emulationApprovalStyles.button} type="submit">
-            {actionLabel}
-          </button>
-        </form>
+        <EmulationApprovalForm
+          provider={provider}
+          query={query}
+          authorizing={authorizing}
+          forwarded={forwarded}
+          actionLabel={actionLabel}
+        />
       }
     />
   );

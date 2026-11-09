@@ -218,42 +218,12 @@ const subscribeToHandoffStatus = (
   };
 };
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting.
-export function HandoffControls({ initial }: { initial: HandoffControlData }) {
-  // The instant server shell is visible before browser event handlers exist.
-  // Do not expose an enabled action that can silently discard that first click.
-  const isClientReady = useSyncExternalStore(
-    subscribeToClientSnapshot,
-    () => true,
-    () => false,
-  );
-  const router = useRouter();
-  const [handoffStore] = useState(() => createHandoffViewStore(initial));
+const useHandoffView = (
+  handoffStore: ReturnType<typeof createHandoffViewStore>,
+  renewalPending: boolean,
+  setNotice: (notice: string) => void,
+) => {
   const dispatchHandoffView = handoffStore.dispatch;
-  const [destination, setDestination] = useState(initial.destination);
-  const [notice, setNotice] = useState("");
-  const [launchNotice, setLaunchNotice] = useState("");
-  const [copyNotice, setCopyNotice] = useState("");
-  // oxlint-disable-next-line unicorn/no-useless-undefined -- React requires an initial value for this optional request ref.
-  const renewalRequest = useRef<{ handoffId: string; id: string } | undefined>(undefined);
-  // oxlint-disable-next-line unicorn/no-useless-undefined -- React requires an initial value for this optional reconciliation ref.
-  const reconciledRenewal = useRef<HandoffRenewalActionState | undefined>(undefined);
-  const runRenewalAction = useCallback(
-    async (
-      previous: HandoffRenewalActionState | undefined,
-      input: Parameters<typeof renewBuilderHandoff>[1],
-    ): Promise<HandoffRenewalActionState> => {
-      try {
-        return await renewBuilderHandoff(previous, input);
-      } catch {
-        // Server Action transport failures belong in the same retryable UI as typed failures.
-        return { status: "error" };
-      }
-    },
-    [],
-  );
-  // oxlint-disable-next-line unicorn/no-useless-undefined -- The renewal action explicitly starts without a result.
-  const [renewal, dispatchRenewal, renewalPending] = useActionState(runRenewalAction, undefined);
   const subscribeHandoff = useCallback(
     (listener: () => void) => {
       let stopPolling: (() => void) | undefined;
@@ -295,13 +265,121 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
         stopPolling?.();
       };
     },
-    [handoffStore, dispatchHandoffView, renewalPending],
+    [handoffStore, dispatchHandoffView, renewalPending, setNotice],
   );
   const { data, access, renewalNotice } = useSyncExternalStore(
     subscribeHandoff,
     handoffStore.getSnapshot,
     handoffStore.getServerSnapshot,
   );
+  return { data, access, renewalNotice };
+};
+
+const handoffStatusMessage = (data: HandoffControlData, access: HandoffAccess) => {
+  let statusMessage =
+    "Your app is prepared. Open your client, then review and send the prompt to continue.";
+  if (data.status === "expired") {
+    statusMessage =
+      "This handoff has expired. Renew it to continue with your saved brief and resources.";
+  }
+  if (data.status === "continued") {
+    statusMessage = "Continued in your app. You can reopen this handoff in either client.";
+  }
+  if (access === "unavailable") {
+    statusMessage =
+      "This handoff is unavailable. Use the same Autograph account and workspace as the web form.";
+  }
+  if (access === "sign-in") {
+    statusMessage = "Sign in to continue your saved app.";
+  }
+  return statusMessage;
+};
+
+const HandoffDestinationSelector = ({
+  access,
+  data,
+  destination,
+  isClientReady,
+  onDestinationChange,
+  renewalPending,
+  renew,
+}: {
+  access: HandoffAccess;
+  data: HandoffControlData;
+  destination: HandoffControlData["destination"];
+  isClientReady: boolean;
+  onDestinationChange: (destination: HandoffControlData["destination"]) => void;
+  renewalPending: boolean;
+  renew: () => void;
+}) => (
+  <>
+    <fieldset disabled={!isClientReady || renewalPending}>
+      <legend>Continue in</legend>
+      {(["codex", "cursor"] as const).map((choice) => (
+        <label key={choice}>
+          <input
+            type="radio"
+            name="handoff-destination"
+            value={choice}
+            checked={destination === choice}
+            onChange={() => {
+              onDestinationChange(choice);
+            }}
+          />
+          {choice === "codex" ? "Codex" : "Cursor"}
+        </label>
+      ))}
+    </fieldset>
+    {data.status === "expired" && access === "ready" ? (
+      <button
+        className={styles.createButton}
+        type="button"
+        disabled={!isClientReady || renewalPending}
+        onClick={renew}
+      >
+        {renewalPending ? "Renewing…" : "Renew handoff"}
+      </button>
+    ) : null}
+  </>
+);
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting.
+export function HandoffControls({ initial }: { initial: HandoffControlData }) {
+  // The instant server shell is visible before browser event handlers exist.
+  // Do not expose an enabled action that can silently discard that first click.
+  const isClientReady = useSyncExternalStore(
+    subscribeToClientSnapshot,
+    () => true,
+    () => false,
+  );
+  const router = useRouter();
+  const [handoffStore] = useState(() => createHandoffViewStore(initial));
+  const dispatchHandoffView = handoffStore.dispatch;
+  const [destination, setDestination] = useState(initial.destination);
+  const [notice, setNotice] = useState("");
+  const [launchNotice, setLaunchNotice] = useState("");
+  const [copyNotice, setCopyNotice] = useState("");
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- React requires an initial value for this optional request ref.
+  const renewalRequest = useRef<{ handoffId: string; id: string } | undefined>(undefined);
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- React requires an initial value for this optional reconciliation ref.
+  const reconciledRenewal = useRef<HandoffRenewalActionState | undefined>(undefined);
+  const runRenewalAction = useCallback(
+    async (
+      previous: HandoffRenewalActionState | undefined,
+      input: Parameters<typeof renewBuilderHandoff>[1],
+    ): Promise<HandoffRenewalActionState> => {
+      try {
+        return await renewBuilderHandoff(previous, input);
+      } catch {
+        // Server Action transport failures belong in the same retryable UI as typed failures.
+        return { status: "error" };
+      }
+    },
+    [],
+  );
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- The renewal action explicitly starts without a result.
+  const [renewal, dispatchRenewal, renewalPending] = useActionState(runRenewalAction, undefined);
+  const { data, access, renewalNotice } = useHandoffView(handoffStore, renewalPending, setNotice);
   const handoffPath = `/handoff/${encodeURIComponent(data.handoffId)}`;
   const signInUrl = `/auth/sign-in?callbackURL=${encodeURIComponent(handoffPath)}`;
   const label = destination === "codex" ? "Codex" : "Cursor";
@@ -326,7 +404,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       // oxlint-disable-next-line react-doctor/nextjs-no-client-side-redirect -- Follow the replacement handoff only after renewal succeeds.
       router.replace(`/handoff/${encodeURIComponent(renewal.handoff.handoffId)}`);
     }
-  }, [data.handoffId, destination, renewal, renewalPending, router]);
+  }, [data.handoffId, destination, dispatchHandoffView, renewal, renewalPending, router]);
 
   const copyPrompt = async () => {
     try {
@@ -374,22 +452,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     );
   };
 
-  let statusMessage =
-    "Your app is prepared. Open your client, then review and send the prompt to continue.";
-  if (data.status === "expired") {
-    statusMessage =
-      "This handoff has expired. Renew it to continue with your saved brief and resources.";
-  }
-  if (data.status === "continued") {
-    statusMessage = "Continued in your app. You can reopen this handoff in either client.";
-  }
-  if (access === "unavailable") {
-    statusMessage =
-      "This handoff is unavailable. Use the same Autograph account and workspace as the web form.";
-  }
-  if (access === "sign-in") {
-    statusMessage = "Sign in to continue your saved app.";
-  }
+  const statusMessage = handoffStatusMessage(data, access);
 
   return (
     <section aria-label="Continue your app" className={handoffStyles.controls}>
@@ -397,35 +460,19 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
         {statusMessage}
       </p>
       {access === "ready" ? null : <a href={signInUrl}>Sign in with the same account</a>}
-      <fieldset disabled={!isClientReady || renewalPending}>
-        <legend>Continue in</legend>
-        {(["codex", "cursor"] as const).map((choice) => (
-          <label key={choice}>
-            <input
-              type="radio"
-              name="handoff-destination"
-              value={choice}
-              checked={destination === choice}
-              onChange={() => {
-                setDestination(choice);
-                setLaunchNotice("");
-                setCopyNotice("");
-              }}
-            />
-            {choice === "codex" ? "Codex" : "Cursor"}
-          </label>
-        ))}
-      </fieldset>
-      {data.status === "expired" && access === "ready" ? (
-        <button
-          className={styles.createButton}
-          type="button"
-          disabled={!isClientReady || renewalPending}
-          onClick={renew}
-        >
-          {renewalPending ? "Renewing…" : "Renew handoff"}
-        </button>
-      ) : null}
+      <HandoffDestinationSelector
+        access={access}
+        data={data}
+        destination={destination}
+        isClientReady={isClientReady}
+        onDestinationChange={(choice) => {
+          setDestination(choice);
+          setLaunchNotice("");
+          setCopyNotice("");
+        }}
+        renewalPending={renewalPending}
+        renew={renew}
+      />
       <button
         className={styles.createButton}
         type="button"

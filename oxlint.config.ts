@@ -7,20 +7,18 @@ import next from "ultracite/oxlint/next";
 import nextJsPlugins from "ultracite/oxlint/next/js-plugins";
 
 // React Doctor remains visible as advisory analysis, including each preset rule's options.
-const reactDoctorAdvisories = Object.fromEntries(
-  Object.entries({
-    ...core.rules,
-    ...next.rules,
-    ...jsPlugins.rules,
-    ...nextJsPlugins.rules,
-    ...antiSlop.rules,
-  })
-    .filter(([name]) => name.startsWith("react-doctor/"))
-    .map(([name, rule]): [string, DummyRule] => [
-      name,
-      Array.isArray(rule) ? ["warn", ...rule.slice(1)] : "warn",
-    ]),
-);
+const reactDoctorAdvisories: Record<string, DummyRule> = {};
+for (const [name, rule] of Object.entries({
+  ...core.rules,
+  ...next.rules,
+  ...jsPlugins.rules,
+  ...nextJsPlugins.rules,
+  ...antiSlop.rules,
+})) {
+  if (name.startsWith("react-doctor/")) {
+    reactDoctorAdvisories[name] = Array.isArray(rule) ? ["warn", ...rule.slice(1)] : "warn";
+  }
+}
 
 export default defineConfig({
   extends: [core, next, jsPlugins, nextJsPlugins, antiSlop],

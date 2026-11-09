@@ -7,7 +7,7 @@ import { useAuth, useCopyToClipboard } from "@better-auth-ui/react";
 import { format } from "date-fns";
 import { CalendarIcon, Check, ChevronDownIcon, Copy } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import type { ComponentType } from "react";
+import type { ComponentType, RefObject } from "react";
 import { toast } from "sonner";
 
 import { buttonVariants } from "@/components/ui/button-variants";
@@ -120,17 +120,11 @@ const CopyButton = function CopyButton({
   );
 };
 
-/** Renders a single additional user field via shadcn primitives. */
-const DateInput = function DateInput({ name, field, isPending }: AdditionalFieldProps) {
-  const { localization } = useAuth();
-  const inputType = resolveInputType(field);
-  const isDateTime = inputType === "datetime";
-
-  const [date, setDate] = useState<Date | undefined>(() => toDate(field.defaultValue));
-  const [time, setTime] = useState<string>(isDateTime && date ? formatTime(date) : "");
-  const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string>();
-
+const serializeAdditionalDate = function serializeAdditionalDate(
+  date: Date | undefined,
+  time: string,
+  isDateTime: boolean,
+) {
   // Compose the hidden form value: ISO date for "date", ISO datetime for
   // "datetime" (date + time).
   let formValue = "";
@@ -151,6 +145,22 @@ const DateInput = function DateInput({ name, field, isPending }: AdditionalField
       formValue = localMidnight.toISOString();
     }
   }
+
+  return formValue;
+};
+
+/** Renders a single additional user field via shadcn primitives. */
+const DateInput = function DateInput({ name, field, isPending }: AdditionalFieldProps) {
+  const { localization } = useAuth();
+  const inputType = resolveInputType(field);
+  const isDateTime = inputType === "datetime";
+
+  const [date, setDate] = useState<Date | undefined>(() => toDate(field.defaultValue));
+  const [time, setTime] = useState<string>(isDateTime && date ? formatTime(date) : "");
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string>();
+
+  const formValue = serializeAdditionalDate(date, time, isDateTime);
 
   /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
   return (
@@ -307,6 +317,66 @@ const SliderField = function SliderField({ name, field, isPending }: AdditionalF
   /* oxlint-enable typescript/strict-boolean-expressions */
 };
 
+const renderDecoratedInput = function renderDecoratedInput({
+  name,
+  field,
+  isPending,
+  inputRef,
+  hasPrefix,
+  nativeInputType,
+  nativeInputMode,
+  nativeStep,
+}: AdditionalFieldProps & {
+  inputRef: RefObject<HTMLInputElement | null>;
+  hasPrefix: boolean;
+  nativeInputType: "number" | undefined;
+  nativeInputMode: "decimal" | "numeric" | undefined;
+  nativeStep: number | undefined;
+}) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
+  return (
+    <Field>
+      <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+
+      <InputGroup>
+        {hasPrefix && <InputGroupAddon align="inline-start">{field.prefix}</InputGroupAddon>}
+
+        <InputGroupInput
+          ref={inputRef}
+          id={name}
+          name={name}
+          type={nativeInputType}
+          inputMode={nativeInputMode}
+          step={nativeStep}
+          defaultValue={
+            field.defaultValue === null || field.defaultValue === undefined
+              ? undefined
+              : String(field.defaultValue)
+          }
+          placeholder={field.placeholder}
+          required={field.required}
+          readOnly={field.readOnly}
+          disabled={isPending}
+        />
+
+        {field.copyable ? (
+          <InputGroupAddon align="inline-end">
+            <CopyButton getValue={() => inputRef.current?.value} isDisabled={isPending} />
+          </InputGroupAddon>
+        ) : (
+          field.suffix !== null &&
+          field.suffix !== undefined && (
+            <InputGroupAddon align="inline-end">{field.suffix}</InputGroupAddon>
+          )
+        )}
+      </InputGroup>
+
+      <FieldError />
+    </Field>
+  );
+  /* oxlint-enable typescript/strict-boolean-expressions */
+};
+
 const InputField = function InputField({ name, field, isPending }: AdditionalFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -326,50 +396,18 @@ const InputField = function InputField({ name, field, isPending }: AdditionalFie
   const nativeStep = maxFractionDigits ? 1 / 10 ** maxFractionDigits : undefined;
   /* oxlint-enable typescript/strict-boolean-expressions */
 
-  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
-  if (hasPrefix || hasSuffix) {
-    return (
-      <Field>
-        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
-
-        <InputGroup>
-          {hasPrefix && <InputGroupAddon align="inline-start">{field.prefix}</InputGroupAddon>}
-
-          <InputGroupInput
-            ref={inputRef}
-            id={name}
-            name={name}
-            type={nativeInputType}
-            inputMode={nativeInputMode}
-            step={nativeStep}
-            defaultValue={
-              field.defaultValue === null || field.defaultValue === undefined
-                ? undefined
-                : String(field.defaultValue)
-            }
-            placeholder={field.placeholder}
-            required={field.required}
-            readOnly={field.readOnly}
-            disabled={isPending}
-          />
-
-          {field.copyable ? (
-            <InputGroupAddon align="inline-end">
-              <CopyButton getValue={() => inputRef.current?.value} isDisabled={isPending} />
-            </InputGroupAddon>
-          ) : (
-            field.suffix !== null &&
-            field.suffix !== undefined && (
-              <InputGroupAddon align="inline-end">{field.suffix}</InputGroupAddon>
-            )
-          )}
-        </InputGroup>
-
-        <FieldError />
-      </Field>
-    );
+  if (hasPrefix || Boolean(hasSuffix)) {
+    return renderDecoratedInput({
+      name,
+      field,
+      isPending,
+      inputRef,
+      hasPrefix,
+      nativeInputType,
+      nativeInputMode,
+      nativeStep,
+    });
   }
-  /* oxlint-enable typescript/strict-boolean-expressions */
 
   return (
     <Field>
@@ -395,6 +433,224 @@ const InputField = function InputField({ name, field, isPending }: AdditionalFie
       <FieldError />
     </Field>
   );
+};
+
+const renderHiddenField = function renderHiddenField({ name, field }: AdditionalFieldProps) {
+  let hiddenValue = "";
+  if (field.defaultValue !== null && field.defaultValue !== undefined) {
+    hiddenValue =
+      field.defaultValue instanceof Date
+        ? field.defaultValue.toISOString()
+        : String(field.defaultValue);
+  }
+
+  return <input type="hidden" name={name} value={hiddenValue} />;
+};
+
+const renderTextareaField = function renderTextareaField({
+  name,
+  field,
+  isPending,
+}: AdditionalFieldProps) {
+  return (
+    <Field>
+      <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+
+      <Textarea
+        id={name}
+        name={name}
+        defaultValue={
+          field.defaultValue === null || field.defaultValue === undefined
+            ? undefined
+            : String(field.defaultValue)
+        }
+        placeholder={field.placeholder}
+        required={field.required}
+        readOnly={field.readOnly}
+        disabled={isPending}
+      />
+
+      <FieldError />
+    </Field>
+  );
+};
+
+const renderNumberField = function renderNumberField({
+  name,
+  field,
+  isPending,
+}: AdditionalFieldProps) {
+  const maxFractionDigits = field.formatOptions?.maximumFractionDigits;
+  let defaultValue: number | string | undefined;
+  if (field.defaultValue !== null && field.defaultValue !== undefined) {
+    defaultValue =
+      typeof field.defaultValue === "number" ? field.defaultValue : String(field.defaultValue);
+  }
+
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
+  return (
+    <Field>
+      <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+
+      <Input
+        id={name}
+        name={name}
+        type="number"
+        inputMode={maxFractionDigits ? "decimal" : "numeric"}
+        min={field.min}
+        max={field.max}
+        step={field.step ?? (maxFractionDigits ? 1 / 10 ** maxFractionDigits : undefined)}
+        defaultValue={defaultValue}
+        placeholder={field.placeholder}
+        required={field.required}
+        readOnly={field.readOnly}
+        disabled={isPending}
+      />
+
+      <FieldError />
+    </Field>
+  );
+  /* oxlint-enable typescript/strict-boolean-expressions */
+};
+
+const renderSwitchField = function renderSwitchField({
+  name,
+  field,
+  isPending,
+}: AdditionalFieldProps) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
+  return (
+    <Field orientation="horizontal">
+      <Switch
+        id={name}
+        name={name}
+        defaultChecked={field.defaultValue === true || field.defaultValue === "true"}
+        disabled={
+          // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- A non-pending field can still be read-only.
+          isPending || field.readOnly
+        }
+      />
+
+      <FieldContent>
+        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+      </FieldContent>
+    </Field>
+  );
+  /* oxlint-enable typescript/strict-boolean-expressions */
+};
+
+const renderCheckboxField = function renderCheckboxField({
+  name,
+  field,
+  isPending,
+}: AdditionalFieldProps) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
+  return (
+    <Field orientation="horizontal">
+      <Checkbox
+        id={name}
+        name={name}
+        defaultChecked={field.defaultValue === true || field.defaultValue === "true"}
+        required={field.required}
+        disabled={
+          // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- A non-pending field can still be read-only.
+          isPending || field.readOnly
+        }
+      />
+
+      <FieldContent>
+        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+      </FieldContent>
+    </Field>
+  );
+  /* oxlint-enable typescript/strict-boolean-expressions */
+};
+
+const renderSelectField = function renderSelectField({
+  name,
+  field,
+  isPending,
+}: AdditionalFieldProps) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
+  return (
+    <Field>
+      <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+
+      <Select
+        name={name}
+        defaultValue={
+          field.defaultValue === null || field.defaultValue === undefined
+            ? undefined
+            : String(field.defaultValue)
+        }
+        required={field.required}
+        disabled={
+          // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- A non-pending field can still be read-only.
+          isPending || field.readOnly
+        }
+      >
+        <SelectTrigger id={name} className="w-full">
+          <SelectValue placeholder={field.placeholder} />
+        </SelectTrigger>
+
+        <SelectContent>
+          {field.options?.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <FieldError />
+    </Field>
+  );
+  /* oxlint-enable typescript/strict-boolean-expressions */
+};
+
+const renderComboboxField = function renderComboboxField({
+  name,
+  field,
+  isPending,
+}: AdditionalFieldProps) {
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
+  return (
+    <Field>
+      <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+
+      <Combobox
+        items={field.options ?? []}
+        name={name}
+        defaultValue={
+          field.defaultValue === null || field.defaultValue === undefined
+            ? undefined
+            : String(field.defaultValue)
+        }
+        required={field.required}
+        disabled={
+          // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- A non-pending field can still be read-only.
+          isPending || field.readOnly
+        }
+      >
+        <ComboboxInput placeholder={field.placeholder} id={name} />
+
+        <ComboboxContent>
+          <ComboboxEmpty>No items found.</ComboboxEmpty>
+
+          <ComboboxList>
+            {(option) => (
+              <ComboboxItem key={option.value} value={option}>
+                {option.label}
+              </ComboboxItem>
+            )}
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
+
+      <FieldError />
+    </Field>
+  );
+  /* oxlint-enable typescript/strict-boolean-expressions */
 };
 
 export const AdditionalField = function AdditionalField({
@@ -433,73 +689,15 @@ export const AdditionalField = function AdditionalField({
   }
 
   if (inputType === "hidden") {
-    let hiddenValue = "";
-    if (field.defaultValue !== null && field.defaultValue !== undefined) {
-      hiddenValue =
-        field.defaultValue instanceof Date
-          ? field.defaultValue.toISOString()
-          : String(field.defaultValue);
-    }
-
-    return <input type="hidden" name={name} value={hiddenValue} />;
+    return renderHiddenField({ name, field, isPending });
   }
 
   if (inputType === "textarea") {
-    return (
-      <Field>
-        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
-
-        <Textarea
-          id={name}
-          name={name}
-          defaultValue={
-            field.defaultValue === null || field.defaultValue === undefined
-              ? undefined
-              : String(field.defaultValue)
-          }
-          placeholder={field.placeholder}
-          required={field.required}
-          readOnly={field.readOnly}
-          disabled={isPending}
-        />
-
-        <FieldError />
-      </Field>
-    );
+    return renderTextareaField({ name, field, isPending });
   }
 
   if (inputType === "number") {
-    const maxFractionDigits = field.formatOptions?.maximumFractionDigits;
-    let defaultValue: number | string | undefined;
-    if (field.defaultValue !== null && field.defaultValue !== undefined) {
-      defaultValue =
-        typeof field.defaultValue === "number" ? field.defaultValue : String(field.defaultValue);
-    }
-
-    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve zero, NaN, and nullish truthiness. */
-    return (
-      <Field>
-        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
-
-        <Input
-          id={name}
-          name={name}
-          type="number"
-          inputMode={maxFractionDigits ? "decimal" : "numeric"}
-          min={field.min}
-          max={field.max}
-          step={field.step ?? (maxFractionDigits ? 1 / 10 ** maxFractionDigits : undefined)}
-          defaultValue={defaultValue}
-          placeholder={field.placeholder}
-          required={field.required}
-          readOnly={field.readOnly}
-          disabled={isPending}
-        />
-
-        <FieldError />
-      </Field>
-    );
-    /* oxlint-enable typescript/strict-boolean-expressions */
+    return renderNumberField({ name, field, isPending });
   }
 
   if (inputType === "slider") {
@@ -507,127 +705,19 @@ export const AdditionalField = function AdditionalField({
   }
 
   if (inputType === "switch") {
-    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
-    return (
-      <Field orientation="horizontal">
-        <Switch
-          id={name}
-          name={name}
-          defaultChecked={field.defaultValue === true || field.defaultValue === "true"}
-          disabled={
-            // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- A non-pending field can still be read-only.
-            isPending || field.readOnly
-          }
-        />
-
-        <FieldContent>
-          <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
-        </FieldContent>
-      </Field>
-    );
-    /* oxlint-enable typescript/strict-boolean-expressions */
+    return renderSwitchField({ name, field, isPending });
   }
 
   if (inputType === "checkbox") {
-    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
-    return (
-      <Field orientation="horizontal">
-        <Checkbox
-          id={name}
-          name={name}
-          defaultChecked={field.defaultValue === true || field.defaultValue === "true"}
-          required={field.required}
-          disabled={
-            // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- A non-pending field can still be read-only.
-            isPending || field.readOnly
-          }
-        />
-
-        <FieldContent>
-          <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
-        </FieldContent>
-      </Field>
-    );
-    /* oxlint-enable typescript/strict-boolean-expressions */
+    return renderCheckboxField({ name, field, isPending });
   }
 
   if (inputType === "select") {
-    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
-    return (
-      <Field>
-        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
-
-        <Select
-          name={name}
-          defaultValue={
-            field.defaultValue === null || field.defaultValue === undefined
-              ? undefined
-              : String(field.defaultValue)
-          }
-          required={field.required}
-          disabled={
-            // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- A non-pending field can still be read-only.
-            isPending || field.readOnly
-          }
-        >
-          <SelectTrigger id={name} className="w-full">
-            <SelectValue placeholder={field.placeholder} />
-          </SelectTrigger>
-
-          <SelectContent>
-            {field.options?.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <FieldError />
-      </Field>
-    );
-    /* oxlint-enable typescript/strict-boolean-expressions */
+    return renderSelectField({ name, field, isPending });
   }
 
   if (inputType === "combobox") {
-    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
-    return (
-      <Field>
-        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
-
-        <Combobox
-          items={field.options ?? []}
-          name={name}
-          defaultValue={
-            field.defaultValue === null || field.defaultValue === undefined
-              ? undefined
-              : String(field.defaultValue)
-          }
-          required={field.required}
-          disabled={
-            // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- A non-pending field can still be read-only.
-            isPending || field.readOnly
-          }
-        >
-          <ComboboxInput placeholder={field.placeholder} id={name} />
-
-          <ComboboxContent>
-            <ComboboxEmpty>No items found.</ComboboxEmpty>
-
-            <ComboboxList>
-              {(option) => (
-                <ComboboxItem key={option.value} value={option}>
-                  {option.label}
-                </ComboboxItem>
-              )}
-            </ComboboxList>
-          </ComboboxContent>
-        </Combobox>
-
-        <FieldError />
-      </Field>
-    );
-    /* oxlint-enable typescript/strict-boolean-expressions */
+    return renderComboboxField({ name, field, isPending });
   }
 
   if (inputType === "date" || inputType === "datetime") {

@@ -100,6 +100,7 @@ export const runManagedRuntimeEntry = async <Configuration>(
   const ownershipSignal = parentSignal
     ? AbortSignal.any([parentSignal, ownership.signal])
     : ownership.signal;
+  // react-doctor-disable-next-line react-doctor/path-traversal-risk -- The continuity adapter supplies the attempt directory through the owner-checked private handoff.
   const currentPath = path.join(parsed.rootDirectory, "current.json");
   await mkdir(parsed.rootDirectory, { mode: 0o700, recursive: true });
   await atomicMetadata(currentPath, {

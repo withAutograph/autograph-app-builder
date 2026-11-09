@@ -286,6 +286,7 @@ export function ConnectionDrawer({
   }
 
   return (
+    // react-doctor-disable-next-line react-doctor/no-noninteractive-element-interactions -- The native dialog handles Escape through onCancel and backdrop clicks through onMouseDown.
     <dialog
       ref={dialogRef}
       className={styles.drawerBackdrop}
@@ -349,14 +350,18 @@ export function ConnectionDrawer({
             </div>
           ) : (
             <div className={styles.configureFields}>
-              <label>
-                {accountLabel}
-                <button type="button" className={styles.accountSelect}>
+              <div className={styles.accountField}>
+                <span id="connection-account-label">{accountLabel}</span>
+                <button
+                  type="button"
+                  className={styles.accountSelect}
+                  aria-labelledby="connection-account-label connection-account-value"
+                >
                   <ConnectionIcon kind={connectionKind.get(flow.name)} name={flow.name} />
-                  Autograph
+                  <span id="connection-account-value">Autograph</span>
                   <ChevronDown size={16} aria-hidden="true" />
                 </button>
-              </label>
+              </div>
               <label>
                 <span>
                   Connection Name <em>*</em>

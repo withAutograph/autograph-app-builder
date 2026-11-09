@@ -42,6 +42,7 @@ export function AnonymousBrief({ onContinue }: { onContinue?: (brief: string) =>
   return (
     <>
       <div className={styles.promptField}>
+        {/* react-doctor-disable-next-line react-doctor/no-placeholder-only-field -- AnonymousBuilderShell supplies the visible label for this field. */}
         <textarea
           id="anonymous-brief"
           name="app-brief"

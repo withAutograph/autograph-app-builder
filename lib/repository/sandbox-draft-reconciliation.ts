@@ -1116,6 +1116,7 @@ export const prepareDraftReconciliation = async (
   const { sandbox } = input;
   const workspaceRoot = input.workspaceRoot ?? DEFAULT_WORKSPACE;
   const checkout = `${workspaceRoot}/repository`;
+  // react-doctor-disable-next-line react-doctor/git-provider-url-injection-risk -- verifyInputs checks both components; this URL is compared with the existing remote.
   const expectedRemote = `https://github.com/${input.repository.owner}/${input.repository.name}.git`;
   const remote = await checked(
     sandbox,

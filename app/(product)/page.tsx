@@ -86,12 +86,8 @@ async function currentUser() {
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function HomeContent({ searchParams }: PageProps) {
-  await connection();
-  const [query, user] = await Promise.all([searchParams, currentUser()]);
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
-  const mode = typeof query.mode === "string" ? query.mode : undefined;
+// eslint-disable-next-line eslint/func-style -- Keep the existing declaration style.
+function providerNotices(query: Awaited<PageProps["searchParams"]>): ProviderConnectionNotice[] {
   const notices: ProviderConnectionNotice[] = [];
   for (const provider of ["vercel", "github"] as const) {
     const status = query[provider];
@@ -111,26 +107,11 @@ async function HomeContent({ searchParams }: PageProps) {
         : {}),
     });
   }
-  if (
-    user.status === "workspace-setup-retry" ||
-    user.status === "workspace-ambiguous" ||
-    user.status === "access-denied"
-  ) {
-    return <WorkspaceOnboarding status={user.status} />;
-  }
+  return notices;
+}
 
-  const authenticated = user.status === "ready";
-  const resumeKey = parseProviderResumeKey(query.resume);
-  if (!authenticated || mode === "anonymous") {
-    return <AnonymousBuilder />;
-  }
-
-  const [connectionsEnabled, comingSoonEnabled, provisioningEnabled] = await Promise.all([
-    builderConnectionsFlag(),
-    builderComingSoonFlag(),
-    builderResourceProvisioningFlag(),
-  ]);
-
+// eslint-disable-next-line eslint/func-style -- Keep the existing declaration style.
+async function loadHomeDraft(resumeKey: ReturnType<typeof parseProviderResumeKey>) {
   /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   if (!resumeKey) {
     const pendingHandoff = await findAuthenticatedPendingBuilderHandoff({
@@ -154,6 +135,23 @@ async function HomeContent({ searchParams }: PageProps) {
         headers: await headers(),
       });
   /* oxlint-enable typescript/strict-boolean-expressions */
+  return durableDraft;
+}
+
+// eslint-disable-next-line eslint/func-style -- Keep the existing declaration style.
+async function loadAuthenticatedHomeData(
+  user: Extract<Awaited<ReturnType<typeof currentUser>>, { status: "ready" }>,
+  resumeKey: ReturnType<typeof parseProviderResumeKey>,
+) {
+  // oxlint-disable-next-line react-doctor/async-parallel -- Preserve flag resolution before draft lookup and its possible redirect.
+  const [connectionsEnabled, comingSoonEnabled, provisioningEnabled] = await Promise.all([
+    builderConnectionsFlag(),
+    builderComingSoonFlag(),
+    builderResourceProvisioningFlag(),
+  ]);
+
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Complete the draft lookup and any redirect before loading integrations.
+  const durableDraft = await loadHomeDraft(resumeKey);
   const integrations = await loadBuilderIntegrationState(
     {
       authenticated: true as const,
@@ -164,6 +162,32 @@ async function HomeContent({ searchParams }: PageProps) {
     },
     loadNextGatewayModels,
   );
+  return { connectionsEnabled, comingSoonEnabled, provisioningEnabled, durableDraft, integrations };
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+async function HomeContent({ searchParams }: PageProps) {
+  await connection();
+  const [query, user] = await Promise.all([searchParams, currentUser()]);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
+  const mode = typeof query.mode === "string" ? query.mode : undefined;
+  const notices = providerNotices(query);
+  if (
+    user.status === "workspace-setup-retry" ||
+    user.status === "workspace-ambiguous" ||
+    user.status === "access-denied"
+  ) {
+    return <WorkspaceOnboarding status={user.status} />;
+  }
+
+  const authenticated = user.status === "ready";
+  const resumeKey = parseProviderResumeKey(query.resume);
+  if (!authenticated || mode === "anonymous") {
+    return <AnonymousBuilder />;
+  }
+
+  const { connectionsEnabled, comingSoonEnabled, provisioningEnabled, durableDraft, integrations } =
+    await loadAuthenticatedHomeData(user, resumeKey);
 
   return (
     <div className={styles.appShell}>

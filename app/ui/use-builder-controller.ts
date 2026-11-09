@@ -55,6 +55,96 @@ function subscribeToClientSnapshot() {
   };
 }
 
+const createInitialBuilderForm = (
+  initialBrief: string,
+  generatedNameSeed: string,
+  initialDraft: BuilderDraft | undefined,
+  defaultModel: string,
+): BuilderForm => {
+  const effectiveInitialBrief = initialBrief.trim() ? initialBrief : defaultBrief;
+  const initialAppName =
+    appNameFromBrief(effectiveInitialBrief) || randomAppName(generatedNameSeed);
+  const initialForm: BuilderForm = initialDraft
+    ? {
+        ...initialDraft.form,
+        buildDestination: initialDraft.form.buildDestination ?? "codex",
+      }
+    : {
+        appName: initialAppName,
+        brief: effectiveInitialBrief,
+        buildDestination: "codex",
+        connections: [],
+        modelId: defaultModel,
+        privateRepository: true,
+        repository: repositoryNameFromAppName(initialAppName),
+      };
+  return initialForm;
+};
+
+const builderSubmissionAvailability = (
+  form: BuilderForm,
+  sourceUploadPending: boolean,
+  integrations: BuilderIntegrationState,
+  model: string,
+) => {
+  let validAppId = false;
+  try {
+    if (form.sourceCandidate === undefined) {
+      deriveBuilderAppId(form.appName);
+    }
+    validAppId = true;
+  } catch {
+    // Invalid app names simply keep submission disabled.
+  }
+  const canSubmit = Boolean(
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
+    !sourceUploadPending &&
+    form.brief.trim() &&
+    (!form.appName.trim() || validAppId) &&
+    (form.buildDestination !== "web" || (integrations.models.status === "ready" && model)),
+  );
+  let submitGuidance: string | undefined;
+  if (form.appName.trim() && !validAppId) {
+    submitGuidance = "Use an app name that can form a lowercase, URL-safe app ID.";
+  } else if (!form.brief.trim()) {
+    submitGuidance = "Add an app brief to continue.";
+  } else if (
+    form.buildDestination === "web" &&
+    (integrations.models.status !== "ready" || !model)
+  ) {
+    submitGuidance = "Choose an available model to continue.";
+  }
+  return { canSubmit, submitGuidance };
+};
+
+const initialVercelTeam = (
+  resumed: boolean,
+  draft: BuilderDraft | undefined,
+  options: { value: string }[],
+) => {
+  if (resumed) {
+    return options[0]?.value ?? "";
+  }
+  return draft?.team ?? options[0]?.value ?? "";
+};
+
+const initialGitScope = (
+  resumed: boolean,
+  draft: BuilderDraft | undefined,
+  options: { value: string }[],
+) => {
+  if (resumed) {
+    return options[0]?.value ?? "";
+  }
+  return draft?.gitScope ?? options[0]?.value ?? "";
+};
+
+const initialStorageProvider = (draft: BuilderDraft | undefined): StorageProvider | null =>
+  draft?.storageProvider === null ? null : "github";
+
+const initialDeploymentProvider = (draft: BuilderDraft | undefined): DeploymentProvider | null =>
+  draft?.deploymentProvider === "vercel" ? "vercel" : null;
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function useBuilderController({
   initialBrief,
@@ -104,23 +194,12 @@ export function useBuilderController({
     model.id === preferredModelId ? [{ detail: model.id, label: model.name, value: model.id }] : [],
   );
   const defaultModel = allModelOptions[0]?.value ?? "";
-  const effectiveInitialBrief = initialBrief.trim() ? initialBrief : defaultBrief;
-  const initialAppName =
-    appNameFromBrief(effectiveInitialBrief) || randomAppName(generatedNameSeed);
-  const initialForm: BuilderForm = initialDraft
-    ? {
-        ...initialDraft.form,
-        buildDestination: initialDraft.form.buildDestination ?? "codex",
-      }
-    : {
-        appName: initialAppName,
-        brief: effectiveInitialBrief,
-        buildDestination: "codex",
-        connections: [],
-        modelId: defaultModel,
-        privateRepository: true,
-        repository: repositoryNameFromAppName(initialAppName),
-      };
+  const initialForm = createInitialBuilderForm(
+    initialBrief,
+    generatedNameSeed,
+    initialDraft,
+    defaultModel,
+  );
   const builderForm = useForm<BuilderForm>({
     defaultValues: initialForm,
     mode: "onChange",
@@ -188,18 +267,14 @@ export function useBuilderController({
   const resumedGitHubConnection = providerNotices.some(
     (notice) => notice.provider === "github" && notice.status === "connected",
   );
-  const [team, setTeam] = useState(
-    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
-    resumedVercelConnection
-      ? (teamOptions[0]?.value ?? "")
-      : (initialDraft?.team ?? teamOptions[0]?.value ?? ""),
+  const selectedInitialTeam = initialVercelTeam(resumedVercelConnection, initialDraft, teamOptions);
+  const [team, setTeam] = useState(selectedInitialTeam);
+  const selectedInitialGitScope = initialGitScope(
+    resumedGitHubConnection,
+    initialDraft,
+    gitScopeOptions,
   );
-  const [gitScope, setGitScope] = useState(
-    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
-    resumedGitHubConnection
-      ? (gitScopeOptions[0]?.value ?? "")
-      : (initialDraft?.gitScope ?? gitScopeOptions[0]?.value ?? ""),
-  );
+  const [gitScope, setGitScope] = useState(selectedInitialGitScope);
   const [model, setModel] = useState(defaultModel);
   const [zdrOnly, setZdrOnly] = useState(initialDraft?.zdrOnly ?? false);
   const [showMoreConnections, setShowMoreConnections] = useState(
@@ -219,11 +294,13 @@ export function useBuilderController({
   const [connectedConnections, setConnectedConnections] = useState<string[]>(
     initialDraft?.connectedConnections ?? [],
   );
+  const selectedInitialStorageProvider = initialStorageProvider(initialDraft);
   const [storageProvider, setStorageProvider] = useState<StorageProvider | null>(
-    initialDraft?.storageProvider === null ? null : "github",
+    selectedInitialStorageProvider,
   );
+  const selectedInitialDeploymentProvider = initialDeploymentProvider(initialDraft);
   const [deploymentProvider, setDeploymentProvider] = useState<DeploymentProvider | null>(
-    initialDraft?.deploymentProvider === "vercel" ? "vercel" : null,
+    selectedInitialDeploymentProvider,
   );
   const draftRevision = useRef(durableDraftRevision);
   const draftUpdatedAt = useRef(durableDraftUpdatedAt);
@@ -560,33 +637,12 @@ export function useBuilderController({
       )
     : allModelOptions;
   const [sourceUploadPending, setSourceUploadPending] = useState(false);
-  let validAppId = false;
-  try {
-    if (form.sourceCandidate === undefined) {
-      deriveBuilderAppId(form.appName);
-    }
-    validAppId = true;
-  } catch {
-    // Invalid app names simply keep submission disabled.
-  }
-  const canSubmit = Boolean(
-    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
-    !sourceUploadPending &&
-    form.brief.trim() &&
-    (!form.appName.trim() || validAppId) &&
-    (form.buildDestination !== "web" || (integrations.models.status === "ready" && model)),
+  const { canSubmit, submitGuidance } = builderSubmissionAvailability(
+    form,
+    sourceUploadPending,
+    integrations,
+    model,
   );
-  let submitGuidance: string | undefined;
-  if (form.appName.trim() && !validAppId) {
-    submitGuidance = "Use an app name that can form a lowercase, URL-safe app ID.";
-  } else if (!form.brief.trim()) {
-    submitGuidance = "Add an app brief to continue.";
-  } else if (
-    form.buildDestination === "web" &&
-    (integrations.models.status !== "ready" || !model)
-  ) {
-    submitGuidance = "Choose an available model to continue.";
-  }
   const updateBrief = (brief: string) => {
     setForm((current) => {
       // `formSnapshot` is updated atomically by every builder field handler.

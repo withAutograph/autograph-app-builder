@@ -43,6 +43,14 @@ function validateResource(resource: string) {
   });
 }
 
+const hasRequiredScopes = (allowedScopes: string[] | null | undefined) => {
+  if (allowedScopes === null || allowedScopes === undefined) {
+    return false;
+  }
+  const allowed = new Set(allowedScopes);
+  return previewOAuthScopes.every((scope) => allowed.has(scope));
+};
+
 /** Read only. Errors propagate so unavailable storage cannot expose an install link. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function isCursorClientReady(database: Reader, resource: string): Promise<boolean> {
@@ -63,12 +71,11 @@ export async function isCursorClientReady(database: Reader, resource: string): P
     const actual = client[key];
     const value = expected[key];
     if (Array.isArray(value)) {
-      if (
-        !Array.isArray(actual) ||
-        actual.length !== value.length ||
-        // oxlint-disable-next-line react-doctor/js-set-map-lookups -- Compare the small registration arrays as supplied.
-        !value.every((entry) => actual.includes(entry))
-      ) {
+      if (!Array.isArray(actual) || actual.length !== value.length) {
+        return false;
+      }
+      const actualValues = new Set(actual);
+      if (!value.every((entry) => actualValues.has(entry))) {
         return false;
       }
     } else if (actual !== value) {
@@ -87,11 +94,7 @@ export async function isCursorClientReady(database: Reader, resource: string): P
     .from(oauthResource)
     .where(and(eq(oauthResource.identifier, resource), eq(oauthResource.disabled, false)))
     .limit(1);
-  return (
-    target !== undefined &&
-    // oxlint-disable-next-line react-doctor/js-set-map-lookups -- Preserve the returned scope list's membership behavior.
-    previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope) ?? false)
-  );
+  return target !== undefined && hasRequiredScopes(target.allowedScopes);
 }
 
 /** Explicit deployment operation. Never invoke from request handlers or readiness checks. */
@@ -105,12 +108,7 @@ export async function setupCursorClient(database: Database, resource: string) {
       .where(eq(oauthResource.identifier, resource))
       .limit(1);
     /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
-    if (
-      !target ||
-      target.disabled ||
-      // oxlint-disable-next-line react-doctor/js-set-map-lookups -- Preserve the returned scope list's membership behavior.
-      !previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope) ?? false)
-    ) {
+    if (!target || target.disabled || !hasRequiredScopes(target.allowedScopes)) {
       throw new Error("Initialize the OAuth resource before registering Cursor.");
     }
     /* oxlint-enable typescript/strict-boolean-expressions */

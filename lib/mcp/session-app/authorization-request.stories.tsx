@@ -4,6 +4,8 @@ import { authorizationRequest } from "@/.storybook/create-app/mcp-fixtures";
 import { McpBlockStoryLayout } from "@/.storybook/create-app/layouts";
 import { AuthorizationControl } from "./view";
 
+const continueWithGitHub = "Continue with GitHub";
+
 const meta = {
   args: {
     canOpen: true,
@@ -55,14 +57,22 @@ export const CodeOnly: Story = {
     },
   },
 };
-export const UnsupportedLink: Story = { args: { canOpen: false } };
+export const UnsupportedLink: Story = {
+  args: { canOpen: false },
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("button", { name: continueWithGitHub })).toBeDisabled();
+    await expect(canvas.getByText("Open the authorization link from chat.")).toBeVisible();
+    await expect(args.onOpenLink).not.toHaveBeenCalled();
+  },
+};
 export const ContinueWithGitHub: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByText("Connect GitHub", { selector: "strong" })).toBeVisible();
     await expect(canvas.getByText(/withAutograph\/app-builder-dogfood/u)).toBeVisible();
     await expect(canvas.getAllByRole("button")).toHaveLength(1);
-    await userEvent.click(canvas.getByRole("button", { name: "Continue with GitHub" }));
+    await userEvent.click(canvas.getByRole("button", { name: continueWithGitHub }));
     await expect(args.onOpenLink).toHaveBeenCalledWith(
       "https://builder.example.test/github/installations?continuation=opaque",
     );
@@ -80,7 +90,7 @@ export const ActionableFailure: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole("button", { name: "Continue with GitHub" }));
+    await userEvent.click(canvas.getByRole("button", { name: continueWithGitHub }));
     await expect(
       await canvas.findByText("The GitHub page could not be opened. Try again."),
     ).toBeVisible();

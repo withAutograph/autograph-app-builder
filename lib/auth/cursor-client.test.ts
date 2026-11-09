@@ -119,6 +119,37 @@ describe("dedicated Cursor deployment registration", () => {
     expect(rows.get(oauthClientResource)).toEqual([]);
   });
 
+  it("preserves duplicate registration and nullable resource scope behavior", async () => {
+    const { database, rows, insert } = storage();
+    rows.set(oauthClient, [
+      { ...cursorClientRegistration(), grantTypes: ["authorization_code", "authorization_code"] },
+    ]);
+    rows.set(oauthClientResource, [{ clientId: cursorClientId, resourceId: resource }]);
+    expect(await isCursorClientReady(database, resource)).toBe(false);
+
+    rows.set(oauthClient, [cursorClientRegistration()]);
+    const expectUnavailableScopes = async (allowedScopes?: string[] | null) => {
+      rows.set(oauthResource, [{ allowedScopes, disabled: false, identifier: resource }]);
+      expect(await isCursorClientReady(database, resource)).toBe(false);
+      insert.mockClear();
+      await expect(setupCursorClient(database, resource)).rejects.toThrow("Initialize");
+      expect(insert).not.toHaveBeenCalled();
+    };
+    await expectUnavailableScopes(null);
+    await expectUnavailableScopes();
+    await expectUnavailableScopes([]);
+
+    rows.set(oauthResource, [
+      {
+        allowedScopes: [...previewOAuthScopes, previewOAuthScopes[0]],
+        disabled: false,
+        identifier: resource,
+      },
+    ]);
+    expect(await isCursorClientReady(database, resource)).toBe(true);
+    await expect(setupCursorClient(database, resource)).resolves.toMatchObject({ ready: true });
+  });
+
   it("requires initialized resources and rejects a foreign resource binding", async () => {
     const { database, rows, insert } = storage();
     rows.set(oauthResource, []);

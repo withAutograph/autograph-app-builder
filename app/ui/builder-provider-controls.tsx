@@ -118,6 +118,111 @@ export function DeployToSection({
   );
 }
 
+const GitHubStoragePanel = ({
+  connected,
+  gitScope,
+  gitScopeOptions,
+  actionLabel,
+  onConnect,
+  onGitScopeChange,
+  onPrivacyChange,
+  onRepositoryChange,
+  privateRepository,
+  repository,
+}: {
+  connected: boolean;
+  gitScope: string;
+  gitScopeOptions: ComboOption[];
+  actionLabel: string;
+  onConnect: () => void;
+  onGitScopeChange: (value: string) => void;
+  onPrivacyChange: (value: boolean) => void;
+  onRepositoryChange: (value: string) => void;
+  privateRepository: boolean;
+  repository: string;
+}) => (
+  <div className={styles.providerPanel} id="storage-provider-github">
+    <div className={styles.repoScope}>
+      <div className={`${styles.repoRow} ${gitScope ? styles.repoRowWithRepository : ""}`}>
+        <div className={styles.integrationField}>
+          <span className={styles.fieldLabel}>
+            Git Scope <small aria-hidden="true">Optional</small>
+          </span>
+          {connected ? (
+            <SearchCombobox
+              label="Git Scope"
+              value={gitScope}
+              options={gitScopeOptions}
+              onChange={onGitScopeChange}
+              inputId="git-scope"
+              prefix={<FaGithub size={16} />}
+              optionIcon={() => <FaGithub size={16} />}
+              footerIcon={<Plus size={21} />}
+              menuFooter={{
+                label: actionLabel,
+                value: "add-github",
+              }}
+              onFooterSelect={onConnect}
+            />
+          ) : (
+            <button
+              className={styles.connectProvider}
+              type="button"
+              id="git-scope"
+              onClick={onConnect}
+            >
+              {actionLabel}
+            </button>
+          )}
+        </div>
+        {gitScope ? (
+          <>
+            <span className={styles.slash} aria-hidden="true">
+              /
+            </span>
+            <div className={styles.repoLabel}>
+              <label className={styles.fieldLabel} htmlFor="repository-name">
+                {privateRepository ? "Private" : "Public"} Repository Name{" "}
+                <small aria-hidden="true">Optional</small>
+              </label>
+              <div className={styles.lockedInput}>
+                <input
+                  id="repository-name"
+                  name="repository-name"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={repository}
+                  onChange={(event) =>
+                    // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+                    onRepositoryChange(event.target.value)
+                  }
+                  placeholder="my-app"
+                />
+                <label className={styles.privacyToggle} aria-label="Private repository">
+                  <input
+                    type="checkbox"
+                    checked={privateRepository}
+                    onChange={(event) =>
+                      // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+                      onPrivacyChange(event.target.checked)
+                    }
+                  />
+                  <span>
+                    <i>{privateRepository ? <FaLock size={11} /> : <FaLockOpen size={12} />}</i>
+                  </span>
+                  <em role="tooltip">
+                    This repository will be {privateRepository ? "private" : "public"}.
+                  </em>
+                </label>
+              </div>
+            </div>
+          </>
+        ) : null}
+      </div>
+    </div>
+  </div>
+);
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function StoreInSection({
   bare = false,
@@ -180,88 +285,18 @@ export function StoreInSection({
       onChange={onProviderChange}
     >
       {selected === "github" && available ? (
-        <div className={styles.providerPanel} id="storage-provider-github">
-          <div className={styles.repoScope}>
-            <div className={`${styles.repoRow} ${gitScope ? styles.repoRowWithRepository : ""}`}>
-              <div className={styles.integrationField}>
-                <span className={styles.fieldLabel}>
-                  Git Scope <small aria-hidden="true">Optional</small>
-                </span>
-                {connected ? (
-                  <SearchCombobox
-                    label="Git Scope"
-                    value={gitScope}
-                    options={gitScopeOptions}
-                    onChange={onGitScopeChange}
-                    inputId="git-scope"
-                    prefix={<FaGithub size={16} />}
-                    optionIcon={() => <FaGithub size={16} />}
-                    footerIcon={<Plus size={21} />}
-                    menuFooter={{
-                      label: githubView.actionLabel,
-                      value: "add-github",
-                    }}
-                    onFooterSelect={onConnect}
-                  />
-                ) : (
-                  <button
-                    className={styles.connectProvider}
-                    type="button"
-                    id="git-scope"
-                    onClick={onConnect}
-                  >
-                    {githubView.actionLabel}
-                  </button>
-                )}
-              </div>
-              {gitScope ? (
-                <>
-                  <span className={styles.slash} aria-hidden="true">
-                    /
-                  </span>
-                  <div className={styles.repoLabel}>
-                    <span className={styles.fieldLabel}>
-                      {privateRepository ? "Private" : "Public"} Repository Name{" "}
-                      <small aria-hidden="true">Optional</small>
-                    </span>
-                    <div className={styles.lockedInput}>
-                      <input
-                        id="repository-name"
-                        name="repository-name"
-                        autoComplete="off"
-                        spellCheck={false}
-                        value={repository}
-                        onChange={(event) =>
-                          // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
-                          onRepositoryChange(event.target.value)
-                        }
-                        placeholder="my-app"
-                      />
-                      <label className={styles.privacyToggle} aria-label="Private repository">
-                        <input
-                          type="checkbox"
-                          checked={privateRepository}
-                          onChange={(event) =>
-                            // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
-                            onPrivacyChange(event.target.checked)
-                          }
-                        />
-                        <span>
-                          <i>
-                            {privateRepository ? <FaLock size={11} /> : <FaLockOpen size={12} />}
-                          </i>
-                        </span>
-                        <em role="tooltip">
-                          This repository will be {privateRepository ? "private" : "public"}.
-                        </em>
-                      </label>
-                    </div>
-                  </div>
-                </>
-              ) : null}
-            </div>
-          </div>
-        </div>
+        <GitHubStoragePanel
+          connected={connected}
+          gitScope={gitScope}
+          gitScopeOptions={gitScopeOptions}
+          actionLabel={githubView.actionLabel}
+          onConnect={onConnect}
+          onGitScopeChange={onGitScopeChange}
+          onPrivacyChange={onPrivacyChange}
+          onRepositoryChange={onRepositoryChange}
+          privateRepository={privateRepository}
+          repository={repository}
+        />
       ) : null}
     </ProviderChoiceSection>
   );

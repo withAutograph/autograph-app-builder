@@ -8,6 +8,7 @@ import type { DayButton, Locale } from "react-day-picker";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
+import { useHydrated } from "@/components/ui/use-hydrated";
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from "lucide-react";
 
 const CalendarDayButton = ({
@@ -18,6 +19,7 @@ const CalendarDayButton = ({
   ...props
 }: ComponentProps<typeof DayButton> & { locale?: Partial<Locale> }) => {
   const defaultClassNames = getDefaultClassNames();
+  const hydrated = useHydrated();
 
   const ref = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -30,7 +32,10 @@ const CalendarDayButton = ({
     <Button
       variant="ghost"
       size="icon"
-      data-day={day.date.toLocaleDateString(locale?.code)}
+      data-day={
+        // react-doctor-disable-next-line react-doctor/no-locale-format-in-render -- This branch runs only after the browser has hydrated.
+        hydrated ? day.date.toLocaleDateString(locale?.code) : undefined
+      }
       data-selected-single={
         modifiers.selected &&
         !modifiers.range_start &&
@@ -64,6 +69,7 @@ const Calendar = ({
   buttonVariant?: ComponentProps<typeof Button>["variant"];
 }) => {
   const defaultClassNames = getDefaultClassNames();
+  const hydrated = useHydrated();
 
   /* oxlint-disable typescript/strict-boolean-expressions -- Preserve false and nullish truthiness. */
   return (
@@ -78,7 +84,10 @@ const Calendar = ({
       captionLayout={captionLayout}
       locale={locale}
       formatters={{
-        formatMonthDropdown: (date) => date.toLocaleString(locale?.code, { month: "short" }),
+        formatMonthDropdown: (date) =>
+          hydrated
+            ? date.toLocaleString(locale?.code, { month: "short" })
+            : String(date.getMonth() + 1),
         ...formatters,
       }}
       classNames={{

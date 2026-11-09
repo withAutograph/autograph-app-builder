@@ -21,6 +21,7 @@ export const publicReleaseClientForContext = async (ctx: WorkflowStepToolContext
   if (endpointValue === undefined || endpointValue === "") {
     throw new Error("protected_operator_required");
   }
+  // react-doctor-disable-next-line react-doctor/no-unguarded-throwing-parse-call -- Invalid operator configuration must fail before any protected request.
   const endpoint = new URL(endpointValue);
   if (
     ![

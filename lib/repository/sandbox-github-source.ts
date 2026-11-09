@@ -703,6 +703,7 @@ export const inspectGitHubSourceSandboxWorkspace =
     // discovery for the next repository command, not a second authorization
     // boundary over source shape, file modes, receipts, or normal edits.
     const snapshot = await readSandboxGitHubSourceSnapshot(input.sandbox, {
+      // react-doctor-disable-next-line react-doctor/git-provider-url-injection-risk -- The snapshot reader validates the remote before checkout comparison or selection.
       repository: `https://github.com/${input.githubSource.repository.owner}/${input.githubSource.repository.name}.git`,
     });
     const workspaceDigest = createHash("sha256")

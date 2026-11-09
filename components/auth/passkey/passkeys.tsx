@@ -3,7 +3,7 @@
 import type { PasskeyAuthClient } from "@better-auth-ui/core/plugins/passkey";
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react";
 import { useListPasskeys } from "@better-auth-ui/react/plugins/passkey";
-import { Fragment, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,10 +37,10 @@ export function Passkeys({ className }: PasskeysProps) {
     passkeyContent = (
       <ItemGroup className="gap-0">
         {passkeys.map((passkey, index) => (
-          <Fragment key={passkey.id}>
+          <li key={passkey.id}>
             {index > 0 && <ItemSeparator />}
             <Passkey passkey={passkey} />
-          </Fragment>
+          </li>
         ))}
       </ItemGroup>
     );

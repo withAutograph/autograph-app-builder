@@ -50,10 +50,12 @@ export function AppDetailsSection({
           placeholder="support-app"
         />
       </label>
-      <label htmlFor="app-brief">
-        <span className={styles.fieldLabel}>
-          App Brief <small aria-hidden="true">Required</small>
-        </span>
+      <div className={styles.briefControl}>
+        <label htmlFor="app-brief">
+          <span className={styles.fieldLabel}>
+            App Brief <small aria-hidden="true">Required</small>
+          </span>
+        </label>
         <div className={styles.briefField}>
           <textarea
             id="app-brief"
@@ -71,7 +73,7 @@ export function AppDetailsSection({
             <RefreshCw size={16} aria-hidden="true" />
           </button>
         </div>
-      </label>
+      </div>
       <p className={styles.helpText}>
         Define this app’s users, workflow, constraints, and desired outcome.{" "}
         <Link href="/docs">Read the App Builder docs</Link>.

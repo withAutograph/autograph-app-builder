@@ -20,6 +20,7 @@ export function serializeAuthPageSearchParams(searchParams: AuthPageSearchParams
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function resolveAuthCallbackURL(defaultURL: string, search: string, sameOrigin?: string) {
+  // react-doctor-disable-next-line react-doctor/url-prefilled-privileged-action -- The callback is restricted below to safe root-relative or same-origin paths.
   const callbackURL = new URLSearchParams(search).get("callbackURL");
   if (callbackURL === null || callbackURL === "") {
     return defaultURL;
@@ -29,7 +30,7 @@ export function resolveAuthCallbackURL(defaultURL: string, search: string, sameO
     const parsed = new URL(callbackURL, "https://autograph.invalid");
     const isRootRelative = callbackURL.startsWith("/") && !callbackURL.startsWith("//");
     const isSameOriginAbsolute = sameOrigin !== undefined && parsed.origin === sameOrigin;
-    if (!isRootRelative && !isSameOriginAbsolute) {
+    if ((!isRootRelative && !isSameOriginAbsolute) || parsed.pathname.startsWith("//")) {
       return defaultURL;
     }
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
