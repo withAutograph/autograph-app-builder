@@ -22,7 +22,10 @@ export const retainRepositoryProductionApproval = async (input: {
   store: RepositoryProductionStore;
   /** Authorizes the newly observed human approval while retaining the ordinary physical app lease. */
   withLease: RepositoryProductionSetupPorts["withLease"];
-  assertNoPendingAccess: (scope: RepositoryProductionScope) => Promise<void>;
+  assertNoPendingAccess: (
+    scope: RepositoryProductionScope,
+    assertFence: () => Promise<void>,
+  ) => Promise<void>;
 }) => {
   if (input.approval.planDigest !== repositoryProductionApprovalDigest(input.scope, input.intent)) {
     throw new Error("repository_production_approval_required");
@@ -46,7 +49,7 @@ export const retainRepositoryProductionApproval = async (input: {
       }
     }
     if (changedEffects || row.record.approval?.planDigest !== input.approval.planDigest) {
-      await input.assertNoPendingAccess(input.scope);
+      await input.assertNoPendingAccess(input.scope, assertCurrent);
     }
     await assertCurrent();
     const saved = await input.store.compareAndSet(row, {

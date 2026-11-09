@@ -166,6 +166,39 @@ export const assertNoConflictingProductionSetup = (input: {
   throw new AppAccessError("app_access_unknown");
 };
 
+/** Optional signup observation runs only while this continuation holds the physical app lease. */
+export const createRepositoryProductionSignupLeaseGuard = (
+  observe: (
+    scope: RepositoryProductionScope,
+    intent: RepositoryProductionIntent | undefined,
+    assertFence: () => Promise<void>,
+  ) => Promise<void>,
+) => {
+  let heldFence: (() => Promise<void>) | undefined;
+  return {
+    assertNoPending: async (
+      scope: RepositoryProductionScope,
+      intent?: RepositoryProductionIntent,
+    ) => {
+      if (heldFence !== undefined) {
+        await observe(scope, intent, heldFence);
+      }
+    },
+    run: async <T>(
+      assertFence: () => Promise<void>,
+      run: (fence: () => Promise<void>) => Promise<T>,
+    ) => {
+      const previous = heldFence;
+      heldFence = assertFence;
+      try {
+        return await run(assertFence);
+      } finally {
+        heldFence = previous;
+      }
+    },
+  };
+};
+
 /** Setup locks authorize the requested approved revision before its journal intent is advanced. */
 export const createRepositoryProductionIntentBoundSetup = (
   ports: Omit<RepositoryProductionSetupPorts, "withLease">,
@@ -615,13 +648,18 @@ export const createRepositoryProductionNativeHandler =
         );
         return z.object({ result: z.unknown() }).parse(response).result;
       };
-      const setup = (scope: RepositoryProductionScope, held?: () => Promise<void>) =>
-        createRepositoryProductionIntentBoundSetup(
+      const setup = (scope: RepositoryProductionScope, held?: () => Promise<void>) => {
+        const signupGuard = createRepositoryProductionSignupLeaseGuard(
+          async (target, intent, assertFence) => {
+            await signup.assertNoPending(target, intent, undefined, assertFence);
+          },
+        );
+        return createRepositoryProductionIntentBoundSetup(
           {
             store,
             assertAuthorized: async (target, intent) => {
               await assertAuthorized(target, intent);
-              await signup.assertNoPending(target, intent);
+              await signupGuard.assertNoPending(target, intent);
             },
             ...workers(scope),
             // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
@@ -653,9 +691,13 @@ export const createRepositoryProductionNativeHandler =
                   .parse(await authRequest(context, { action: listMembersAction }, true)),
             }),
           },
-          async (target, intent, run) =>
-            held ? await run(held) : await withLease(target, run, intent),
+          async (target, intent, run) => {
+            const underLease = async (assertFence: () => Promise<void>) =>
+              await signupGuard.run(assertFence, run);
+            return held ? await underLease(held) : await withLease(target, underLease, intent);
+          },
         );
+      };
       const creator = createRepositoryProductionCreator({
         builderOrigin,
         realmDigest: (scope) => {
@@ -807,13 +849,28 @@ export const createRepositoryProductionNativeHandler =
         command?: AppAccessCommand,
         roleUpdate = false,
         automaticCompletion = false,
-      ) =>
-        createRepositoryProductionManagement({
+      ) => {
+        const signupGuard = createRepositoryProductionSignupLeaseGuard(
+          async (scope, intent, assertFence) => {
+            await signup.assertNoPending(
+              scope,
+              intent,
+              command?.action === "remove" ? { cancelActorId: command.memberId } : undefined,
+              assertFence,
+            );
+          },
+        );
+        return createRepositoryProductionManagement({
           builderOrigin,
           journal: accessJournal,
-          withLease: held
-            ? async (_scope, run) => await run(held)
-            : async (scope, run) => await withLease(scope, run, undefined, automaticCompletion),
+          cancelPendingSignup: async (input) => await signup.cancel(input),
+          withLease: async (scope, run) => {
+            const underLease = async (assertFence: () => Promise<void>) =>
+              await signupGuard.run(assertFence, run);
+            return held
+              ? await underLease(held)
+              : await withLease(scope, underLease, undefined, automaticCompletion);
+          },
           readSetup: store.read,
           workers,
           realm,
@@ -893,7 +950,7 @@ export const createRepositoryProductionNativeHandler =
               throw new Error("repository_production_scope_denied");
             }
             if (mutating && !roleUpdate) {
-              await signup.assertNoPending(scope);
+              await signupGuard.assertNoPending(scope);
               const row = await store.read(scope);
               const commandId = command?.clientRequestId;
               const pendingCommandIds = (await accessJournal.pending(scope)).map(
@@ -982,6 +1039,7 @@ export const createRepositoryProductionNativeHandler =
             );
           },
         });
+      };
       const management = managementFor();
       const selectCreatorEmail = async (
         found: Awaited<ReturnType<typeof resolve>>,
@@ -1088,8 +1146,8 @@ export const createRepositoryProductionNativeHandler =
             ownerContext: owner.ownerContext,
             approval,
             store,
-            assertNoPendingAccess: async (scope) => {
-              await signup.assertNoPending(scope);
+            assertNoPendingAccess: async (scope, assertFence) => {
+              await signup.assertNoPending(scope, undefined, undefined, assertFence);
               const pending = await accessJournal.pending(scope);
               if (pending.length > 0) {
                 throw new Error("repository_production_access_reconciliation_required");

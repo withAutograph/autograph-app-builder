@@ -59,7 +59,9 @@ export const resolveRepositoryProductionSignupIntent = (
     description.backend.kind === "generated-postgres" ? description.backend.roles : [],
   );
   if (
-    (description.backend.kind === "generated-postgres" && access.appRoles.length === 0) ||
+    (description.backend.kind === "generated-postgres" &&
+      catalog.size > 0 &&
+      access.appRoles.length === 0) ||
     access.appRoles.some((role) => !catalog.has(role))
   ) {
     throw new Error("repository_production_signup_roles_unavailable");

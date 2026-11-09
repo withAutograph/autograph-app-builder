@@ -269,6 +269,15 @@ describe("Production signup policy", () => {
     expect(() =>
       resolveRepositoryProductionSignupIntent({ access: { ...access, appRoles: [] } }, generated),
     ).toThrow("roles_unavailable");
+    if (generated.backend.kind !== "generated-postgres") {
+      throw new Error("Expected a generated PostgreSQL app");
+    }
+    expect(
+      resolveRepositoryProductionSignupIntent(
+        { access: { ...access, appRoles: [] } },
+        { ...generated, backend: { ...generated.backend, roles: [] } },
+      ),
+    ).toEqual({ access: { ...access, appRoles: [] }, entryPath: "/requests" });
     expect(
       resolveRepositoryProductionSignupIntent(
         { access },

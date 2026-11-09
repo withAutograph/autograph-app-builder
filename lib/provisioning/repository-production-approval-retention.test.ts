@@ -96,12 +96,15 @@ const fixture = () => {
       return row;
     },
   );
-  const assertNoPendingAccess = vi.fn(async () => {
-    expect(held).toBe(true);
-    if (unresolvedGrant) {
-      throw new Error("signup_reconciliation_required");
-    }
-  });
+  const assertNoPendingAccess = vi.fn(
+    async (_scope: RepositoryProductionScope, assertFence: () => Promise<void>) => {
+      expect(held).toBe(true);
+      await assertFence();
+      if (unresolvedGrant) {
+        throw new Error("signup_reconciliation_required");
+      }
+    },
+  );
   const retain = async (intent = nextIntent) => {
     await retainRepositoryProductionApproval({
       scope,
@@ -168,6 +171,20 @@ describe("Production approval retention", () => {
     await test.retain();
     expect(test.row().record.approval).toEqual(approval(nextIntent));
     expect(test.row().record.intent).toEqual(originalIntent);
+  });
+  it("passes the current physical fence into the pending-signup observer before retaining approval", async () => {
+    const test = fixture();
+    let observed = false;
+    test.assertNoPendingAccess.mockImplementationOnce(async (_scope, assertFence) => {
+      await assertFence();
+      observed = true;
+      test.revoke();
+      await assertFence();
+    });
+    await expect(test.retain()).rejects.toThrow("authorization_required");
+    expect(observed).toBe(true);
+    expect(test.compareAndSet).not.toHaveBeenCalled();
+    expect(test.row().record.approval).toEqual(approval(originalIntent));
   });
   it("preserves the original approval when current owner or lease authority is lost", async () => {
     const test = fixture();

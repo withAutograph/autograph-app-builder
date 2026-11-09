@@ -218,8 +218,12 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       roles: string[];
       active: boolean;
       signupClaim?: { policyId: string; claimId: string; scopeDigest: string };
+      signupGrantReadback?: { operationRef: string; fenceGeneration: number };
     },
   ) => {
+    if (managedAccess?.signupGrantReadback && (!readOnly || !managedAccess.signupClaim)) {
+      throw new Error("repository_production_signup_readback_only");
+    }
     await assertCurrent(context);
     const { row } = context;
     const { scope, intent, resource, lease } = row.record;
@@ -307,12 +311,16 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     const planWithMembership: typeof planStart & {
       authMembership?: typeof membership;
       signupClaim?: NonNullable<typeof managedAccess>["signupClaim"];
+      signupGrantReadback?: NonNullable<typeof managedAccess>["signupGrantReadback"];
     } = planStart;
     if (membership !== undefined) {
       planWithMembership.authMembership = membership;
     }
     if (managedAccess?.signupClaim !== undefined) {
       planWithMembership.signupClaim = managedAccess.signupClaim;
+    }
+    if (managedAccess?.signupGrantReadback !== undefined) {
+      planWithMembership.signupGrantReadback = managedAccess.signupGrantReadback;
     }
     const plan = {
       ...planWithMembership,
@@ -627,6 +635,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
         roles: string[];
         active: boolean;
         signupClaim?: { policyId: string; claimId: string; scopeDigest: string };
+        signupGrantReadback?: { operationRef: string; fenceGeneration: number };
       },
     ) {
       return observe(await run(context, "access", true, access));

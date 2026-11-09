@@ -19,6 +19,10 @@ import type {
 import type { createRepositoryProductionWorkers } from "./repository-production-workers";
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
+const recordedGrant = z.strictObject({
+  operationRef: z.uuid(),
+  fenceGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+});
 export const repositoryProductionSignupClaimSchema = z.object({
   id: z.uuid(),
   policyId: z.uuid(),
@@ -36,19 +40,54 @@ export const repositoryProductionSignupClaimSchema = z.object({
   expiresAt: z.iso.datetime({ offset: true }),
   accessState: z.enum(["absent", "active", "revoked", "changed"]),
   memberPrepared: z.boolean(),
+  grantReserved: z.boolean().optional(),
+  recordedGrant: recordedGrant.optional(),
+  accessRevocation: z
+    .strictObject({ fenceGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER) })
+    .optional(),
 });
 export type RepositoryProductionSignupClaim = z.infer<typeof repositoryProductionSignupClaimSchema>;
+const retainedClaim = repositoryProductionSignupClaimSchema.omit({
+  status: true,
+  accessState: true,
+  memberPrepared: true,
+  grantReserved: true,
+  recordedGrant: true,
+  accessRevocation: true,
+});
+const signupStage = z.enum([
+  "registered",
+  "prepared",
+  "grant-pending",
+  "granted",
+  "applied",
+  "cancel-pending",
+  "rejected",
+]);
 export const repositoryProductionSignupRecordSchema = z.strictObject({
   version: z.literal(1),
   kind: z.literal("repository-production-signup-v1"),
   scope: repositoryProductionScopeSchema,
-  claim: repositoryProductionSignupClaimSchema.omit({
-    status: true,
-    accessState: true,
-    memberPrepared: true,
-  }),
-  stage: z.enum(["registered", "prepared", "grant-pending", "granted", "applied", "rejected"]),
+  claim: retainedClaim,
+  stage: signupStage,
   workerCheckpoints: z.array(z.json()),
+  cancellation: z
+    .strictObject({
+      operationRef: z.uuid(),
+      actorId: z.string().min(1),
+      scopeDigest: hash,
+      roles: z.array(z.string()),
+    })
+    .optional(),
+  renewals: z
+    .array(
+      z.strictObject({
+        claim: retainedClaim,
+        stage: signupStage,
+        workerCheckpoints: z.array(z.json()),
+      }),
+    )
+    .optional(),
 });
 export type RepositoryProductionSignupRecord = z.infer<
   typeof repositoryProductionSignupRecordSchema
@@ -67,6 +106,10 @@ export interface RepositoryProductionSignupStore {
   compareAndSet: (
     row: RepositoryProductionSignupRow,
     record: RepositoryProductionSignupRecord,
+  ) => Promise<RepositoryProductionSignupRow | undefined>;
+  renew: (
+    row: RepositoryProductionSignupRow,
+    claim: RepositoryProductionSignupClaim,
   ) => Promise<RepositoryProductionSignupRow | undefined>;
   pending: (scope: RepositoryProductionScope) => Promise<RepositoryProductionSignupRow[]>;
 }
@@ -102,6 +145,78 @@ const immutableClaim = (claim: RepositoryProductionSignupClaim) =>
 const denied = () => new AppAccessError("app_access_denied");
 const unusable = (claim: RepositoryProductionSignupClaim) =>
   claim.status === "rejected" || claim.accessState === "revoked" || claim.accessState === "changed";
+const claimIdentity = (claim: RepositoryProductionSignupRecord["claim"]) => ({
+  id: claim.id,
+  policyId: claim.policyId,
+  workspaceId: claim.workspaceId,
+  resourceDigest: claim.resourceDigest,
+  appId: claim.appId,
+  organizationId: claim.organizationId,
+  actorId: claim.actorId,
+});
+/** Older worker responses cannot prove that no protected grant was reserved. */
+export const repositoryProductionSignupNeverGranted = (claim: RepositoryProductionSignupClaim) =>
+  claim.grantReserved === false && claim.accessState === "absent";
+export const repositoryProductionSignupCanRenew = (
+  record: RepositoryProductionSignupRecord,
+  claim: RepositoryProductionSignupClaim,
+) => {
+  if (record.cancellation !== undefined) {
+    return false;
+  }
+  if (
+    claim.status !== "verified" ||
+    !repositoryProductionSignupNeverGranted(claim) ||
+    record.stage === "granted" ||
+    record.stage === "applied"
+  ) {
+    return false;
+  }
+  if (
+    !isDeepStrictEqual(claimIdentity(record.claim), claimIdentity(claim)) ||
+    record.claim.scopeDigest === claim.scopeDigest
+  ) {
+    return false;
+  }
+  return !(record.renewals ?? []).some(
+    (previous) => previous.claim.scopeDigest === claim.scopeDigest,
+  );
+};
+export const renewedRepositoryProductionSignupRecord = (
+  record: RepositoryProductionSignupRecord,
+  claim: RepositoryProductionSignupClaim,
+): RepositoryProductionSignupRecord => {
+  if (!repositoryProductionSignupCanRenew(record, claim)) {
+    throw denied();
+  }
+  return {
+    ...record,
+    claim: immutableClaim(claim),
+    stage: "registered",
+    workerCheckpoints: [],
+    renewals: [
+      ...(record.renewals ?? []),
+      { claim: record.claim, stage: record.stage, workerCheckpoints: record.workerCheckpoints },
+    ],
+  };
+};
+export const repositoryProductionSignupStepOperationRef = (
+  record: RepositoryProductionSignupRecord,
+  step: string,
+) =>
+  repositoryProductionSignupOperationRef(
+    record.claim.policyId,
+    record.claim.id,
+    (record.renewals?.length ?? 0) > 0 ? `${step}:${record.claim.scopeDigest}` : step,
+  );
+const ownsRecordedGrant = (
+  row: RepositoryProductionSignupRow,
+  claim: RepositoryProductionSignupClaim,
+) =>
+  claim.grantReserved === true &&
+  claim.accessState === "active" &&
+  claim.recordedGrant?.operationRef ===
+    repositoryProductionSignupStepOperationRef(row.record, "grant");
 
 class SignupCompletion {
   private row: RepositoryProductionSignupRow | undefined;
@@ -151,7 +266,10 @@ class SignupCompletion {
     if (!setup?.record.lease || setup.record.effects["signup-policy"].state !== "applied") {
       throw denied();
     }
-    const id = repositoryProductionSignupOperationRef(this.policyId, this.claimId, step);
+    const retained = this.row?.record;
+    const id = retained
+      ? repositoryProductionSignupStepOperationRef(retained, step)
+      : repositoryProductionSignupOperationRef(this.policyId, this.claimId, step);
     return {
       row: {
         ...setup,
@@ -191,7 +309,7 @@ class SignupCompletion {
     await this.assertCurrent();
     return z.object({ result: z.json() }).parse(result).result;
   }
-  private async readClaim() {
+  private async readClaim(allowReservedReadback = false) {
     const parsed = repositoryProductionSignupClaimSchema.safeParse(
       await this.auth(
         { action: "read-signup", policyId: this.policyId, claimId: this.claimId },
@@ -214,17 +332,33 @@ class SignupCompletion {
       throw denied();
     }
     if (this.row && !isDeepStrictEqual(this.row.record.claim, immutableClaim(claim))) {
+      if (!repositoryProductionSignupCanRenew(this.row.record, claim)) {
+        throw denied();
+      }
+      await this.validatePolicy(claim);
+      await this.assertCurrent();
+      const renewed = await this.ports.journal.renew(this.row, claim);
+      if (!renewed) {
+        throw new Error("repository_production_signup_conflict");
+      }
+      this.row = renewed;
+      await this.assertCurrent();
+    }
+    if (this.row?.record.stage === "rejected" || this.row?.record.stage === "cancel-pending") {
       throw denied();
     }
-    if (unusable(claim)) {
-      if (this.row && this.row.record.stage !== "rejected") {
+    if (unusable(claim) && !(allowReservedReadback && claim.grantReserved !== false)) {
+      if (
+        this.row &&
+        !(this.row.record.stage === "grant-pending" && claim.grantReserved !== false)
+      ) {
         await this.save("rejected");
       }
       throw denied();
     }
     return claim;
   }
-  private async register(claim: RepositoryProductionSignupClaim) {
+  private async validatePolicy(claim: RepositoryProductionSignupClaim) {
     const setup = await this.ports.readSetup(this.scope);
     const policy = repositoryProductionSignupPolicySchema.parse(
       setup?.record.effects["signup-policy"].receipt,
@@ -243,6 +377,9 @@ class SignupCompletion {
     ) {
       throw denied();
     }
+  }
+  private async register(claim: RepositoryProductionSignupClaim) {
+    await this.validatePolicy(claim);
     if (!this.row) {
       if (claim.accessState !== "absent") {
         throw denied();
@@ -294,6 +431,9 @@ class SignupCompletion {
   }
   private async inspect(claim: RepositoryProductionSignupClaim) {
     const latest = await this.readClaim();
+    if (latest.scopeDigest !== claim.scopeDigest) {
+      return "unknown";
+    }
     // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Read current claim authority before constructing a grant context.
     const context = await this.context("grant");
     if (context.row.record.intent.storage.kind === "none") {
@@ -303,6 +443,38 @@ class SignupCompletion {
       .workers(this.scope)
       .inspectAppAccess(context, this.access(claim));
     return observed.state;
+  }
+  private async observeRecordedGrant(claim: RepositoryProductionSignupClaim) {
+    const observed = claim.recordedGrant;
+    if (!this.row || !observed || claim.accessState !== "active") {
+      return false;
+    }
+    if (!ownsRecordedGrant(this.row, claim)) {
+      throw denied();
+    }
+    const context = await this.context("observe-grant");
+    if (context.row.record.intent.storage.kind === "postgres") {
+      const result = await this.ports.workers(this.scope).inspectAppAccess(context, {
+        ...this.access(claim),
+        signupGrantReadback: observed,
+      });
+      await this.assertCurrent();
+      if (result.state !== "applied") {
+        return false;
+      }
+    }
+    const checkpoint = {
+      kind: "signup-recorded-grant",
+      ...observed,
+      scopeDigest: claim.scopeDigest,
+    };
+    if (
+      this.row.record.stage !== "applied" ||
+      !this.row.record.workerCheckpoints.some((previous) => isDeepStrictEqual(previous, checkpoint))
+    ) {
+      await this.save("applied", checkpoint);
+    }
+    return true;
   }
   private async grant(claim: RepositoryProductionSignupClaim) {
     if (this.row?.record.stage !== "prepared" && this.row?.record.stage !== "grant-pending") {
@@ -327,10 +499,27 @@ class SignupCompletion {
   }
   async run(): Promise<"ready" | "pending"> {
     this.row = await this.ports.journal.read(this.scope, this.claimId);
-    if (this.row?.record.stage === "rejected") {
+    let claim = await this.readClaim(true);
+    if (this.row && claim.recordedGrant) {
+      if (await this.observeRecordedGrant(claim)) {
+        return "ready";
+      }
+      if (claim.status === "applied") {
+        return "pending";
+      }
+    }
+    if (unusable(claim)) {
+      if (
+        (this.row?.record.stage === "grant-pending" || this.row?.record.stage === "granted") &&
+        claim.grantReserved !== false
+      ) {
+        return "pending";
+      }
+      if (this.row) {
+        await this.save("rejected");
+      }
       throw denied();
     }
-    const claim = await this.readClaim();
     if (claim.status === "applied") {
       if (!this.row || claim.accessState !== "active") {
         throw denied();
@@ -342,6 +531,7 @@ class SignupCompletion {
     if (!(await this.prepareMember(claim))) {
       return "pending";
     }
+    claim = await this.readClaim();
     await this.grant(claim);
     if (this.row?.record.stage !== "granted") {
       return "pending";
@@ -372,22 +562,42 @@ export const createRepositoryProductionSignup = (ports: RepositoryProductionSign
 export const assertNoUnresolvedRepositoryProductionSignup = async (
   rows: readonly RepositoryProductionSignupRow[],
   readClaim: (row: RepositoryProductionSignupRow) => Promise<Json>,
+  observeRecorded?: (
+    row: RepositoryProductionSignupRow,
+    claim: RepositoryProductionSignupClaim,
+  ) => Promise<boolean>,
 ) => {
-  await Promise.all(
+  const results = await Promise.allSettled(
     rows.map(async (row) => {
+      if (row.record.stage === "cancel-pending") {
+        throw new Error("repository_production_signup_reconciliation_required");
+      }
       if (row.record.stage !== "grant-pending") {
         return;
       }
       const claim = repositoryProductionSignupClaimSchema.parse(await readClaim(row));
+      if (
+        repositoryProductionSignupNeverGranted(claim) &&
+        isDeepStrictEqual(claimIdentity(claim), claimIdentity(row.record.claim))
+      ) {
+        return;
+      }
       if (!isDeepStrictEqual(immutableClaim(claim), row.record.claim)) {
         throw denied();
       }
-      if (claim.status === "rejected") {
+      if (ownsRecordedGrant(row, claim) && observeRecorded && (await observeRecorded(row, claim))) {
         return;
+      }
+      if (claim.recordedGrant !== undefined) {
+        throw new Error("repository_production_signup_reconciliation_required");
       }
       if (claim.status !== "applied" || claim.accessState !== "active") {
         throw new Error("repository_production_signup_reconciliation_required");
       }
     }),
   );
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure) {
+    throw failure.reason;
+  }
 };

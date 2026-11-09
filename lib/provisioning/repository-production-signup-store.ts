@@ -12,11 +12,41 @@ import type { RepositoryProductionScope } from "./repository-production-contract
 import {
   repositoryProductionSignupOperationRef,
   repositoryProductionSignupRecordSchema,
+  renewedRepositoryProductionSignupRecord,
 } from "./repository-production-signup";
 import type {
+  RepositoryProductionSignupRecord,
   RepositoryProductionSignupRow,
   RepositoryProductionSignupStore,
 } from "./repository-production-signup";
+
+const scopeMismatch = "repository_production_signup_scope_mismatch";
+const cancellationStage = "cancel-pending";
+const assertCancellation = (
+  record: RepositoryProductionSignupRecord,
+  previous: RepositoryProductionSignupRecord,
+) => {
+  if (record.stage === cancellationStage && record.cancellation === undefined) {
+    throw new Error(scopeMismatch);
+  }
+  if (previous.cancellation && !isDeepStrictEqual(record.cancellation, previous.cancellation)) {
+    throw new Error(scopeMismatch);
+  }
+  if (record.cancellation) {
+    if (record.stage !== cancellationStage && record.stage !== "rejected") {
+      throw new Error(scopeMismatch);
+    }
+    const expected = {
+      ...record.cancellation,
+      actorId: record.claim.actorId,
+      scopeDigest: record.claim.scopeDigest,
+      roles: record.claim.appRoles,
+    };
+    if (!isDeepStrictEqual(record.cancellation, expected)) {
+      throw new Error(scopeMismatch);
+    }
+  }
+};
 
 const scopePredicate = (scope: RepositoryProductionScope) =>
   and(
@@ -45,7 +75,7 @@ const parse = (
     claim.policyId !== repositoryProductionOperationRef(scope) ||
     raw.requestDigest !== repositoryProductionDigest({ scope, claim })
   ) {
-    throw new Error("repository_production_signup_scope_mismatch");
+    throw new Error(scopeMismatch);
   }
   if (
     raw.issuer !== scope.authority.issuer ||
@@ -53,7 +83,7 @@ const parse = (
     raw.workspaceId !== scope.authority.workspaceId ||
     raw.ownerUserId !== scope.authority.ownerUserId
   ) {
-    throw new Error("repository_production_signup_scope_mismatch");
+    throw new Error(scopeMismatch);
   }
   return { operationRef: raw.requestId, revision: raw.revision, record };
 };
@@ -63,6 +93,7 @@ const stages = [
   "grant-pending",
   "granted",
   "applied",
+  cancellationStage,
   "rejected",
 ] as const;
 const state = (stage: (typeof stages)[number]) =>
@@ -80,7 +111,7 @@ export const createPostgresRepositoryProductionSignupStore = (
       .limit(1);
     const row = raw === undefined ? undefined : parse(raw);
     if (row && !isDeepStrictEqual(row.record.scope, scope)) {
-      throw new Error("repository_production_signup_scope_mismatch");
+      throw new Error(scopeMismatch);
     }
     return row;
   };
@@ -94,7 +125,7 @@ export const createPostgresRepositoryProductionSignupStore = (
       return rows.map((raw) => {
         const row = parse(raw);
         if (!isDeepStrictEqual(row.record.scope, scope)) {
-          throw new Error("repository_production_signup_scope_mismatch");
+          throw new Error(scopeMismatch);
         }
         return row;
       });
@@ -124,6 +155,10 @@ export const createPostgresRepositoryProductionSignupStore = (
     },
     async compareAndSet(row, input) {
       const record = repositoryProductionSignupRecordSchema.parse(input);
+      if (!isDeepStrictEqual(record.renewals ?? [], row.record.renewals ?? [])) {
+        throw new Error(scopeMismatch);
+      }
+      assertCancellation(record, row.record);
       if (
         !isDeepStrictEqual(record.scope, row.record.scope) ||
         !isDeepStrictEqual(record.claim, row.record.claim) ||
@@ -133,11 +168,31 @@ export const createPostgresRepositoryProductionSignupStore = (
           row.record.workerCheckpoints,
         )
       ) {
-        throw new Error("repository_production_signup_scope_mismatch");
+        throw new Error(scopeMismatch);
       }
       const [raw] = await database
         .update(builderProvisioningJournals)
         .set({
+          record,
+          revision: row.revision + 1,
+          state: state(record.stage),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            predicate(record.scope, record.claim.id),
+            eq(builderProvisioningJournals.revision, row.revision),
+          ),
+        )
+        .returning();
+      return raw === undefined ? undefined : parse(raw);
+    },
+    async renew(row, claim) {
+      const record = renewedRepositoryProductionSignupRecord(row.record, claim);
+      const [raw] = await database
+        .update(builderProvisioningJournals)
+        .set({
+          requestDigest: repositoryProductionDigest({ scope: record.scope, claim: record.claim }),
           record,
           revision: row.revision + 1,
           state: state(record.stage),

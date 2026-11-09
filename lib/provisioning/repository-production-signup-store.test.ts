@@ -9,7 +9,10 @@ import { builderProvisioningJournals } from "../db/schema";
 import { repositoryProductionOperationRef } from "./repository-production-contract";
 import type { RepositoryProductionScope } from "./repository-production-contract";
 import { createPostgresRepositoryProductionSignupStore } from "./repository-production-signup-store";
-import type { RepositoryProductionSignupRecord } from "./repository-production-signup";
+import type {
+  RepositoryProductionSignupRecord,
+  RepositoryProductionSignupClaim,
+} from "./repository-production-signup";
 
 type Raw = typeof builderProvisioningJournals.$inferSelect;
 const scope: RepositoryProductionScope = {
@@ -132,6 +135,150 @@ const fixture = () => {
 };
 
 describe("Production signup durable journal", () => {
+  it("retains an exact cancellation target across unknown outcomes and forbids renewal or grant revival", async () => {
+    const test = fixture();
+    const first = await test.store.reserve({ ...record, stage: "grant-pending" });
+    const cancellation = {
+      operationRef: "22222222-2222-4222-a222-222222222222",
+      actorId: record.claim.actorId,
+      scopeDigest: record.claim.scopeDigest,
+      roles: record.claim.appRoles,
+    };
+    await expect(
+      test.store.compareAndSet(first, { ...first.record, stage: "cancel-pending" }),
+    ).rejects.toThrow("scope_mismatch");
+    await expect(
+      test.store.compareAndSet(first, {
+        ...first.record,
+        stage: "cancel-pending",
+        cancellation: { ...cancellation, actorId: "foreign" },
+      }),
+    ).rejects.toThrow("scope_mismatch");
+    const captured = await test.store.compareAndSet(first, {
+      ...first.record,
+      stage: "cancel-pending",
+      cancellation,
+    });
+    if (!captured) {
+      throw new Error("missing cancellation journal");
+    }
+    expect(await test.store.pending(scope)).toEqual([captured]);
+    await expect(
+      test.store.renew(captured, {
+        ...record.claim,
+        scopeDigest: "d".repeat(64),
+        status: "verified",
+        accessState: "absent",
+        memberPrepared: false,
+        grantReserved: false,
+      }),
+    ).rejects.toMatchObject({ code: "app_access_denied" });
+    await expect(
+      test.store.compareAndSet(captured, { ...captured.record, stage: "applied" }),
+    ).rejects.toThrow("scope_mismatch");
+    await expect(
+      test.store.compareAndSet(captured, {
+        ...captured.record,
+        cancellation: { ...cancellation, operationRef: "33333333-3333-4333-a333-333333333333" },
+      }),
+    ).rejects.toThrow("scope_mismatch");
+    const rejected = await test.store.compareAndSet(captured, {
+      ...captured.record,
+      stage: "rejected",
+    });
+    expect(rejected?.record.cancellation).toEqual(cancellation);
+    expect(await test.store.pending(scope)).toEqual([]);
+    expect(await test.store.read(scope, record.claim.id)).toEqual(rejected);
+    expect(
+      await test.store.compareAndSet(captured, { ...captured.record, stage: "rejected" }),
+    ).toBeUndefined();
+  });
+  it("renews only an authoritatively never-granted claim with a new CAS digest and preserved audit", async () => {
+    const test = fixture();
+    const first = await test.store.reserve(record);
+    const pending = await test.store.compareAndSet(first, {
+      ...record,
+      stage: "grant-pending",
+      workerCheckpoints: [{ memberPrepared: true }],
+    });
+    if (!pending) {
+      throw new Error("missing pending journal");
+    }
+    const beforeDigest = test.rows[0].requestDigest;
+    const current: RepositoryProductionSignupClaim = {
+      ...record.claim,
+      scopeDigest: "d".repeat(64),
+      sessionId: "new-verified-session",
+      expiresAt: "2099-02-01T00:00:00.000Z",
+      status: "verified",
+      accessState: "absent",
+      memberPrepared: false,
+      grantReserved: false,
+    };
+    const renewed = await test.store.renew(pending, current);
+    expect(renewed?.operationRef).toBe(first.operationRef);
+    expect(renewed?.record.stage).toBe("registered");
+    expect(renewed?.record.workerCheckpoints).toEqual([]);
+    expect(renewed?.record.renewals).toEqual([
+      {
+        claim: pending.record.claim,
+        stage: "grant-pending",
+        workerCheckpoints: [{ memberPrepared: true }],
+      },
+    ]);
+    expect(test.rows[0].requestDigest).not.toBe(beforeDigest);
+    expect(await test.store.read(scope, record.claim.id)).toEqual(renewed);
+    expect(await test.store.renew(pending, current)).toBeUndefined();
+    expect(await test.store.compareAndSet(pending, pending.record)).toBeUndefined();
+    if (!renewed) {
+      throw new Error("missing renewed journal");
+    }
+    await expect(
+      test.store.compareAndSet(renewed, { ...renewed.record, renewals: [] }),
+    ).rejects.toThrow("scope_mismatch");
+    await expect(
+      test.store.renew(renewed, {
+        ...current,
+        scopeDigest: pending.record.claim.scopeDigest,
+      }),
+    ).rejects.toMatchObject({ code: "app_access_denied" });
+  });
+  it("does not reset reserved, revoked, foreign, applied or unproven claims", async () => {
+    const current: RepositoryProductionSignupClaim = {
+      ...record.claim,
+      scopeDigest: "d".repeat(64),
+      sessionId: "new-session",
+      status: "verified",
+      accessState: "absent",
+      memberPrepared: false,
+      grantReserved: false,
+    };
+    await Promise.all(
+      [
+        { grantReserved: true },
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Missing older-worker evidence must not authorize renewal.
+        { grantReserved: undefined },
+        { actorId: "foreign" },
+        { resourceDigest: "e".repeat(64) },
+        { accessState: "revoked" as const },
+        { accessState: "changed" as const },
+        { status: "rejected" as const },
+      ].map(async (change) => {
+        const test = fixture();
+        const first = await test.store.reserve(record);
+        const before = structuredClone(test.rows);
+        await expect(test.store.renew(first, { ...current, ...change })).rejects.toMatchObject({
+          code: "app_access_denied",
+        });
+        expect(test.rows).toEqual(before);
+      }),
+    );
+    const test = fixture();
+    const applied = await test.store.reserve({ ...record, stage: "applied" });
+    await expect(test.store.renew(applied, current)).rejects.toMatchObject({
+      code: "app_access_denied",
+    });
+  });
   it("retains real UUID/pending-settled constraints through CAS and rejects stale writes", async () => {
     const checks = getTableConfig(builderProvisioningJournals).checks.map((check) => check.name);
     expect(checks).toContain("builder_provisioning_journal_request_id_check");

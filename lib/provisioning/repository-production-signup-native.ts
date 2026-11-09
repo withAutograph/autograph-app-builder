@@ -13,10 +13,11 @@ import type {
 import {
   createRepositoryProductionSignup,
   assertNoUnresolvedRepositoryProductionSignup,
-  repositoryProductionSignupOperationRef,
+  repositoryProductionSignupStepOperationRef,
 } from "./repository-production-signup";
 import type { RepositoryProductionSignupPorts } from "./repository-production-signup";
 import { createPostgresRepositoryProductionSignupStore } from "./repository-production-signup-store";
+import { createRepositoryProductionSignupCancellation } from "./repository-production-signup-cancellation";
 
 import type { RepositoryProductionSetupPorts } from "./repository-production-setup";
 
@@ -30,6 +31,7 @@ export const createRepositoryProductionSignupNative = (
   },
 ) => {
   const journal = createPostgresRepositoryProductionSignupStore(input.database);
+  const cancellation = createRepositoryProductionSignupCancellation({ ...input, journal });
   const assertNoConflictingAccess = async (scope: RepositoryProductionScope) => {
     const row = await input.readSetup(scope);
     if (
@@ -52,51 +54,115 @@ export const createRepositoryProductionSignupNative = (
     assertNoConflictingAccess,
   });
   return {
+    async cancel(value: Parameters<typeof cancellation.cancel>[0]) {
+      return await cancellation.cancel(value);
+    },
     async assertNoPending(
       scope: RepositoryProductionScope,
       requestedIntent?: RepositoryProductionIntent,
+      cancellationTarget?: { cancelActorId: string },
+      assertFence?: () => Promise<void>,
     ) {
-      const pending = await journal.pending(scope);
-      await assertNoUnresolvedRepositoryProductionSignup(pending, async (row) => {
+      const rows = await journal.pending(scope);
+      const targeted = rows.filter(
+        (row) => row.record.claim.actorId === cancellationTarget?.cancelActorId,
+      );
+      if (targeted.length > 1) {
+        throw new AppAccessError("app_access_denied");
+      }
+      const pending = rows.filter((row) => row !== targeted[0]);
+      const readContext = async (row: (typeof pending)[number], step: string) => {
+        if (!assertFence) {
+          throw new AppAccessError("app_access_denied");
+        }
+        await assertFence();
         const setup = await input.readSetup(scope);
         if (!setup?.record.lease) {
           throw new AppAccessError("app_access_denied");
         }
-        // oxlint-disable-next-line typescript/promise-function-async -- Retain the current authorization promise without changing error timing.
-        const assertCurrent = () =>
-          input.assertAuthorized(scope, requestedIntent ?? setup.record.intent);
+        const assertCurrent = async () => {
+          await assertFence();
+          await input.assertAuthorized(scope, requestedIntent ?? setup.record.intent);
+        };
         await assertCurrent();
-        const result = await input.workers(scope).invokeAuthManagement(
-          {
+        return {
+          setup,
+          assertCurrent,
+          effect: {
             row: {
               ...setup,
-              operationRef: repositoryProductionSignupOperationRef(
-                row.record.claim.policyId,
-                row.record.claim.id,
-                "read",
-              ),
+              operationRef: repositoryProductionSignupStepOperationRef(row.record, step),
             },
-            effect: "creator-access",
+            effect: "creator-access" as const,
             assertCurrent,
             // oxlint-disable-next-line typescript/promise-function-async -- The read-only port returns the existing rejected promise directly.
             checkpoint: () => Promise.reject(new Error("read_only")),
           },
-          {
-            version: 1,
-            realm: input.realm(scope),
-            builderOrigin: input.builderOrigin,
-            scope: { appId: scope.appId, organizationId: scope.organizationId },
-            request: {
-              action: "read-signup",
-              policyId: row.record.claim.policyId,
-              claimId: row.record.claim.id,
+        };
+      };
+      await assertNoUnresolvedRepositoryProductionSignup(
+        pending,
+        async (row) => {
+          const context = await readContext(row, "read");
+          const result = await input.workers(scope).invokeAuthManagement(
+            context.effect,
+            {
+              version: 1,
+              realm: input.realm(scope),
+              builderOrigin: input.builderOrigin,
+              scope: { appId: scope.appId, organizationId: scope.organizationId },
+              request: {
+                action: "read-signup",
+                policyId: row.record.claim.policyId,
+                claimId: row.record.claim.id,
+              },
             },
-          },
-          true,
-        );
-        await assertCurrent();
-        return z.object({ result: z.json() }).parse(result).result;
-      });
+            true,
+          );
+          await context.assertCurrent();
+          return z.object({ result: z.json() }).parse(result).result;
+        },
+        async (row, claim) => {
+          if (!claim.recordedGrant) {
+            return false;
+          }
+          const context = await readContext(row, "observe-grant");
+          if (context.setup.record.intent.storage.kind === "postgres") {
+            const observed = await input.workers(scope).inspectAppAccess(context.effect, {
+              actorId: claim.actorId,
+              roles: claim.appRoles,
+              active: true,
+              signupClaim: {
+                policyId: claim.policyId,
+                claimId: claim.id,
+                scopeDigest: claim.scopeDigest,
+              },
+              signupGrantReadback: claim.recordedGrant,
+            });
+            await context.assertCurrent();
+            if (observed.state !== "applied") {
+              return false;
+            }
+          }
+          const saved = await journal.compareAndSet(row, {
+            ...row.record,
+            stage: "applied",
+            workerCheckpoints: [
+              ...row.record.workerCheckpoints,
+              {
+                kind: "signup-recorded-grant",
+                ...claim.recordedGrant,
+                scopeDigest: claim.scopeDigest,
+              },
+            ],
+          });
+          if (!saved) {
+            throw new Error("repository_production_signup_conflict");
+          }
+          await context.assertCurrent();
+          return true;
+        },
+      );
     },
     async complete(policyId: string, claimId: string) {
       const rows = await input.database
