@@ -252,7 +252,15 @@ app calls for testing or independent assessment.
 
 For a selected existing repository with native Production deployment, including
 Arrusted, publish the reviewed draft, use the separate approved PR Ready and
-merge flow, and report the native deployment result. Hosted Preview, a synthetic
+merge flow, and report the native deployment result. Before requesting Ready/merge,
+read the draft's delivery status and follow its normal Production setup continuation.
+For a managed destination, prepare the required data, access and runtime bindings
+after draft publication and before merging. Native deployments capture their
+environment at creation; binding a database after merge cannot repair an already
+created deployment. A saved ready setup is reused for source-only revisions;
+only changed data/access requirements need their normal preparation approval.
+Generic GitHub destinations retain their existing flow. Frontend-only apps never
+allocate a database. Hosted Preview, a synthetic
 runtime journal, and external qualification are optional and do not precede this
 handoff. For new runtime bindings the app actually needs, call
 `plan-app-production` and present its exact plan with `prepare-app-production`.
@@ -267,6 +275,11 @@ external command from the creator. Invitations, app roles, access removal and
 account recovery belong to the session's People controls. The creator supplies
 the repository and app requirements; keep infrastructure details within the
 operator flow.
+If an earlier merged app deployment missed newly installed bindings, keep the same
+app and saved setup and repair its reported behavior through the ordinary reviewed
+app revision and native Git delivery. Do not substitute a manual deployment,
+promotion, alias change or CD-selected deployment. A setup-ready result is not
+evidence that the provider has activated the app or that its behavior works.
 Preserve separate effect approvals and report unavailable deployment/submission
 capabilities as delivery work still required.
 

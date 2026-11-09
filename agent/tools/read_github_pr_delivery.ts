@@ -7,10 +7,14 @@ import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-githu
 import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { resolveGitHubPrDeliverySubject } from "@/lib/agent/github-pr-delivery-subject";
+import {
+  readGitHubProductionDeliveryReadiness,
+  githubProductionSetupContinuation,
+} from "@/lib/agent/github-production-delivery-readiness";
 
 export default defineTool({
   description:
-    "Read the current GitHub pull request, required checks, and merge status for this session's published draft. A draft defers checks until ready for review. A passing check or a merge does not verify the hosted app.",
+    "Read this session's reviewed pull request and required checks. For a managed Production destination, finish its normal data, access and runtime binding setup after draft publication and before Ready/merge. Follow returned nextCall using the existing setup approval or saved continuation; no database details or app-test gate. A draft defers checks until Ready. Passing checks or setup do not claim native activation or hosted behavior.",
   async execute(_input, ctx) {
     const subject = resolveGitHubPrDeliverySubject(
       appBuilderWorkflowState.get(),
@@ -42,6 +46,24 @@ export default defineTool({
       observation.reviewedRevision &&
       reconciliationIsReady
     ) {
+      const productionSetup = await readGitHubProductionDeliveryReadiness(
+        {
+          appId: subject.appId,
+          repositoryId: observation.reviewedTarget.repositoryId,
+          repositoryFullName: `${observation.reviewedTarget.owner}/${observation.reviewedTarget.name}`,
+        },
+        ctx,
+      );
+      if (
+        productionSetup.applicable &&
+        (productionSetup.state !== "ready" || productionSetup.preparationRequired)
+      ) {
+        return {
+          ...result,
+          productionSetup,
+          nextCall: githubProductionSetupContinuation(productionSetup),
+        };
+      }
       const target: typeof observation.reviewedTarget & { installationId?: string } = {
         ...observation.reviewedTarget,
       };

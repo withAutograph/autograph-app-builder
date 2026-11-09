@@ -11,11 +11,19 @@ const mocks = vi.hoisted(() => ({
   inspect: vi.fn(),
   inspectReconciled: vi.fn(),
   run: vi.fn(),
+  production: vi.fn(),
 }));
 vi.mock("./draft-reconciliation-state", () => ({
   draftReconciliationState: { get: mocks.getCandidate },
 }));
 vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: mocks.getState } }));
+vi.mock("./github-production-delivery-readiness", () => ({
+  githubProductionSetupContinuation: (setup: { preparationRequired: boolean; appId: string }) => ({
+    tool: setup.preparationRequired ? "plan-app-production" : "get-app-production",
+    input: { appId: setup.appId },
+  }),
+  readGitHubProductionDeliveryReadiness: mocks.production,
+}));
 vi.mock("./deployment-github-publication-runtime", () => ({
   // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   githubPublicationRuntimeForSession: () =>
@@ -76,6 +84,14 @@ beforeEach(() => {
   mocks.inspectReconciled.mockReset();
   mocks.getCandidate.mockReset();
   mocks.run.mockReset();
+  mocks.production.mockReset();
+  mocks.production.mockResolvedValue({
+    version: 1,
+    appId: "example-app",
+    repositoryId: reviewedTarget.repositoryId,
+    repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
+    applicable: false,
+  });
   mocks.getState.mockReturnValue({
     appSpec: { appId: "example-app" },
     githubDraftProposal: { proposal: { digest: approval.proposalDigest } },
@@ -189,6 +205,81 @@ it.each([
     readyAt,
     reviewedTarget,
   });
+});
+
+it("does not dispatch merge when the managed app is missing its required Production setup", async () => {
+  mocks.inspect.mockResolvedValue(observe({ checks: "passed" }));
+  mocks.run.mockResolvedValue({
+    evidence: { kind: "pr-merge", mergeCommitSha },
+    status: "succeeded",
+  });
+  mocks.production.mockResolvedValue({
+    version: 1,
+    appId: "example-app",
+    repositoryId: reviewedTarget.repositoryId,
+    repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
+    applicable: true,
+    operationRef: "11111111-1111-4111-8111-111111111111",
+    state: "setting-up-data",
+    preparationRequired: true,
+  });
+  await expect(step(approval, readyAt)).resolves.toMatchObject({
+    status: "production-setup-required",
+    nextCall: { tool: "plan-app-production", input: { appId: "example-app" } },
+  });
+  expect(mocks.run).not.toHaveBeenCalled();
+});
+
+it("retains the same review and ready cycle while saved setup is still progressing", async () => {
+  mocks.inspect.mockResolvedValue(observe({ checks: "passed" }));
+  mocks.production.mockResolvedValue({
+    version: 1,
+    appId: "example-app",
+    repositoryId: reviewedTarget.repositoryId,
+    repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
+    applicable: true,
+    operationRef: "11111111-1111-4111-8111-111111111111",
+    state: "checking-access",
+    preparationRequired: false,
+  });
+  await expect(step(approval, readyAt)).resolves.toMatchObject({
+    status: "production-setup-required",
+    readyAt,
+    nextCall: { tool: "get-app-production", input: { appId: "example-app" } },
+  });
+  expect(mocks.run).not.toHaveBeenCalled();
+  mocks.production.mockResolvedValue({
+    version: 1,
+    appId: "example-app",
+    repositoryId: reviewedTarget.repositoryId,
+    repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
+    applicable: true,
+    operationRef: "11111111-1111-4111-8111-111111111111",
+    state: "ready",
+    preparationRequired: false,
+  });
+  mocks.run.mockResolvedValue({
+    evidence: { kind: "pr-merge", mergeCommitSha },
+    status: "succeeded",
+  });
+  await expect(step(approval, readyAt)).resolves.toEqual({ status: "merged", mergeCommitSha });
+  expect(mocks.run).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      approvedByCallId: callId,
+      reviewedTarget,
+      readyAt,
+      kind: "pr-merge",
+    }),
+  );
+});
+
+it("does not merge if the required setup service cannot be read", async () => {
+  mocks.inspect.mockResolvedValue(observe({ checks: "passed" }));
+  mocks.production.mockRejectedValue(new Error("Production setup is temporarily unavailable"));
+  await expect(step(approval, readyAt)).rejects.toThrow(
+    "Production setup is temporarily unavailable",
+  );
+  expect(mocks.run).not.toHaveBeenCalled();
 });
 
 it("recovers a ready transition after the original response is lost", async () => {

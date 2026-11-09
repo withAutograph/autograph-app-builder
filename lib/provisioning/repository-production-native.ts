@@ -85,6 +85,7 @@ import {
 import { PhysicalResourceLeaseBusyError } from "./postgres-physical-resource-lease";
 import { createRepositoryProductionWorkers } from "./repository-production-workers";
 import { createRepositoryProductionSetup } from "./repository-production-setup";
+import { createRepositoryProductionDeliveryStatus } from "./repository-production-delivery-status";
 import type {
   RepositoryProductionEffectContext,
   RepositoryProductionSetupPorts,
@@ -1089,6 +1090,15 @@ export const createRepositoryProductionNativeHandler =
             ? await setup(found.scope).status(found.scope, row.record.intent)
             : { operationRef: key(found.scope), state: "setting-up-data" };
         },
+        readDeliveryStatus: createRepositoryProductionDeliveryStatus({
+          repositories: configuration.repositories,
+          readSession: async (owner) => {
+            await readSession(owner);
+          },
+          resolveCurrent: resolve,
+          store,
+          isRuntimeBindingReady: (row) => workers(row.record.scope).isRuntimeBindingReady(row),
+        }),
         resolvePlan: async (owner, creatorEmail) => {
           const found = await resolve(owner);
           const saved = await store.read(found.scope);

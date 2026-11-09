@@ -129,6 +129,44 @@ export async function continueGitHubPrDelivery(
     return { status: WAITING_FOR_CHECKS satisfies typeof WAITING_FOR_CHECKS, readyAt };
   }
 
+  const [
+    { appBuilderWorkflowState },
+    { draftReconciliationState },
+    { resolveGitHubPrDeliverySubject },
+    { readGitHubProductionDeliveryReadiness, githubProductionSetupContinuation },
+  ] = await Promise.all([
+    import("./workflow-state"),
+    import("./draft-reconciliation-state"),
+    import("./github-pr-delivery-subject"),
+    import("./github-production-delivery-readiness"),
+  ]);
+  const subject = resolveGitHubPrDeliverySubject(
+    appBuilderWorkflowState.get(),
+    draftReconciliationState.get(),
+  );
+  if (subject === undefined || subject.proposalDigest !== proposalDigest) {
+    return { status: "revision-changed" as const };
+  }
+  const productionSetup = await readGitHubProductionDeliveryReadiness(
+    {
+      appId: subject.appId,
+      repositoryId: reviewedTarget.repositoryId,
+      repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
+    },
+    ctx,
+  );
+  if (
+    productionSetup.applicable &&
+    (productionSetup.state !== "ready" || productionSetup.preparationRequired)
+  ) {
+    return {
+      status: "production-setup-required" as const,
+      readyAt,
+      productionSetup,
+      nextCall: githubProductionSetupContinuation(productionSetup),
+    };
+  }
+
   ctx.abortSignal.throwIfAborted();
   const result = await run({ ...activeEffect, kind: "pr-merge", readyAt });
   return mergeResult(result);

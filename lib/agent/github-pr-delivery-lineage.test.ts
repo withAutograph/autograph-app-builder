@@ -1,5 +1,5 @@
 /* oxlint-disable anti-slop/no-module-mocking -- Control persisted session state and external GitHub reads while exercising the real delivery tool, approval callback and lineage resolver. */
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ApprovalContext } from "eve/tools/approval";
 import type { ToolContext } from "eve/tools";
 import type { AppBuilderWorkflowState } from "./workflow-state";
@@ -25,6 +25,11 @@ vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: mocks.getSt
 vi.mock("./draft-reconciliation-state", () => ({
   draftReconciliationState: { get: mocks.getCandidate },
 }));
+vi.mock("./production-delivery-requirement", () => ({
+  managedProductionDeliveryRequirements: { get: () => [] },
+  retainManagedProductionDeliveryRequirement: vi.fn(),
+}));
+afterEach(() => vi.unstubAllEnvs());
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: mocks.runtimeForSession,
 }));
@@ -108,6 +113,7 @@ const recovered = async () => {
 };
 
 beforeEach(() => {
+  vi.stubEnv("REPOSITORY_PRODUCTION_OPERATOR_URL", "");
   vi.resetAllMocks();
   mocks.runtimeForSession.mockResolvedValue({
     inspectPublishedPullRequest: mocks.inspect,

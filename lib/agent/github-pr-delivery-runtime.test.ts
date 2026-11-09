@@ -1,6 +1,7 @@
 /* oxlint-disable anti-slop/no-module-mocking -- Replace Eve session state and the scoped runtime factory while exercising the real tool and publication runtime. */
 import { createHash } from "node:crypto";
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
+import type { RepositoryProductionDeliveryStatus } from "../provisioning/repository-production-delivery";
 
 import readDelivery from "../../agent/tools/read_github_pr_delivery";
 import { GITHUB_PUBLICATION_VERSION } from "../repository/github-publication";
@@ -19,6 +20,14 @@ const mocks = vi.hoisted(() => ({
   getState: vi.fn(),
   getCandidate: vi.fn(() => null),
   runtimeForSession: vi.fn(),
+  production:
+    vi.fn<
+      (target: {
+        appId: string;
+        repositoryId: string;
+        repositoryFullName: string;
+      }) => Promise<RepositoryProductionDeliveryStatus>
+    >(),
 }));
 vi.mock("./draft-reconciliation-state", () => ({
   draftReconciliationState: { get: mocks.getCandidate },
@@ -28,6 +37,22 @@ vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: mocks.getSt
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: mocks.runtimeForSession,
 }));
+vi.mock("./github-production-delivery-readiness", () => ({
+  readGitHubProductionDeliveryReadiness: mocks.production,
+  githubProductionSetupContinuation: (setup: { preparationRequired: boolean; appId: string }) => ({
+    tool: setup.preparationRequired ? "plan-app-production" : "get-app-production",
+    input: { appId: setup.appId },
+  }),
+}));
+beforeEach(() => {
+  mocks.production.mockReset();
+  // oxlint-disable-next-line eslint/require-await -- This controlled service port resolves without provider work.
+  mocks.production.mockImplementation(async (target) => ({
+    version: 1,
+    ...target,
+    applicable: false,
+  }));
+});
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const signed = <T extends object>(value: T): T & { digest: string } => ({
@@ -163,6 +188,36 @@ it("reports draft checks as deferred using only the session's reviewed publicati
   expect(inspect).toHaveBeenCalledExactlyOnceWith(reviewedTarget);
   expect(unexpected).not.toHaveBeenCalled();
   expect(compareAndSet).not.toHaveBeenCalled();
+});
+
+it("automatically directs managed setup before exposing the Ready/merge approval", async () => {
+  const { proposal, reviewedTarget, runtime } = fixture();
+  const mutate = vi.fn();
+  mocks.getState.mockReturnValue({
+    appSpec: { appId: "demo" },
+    githubDraftProposal: { proposal },
+    phase: "reviewed",
+  });
+  mocks.runtimeForSession.mockResolvedValue({ ...runtime, runPublishedPullRequestEffect: mutate });
+  mocks.production.mockResolvedValue({
+    version: 1,
+    appId: "demo",
+    repositoryId: reviewedTarget.repositoryId,
+    repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
+    applicable: true,
+    operationRef: "11111111-1111-4111-8111-111111111111",
+    state: "setting-up-data",
+    preparationRequired: true,
+  });
+  // SAFETY: Runtime and prerequisite reads are controlled; the real tool owns approval construction.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Fixture supplies only the fields used through these injected boundaries.
+  const result = await readDelivery.execute({}, { session: { auth: {} } } as never);
+  expect(result).toMatchObject({
+    checks: "deferred",
+    nextCall: { tool: "plan-app-production", input: { appId: "demo" } },
+  });
+  expect(result).not.toHaveProperty("approval");
+  expect(mutate).not.toHaveBeenCalled();
 });
 
 it("fails before provider inspection when the stored receipt belongs to a different repository", async () => {
