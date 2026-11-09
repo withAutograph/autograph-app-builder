@@ -128,6 +128,7 @@ describe("session-owned app access route", () => {
       verifyAuthWorkload: async () => {},
       resolvePlan: unusedProtectedPort,
       readSetup: unusedProtectedPort,
+      readDeliveryStatus: unusedProtectedPort,
       resolveSetup: unusedProtectedPort,
       management: {
         read: async () => {

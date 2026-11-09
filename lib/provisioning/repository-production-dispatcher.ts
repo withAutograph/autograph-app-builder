@@ -8,6 +8,14 @@ import { repositoryProductionApprovalInput } from "./repository-production-appro
 import { observeRepositoryProductionPhase } from "./repository-production-diagnostic";
 import { operatorOwnerContextSchema } from "./hosted-operator-contract";
 import type { OperatorOwnerContext } from "./hosted-operator-contract";
+import {
+  repositoryProductionDeliveryStatusSchema,
+  repositoryProductionDeliveryTargetSchema,
+} from "./repository-production-delivery";
+import type {
+  RepositoryProductionDeliveryStatus,
+  RepositoryProductionDeliveryTarget,
+} from "./repository-production-delivery";
 import type {
   RepositoryProductionIntent,
   RepositoryProductionScope,
@@ -74,6 +82,11 @@ export const repositoryProductionRequestSchema = z.discriminatedUnion("action", 
   z.strictObject({ ...ownerFields, action: z.literal("setup-status") }),
   z.strictObject({
     ...ownerFields,
+    ...repositoryProductionDeliveryTargetSchema.shape,
+    action: z.literal("delivery-status"),
+  }),
+  z.strictObject({
+    ...ownerFields,
     action: z.literal("access-status"),
     cursor: z.string().optional(),
   }),
@@ -102,6 +115,10 @@ export interface RepositoryProductionHandlerDependencies {
     creatorEmail?: string,
   ) => Promise<{ scope: RepositoryProductionScope; intent: RepositoryProductionIntent }>;
   readSetup: (owner: RepositoryProductionRequestOwner) => Promise<RepositoryProductionSetupResult>;
+  readDeliveryStatus: (
+    owner: RepositoryProductionRequestOwner,
+    target: RepositoryProductionDeliveryTarget,
+  ) => Promise<RepositoryProductionDeliveryStatus>;
   resolveSetup: (
     owner: RepositoryProductionRequestOwner,
     approvedByCallId: string,
@@ -192,6 +209,23 @@ export const createRepositoryProductionHandler =
       }
       if (body.action === "setup-status") {
         return reply({ version: 1, ...(await deps.readSetup(owner)) });
+      }
+      if (body.action === "delivery-status") {
+        const target = {
+          repositoryId: body.repositoryId,
+          repositoryFullName: body.repositoryFullName,
+        };
+        const result = repositoryProductionDeliveryStatusSchema.parse(
+          await deps.readDeliveryStatus(owner, target),
+        );
+        if (
+          result.appId !== owner.appId ||
+          result.repositoryId !== target.repositoryId ||
+          result.repositoryFullName !== target.repositoryFullName
+        ) {
+          return reply({ code: "app_access_denied" }, 403);
+        }
+        return reply(result);
       }
       if (body.action === "access-status") {
         return reply(

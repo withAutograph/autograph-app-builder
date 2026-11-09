@@ -88,6 +88,14 @@ const fixture = () => {
     }),
     resolvePlan: vi.fn(async () => ({ scope, intent })),
     readSetup: prepared,
+    readDeliveryStatus: vi.fn<RepositoryProductionHandlerDependencies["readDeliveryStatus"]>(
+      async (requested, target) => ({
+        version: 1,
+        appId: requested.appId,
+        ...target,
+        applicable: false,
+      }),
+    ),
     resolveSetup: vi.fn(async (_owner, id) => {
       if (id !== "approved") {
         throw new Error("no saved approval");
@@ -145,6 +153,94 @@ it("authenticates the saved signup policy before completing a claim without acce
 });
 
 describe("protected repository Production dispatcher", () => {
+  it("reads delivery prerequisites for the exact reviewed repository without preparing or reading People", async () => {
+    const f = fixture();
+    const target = { repositoryId: "123", repositoryFullName: "example/repo" };
+    f.deps.readDeliveryStatus = vi.fn<
+      RepositoryProductionHandlerDependencies["readDeliveryStatus"]
+    >(async () => ({
+      version: 1,
+      appId: owner.appId,
+      ...target,
+      applicable: true,
+      operationRef: "11111111-1111-4111-a111-111111111111",
+      state: "checking-access",
+      preparationRequired: false,
+    }));
+    const response = await f.send({ version: 1, ...owner, ...target, action: "delivery-status" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      applicable: true,
+      state: "checking-access",
+      preparationRequired: false,
+    });
+    expect(f.deps.readDeliveryStatus).toHaveBeenCalledWith(owner, target);
+    expect(f.prepared).not.toHaveBeenCalled();
+    expect(f.deps.resolveSetup).not.toHaveBeenCalled();
+    expect(f.deps.management.read).not.toHaveBeenCalled();
+    expect(f.deps.management.execute).not.toHaveBeenCalled();
+  });
+
+  it("keeps unreadable or unauthorized delivery status closed rather than reporting unmanaged", async () => {
+    const f = fixture();
+    const request = {
+      version: 1,
+      ...owner,
+      repositoryId: "123",
+      repositoryFullName: "example/repo",
+      action: "delivery-status",
+    };
+    f.deps.readDeliveryStatus = vi.fn(async () => {
+      throw new Error("store unavailable");
+    });
+    expect((await f.send(request)).status).toBe(503);
+    f.deps.readDeliveryStatus = vi.fn(async () => {
+      throw new HostedOperatorError("authorization_required");
+    });
+    expect((await f.send(request)).status).toBe(403);
+    expect((await f.send(request, "wrong")).status).toBe(403);
+  });
+
+  it("rejects a delivery status for a different repository or app", async () => {
+    const f = fixture();
+    f.deps.readDeliveryStatus = vi.fn<
+      RepositoryProductionHandlerDependencies["readDeliveryStatus"]
+    >(async () => ({
+      version: 1,
+      appId: "other-app",
+      repositoryId: "456",
+      repositoryFullName: "other/repo",
+      applicable: false,
+    }));
+    expect(
+      (
+        await f.send({
+          version: 1,
+          ...owner,
+          repositoryId: "123",
+          repositoryFullName: "example/repo",
+          action: "delivery-status",
+        })
+      ).status,
+    ).toBe(403);
+  });
+
+  it("rejects malformed delivery targets before invoking the read", async () => {
+    const f = fixture();
+    expect(
+      (
+        await f.send({
+          version: 1,
+          ...owner,
+          repositoryId: "repo",
+          repositoryFullName: "example/repo",
+          action: "delivery-status",
+        })
+      ).status,
+    ).toBe(400);
+    expect(f.deps.readDeliveryStatus).not.toHaveBeenCalled();
+  });
+
   it("carries the selected creator account through normal protected planning and preparation", async () => {
     const f = fixture();
     const planned = await f.send({
