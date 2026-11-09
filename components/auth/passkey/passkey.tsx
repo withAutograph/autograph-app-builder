@@ -5,6 +5,7 @@ import { Fingerprint, Pencil, X } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useHydrated } from "@/components/ui/use-hydrated";
 import {
   Item,
   ItemActions,
@@ -27,6 +28,7 @@ export interface PasskeyProps {
 export function Passkey({ passkey }: PasskeyProps) {
   const { localization } = useAuth();
   const { localization: passkeyLocalization } = useAuthPlugin(passkeyPlugin);
+  const hydrated = useHydrated();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
 
@@ -35,6 +37,15 @@ export function Passkey({ passkey }: PasskeyProps) {
   const passkeyName = passkey.name || passkeyLocalization.passkey;
   /* oxlint-enable typescript/strict-boolean-expressions */
 
+  let createdAt = "—";
+  if (hydrated) {
+    // react-doctor-disable-next-line react-doctor/no-locale-format-in-render -- Formatting occurs only after browser hydration.
+    createdAt = new Date(passkey.createdAt).toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  }
+
   return (
     <Item>
       <ItemMedia variant="icon">
@@ -42,12 +53,7 @@ export function Passkey({ passkey }: PasskeyProps) {
       </ItemMedia>
       <ItemContent>
         <ItemTitle>{passkeyName}</ItemTitle>
-        <ItemDescription>
-          {new Date(passkey.createdAt).toLocaleString(undefined, {
-            dateStyle: "medium",
-            timeStyle: "short",
-          })}
-        </ItemDescription>
+        <ItemDescription>{createdAt}</ItemDescription>
       </ItemContent>
       <ItemActions>
         <Button

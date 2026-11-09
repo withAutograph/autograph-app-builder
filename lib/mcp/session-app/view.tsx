@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { FaGithub } from "react-icons/fa";
 
 import { ChoiceCard, SectionShell } from "../../../components/create-app/choice-card";
@@ -141,28 +141,13 @@ export function InputControl({
   return <p className="fallback">Answer this request in chat to continue.</p>;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function AuthorizationControl({
-  canOpen,
-  onOpenLink,
-  request,
-}: {
-  canOpen: boolean;
-  onOpenLink: (url: string) => Promise<void>;
-  request: PublicInputRequest;
-}) {
+const useAuthorizationLink = (
+  challenge: PublicInputRequest["authorization"],
+  canOpen: boolean,
+  onOpenLink: (url: string) => Promise<void>,
+) => {
   const [opened, setOpened] = useState(false);
   const [error, setError] = useState("");
-  const challenge = request.authorization;
-  const storeIn = challenge?.repositoryAccess
-    ? githubRepositoryAccessViewModel(challenge.repositoryAccess)
-    : undefined;
-  const isGitHub = storeIn !== undefined;
-  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
-  // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty provider display name uses the request title.
-  const provider = isGitHub ? "Connect GitHub" : challenge?.displayName || request.title;
-  /* oxlint-enable typescript/strict-boolean-expressions */
-
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function connect() {
     /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
@@ -178,6 +163,62 @@ export function AuthorizationControl({
       setError("The GitHub page could not be opened. Try again.");
     }
   }
+
+  return { opened, error, connect };
+};
+
+const AuthorizationFeedback = ({
+  opened,
+  isGitHub,
+  canOpen,
+  challenge,
+  error,
+}: {
+  opened: boolean;
+  isGitHub: boolean;
+  canOpen: boolean;
+  challenge: PublicInputRequest["authorization"];
+  error: string;
+}) => {
+  const showFallback = !canOpen && Boolean(challenge?.url);
+  return (
+    <>
+      {opened && isGitHub ? (
+        <p className="authorization-status" role="status">
+          Complete the GitHub step, then return here. Autograph will show whether access was
+          confirmed.
+        </p>
+      ) : null}
+      {showFallback ? <p className="fallback">Open the authorization link from chat.</p> : null}
+      {error === "" ? null : (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+    </>
+  );
+};
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function AuthorizationControl({
+  canOpen,
+  onOpenLink,
+  request,
+}: {
+  canOpen: boolean;
+  onOpenLink: (url: string) => Promise<void>;
+  request: PublicInputRequest;
+}) {
+  const challenge = request.authorization;
+  const { opened, error, connect } = useAuthorizationLink(challenge, canOpen, onOpenLink);
+  const storeIn = challenge?.repositoryAccess
+    ? githubRepositoryAccessViewModel(challenge.repositoryAccess)
+    : undefined;
+  const isGitHub = storeIn !== undefined;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
+  // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty provider display name uses the request title.
+  const provider = isGitHub ? "Connect GitHub" : challenge?.displayName || request.title;
+  /* oxlint-enable typescript/strict-boolean-expressions */
 
   /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   return (
@@ -211,20 +252,13 @@ export function AuthorizationControl({
           {isGitHub ? "Continue with GitHub" : "Continue"}
         </button>
       ) : null}
-      {opened && isGitHub ? (
-        <p className="authorization-status" role="status">
-          Complete the GitHub step, then return here. Autograph will show whether access was
-          confirmed.
-        </p>
-      ) : null}
-      {!canOpen && challenge?.url ? (
-        <p className="fallback">Open the authorization link from chat.</p>
-      ) : null}
-      {error ? (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      ) : null}
+      <AuthorizationFeedback
+        opened={opened}
+        isGitHub={isGitHub}
+        canOpen={canOpen}
+        challenge={challenge}
+        error={error}
+      />
     </div>
   );
   /* oxlint-enable typescript/strict-boolean-expressions */
@@ -343,6 +377,89 @@ function guidanceForAnswers(canCallTools: boolean, unansweredCount: number) {
   return guidance;
 }
 
+const submittedDecisionOutcome = (decisionOutcome: DecisionOutcome): ReactElement | null => {
+  const decisionOptions = binaryDecisionOptions(decisionOutcome.request);
+  const canceled =
+    decisionOutcome.response.kind === "deny" ||
+    (decisionOutcome.response.kind === "answer" &&
+      decisionOptions?.[1]?.id === decisionOutcome.response.optionId);
+  if (canceled) {
+    return (
+      <main className="mcpApp shell outcome outcome--neutral" role="status">
+        <strong>Continuing in chat…</strong>
+      </main>
+    );
+  }
+
+  const pullRequestNumber = draftPullRequestNumber(decisionOutcome.request.title);
+  if ((pullRequestNumber ?? "") !== "") {
+    return (
+      <main className="mcpApp shell outcome outcome--success" role="status">
+        <span aria-hidden="true">✓</span>
+        <div>
+          <strong>Draft PR {pullRequestNumber} updated</strong>
+          <p>
+            The reviewed changes are in the draft PR. It remains a draft and will not merge or
+            deploy.
+          </p>
+        </div>
+      </main>
+    );
+  }
+  return null;
+};
+
+const DecisionFailureOutcome = ({ decisionOutcome }: { decisionOutcome: DecisionOutcome }) => {
+  const pullRequestNumber = draftPullRequestNumber(decisionOutcome.request.title);
+  const heading =
+    (pullRequestNumber ?? "") === ""
+      ? "Your response could not be submitted"
+      : `Draft PR ${pullRequestNumber} could not be updated`;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
+  return (
+    <main className="mcpApp shell outcome outcome--failure" role="alert">
+      <span aria-hidden="true">!</span>
+      <div>
+        <strong>{heading}</strong>
+        <p>
+          {
+            // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty error uses the standard failure detail.
+            decisionOutcome.error ||
+              "Builder could not complete the update. Check chat for the specific diagnostic before retrying."
+          }
+        </p>
+      </div>
+    </main>
+  );
+  /* oxlint-enable typescript/strict-boolean-expressions */
+};
+
+const RequestFailureOutcome = ({
+  authorizationOpened,
+  result,
+}: {
+  authorizationOpened: boolean;
+  result: EveSessionResult;
+}) => {
+  const message = result.error?.message;
+  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
+  return (
+    <main className="mcpApp shell outcome outcome--failure" role="alert">
+      <span aria-hidden="true">!</span>
+      <div>
+        <strong>{authorizationOpened ? "GitHub connection failed" : "Request failed"}</strong>
+        <p>
+          {
+            // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty error message uses the standard failure detail.
+            message || "Autograph could not confirm repository access. Try again."
+          }
+        </p>
+      </div>
+    </main>
+  );
+  /* oxlint-enable typescript/strict-boolean-expressions */
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function SessionOutcome({
   authorizationOpened,
@@ -356,80 +473,20 @@ function SessionOutcome({
   submitted: boolean;
 }) {
   if (decisionOutcome?.status === "failed") {
-    const pullRequestNumber = draftPullRequestNumber(decisionOutcome.request.title);
-    const heading =
-      (pullRequestNumber ?? "") === ""
-        ? "Your response could not be submitted"
-        : `Draft PR ${pullRequestNumber} could not be updated`;
-    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
-    return (
-      <main className="mcpApp shell outcome outcome--failure" role="alert">
-        <span aria-hidden="true">!</span>
-        <div>
-          <strong>{heading}</strong>
-          <p>
-            {
-              // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty error uses the standard failure detail.
-              decisionOutcome.error ||
-                "Builder could not complete the update. Check chat for the specific diagnostic before retrying."
-            }
-          </p>
-        </div>
-      </main>
-    );
-    /* oxlint-enable typescript/strict-boolean-expressions */
+    return <DecisionFailureOutcome decisionOutcome={decisionOutcome} />;
   }
 
   if (result.status === "failed") {
-    /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
-    return (
-      <main className="mcpApp shell outcome outcome--failure" role="alert">
-        <span aria-hidden="true">!</span>
-        <div>
-          <strong>{authorizationOpened ? "GitHub connection failed" : "Request failed"}</strong>
-          <p>
-            {
-              // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty error message uses the standard failure detail.
-              result.error?.message || "Autograph could not confirm repository access. Try again."
-            }
-          </p>
-        </div>
-      </main>
-    );
-    /* oxlint-enable typescript/strict-boolean-expressions */
+    return <RequestFailureOutcome authorizationOpened={authorizationOpened} result={result} />;
   }
 
   if (
     decisionOutcome?.status === "submitted" ||
     (decisionOutcome?.status === "submitting" && result.status !== "input_required")
   ) {
-    const decisionOptions = binaryDecisionOptions(decisionOutcome.request);
-    const canceled =
-      decisionOutcome.response.kind === "deny" ||
-      (decisionOutcome.response.kind === "answer" &&
-        decisionOptions?.[1]?.id === decisionOutcome.response.optionId);
-    if (canceled) {
-      return (
-        <main className="mcpApp shell outcome outcome--neutral" role="status">
-          <strong>Continuing in chat…</strong>
-        </main>
-      );
-    }
-
-    const pullRequestNumber = draftPullRequestNumber(decisionOutcome.request.title);
-    if ((pullRequestNumber ?? "") !== "") {
-      return (
-        <main className="mcpApp shell outcome outcome--success" role="status">
-          <span aria-hidden="true">✓</span>
-          <div>
-            <strong>Draft PR {pullRequestNumber} updated</strong>
-            <p>
-              The reviewed changes are in the draft PR. It remains a draft and will not merge or
-              deploy.
-            </p>
-          </div>
-        </main>
-      );
+    const decision = submittedDecisionOutcome(decisionOutcome);
+    if (decision !== null) {
+      return decision;
     }
   }
 
@@ -586,6 +643,126 @@ const sessionAccessControls = (input: {
   return controls;
 };
 
+type SessionSubmissionState = "idle" | "submitting" | "submitted";
+
+const SessionRequestFooter = ({
+  canCallTools,
+  complete,
+  continueGuidance,
+  onSubmit,
+  state,
+  submissionError,
+}: {
+  canCallTools: boolean;
+  complete: boolean;
+  continueGuidance: string | undefined;
+  onSubmit: () => void;
+  state: SessionSubmissionState;
+  submissionError: string;
+}) => (
+  <footer>
+    <button
+      type="button"
+      className="primary"
+      disabled={!complete || !canCallTools || state === "submitting"}
+      aria-describedby={(continueGuidance ?? "") === "" ? undefined : "continue-guidance"}
+      onClick={() => {
+        onSubmit();
+      }}
+    >
+      {state === "submitting" ? "Submitting…" : "Continue"}
+    </button>
+    {(continueGuidance ?? "") === "" ? null : (
+      <p className="continue-guidance" id="continue-guidance">
+        {continueGuidance}
+      </p>
+    )}
+    {submissionError ? (
+      <p className="error" role="alert">
+        {submissionError}
+      </p>
+    ) : null}
+  </footer>
+);
+
+const SessionRequestForm = ({
+  answers,
+  canCallTools,
+  canOpenLinks,
+  complete,
+  continueGuidance,
+  invitations,
+  onAnswer,
+  onDecision,
+  onOpenLink,
+  onSubmit,
+  onlyDecision,
+  requests,
+  respondable,
+  state,
+  submissionError,
+}: {
+  answers: Record<string, SessionAnswer>;
+  canCallTools: boolean;
+  canOpenLinks: boolean;
+  complete: boolean;
+  continueGuidance: string | undefined;
+  invitations: ReactNode[];
+  onAnswer: (requestId: string, answer: SessionAnswer) => void;
+  onDecision: (request: PublicInputRequest, answer: SessionAnswer) => void;
+  onOpenLink: (url: string) => Promise<void>;
+  onSubmit: () => void;
+  onlyDecision: boolean;
+  requests: PublicInputRequest[];
+  respondable: PublicInputRequest[];
+  state: SessionSubmissionState;
+  submissionError: string;
+}) => (
+  <main className={`mcpApp shell${onlyDecision ? " approval-shell" : ""}`}>
+    {invitations}
+    {onlyDecision ? null : (
+      <header>
+        <div>
+          <strong>Autograph App Builder</strong>
+          <p>Review the request below and choose how to proceed.</p>
+        </div>
+        <span>
+          {requests.length} {requests.length === 1 ? "request" : "requests"}
+        </span>
+      </header>
+    )}
+    <div className="request-list">
+      {requests.map((request) => (
+        <SessionRequestControl
+          key={request.requestId}
+          request={request}
+          answer={answers[request.requestId]}
+          canOpenLinks={canOpenLinks}
+          isSubmitting={state === "submitting"}
+          onlyDecision={onlyDecision}
+          onAnswer={(answer) => {
+            onAnswer(request.requestId, answer);
+          }}
+          onDecision={(answer) => {
+            onDecision(request, answer);
+          }}
+          onOpenLink={onOpenLink}
+        />
+      ))}
+    </div>
+    {respondable.length && !onlyDecision ? (
+      <SessionRequestFooter
+        canCallTools={canCallTools}
+        complete={complete}
+        continueGuidance={continueGuidance}
+        onSubmit={onSubmit}
+        state={state}
+        submissionError={submissionError}
+      />
+    ) : null}
+  </main>
+);
+
 // oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 export function SessionAppView({
   canCallTools,
@@ -603,7 +780,7 @@ export function SessionAppView({
   identityInvitations?: PublicIdentityInvitation[];
 }) {
   const [answers, setAnswers] = useState<Record<string, SessionAnswer>>({});
-  const [state, setState] = useState<"idle" | "submitting" | "submitted">("idle");
+  const [state, setState] = useState<SessionSubmissionState>("idle");
   const [authorizationOpened, setAuthorizationOpened] = useState(false);
   const [submissionError, setSubmissionError] = useState("");
   const [decisionOutcome, setDecisionOutcome] = useState<DecisionOutcome>();
@@ -721,63 +898,28 @@ export function SessionAppView({
   }
 
   return (
-    <main className={`mcpApp shell${onlyDecision ? " approval-shell" : ""}`}>
-      {invitations}
-      {onlyDecision ? null : (
-        <header>
-          <div>
-            <strong>Autograph App Builder</strong>
-            <p>Review the request below and choose how to proceed.</p>
-          </div>
-          <span>
-            {requests.length} {requests.length === 1 ? "request" : "requests"}
-          </span>
-        </header>
-      )}
-      <div className="request-list">
-        {requests.map((request) => (
-          <SessionRequestControl
-            key={request.requestId}
-            request={request}
-            answer={answers[request.requestId]}
-            canOpenLinks={canOpenLinks}
-            isSubmitting={state === "submitting"}
-            onlyDecision={onlyDecision}
-            onAnswer={(answer) => {
-              setAnswers((current) => ({ ...current, [request.requestId]: answer }));
-            }}
-            onDecision={(answer) => {
-              void submitDecision(request, answer);
-            }}
-            onOpenLink={openAuthorization}
-          />
-        ))}
-      </div>
-      {respondable.length && !onlyDecision ? (
-        <footer>
-          <button
-            type="button"
-            className="primary"
-            disabled={!complete || !canCallTools || state === "submitting"}
-            aria-describedby={(continueGuidance ?? "") === "" ? undefined : "continue-guidance"}
-            onClick={() => {
-              void submit();
-            }}
-          >
-            {state === "submitting" ? "Submitting…" : "Continue"}
-          </button>
-          {(continueGuidance ?? "") === "" ? null : (
-            <p className="continue-guidance" id="continue-guidance">
-              {continueGuidance}
-            </p>
-          )}
-          {submissionError ? (
-            <p className="error" role="alert">
-              {submissionError}
-            </p>
-          ) : null}
-        </footer>
-      ) : null}
-    </main>
+    <SessionRequestForm
+      answers={answers}
+      canCallTools={canCallTools}
+      canOpenLinks={canOpenLinks}
+      complete={complete}
+      continueGuidance={continueGuidance}
+      invitations={invitations}
+      onAnswer={(requestId, answer) => {
+        setAnswers((current) => ({ ...current, [requestId]: answer }));
+      }}
+      onDecision={(request, answer) => {
+        void submitDecision(request, answer);
+      }}
+      onOpenLink={openAuthorization}
+      onSubmit={() => {
+        void submit();
+      }}
+      onlyDecision={onlyDecision}
+      requests={requests}
+      respondable={respondable}
+      state={state}
+      submissionError={submissionError}
+    />
   );
 }

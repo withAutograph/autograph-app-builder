@@ -47,6 +47,173 @@ const subscribeToLocation = () => () => {
 const getLocationSearch = () => window.location.search;
 const getServerLocationSearch = () => "";
 
+type ConsentClient = ReturnType<typeof usePublicOAuthClient<OAuthProviderAuthClient>>["data"];
+type ConsentSession = ReturnType<typeof useSession<OAuthProviderAuthClient>>["data"];
+type ConsentPlugin = ReturnType<typeof oauthProviderPlugin>;
+type ConsentMutation = ReturnType<typeof useOAuthConsent<OAuthProviderAuthClient>>;
+
+const isConsentRequestInvalid = (
+  request: OAuthAuthorizationRequest | undefined,
+  isSessionPending: boolean,
+  session: ConsentSession,
+  publicClient: ReturnType<typeof usePublicOAuthClient<OAuthProviderAuthClient>>,
+  client: ConsentClient,
+) => {
+  let invalidRequest = request !== undefined && (request.clientId ?? "") === "";
+  if (request !== undefined && !invalidRequest) {
+    invalidRequest = (!isSessionPending && !session) || publicClient.isError;
+    if (!invalidRequest && !publicClient.isPending) {
+      invalidRequest = Boolean(session && !client);
+    }
+  }
+  return invalidRequest;
+};
+
+const renderClientIdentity = (
+  client: ConsentClient,
+  clientName: string,
+  logoUrl: string | undefined,
+) => (
+  <div className="flex items-center gap-3">
+    {client ? (
+      <Avatar size="lg">
+        <AvatarImage alt={clientName} referrerPolicy="no-referrer" src={logoUrl} />
+        <AvatarFallback>
+          <ShieldCheck className="size-5" />
+        </AvatarFallback>
+      </Avatar>
+    ) : (
+      <Skeleton className="size-10 rounded-full" />
+    )}
+    <div className="min-w-0 flex-1">
+      {client ? (
+        <p className="truncate font-medium">{clientName}</p>
+      ) : (
+        <Skeleton className="h-4 w-36" />
+      )}
+      {(client?.client_uri ?? "") === "" ? null : (
+        <p className="truncate text-xs text-muted-foreground">{client?.client_uri}</p>
+      )}
+    </div>
+  </div>
+);
+
+const renderRequestedScopes = (
+  request: OAuthAuthorizationRequest | undefined,
+  scopeMetadata: ConsentPlugin["scopeMetadata"],
+) =>
+  request ? (
+    <ul className="grid gap-3">
+      {request.scopes.map((scope) => {
+        const metadata = resolveOAuthScopeMetadata(scopeMetadata, scope, {
+          clientId: request.clientId,
+          requestedScopes: request.scopes,
+        });
+        return (
+          <li className="flex gap-3" key={scope}>
+            <Check className="mt-0.5 size-4 shrink-0 text-primary" />
+            <div className="grid gap-0.5">
+              <p className="text-sm font-medium">{metadata.label}</p>
+              {(metadata.description ?? "") === "" ? null : (
+                <p className="text-xs text-muted-foreground">{metadata.description}</p>
+              )}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  ) : (
+    <div className="flex gap-3">
+      <Skeleton className="mt-0.5 size-4 shrink-0 rounded-full" />
+      <div className="grid flex-1 gap-2">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-3 w-full max-w-64" />
+      </div>
+    </div>
+  );
+
+const renderConsentAccount = (
+  session: ConsentSession,
+  isSessionPending: boolean,
+  localization: ConsentPlugin["localization"],
+) => (
+  <div className="flex items-center gap-3">
+    <UserAvatar isPending={isSessionPending} user={session?.user} />
+    <div className="min-w-0 flex-1">
+      <p className="text-xs text-muted-foreground">{localization.signedInAs}</p>
+      {session ? (
+        <>
+          <p className="truncate text-sm font-medium">{session.user.name || session.user.email}</p>
+          {session.user.name ? (
+            <p className="truncate text-xs text-muted-foreground">{session.user.email}</p>
+          ) : null}
+        </>
+      ) : (
+        <Skeleton className="mt-1 h-4 w-40" />
+      )}
+    </div>
+  </div>
+);
+
+const renderConsentLinks = (
+  policyUrl: string | undefined,
+  termsUrl: string | undefined,
+  localization: ConsentPlugin["localization"],
+) =>
+  policyUrl === undefined && termsUrl === undefined ? null : (
+    <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
+      {policyUrl === undefined ? null : (
+        <a
+          className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          href={policyUrl}
+          rel="noreferrer"
+          target="_blank"
+        >
+          {localization.privacyPolicy}
+        </a>
+      )}
+      {termsUrl === undefined ? null : (
+        <a
+          className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          href={termsUrl}
+          rel="noreferrer"
+          target="_blank"
+        >
+          {localization.termsOfService}
+        </a>
+      )}
+    </div>
+  );
+
+const renderConsentActions = (
+  consent: ConsentMutation,
+  canRespond: boolean,
+  localization: ConsentPlugin["localization"],
+) => (
+  <CardFooter className="grid grid-cols-2 gap-2">
+    <Button
+      disabled={!canRespond}
+      variant="outline"
+      onClick={() => {
+        consent.mutate({ accept: false });
+      }}
+    >
+      {/* oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Show the cancellation spinner only for an explicit denial request. */}
+      {consent.isPending && consent.variables?.accept === false ? <Spinner /> : null}
+      {localization.cancel}
+    </Button>
+    <Button
+      disabled={!canRespond}
+      onClick={() => {
+        consent.mutate({ accept: true });
+      }}
+    >
+      {consent.isPending && consent.variables?.accept ? <Spinner /> : null}
+      {localization.allow}
+    </Button>
+  </CardFooter>
+);
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function OAuthConsent({ className }: OAuthConsentProps) {
   const { authClient } = useAuth();
@@ -75,16 +242,13 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
   const logoUrl = sanitizeOAuthClientUrl(client?.logo_uri);
   const policyUrl = sanitizeOAuthClientUrl(client?.policy_uri);
   const termsUrl = sanitizeOAuthClientUrl(client?.tos_uri);
-  const requestResolved = request !== undefined;
-  /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
-  let invalidRequest = requestResolved && !request.clientId;
-  /* oxlint-enable typescript/strict-boolean-expressions */
-  if (requestResolved && !invalidRequest) {
-    invalidRequest = (!isSessionPending && !session) || publicClient.isError;
-    if (!invalidRequest && !publicClient.isPending) {
-      invalidRequest = Boolean(session && !client);
-    }
-  }
+  const invalidRequest = isConsentRequestInvalid(
+    request,
+    isSessionPending,
+    session,
+    publicClient,
+    client,
+  );
   /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
   const canRespond = Boolean(request?.clientId && session && client && !consent.isPending);
   /* oxlint-enable typescript/strict-boolean-expressions */
@@ -104,29 +268,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
   return (
     <Card className={cn("w-full max-w-md", className)}>
       <CardHeader className="gap-4">
-        <div className="flex items-center gap-3">
-          {client ? (
-            <Avatar size="lg">
-              <AvatarImage alt={clientName} referrerPolicy="no-referrer" src={logoUrl} />
-              <AvatarFallback>
-                <ShieldCheck className="size-5" />
-              </AvatarFallback>
-            </Avatar>
-          ) : (
-            <Skeleton className="size-10 rounded-full" />
-          )}
-
-          <div className="min-w-0 flex-1">
-            {client ? (
-              <p className="truncate font-medium">{clientName}</p>
-            ) : (
-              <Skeleton className="h-4 w-36" />
-            )}
-            {client?.client_uri ? (
-              <p className="truncate text-xs text-muted-foreground">{client.client_uri}</p>
-            ) : null}
-          </div>
-        </div>
+        {renderClientIdentity(client, clientName, logoUrl)}
 
         <div className="grid gap-1">
           <CardTitle className="text-xl">
@@ -144,107 +286,16 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
             {interpolateClient(localization.requestedPermissions, clientName)}
           </p>
 
-          {request ? (
-            <ul className="grid gap-3">
-              {request.scopes.map((scope) => {
-                const metadata = resolveOAuthScopeMetadata(scopeMetadata, scope, {
-                  clientId: request.clientId,
-                  requestedScopes: request.scopes,
-                });
-
-                return (
-                  <li className="flex gap-3" key={scope}>
-                    <Check className="mt-0.5 size-4 shrink-0 text-primary" />
-                    <div className="grid gap-0.5">
-                      <p className="text-sm font-medium">{metadata.label}</p>
-                      {metadata.description ? (
-                        <p className="text-xs text-muted-foreground">{metadata.description}</p>
-                      ) : null}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <div className="flex gap-3">
-              <Skeleton className="mt-0.5 size-4 shrink-0 rounded-full" />
-              <div className="grid flex-1 gap-2">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-3 w-full max-w-64" />
-              </div>
-            </div>
-          )}
+          {renderRequestedScopes(request, scopeMetadata)}
         </div>
 
         <Separator />
 
-        <div className="flex items-center gap-3">
-          <UserAvatar isPending={isSessionPending} user={session?.user} />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs text-muted-foreground">{localization.signedInAs}</p>
-            {session ? (
-              <>
-                <p className="truncate text-sm font-medium">
-                  {session.user.name || session.user.email}
-                </p>
-                {session.user.name ? (
-                  <p className="truncate text-xs text-muted-foreground">{session.user.email}</p>
-                ) : null}
-              </>
-            ) : (
-              <Skeleton className="mt-1 h-4 w-40" />
-            )}
-          </div>
-        </div>
-
-        {policyUrl === undefined && termsUrl === undefined ? null : (
-          <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
-            {policyUrl === undefined ? null : (
-              <a
-                className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
-                href={policyUrl}
-                rel="noreferrer"
-                target="_blank"
-              >
-                {localization.privacyPolicy}
-              </a>
-            )}
-            {termsUrl === undefined ? null : (
-              <a
-                className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
-                href={termsUrl}
-                rel="noreferrer"
-                target="_blank"
-              >
-                {localization.termsOfService}
-              </a>
-            )}
-          </div>
-        )}
+        {renderConsentAccount(session, isSessionPending, localization)}
+        {renderConsentLinks(policyUrl, termsUrl, localization)}
       </CardContent>
 
-      <CardFooter className="grid grid-cols-2 gap-2">
-        <Button
-          disabled={!canRespond}
-          variant="outline"
-          onClick={() => {
-            consent.mutate({ accept: false });
-          }}
-        >
-          {/* oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Show the cancellation spinner only for an explicit denial request. */}
-          {consent.isPending && consent.variables?.accept === false ? <Spinner /> : null}
-          {localization.cancel}
-        </Button>
-        <Button
-          disabled={!canRespond}
-          onClick={() => {
-            consent.mutate({ accept: true });
-          }}
-        >
-          {consent.isPending && consent.variables?.accept ? <Spinner /> : null}
-          {localization.allow}
-        </Button>
-      </CardFooter>
+      {renderConsentActions(consent, canRespond, localization)}
     </Card>
   );
   /* oxlint-enable typescript/strict-boolean-expressions */
