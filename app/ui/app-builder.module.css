@@ -275,6 +275,7 @@
   color: #1a9c4b;
 }
 .appDetailsSection > label,
+.appDetailsSection > .briefControl,
 .repoRow > label,
 .repoLabel,
 .integrationField {
