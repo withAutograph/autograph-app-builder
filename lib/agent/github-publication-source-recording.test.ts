@@ -82,6 +82,7 @@ const hooks = vi.hoisted(() => {
     reconcile: vi.fn(),
     state: {
       phase: "reviewed",
+      // SAFETY: This test-owned state starts without a publication marker and later records only a verified proposal digest.
       publishedGitHubDraftProposalDigest: undefined as string | undefined,
       appBackendKind: "static",
       appSpec: { appId: "spend-review", digest: "c".repeat(64) },
@@ -257,6 +258,7 @@ describe("publication records actual source for its compiled app release", () =>
       repositoryId: "repository",
       branchSha: "verified-head",
     });
+    // SAFETY: This minimal Eve context supplies the exercised ports; the fixture controls owner, approval, state and publication dependencies.
     await publishTool.execute(input, ctx as never);
     expect(hooks.state).toHaveProperty(
       "publishedGitHubDraftProposalDigest",
@@ -273,6 +275,7 @@ describe("publication records actual source for its compiled app release", () =>
         proposalDigest: kind === "foreign" ? "f".repeat(64) : input.expectedProposalDigest,
         repositoryId: "repository",
       });
+      // SAFETY: This minimal Eve context supplies the exercised ports while controlled publication results test refusal to record unverified markers.
       await publishTool.execute(input, ctx as never);
       expect(hooks.state.publishedGitHubDraftProposalDigest).toBeUndefined();
     },
@@ -287,6 +290,7 @@ describe("publication records actual source for its compiled app release", () =>
         proposalDigest: input.expectedProposalDigest,
         repositoryId: "repository",
       });
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this controlled port's Promise identity and synchronous cancellation/state-change timing.
       hooks.record.mockImplementation(() => {
         if (reason === "owner") {
           return Promise.reject(new Error("owner revoked"));
@@ -304,6 +308,7 @@ describe("publication records actual source for its compiled app release", () =>
         }
         return Promise.resolve({ status: "recorded" });
       });
+      // SAFETY: This controlled Eve context adds the real AbortSignal to test cancellation while all state and outward-effect ports remain test-owned.
       const result = await publishTool.execute(input, {
         ...ctx,
         abortSignal: cancellation.signal,

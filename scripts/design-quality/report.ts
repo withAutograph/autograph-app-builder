@@ -108,9 +108,10 @@ export function renderReport(report: {
       return `<details${group === "generated" ? " open" : ""}><summary>${title} (${entries.length})</summary>${visible.map(({ o, index }) => location(o, index)).join("") || "No findings in assessed evidence."}${visible.length < entries.length ? '<p>Showing 30 representative unknowns. <a href="report.json">Download every observation and source location</a>.</p>' : ""}</details>`;
     })
     .join("");
+  /* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the evaluator's optional historical diagnostic projection for report rendering. */
+  // SAFETY: This evaluator projection reads optional historical diagnostics only for report rendering.
   const implementationDiagnostics =
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve the existing assertion and its runtime behavior.
+    // Historical evaluator source may carry optional report diagnostics.
     (
       report.source as {
         implementationDiagnostics?: {
@@ -122,6 +123,7 @@ export function renderReport(report: {
         }[];
       }
     )?.implementationDiagnostics ?? [];
+  /* oxlint-enable typescript/no-unsafe-type-assertion */
   const implementationFindings = implementationDiagnostics.length
     ? `<details open><summary>Generated-code implementation diagnostics (${implementationDiagnostics.length})</summary>${implementationDiagnostics
         .map((diagnostic, index) => {

@@ -372,14 +372,16 @@ export async function installBrowserBoundaries(
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function browserBoundaryState(page: Page) {
   return await page.evaluate(() => {
+    /* oxlint-disable typescript/no-unsafe-type-assertion -- Read only the browser fixture object installed before page scripts. */
+    // SAFETY: installBrowserBoundaries installs this test-owned readback object before the page runs.
     const state =
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve the existing browser fixture assertion.
+      // Read back the object installed by the shared browser fixture.
       (
         window as typeof window & {
           __e2eBoundaries: { clipboard: string[]; opened: string[] };
         }
       ).__e2eBoundaries;
+    /* oxlint-enable typescript/no-unsafe-type-assertion */
     return structuredClone(state);
   });
 }
