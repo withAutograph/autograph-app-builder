@@ -47,6 +47,7 @@ export interface ManagementResolverDependencies<Profile extends ManagementProfil
     context: OperatorArtifactContext,
     storage: Extract<RepositoryProductionIntent["storage"], { kind: "postgres" }>,
     assertCurrentOwner: () => Promise<void>,
+    owner: RepositoryProductionRequestOwner,
   ) => Promise<RepositoryProductionCapture>;
 }
 
@@ -139,7 +140,7 @@ export const createRepositoryProductionManagementResolver =
         authority: scope.authority,
         target: { appId: scope.appId, sessionId: intent.sessionId },
       };
-      const capture = await deps.readCapture(context, intent.storage, assertCurrentOwner);
+      const capture = await deps.readCapture(context, intent.storage, assertCurrentOwner, owner);
       const { description } = capture;
       subject.capture = capture;
       if (description) {

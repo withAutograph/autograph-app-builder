@@ -18,6 +18,7 @@ import {
 } from "./repository-production-destination";
 import { GENERATED_RELEASE_MEMBERS } from "./hosted-operator-sandbox-launcher";
 import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launcher";
+import { createRepositoryProductionCaptureReader } from "./repository-production-capture";
 import { createRepositoryProductionManagementResolver } from "./repository-production-management-subject";
 import type {
   ManagementProfile,
@@ -220,6 +221,7 @@ describe("saved approved Production management subject", () => {
       { authority, target: { appId: owner.appId, sessionId: owner.sessionId } },
       f.intent.storage,
       expect.any(Function),
+      owner,
     );
     expect(f.resolveCurrent).not.toHaveBeenCalled();
     expect(f.getRow()).toEqual(before);
@@ -440,4 +442,40 @@ describe("saved approved Production management subject", () => {
     await expect(f.resolve()).rejects.toThrow("live owner revoked");
     expect(f.readCapture).not.toHaveBeenCalled();
   });
+});
+
+it("reuses immutable content without retaining an approval across actual management resolutions", async () => {
+  const f = fixture();
+  const { storage } = f.intent;
+  if (storage.kind !== "postgres") {
+    throw new Error("Expected controlled persistent app");
+  }
+  const readSelection = vi.fn().mockResolvedValue({ ...storage, schemaSha256: "d".repeat(64) });
+  const readRelease = vi.fn().mockResolvedValue(f.capture);
+  f.deps.readCapture = createRepositoryProductionCaptureReader({ readSelection, readRelease });
+  await f.resolve();
+  await f.resolve();
+  expect(readRelease).toHaveBeenCalledTimes(1);
+  expect(readSelection).toHaveBeenCalledTimes(2);
+  delete f.getRow().record.approval;
+  await expect(f.resolve()).rejects.toThrow("repository_production_approval_required");
+  expect(readRelease).toHaveBeenCalledTimes(1);
+});
+
+it("keeps live canonical owner revocation authoritative after managed content reuse", async () => {
+  const f = fixture();
+  const { storage } = f.intent;
+  if (storage.kind !== "postgres") {
+    throw new Error("Expected controlled persistent app");
+  }
+  const readRelease = vi.fn().mockResolvedValue(f.capture);
+  f.deps.readCapture = createRepositoryProductionCaptureReader({
+    readSelection: vi.fn().mockResolvedValue({ ...storage, schemaSha256: "d".repeat(64) }),
+    readRelease,
+  });
+  await f.resolve();
+  await f.resolve();
+  f.revokeOwner();
+  await expect(f.resolve()).rejects.toThrow("live owner revoked");
+  expect(readRelease).toHaveBeenCalledTimes(1);
 });

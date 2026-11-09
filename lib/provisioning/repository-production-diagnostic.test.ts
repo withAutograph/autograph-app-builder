@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { HostedOperatorError } from "./hosted-operator-contract";
 import {
+  observeRepositoryProductionConnectionTiming,
   observeRepositoryProductionPhase,
   reportRepositoryProductionFailure,
   reportRepositoryProductionProgress,
@@ -261,5 +262,70 @@ describe("private Production failure diagnostics", () => {
       ),
     ).resolves.toBe(result);
     expect(log).not.toHaveBeenCalled();
+  });
+});
+
+describe("connection component timing", () => {
+  it("reports only a fixed phase, outcome and elapsed milliseconds while retaining the result", async () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(performance, "now").mockReturnValueOnce(100).mockReturnValueOnce(147.9);
+    const result = { privateValue: "private-token-and-url" };
+    await expect(
+      observeRepositoryProductionConnectionTiming("workload_oidc_acquire", async () => result),
+    ).resolves.toBe(result);
+    expect(log.mock.calls.map(([value]) => z.json().parse(JSON.parse(String(value))))).toEqual([
+      {
+        event: "builder.repository_production_connection_timing",
+        phase: "workload_oidc_acquire",
+        state: "started",
+        elapsedMs: 0,
+      },
+      {
+        event: "builder.repository_production_connection_timing",
+        phase: "workload_oidc_acquire",
+        state: "completed",
+        elapsedMs: 47,
+      },
+    ]);
+    expect(log.mock.calls.flat().join("")).not.toContain("private");
+  });
+
+  it("retains the original rejection without reading any private exception fields", async () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    const access = vi.fn(() => {
+      throw new Error("private accessor");
+    });
+    const failure = new Proxy(new Error("private-token-and-connection-string"), {
+      get: access,
+      getOwnPropertyDescriptor: access,
+      getPrototypeOf: access,
+    });
+    await expect(
+      observeRepositoryProductionConnectionTiming("auth_operator_identity", async () => {
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+    expect(access).not.toHaveBeenCalled();
+    expect(log.mock.calls.flat().join("")).toContain('"state":"failed"');
+    expect(log.mock.calls.flat().join("")).not.toContain("private");
+  });
+
+  it("does not change success or cancellation when the clock or logger fails", async () => {
+    const result = {};
+    vi.spyOn(performance, "now").mockImplementation(() => {
+      throw new Error("clock unavailable");
+    });
+    vi.spyOn(console, "info").mockImplementation(() => {
+      throw new Error("logger unavailable");
+    });
+    await expect(
+      observeRepositoryProductionConnectionTiming("connection_authority", async () => result),
+    ).resolves.toBe(result);
+    const failure = new DOMException("private abort reason", "AbortError");
+    await expect(
+      observeRepositoryProductionConnectionTiming("connection_authority", async () => {
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
   });
 });

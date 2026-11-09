@@ -237,6 +237,63 @@ export const reportRepositoryProductionProgress = (
   }
 };
 
+const connectionTimingSchema = z.strictObject({
+  event: z.literal("builder.repository_production_connection_timing"),
+  phase: z.enum([
+    "connection_authority",
+    "workload_oidc_acquire",
+    "workload_oidc_verify",
+    "maintenance_identity",
+    "auth_operator_identity",
+    "auth_runtime_identity",
+  ]),
+  state: z.enum(["started", "completed", "failed"]),
+  elapsedMs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+});
+
+/** Connection-only timings contain no result, exception or private connection payload. */
+export const observeRepositoryProductionConnectionTiming = async <T>(
+  phase: z.infer<typeof connectionTimingSchema>["phase"],
+  run: () => Promise<T>,
+): Promise<T> => {
+  let startedAt: number | undefined;
+  try {
+    startedAt = performance.now();
+  } catch {
+    // A clock failure cannot change the protected operation.
+  }
+  const report = (state: z.infer<typeof connectionTimingSchema>["state"]) => {
+    try {
+      if (startedAt === undefined) {
+        return;
+      }
+      const elapsedMs =
+        state === "started" ? 0 : Math.max(0, Math.floor(performance.now() - startedAt));
+      console.info(
+        JSON.stringify(
+          connectionTimingSchema.parse({
+            event: "builder.repository_production_connection_timing",
+            phase,
+            state,
+            elapsedMs,
+          }),
+        ),
+      );
+    } catch {
+      // Timing and logging never replace the original result or exception.
+    }
+  };
+  report("started");
+  try {
+    const result = await run();
+    report("completed");
+    return result;
+  } catch (error) {
+    report("failed");
+    throw error;
+  }
+};
+
 export const observeRepositoryProductionPhase = async <T>(
   phase: Failure["phase"],
   code: Failure["code"],

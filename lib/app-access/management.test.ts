@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RepositoryProductionScope } from "../provisioning/repository-production-contract";
 import { AppAccessError } from "./errors";
+import { completeRepositoryProductionInvitation } from "../provisioning/repository-production-native";
+import { PhysicalResourceLeaseBusyError } from "../provisioning/postgres-physical-resource-lease";
 import { createAppAccessManagementService } from "./management";
 import type { AppAccessManagementDependencies, AppAccessOperationRow } from "./management";
 import type { AppAccessOwner } from "./operator-client";
@@ -209,6 +211,82 @@ describe("managed app access", () => {
     });
     expect(deps.enrollInvitee).not.toHaveBeenCalled();
   });
+
+  it("returns pending before capture, Auth reads or writes when the automatic completion slot is busy", async () => {
+    const { service, deps, rows } = setup();
+    const command = invite();
+    await service.execute(owner, command);
+    const before = structuredClone([...rows]);
+    const authorize = vi.fn(async () => {});
+    const readInvitation = vi.fn(deps.readVerifiedInvitation);
+    const update = vi.spyOn(deps.journal, "update");
+    deps.assertAuthorized = authorize;
+    deps.readVerifiedInvitation = readInvitation;
+    deps.withLease = async () => {
+      throw new PhysicalResourceLeaseBusyError();
+    };
+    vi.mocked(deps.execute).mockClear();
+    await expect(
+      completeRepositoryProductionInvitation({
+        creator: async () => "not-owned",
+        invitee: async () => {
+          await service.completeInvitation(command.clientRequestId);
+        },
+      }),
+    ).resolves.toBe("pending");
+    expect(authorize).not.toHaveBeenCalled();
+    expect(readInvitation).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(deps.execute).not.toHaveBeenCalled();
+    expect(deps.enrollInvitee).not.toHaveBeenCalled();
+    expect(deps.acceptInvitation).not.toHaveBeenCalled();
+    expect([...rows]).toEqual(before);
+  });
+
+  it.each([
+    ["pending", "owner revoked"],
+    ["pending", "repository_production_approval_required"],
+    ["applied", "owner revoked"],
+    ["applied", "repository_production_approval_required"],
+  ] as const)(
+    "checks %s enrollment authority under the held lease before returning or effects (%s)",
+    async (enrollment, reason) => {
+      const { service, deps, rows } = setup();
+      const command = invite();
+      await service.execute(owner, command);
+      if (enrollment === "applied") {
+        await service.completeInvitation(command.clientRequestId);
+      }
+      const before = structuredClone([...rows]);
+      let held = false;
+      deps.withLease = async (_scope, run) => {
+        held = true;
+        try {
+          return await run(async () => {});
+        } finally {
+          held = false;
+        }
+      };
+      const failure = new Error(reason);
+      deps.assertAuthorized = vi.fn(async () => {
+        expect(held).toBe(true);
+        throw failure;
+      });
+      const readInvitation = vi.fn(deps.readVerifiedInvitation);
+      deps.readVerifiedInvitation = readInvitation;
+      const update = vi.spyOn(deps.journal, "update");
+      vi.mocked(deps.enrollInvitee).mockClear();
+      vi.mocked(deps.acceptInvitation).mockClear();
+      await expect(service.completeInvitation(command.clientRequestId)).rejects.toBe(failure);
+      expect(deps.assertAuthorized).toHaveBeenCalled();
+      expect(readInvitation).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+      expect(deps.enrollInvitee).not.toHaveBeenCalled();
+      expect(deps.acceptInvitation).not.toHaveBeenCalled();
+      expect([...rows]).toEqual(before);
+      expect(held).toBe(false);
+    },
+  );
 
   it("enrolls only the verified recipient and does not regrant completed invitations", async () => {
     const { service, deps } = setup();

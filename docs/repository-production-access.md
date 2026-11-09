@@ -50,6 +50,26 @@ required. Every URL must match the configured direct endpoint, database, role
 and TLS policy; read-only SQL verifies the actual database and role before any
 worker receives credentials. Connection values and driver error details stay
 private. This path does not reuse a synthetic Preview connector or credential.
+Automatic invitation callbacks read their exact durable invitation/setup and try
+the existing nonblocking physical app slot before resolving the full capture.
+Busy callbacks return pending without repeating that content work. Current owner,
+setup approval and pending-operation boundaries are still checked under the held
+slot before lease writes, an already-applied acknowledgement or any access effect.
+
+Within a single protected request, management may reuse a fully verified immutable
+generated-release capture after rereading the exact current selection and its
+release/manifest binding. Reuse is bound to the complete app/session authority,
+physical owner generation and exact artifact, release, manifest and schema hashes.
+It never caches owner authorization, setup approval, saved intent, role or pending
+operation checks. Every reuse checks current ownership before and after awaiting
+content; rejected reads are evicted. Returned Buffers and descriptions are isolated
+copies. Separate requests share no capture state and introduce no positive TTL.
+
+Connection diagnostics also record only fixed authority, OIDC and SQL-identity
+phase names, started/completed/failed state and nonnegative elapsed milliseconds.
+Clock or logging failures do not affect the original result, error or cancellation;
+no connection values, identifiers, provider payloads or error text enter timings.
+
 Internal failure diagnostics distinguish authority, workload OIDC, each connection
 binding and SQL identity, encrypted credential decoding and Sandbox creation.
 Setup preparation (including the physical lease and reconciliation) and the final
