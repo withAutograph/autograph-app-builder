@@ -435,6 +435,7 @@ export const installManagedAcceptanceSuite = (
             observeReadiness: async () => {
               await vi.waitFor(
                 async () => {
+                  // react-doctor-disable-next-line react-doctor/no-fetch-response-used-without-status-check -- This test asserts status 200 before consuming the response.
                   const response = await fetch(`http://127.0.0.1:${appPort}`, {
                     headers: { connection: "close" },
                   });
@@ -505,12 +506,14 @@ export const installManagedAcceptanceSuite = (
               operation: "observe-readiness",
             });
             expect(before.state).toBe("ready");
+            // react-doctor-disable-next-line react-doctor/no-fetch-response-used-without-status-check -- This test asserts the expected denial status before consuming the response.
             const denied = await fetch(`http://127.0.0.1:${bridgePort}`, {
               headers: { connection: "close" },
             });
             expect(denied.status).toBeGreaterThanOrEqual(400);
             await denied.text();
             const readThroughBridge = async () => {
+              // react-doctor-disable-next-line react-doctor/no-fetch-response-used-without-status-check -- This test asserts status 200 before consuming the response.
               const response = await fetch(`http://127.0.0.1:${bridgePort}`, {
                 headers: {
                   authorization: `Bearer ${capabilities.transport}`,
