@@ -92,10 +92,35 @@ describe("Preview Better Auth UI", () => {
     },
   );
 
+  it.each([
+    "/a/..//external.example/steal",
+    "/.//external.example/steal",
+    "/%2e//external.example/steal",
+    "https://builder.example.test//external.example/steal",
+  ])("rejects callbacks that normalize to a network-path reference: %s", (callbackURL) => {
+    expect(
+      resolveAuthCallbackURL(
+        "/safe",
+        `?callbackURL=${encodeURIComponent(callbackURL)}`,
+        "https://builder.example.test",
+      ),
+    ).toBe("/safe");
+  });
+
   it("preserves callback query strings and fragments", () => {
     expect(resolveAuthCallbackURL("/", "?callbackURL=%2F%3Fsource%3Doauth%23complete")).toBe(
       "/?source=oauth#complete",
     );
+  });
+
+  it("preserves a same-origin callback after ordinary path normalization", () => {
+    expect(
+      resolveAuthCallbackURL(
+        "/safe",
+        `?callbackURL=${encodeURIComponent("/a/../workspace?source=oauth#done")}`,
+        "https://builder.example.test",
+      ),
+    ).toBe("/workspace?source=oauth#done");
   });
 
   it("preserves absolute callbacks for the current origin", () => {
@@ -146,6 +171,17 @@ describe("Preview Better Auth UI", () => {
         "https://builder.example.test",
       ),
     ).toBe("/auth/setting-up?callbackURL=%2F");
+  });
+
+  it("rejects an inherited passkey redirect that normalizes to an external host", () => {
+    const fallback = "/auth/setting-up?callbackURL=%2F";
+    expect(
+      resolvePasskeyRedirectTo(
+        fallback,
+        `?redirectTo=${encodeURIComponent("/a/..//external.example/steal")}`,
+        "https://builder.example.test",
+      ),
+    ).toBe(fallback);
   });
 
   it("forwards the complete signed OAuth query through social sign-in", async () => {

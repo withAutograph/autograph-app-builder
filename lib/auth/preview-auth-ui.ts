@@ -29,7 +29,7 @@ export function resolveAuthCallbackURL(defaultURL: string, search: string, sameO
     const parsed = new URL(callbackURL, "https://autograph.invalid");
     const isRootRelative = callbackURL.startsWith("/") && !callbackURL.startsWith("//");
     const isSameOriginAbsolute = sameOrigin !== undefined && parsed.origin === sameOrigin;
-    if (!isRootRelative && !isSameOriginAbsolute) {
+    if ((!isRootRelative && !isSameOriginAbsolute) || parsed.pathname.startsWith("//")) {
       return defaultURL;
     }
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
