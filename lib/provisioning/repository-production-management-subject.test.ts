@@ -19,7 +19,10 @@ import {
 import { GENERATED_RELEASE_MEMBERS } from "./hosted-operator-sandbox-launcher";
 import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launcher";
 import { createRepositoryProductionCaptureReader } from "./repository-production-capture";
-import { createRepositoryProductionManagementResolver } from "./repository-production-management-subject";
+import {
+  createRepositoryProductionManagementResolver,
+  readRepositoryProductionManagementRecord,
+} from "./repository-production-management-subject";
 import type {
   ManagementProfile,
   ManagementResolverDependencies,
@@ -478,4 +481,44 @@ it("keeps live canonical owner revocation authoritative after managed content re
   f.revokeOwner();
   await expect(f.resolve()).rejects.toThrow("live owner revoked");
   expect(readRelease).toHaveBeenCalledTimes(1);
+});
+
+describe("completed invitation metadata authority", () => {
+  it("reads the approved saved intent without resolving or reading its release", async () => {
+    const f = fixture();
+    expect(await readRepositoryProductionManagementRecord(f.deps, owner, scope)).toEqual(
+      f.getRow(),
+    );
+    expect(f.readCapture).not.toHaveBeenCalled();
+    expect(f.resolveCurrent).not.toHaveBeenCalled();
+  });
+
+  it("retains fresh owner revocation after the saved row read", async () => {
+    const f = fixture();
+    f.deps.store.read = async () => {
+      f.revokeOwner();
+      return f.getRow();
+    };
+    await expect(readRepositoryProductionManagementRecord(f.deps, owner, scope)).rejects.toThrow(
+      "live owner revoked",
+    );
+    expect(f.readCapture).not.toHaveBeenCalled();
+  });
+
+  it("refuses missing setup, unapproved intent and a foreign app", async () => {
+    const f = fixture();
+    delete f.getRow().record.approval;
+    await expect(readRepositoryProductionManagementRecord(f.deps, owner, scope)).rejects.toThrow(
+      "repository_production_approval_required",
+    );
+    f.setRow(approvedRow());
+    await expect(
+      readRepositoryProductionManagementRecord(f.deps, owner, { ...scope, appId: "other" }),
+    ).rejects.toThrow("repository_production_owner_changed");
+    f.setRow(undefined);
+    await expect(readRepositoryProductionManagementRecord(f.deps, owner, scope)).rejects.toThrow(
+      "repository_production_setup_required",
+    );
+    expect(f.readCapture).not.toHaveBeenCalled();
+  });
 });

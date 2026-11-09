@@ -50,11 +50,20 @@ required. Every URL must match the configured direct endpoint, database, role
 and TLS policy; read-only SQL verifies the actual database and role before any
 worker receives credentials. Connection values and driver error details stay
 private. This path does not reuse a synthetic Preview connector or credential.
-Automatic invitation callbacks read their exact durable invitation/setup and try
-the existing nonblocking physical app slot before resolving the full capture.
-Busy callbacks return pending without repeating that content work. Current owner,
-setup approval and pending-operation boundaries are still checked under the held
-slot before lease writes, an already-applied acknowledgement or any access effect.
+Automatic invitation callbacks first read exact durable enrollment completion
+before starting the short background-work response budget. An applied invitation
+and enrollment with its bound actor, or an applied creator setup with its bound
+creator frame, can acknowledge completion using fresh canonical owner/workspace,
+configured destination, saved intent/approval and pending-operation checks alone.
+This read-only acknowledgement loads no release capture, takes no lease, writes
+nothing and never proves current app permissions; Gateway access remains fresh.
+Pending removal, role change or cancellation for that actor/invitation stays
+pending without replaying enrollment. Unknown completion continues normally.
+
+Incomplete callbacks try the existing nonblocking physical app slot before
+resolving the full capture. Busy callbacks return pending without repeating that
+content work. Current owner, setup approval and pending-operation boundaries are
+still checked under the held slot before lease writes or any access effect.
 
 Within a single protected request, management may reuse a fully verified immutable
 generated-release capture after rereading the exact current selection and its

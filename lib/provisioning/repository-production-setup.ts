@@ -86,6 +86,11 @@ const selectedEffects = (record: RepositoryProductionRecord): RepositoryProducti
     ? ["creator-access"]
     : ["allocate-storage", "install-schema", CREATOR_ACCESS_EFFECT, BIND_RUNTIME_EFFECT];
 
+/** Durable completion only; current owner and approval are checked by the caller. */
+export const repositoryProductionSetupComplete = (record: RepositoryProductionRecord): boolean =>
+  !unfinished(record) &&
+  selectedEffects(record).every((effect) => record.effects[effect].state === "applied");
+
 /** Same-app delivery continuation; no Preview prerequisite, deployment mutation or product-test gate. */
 export const createRepositoryProductionSetup = (ports: RepositoryProductionSetupPorts) => ({
   async prepare(
@@ -360,9 +365,7 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
       return { operationRef: row.operationRef, state: "reconciling" };
     }
     const complete =
-      selectedEffects(row.record).every(
-        (effect) => row.record.effects[effect].state === "applied",
-      ) &&
+      repositoryProductionSetupComplete(row.record) &&
       (row.record.intent.storage.kind === "none" || ports.isRuntimeBindingReady?.(row) !== false);
     return { operationRef: row.operationRef, state: complete ? "ready" : "checking-access" };
   },
