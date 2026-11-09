@@ -1414,7 +1414,7 @@ exit 99
     const mise = path.join(directory, "mise");
     writeFileSync(
       mise,
-      "#!/bin/sh\ncase \"$1\" in trust|install) exit 0;; which) printf '%s\\n' \"$PWD/source-cue\"; exit 0;; esac\n(sleep 3; printf 'service log\\n') &\nprintf 'test failure\\n'\nexit 17\n",
+      "#!/bin/sh\ncase \"$1\" in activate|trust|install) exit 0;; which) printf '%s\\n' \"$PWD/source-cue\"; exit 0;; esac\n(sleep 3; printf 'service log\\n') &\nprintf 'test failure\\n'\nexit 17\n",
     );
     chmodSync(mise, 0o755);
     try {
