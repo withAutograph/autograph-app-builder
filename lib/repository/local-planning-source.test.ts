@@ -30,12 +30,30 @@ const fixture = () => {
   const source = path.join(directory, "source");
   const candidate = path.join(directory, "candidate");
   mkdirSync(source);
+  // Test-owned Git repositories must not invoke developer/runner hooks configured
+  // through hook.*.command or inherit unrelated system/global Git behavior.
+  const gitEnvironment = {
+    ...process.env,
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_SYSTEM: "/dev/null",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+  };
   // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
   const git = (root: string, ...args: string[]) =>
     execFileSync(
       "/usr/bin/git",
-      ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "-C", root, ...args],
-      { encoding: "utf-8" },
+      [
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "init.defaultBranch=main",
+        "-C",
+        root,
+        ...args,
+      ],
+      { encoding: "utf-8", env: gitEnvironment },
     ).trim();
   // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
   const write = (root: string, file: string, bytes: string) => {
@@ -53,7 +71,7 @@ const fixture = () => {
   git(source, "add", ".");
   git(source, "commit", "--quiet", "-m", "base");
   const originalSha = git(source, "rev-parse", "HEAD");
-  execFileSync("/usr/bin/git", ["clone", "--quiet", source, candidate]);
+  git(source, "clone", "--quiet", source, candidate);
   git(candidate, "config", "user.name", "Fixture");
   git(candidate, "config", "user.email", "fixture@example.test");
   write(candidate, "apps/example/app/page.tsx", "saved product\n");
@@ -283,7 +301,7 @@ describe("retained dirty planning baseline", () => {
       const stateRoot = path.join(path.dirname(f.source), "retained");
       const snapshot = path.join(stateRoot, "runs", "run-ABC123", "source");
       mkdirSync(path.dirname(snapshot), { mode: 0o700, recursive: true });
-      execFileSync("/usr/bin/git", ["clone", "--quiet", f.source, snapshot]);
+      f.git(f.source, "clone", "--quiet", f.source, snapshot);
       chmodSync(snapshot, 0o700);
       chmodSync(path.join(snapshot, ".git"), 0o700);
       f.git(snapshot, "config", "user.name", "Fixture");
@@ -307,7 +325,7 @@ describe("retained dirty planning baseline", () => {
       const artifact = path.join(stateRoot, "source-baselines", f.originalSha, expected);
       mkdirSync(artifact, { mode: 0o700, recursive: true });
       const artifactGit = path.join(artifact, "source.git");
-      execFileSync("/usr/bin/git", ["clone", "--bare", "--quiet", snapshot, artifactGit]);
+      f.git(f.source, "clone", "--bare", "--quiet", snapshot, artifactGit);
       chmodSync(artifactGit, 0o700);
       writeFileSync(
         path.join(artifact, "manifest.json"),
@@ -374,7 +392,7 @@ describe("retained dirty planning baseline", () => {
       const stateRoot = path.join(path.dirname(f.source), "retained");
       const snapshot = path.join(stateRoot, "runs", "run-ABC123", "source");
       mkdirSync(path.dirname(snapshot), { mode: 0o700, recursive: true });
-      execFileSync("/usr/bin/git", ["clone", "--quiet", f.source, snapshot]);
+      f.git(f.source, "clone", "--quiet", f.source, snapshot);
       chmodSync(snapshot, 0o700);
       chmodSync(path.join(snapshot, ".git"), 0o700);
       f.git(snapshot, "config", "user.name", "Fixture");
@@ -592,9 +610,9 @@ describe("retained dirty planning baseline", () => {
       }
     };
     try {
-      const original = await captureLocalPlanningSource(f.source, f.originalSha, { readAuthority });
-      const originalDigest = original.generation.workspaceDigest;
-      original.dispose();
+      const { workspaceDigest: originalDigest } = await inspectDevelopmentSourceGeneration(
+        f.source,
+      );
       f.write(f.source, "shared.txt", "platform revision one\n");
       f.git(f.source, "add", "shared.txt");
       f.git(f.source, "commit", "--quiet", "-m", "first platform revision");
