@@ -286,6 +286,7 @@ export function ConnectionDrawer({
   }
 
   return (
+    // react-doctor-disable-next-line react-doctor/no-noninteractive-element-interactions -- The native dialog handles Escape through onCancel and backdrop clicks through onMouseDown.
     <dialog
       ref={dialogRef}
       className={styles.drawerBackdrop}

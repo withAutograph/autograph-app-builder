@@ -13,6 +13,7 @@ import {
 // oxlint-disable-next-line sonarjs/function-name, eslint/func-style -- React components use PascalCase names for JSX and diagnostics. Preserve function declaration hoisting and initialization timing.
 async function RedirectAccountVisitor() {
   const requestHeaders = await headers();
+  // react-doctor-disable-next-line react-doctor/no-unguarded-throwing-parse-call -- Invalid server auth configuration must fail instead of choosing another origin.
   const { origin } = new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:3000/api/auth");
   // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   const state = await resolveWorkspaceOnboardingState(() =>

@@ -235,6 +235,7 @@ const CreatorAccountForm = ({
 }) => {
   const emailId = useId();
   return (
+    // react-doctor-disable-next-line react-doctor/no-prevent-default -- This form dispatches the selected account through the existing client action.
     <form
       aria-label="Choose your app account"
       className="space-y-3"
