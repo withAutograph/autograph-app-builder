@@ -231,10 +231,11 @@ describe("closed Production Auth schema transport", () => {
       expect(f.createSandbox).not.toHaveBeenCalled();
     },
   );
-  it("Production proposal passes an explicit restricted operator role through a private file", async () => {
+  it("normalizes an existing require binding for the Production proposal without changing its identity", async () => {
     const f = await fixture();
     const selected = { ...profile, runtime: f.row.record.runtime };
-    const readMigrationUrl = vi.fn(async () => migrationUrl);
+    const suppliedUrl = migrationUrl.replace("sslmode=verify-full", "sslmode=require");
+    const readMigrationUrl = vi.fn(async () => suppliedUrl);
     const result = await createProductionAuthSchemaProposal({
       createSandbox: f.createSandbox,
       getOidc: async () => "test-oidc",
@@ -247,7 +248,31 @@ describe("closed Production Auth schema transport", () => {
     });
     expect(input!.toString("utf-8")).not.toContain("private-fixture");
     expect(JSON.stringify(f.runCommand.mock.calls)).not.toContain("private-fixture");
+    expect(
+      f.files.get("/vercel/sandbox/auth-schema-proposal-migration-url")?.toString("utf-8"),
+    ).toBe(migrationUrl);
+    expect(suppliedUrl).toContain("sslmode=require");
   });
+  it.each([false, true])(
+    "normalizes require before approved schema apply/readback (readOnly=%s)",
+    async (readOnly) => {
+      const f = await fixture({ readOnly });
+      f.input.directDatabaseUrl = migrationUrl.replace("sslmode=verify-full", "sslmode=require");
+      await runProductionAuthSchemaFileSpool({ ...profile.runtime.sandbox, workers: {} }, f.input, {
+        createSandbox: f.createSandbox,
+      });
+      const transported = [...f.files.values()]
+        .map((bytes) => bytes.toString("utf-8"))
+        .filter((value) => value.includes("private-fixture"));
+      expect(transported.length).toBeGreaterThan(0);
+      for (const value of transported) {
+        expect(value).toContain("sslmode=verify-full");
+        expect(value).not.toContain("sslmode=require");
+      }
+      expect(f.input.directDatabaseUrl).toContain("sslmode=require");
+      expect(JSON.stringify(f.runCommand.mock.calls)).not.toContain("private-fixture");
+    },
+  );
   it("does not mark dispatch on failed VM creation, and marks it before an uncertain worker command", async () => {
     const f = await fixture();
     const beforeWorkerDispatch = vi.fn(async () => {});

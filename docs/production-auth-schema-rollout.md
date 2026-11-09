@@ -51,6 +51,20 @@ target, privately using its migration binding and explicit managed operator role
 The existing Preview proposal API stays Preview-only. Returned resource/role
 must match deployment enrollment.
 
+An existing Neon binding with one `sslmode=require` is strengthened in memory
+to `verify-full` before planning, approved apply, or readback. The stored binding,
+password, target and roles are unchanged. Duplicate or missing TLS parameters,
+unsupported query overrides, pooled endpoints and mismatched resource identities
+still fail the independent strict connection assertion.
+
+Auth maintenance failures emit server-only `builder.auth_schema_rollout_failure`
+diagnostics identifying a closed phase, error class, and optional allowlisted
+operator code or SQLSTATE. These distinguish configuration, canonical owner,
+profile selection, migration binding, OIDC, VM creation, proposal and journal
+failures. They never include exception text, SQL, credentials, URLs, caller
+attributes, request arguments or native inputs. Public errors remain generic;
+diagnostics neither authorize effects nor change retry or cleanup behavior.
+
 The existing tenant-owned `builder_provisioning_journal` stores separate
 `production-auth-schema-rollout-v1` records. Each freezes the complete original
 schema proposal, catalog/source, worker, sandbox, connection **reference**,

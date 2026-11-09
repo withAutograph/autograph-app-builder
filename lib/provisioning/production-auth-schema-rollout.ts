@@ -18,6 +18,7 @@ import type {
 } from "./production-auth-schema-rollout-contract";
 import type { AuthSchemaRolloutProfile } from "./production-auth-schema-rollout-configuration";
 import type { PrivateOperatorApprovalObservation } from "../eve/private-operator-approval-observation";
+import { observeAuthSchemaRolloutPhaseSync } from "./production-auth-schema-rollout-diagnostic";
 
 export interface AuthSchemaRolloutStore {
   read: (
@@ -128,51 +129,55 @@ export const createAuthSchemaRollout = (ports: AuthSchemaRolloutPorts) => {
         await authorize(owner, scope);
       };
       const proposal = await ports.propose(profile, assertCurrent);
-      const parsed = proposalSchema.parse(proposal);
-      const { resourceId, ...resource } = profile.resource;
-      if (
-        !isDeepStrictEqual(parsed.resource, resource) ||
-        !isDeepStrictEqual(parsed.schemaPlan.resource, resource) ||
-        parsed.schemaPlan.authOperatorRole !== profile.authOperatorRole
-      ) {
-        throw mismatch();
-      }
-      const operatorPlan = z.json().parse({
-        version: 1,
-        action: "prepare",
-        authDatabase: {
-          resourceId,
-          database: resource.database,
-          migratorRole: resource.migratorRole,
-          runtimeRole: resource.runtimeRole,
-        },
-        authSchema: {
-          planDigest: parsed.schemaPlan.planDigest,
-          targetDigest: parsed.schemaPlan.targetDigest,
+      const frozen = observeAuthSchemaRolloutPhaseSync("proposal_validation", () => {
+        const parsed = proposalSchema.parse(proposal);
+        const { resourceId, ...resource } = profile.resource;
+        if (
+          !isDeepStrictEqual(parsed.resource, resource) ||
+          !isDeepStrictEqual(parsed.schemaPlan.resource, resource) ||
+          parsed.schemaPlan.authOperatorRole !== profile.authOperatorRole
+        ) {
+          throw mismatch();
+        }
+        const operatorPlan = z.json().parse({
+          version: 1,
+          action: "prepare",
+          authDatabase: {
+            resourceId,
+            database: resource.database,
+            migratorRole: resource.migratorRole,
+            runtimeRole: resource.runtimeRole,
+          },
+          authSchema: {
+            planDigest: parsed.schemaPlan.planDigest,
+            targetDigest: parsed.schemaPlan.targetDigest,
+            authOperatorRole: profile.authOperatorRole,
+          },
+          neon: {
+            endpoint: resource.hostname,
+            projectId: resource.neon.projectId,
+            branchId: resource.neon.branchId,
+          },
+          rollout: { scope, runtime: profile.runtime, proposal },
+        });
+        const planDigest = authSchemaRolloutDigest(operatorPlan);
+        const plan = authSchemaRolloutApprovalSchema.parse({
+          version: 1,
+          operationRef: authSchemaRolloutOperationRef(scope, planDigest),
+          scope,
+          planDigest,
+          resource: profile.resource,
+          resourceLabel: profile.label,
           authOperatorRole: profile.authOperatorRole,
-        },
-        neon: {
-          endpoint: resource.hostname,
-          projectId: resource.neon.projectId,
-          branchId: resource.neon.branchId,
-        },
-        rollout: { scope, runtime: profile.runtime, proposal },
+          schemaPlanDigest: parsed.schemaPlan.planDigest,
+          targetDigest: parsed.schemaPlan.targetDigest,
+          workerSha256: profile.runtime.worker.sha256,
+          sourceCapture: profile.runtime.worker.sourceCapture,
+          effects: parsed.schemaPlan.effects,
+        });
+        return { operatorPlan, plan };
       });
-      const planDigest = authSchemaRolloutDigest(operatorPlan);
-      const plan = authSchemaRolloutApprovalSchema.parse({
-        version: 1,
-        operationRef: authSchemaRolloutOperationRef(scope, planDigest),
-        scope,
-        planDigest,
-        resource: profile.resource,
-        resourceLabel: profile.label,
-        authOperatorRole: profile.authOperatorRole,
-        schemaPlanDigest: parsed.schemaPlan.planDigest,
-        targetDigest: parsed.schemaPlan.targetDigest,
-        workerSha256: profile.runtime.worker.sha256,
-        sourceCapture: profile.runtime.worker.sourceCapture,
-        effects: parsed.schemaPlan.effects,
-      });
+      const { operatorPlan, plan } = frozen;
       await assertCurrent();
       const row = await ports.store.reserve(
         authSchemaRolloutRecordSchema.parse({
