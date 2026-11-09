@@ -585,6 +585,33 @@ describe("concrete protected Production worker composition", () => {
     expect((await f.workers.reconcile(f.context)).state).toBe("applied");
     expect(f.context.row.record.privateState).toBeUndefined();
   });
+  it("carries the verified signup claim into the protected generated access plan", async () => {
+    const f = await fixture();
+    const signupClaim = {
+      policyId: repositoryProductionOperationRef(scope),
+      claimId: "22222222-2222-4222-a222-222222222222",
+      scopeDigest: "e".repeat(64),
+    };
+    const before = structuredClone(f.context.row.record);
+    await f.workers.mutateAppAccess(f.context, {
+      actorId: "verified-signup",
+      roles: ["requester"],
+      active: true,
+      signupClaim,
+    });
+    const grant = defined(f.calls.find((call) => call.operation === "access" && !call.readOnly));
+    const plan = z
+      .object({
+        signupClaim: z.object({ policyId: z.uuid(), claimId: z.uuid(), scopeDigest: z.string() }),
+        access: z.array(z.object({ actorId: z.string() })),
+      })
+      .parse(JSON.parse(defined(grant.startupFiles["approved-access-plan.json"]).toString()));
+    expect(plan.signupClaim).toEqual(signupClaim);
+    expect(plan.access).toEqual([{ actorId: "verified-signup" }]);
+    expect(grant.context.operation.operation_id).toBe(f.context.row.operationRef);
+    expect(f.context.row.record).toEqual(before);
+    expect(grant.directDatabaseUrl).not.toContain("maintenance");
+  });
   it("supports management grants without stealing creator identity or encrypted resource ownership", async () => {
     const f = await fixture();
     await f.workers.mutateAppAccess(
@@ -597,6 +624,45 @@ describe("concrete protected Production worker composition", () => {
     const plan = planFrom(defined(f.calls[0]).startupFiles["approved-access-plan.json"]);
     expect(plan.access?.[0]?.actorId).toBe("invitee");
     expect(plan.appDatabase).toEqual(f.context.row.record.resource);
+  });
+  it("observes an original signup grant without replacing the current lease authority or dispatching writes", async () => {
+    const f = await fixture();
+    defined(f.context.row.record.lease).fenceGeneration = 429;
+    const access = {
+      actorId: "verified-signup",
+      roles: [],
+      active: true,
+      signupClaim: {
+        policyId: repositoryProductionOperationRef(scope),
+        claimId: "22222222-2222-4222-a222-222222222222",
+        scopeDigest: "e".repeat(64),
+      },
+      signupGrantReadback: {
+        operationRef: "33333333-3333-4333-a333-333333333333",
+        fenceGeneration: 17,
+      },
+    };
+    await f.workers.inspectAppAccess(f.context, access);
+    const call = defined(f.calls.find((entry) => entry.operation === "access"));
+    const bytes = defined(call.startupFiles["approved-access-plan.json"]);
+    const approved = z
+      .object({
+        signupGrantReadback: z.object({ operationRef: z.uuid(), fenceGeneration: z.number() }),
+        signupClaim: z.object({ scopeDigest: z.string() }),
+        access: z.array(z.object({ actorId: z.string(), roles: z.array(z.string()) })),
+      })
+      .parse(JSON.parse(bytes.toString()));
+    expect(approved.signupGrantReadback).toEqual(access.signupGrantReadback);
+    expect(approved.signupClaim).toEqual({ scopeDigest: access.signupClaim.scopeDigest });
+    expect(approved.access).toEqual([{ actorId: access.actorId, roles: [] }]);
+    expect(call.context.operation.fence_generation).toBe(429);
+    expect(call.context.operation.approval_digest).toBe(
+      createHash("sha256").update(bytes).digest("hex"),
+    );
+    expect(call.readOnly).toBe(true);
+    const calls = f.calls.length;
+    await expect(f.workers.mutateAppAccess(f.context, access)).rejects.toThrow("readback_only");
+    expect(f.calls).toHaveLength(calls);
   });
   it("stops before credentials or provider work when the lease is revoked", async () => {
     const f = await fixture();

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resolveAppAccessIntent } from "../agent/app-access-intent";
 import {
   repositoryProductionDigest,
   repositoryProductionIntentSchema,
@@ -14,14 +15,23 @@ import type {
 export const repositoryProductionApprovalDigest = (
   scope: RepositoryProductionScope,
   intent: RepositoryProductionIntent,
-) =>
-  repositoryProductionDigest({
+) => {
+  const signup: Pick<RepositoryProductionIntent, "access" | "entryPath"> = {};
+  if (intent.access?.mode === "self-signup") {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Approval canonicalization has no inherited selection.
+    signup.access = resolveAppAccessIntent(intent.access, undefined) ?? intent.access;
+    if (intent.entryPath !== undefined) {
+      signup.entryPath = intent.entryPath;
+    }
+  }
+  return repositoryProductionDigest({
     scope,
     creatorRoles: [...new Set(intent.creatorRoles)].toSorted(),
     // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(intent.creatorEmail === undefined
       ? {}
       : { creatorEmail: intent.creatorEmail.toLowerCase() }),
+    ...signup,
     storage:
       intent.storage.kind === "none"
         ? { kind: "none" }
@@ -32,6 +42,7 @@ export const repositoryProductionApprovalDigest = (
             databaseEnvironment: intent.storage.databaseEnvironment,
           },
   });
+};
 export const repositoryProductionApprovalInputSchema = z
   .strictObject({
     scope: repositoryProductionScopeSchema,

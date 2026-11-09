@@ -3,6 +3,7 @@ import { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { operatorOwnerContextSchema } from "./hosted-operator-contract";
 import { centralHostCanonicalBytes } from "./central-integration-host-contract";
+import { appAccessIntentSchema } from "../agent/app-access-intent";
 
 const REPOSITORY_PRODUCTION_SETUP_KIND = "repository-production-setup-v1";
 
@@ -23,6 +24,14 @@ export const repositoryProductionScopeSchema = z.strictObject({
   environment: z.literal("production"),
 });
 export type RepositoryProductionScope = z.infer<typeof repositoryProductionScopeSchema>;
+/** Same canonical same-origin path contract as the shared Auth signup utility. */
+export const repositoryProductionSignupPathSchema = z
+  .string()
+  .regex(/^\/(?!\/)[^\\\s#]*$/u)
+  .refine((value) => {
+    const url = new URL(value, "https://signup.invalid");
+    return url.origin === "https://signup.invalid" && `${url.pathname}${url.search}` === value;
+  });
 export const repositoryProductionIntentSchema = z.strictObject({
   sessionId: id,
   sourceSha: z.string().regex(/^[a-f0-9]{40,64}$/u),
@@ -31,6 +40,9 @@ export const repositoryProductionIntentSchema = z.strictObject({
     .email()
     .transform((email) => email.toLowerCase())
     .optional(),
+  access: appAccessIntentSchema.optional(),
+  /** Captured app route; public input cannot select the signup return path. */
+  entryPath: repositoryProductionSignupPathSchema.optional(),
   storage: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("none") }),
     z.strictObject({
@@ -57,6 +69,7 @@ export const repositoryProductionEffectSchema = z.enum([
   "install-schema",
   "creator-access",
   "bind-runtime",
+  "signup-policy",
 ]);
 export type RepositoryProductionEffect = z.infer<typeof repositoryProductionEffectSchema>;
 const checkpointSchema = z.strictObject({
@@ -88,7 +101,13 @@ export const repositoryProductionRecordSchema = z.strictObject({
   ownerContext: operatorOwnerContextSchema.optional(),
   creatorOwnerContext: operatorOwnerContextSchema.optional(),
   approval: z.strictObject({ planDigest: hash, approvedByCallId: id, approvalId: id }).optional(),
-  effects: z.record(repositoryProductionEffectSchema, checkpointSchema),
+  effects: z.object({
+    "allocate-storage": checkpointSchema,
+    "install-schema": checkpointSchema,
+    "creator-access": checkpointSchema,
+    "bind-runtime": checkpointSchema,
+    "signup-policy": checkpointSchema.default({ state: "idle" }),
+  }),
   workerCheckpoints: z.array(z.json()),
   lease: z
     .strictObject({ leaseId: z.uuid(), fenceGeneration: z.number().int().positive() })

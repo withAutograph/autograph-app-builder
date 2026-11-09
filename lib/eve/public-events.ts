@@ -1293,6 +1293,7 @@ const inputRequest = (request: {
 }): PublicInputRequest | undefined => {
   const approvalTitles = {
     apply_app_creation: "Build this app?",
+    "apply-production-auth-schema-rollout": "Approve this one-time shared sign-in service update?",
     "cleanup-app-hosted-runtime": "Remove this app's Preview resources?",
     "export-app-hosted-data": "Export this customer’s app data privately?",
     "finish-github-pr-delivery": "Merge the reviewed changes when checks pass?",

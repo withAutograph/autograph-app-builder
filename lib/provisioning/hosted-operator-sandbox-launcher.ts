@@ -174,6 +174,7 @@ const workerSubcommandSchema = z.enum([
   VENDOR_COMMAND,
   GENERATED_COMMAND,
   AUTH_COMMAND,
+  "auth-protected-schema-readback",
   MEMBERSHIP_COMMAND,
   SIGNUP_POLICY_COMMAND,
   MEMBERSHIP_INSPECT_COMMAND,
@@ -1347,6 +1348,9 @@ type SharedSpoolInput = Pick<SandboxWorkerInput, "signal" | "readbackOnly" | "fe
   startupFiles?: Readonly<Record<string, Buffer>>;
   /** Only the closed repository Production wrapper can supply these fixed worker files. */
   repositoryProduction?: true;
+  /** Only the closed existing-Production-Auth schema wrapper supplies these two files. */
+  productionAuthSchema?: true;
+  beforeWorkerDispatch?: () => Promise<void>;
 };
 interface SharedSpoolSetup {
   context: WorkerContext;
@@ -1770,6 +1774,7 @@ const runPinnedFileSpoolTransport = async (
               GATEWAY_READBACK_OIDC_FILE,
             ]
           : []),
+        ...(input.productionAuthSchema ? [OPERATOR_PLAN_FILE, "auth-schema-plan.json"] : []),
         "app-integration-approved-plan.json",
         "app-integration-connections.json",
         "app-integration-authority.json",
@@ -1974,6 +1979,7 @@ const runPinnedFileSpoolTransport = async (
       ? [releaseDirectory]
       : ["--release-directory", releaseDirectory];
     execution.stage = "command_start";
+    await input.beforeWorkerDispatch?.();
     command = await sandbox.runCommand({
       args: [
         worker.subcommand,
@@ -2022,6 +2028,7 @@ const runPinnedFileSpoolTransport = async (
         membership ||
         worker.operationScope === APP_INTEGRATION_SCOPE ||
         worker.operationScope === CENTRAL_INTEGRATION_SCOPE ||
+        (input.productionAuthSchema && worker.operationScope === AUTH_SCOPE) ||
         worker.operationScope === AUTH_APP_ACCESS_SCOPE)
     ) {
       await assertCurrent();
@@ -2514,4 +2521,115 @@ export const runRepositoryProductionFileSpool = async (
     );
     throw error;
   }
+};
+
+/** Private service rollout of an existing Production Auth schema. No app, membership,
+ * resource allocation, environment binding or Preview bootstrap effects are admitted.
+ */
+export const runProductionAuthSchemaFileSpool = async (
+  configuration: HostedOperatorSandboxConfiguration,
+  input: {
+    worker: ProtectedInstallerWorkerDescriptor;
+    context: ProtectedInstallContextWire;
+    operatorPlan: Buffer;
+    authSchemaPlan: Buffer;
+    directDatabaseUrl: string;
+    readOnly: boolean;
+    runId: string;
+    signal: AbortSignal;
+    assertCurrent: () => Promise<void>;
+    recordCheckpoint?: RecordWorkerCheckpoint;
+    beforeWorkerDispatch?: () => Promise<void>;
+  },
+  dependencies: { createSandbox?: CreateSandbox } = {},
+) => {
+  const { context } = input;
+  const worker: ProtectedInstallerWorkerDescriptor = {
+    ...input.worker,
+    subcommand: input.readOnly ? "auth-protected-schema-readback" : AUTH_COMMAND,
+  };
+  if (
+    context.resource.environment !== "production" ||
+    context.app_id !== "auth" ||
+    context.tenant_targets.length !== 0 ||
+    worker.id !== AUTH_SCOPE ||
+    worker.operationScope !== AUTH_SCOPE ||
+    context.installer.id !== worker.id ||
+    context.installer.sha256 !== worker.sha256 ||
+    !Number.isSafeInteger(context.operation.fence_generation) ||
+    context.operation.fence_generation < 1 ||
+    (input.readOnly
+      ? input.recordCheckpoint !== undefined
+      : input.recordCheckpoint === undefined) ||
+    sha256(input.operatorPlan) !== context.operation.approval_digest
+  ) {
+    throw resourceMismatch();
+  }
+  const schemaFrame = z
+    .object({
+      version: z.literal(1),
+      resource: authResourceSchema.extend({ environment: z.literal("production") }),
+      schemaPlan: z.object({
+        planDigest: digestSchema,
+        targetDigest: digestSchema,
+        authOperatorRole: z.string().min(1),
+      }),
+    })
+    .parse(JSON.parse(input.authSchemaPlan.toString("utf-8")));
+  const { resource } = schemaFrame;
+  if (
+    resource.hostname !== context.resource.hostname ||
+    resource.database !== context.resource.database ||
+    resource.migratorRole !== context.resource.migrator_role ||
+    resource.runtimeRole !== context.resource.runtime_role ||
+    resource.neon.projectId !== context.resource.provider_project_id ||
+    resource.neon.branchId !== context.resource.provider_branch_id ||
+    schemaFrame.schemaPlan.planDigest !== context.release.sha256 ||
+    schemaFrame.schemaPlan.targetDigest !== context.release.id
+  ) {
+    throw resourceMismatch();
+  }
+  // URL identity is checked independently of the worker before any credential transport.
+  const { assertAuthProposalMigrationUrl } = await import("./hosted-operator-auth-proposal");
+  assertAuthProposalMigrationUrl(input.directDatabaseUrl, resource);
+  await input.assertCurrent();
+  const createSandbox: CreateSandbox =
+    dependencies.createSandbox ??
+    (async (options) => {
+      const token = await getVercelOidcToken({ project: options.projectId, team: options.teamId });
+      return await Sandbox.create({ ...options, token });
+    });
+  const bytes = canonicalContextBytes(context);
+  return await runPinnedFileSpoolTransport(
+    configuration,
+    createSandbox,
+    {
+      directDatabaseUrl: input.directDatabaseUrl,
+      readbackOnly: input.readOnly ? true : undefined,
+      fenceGeneration: context.operation.fence_generation,
+      signal: input.signal,
+      startupFiles: {
+        "operator-plan.json": input.operatorPlan,
+        "auth-schema-plan.json": input.authSchemaPlan,
+      },
+      productionAuthSchema: true,
+      beforeWorkerDispatch: input.beforeWorkerDispatch,
+    },
+    { stage: "sandbox_create", mode: input.readOnly ? "inspect" : "execute" },
+    {
+      context,
+      contextDigest: sha256(bytes),
+      worker,
+      runId: workerRunIdSchema.parse(input.runId),
+      assertCurrent: input.assertCurrent,
+      allowedResources: new Set([context.resource.resource_id]),
+      allowedTenants: new Set(),
+      recordCheckpoint: input.recordCheckpoint,
+      resources: false,
+      access: false,
+      membership: false,
+      installReadback: false,
+      generatedFiles: [],
+    },
+  );
 };

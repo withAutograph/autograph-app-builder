@@ -29,6 +29,7 @@ import type {
   RepositoryProductionObservation,
 } from "./repository-production-setup";
 import { runRepositoryProductionFileSpool } from "./hosted-operator-sandbox-launcher";
+import { createRepositoryProductionSignupPolicy } from "./repository-production-signup-policy";
 import type {
   GeneratedAppReleaseFiles,
   HostedOperatorSandboxConfiguration,
@@ -212,8 +213,17 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     context: RepositoryProductionEffectContext,
     operation: "storage" | "schema" | "access" | "membership",
     readOnly: boolean,
-    managedAccess?: { actorId: string; roles: string[]; active: boolean },
+    managedAccess?: {
+      actorId: string;
+      roles: string[];
+      active: boolean;
+      signupClaim?: { policyId: string; claimId: string; scopeDigest: string };
+      signupGrantReadback?: { operationRef: string; fenceGeneration: number };
+    },
   ) => {
+    if (managedAccess?.signupGrantReadback && (!readOnly || !managedAccess.signupClaim)) {
+      throw new Error("repository_production_signup_readback_only");
+    }
     await assertCurrent(context);
     const { row } = context;
     const { scope, intent, resource, lease } = row.record;
@@ -298,9 +308,19 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       access,
       effects: [{ id: AUTH_MEMBERSHIP_EFFECT, kind: AUTH_MEMBERSHIP_EFFECT }],
     };
-    const planWithMembership: typeof planStart & { authMembership?: typeof membership } = planStart;
+    const planWithMembership: typeof planStart & {
+      authMembership?: typeof membership;
+      signupClaim?: NonNullable<typeof managedAccess>["signupClaim"];
+      signupGrantReadback?: NonNullable<typeof managedAccess>["signupGrantReadback"];
+    } = planStart;
     if (membership !== undefined) {
       planWithMembership.authMembership = membership;
+    }
+    if (managedAccess?.signupClaim !== undefined) {
+      planWithMembership.signupClaim = managedAccess.signupClaim;
+    }
+    if (managedAccess?.signupGrantReadback !== undefined) {
+      planWithMembership.signupGrantReadback = managedAccess.signupGrantReadback;
     }
     const plan = {
       ...planWithMembership,
@@ -535,6 +555,25 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     reportRepositoryProductionProgress("worker_input", "completed");
     return await runWorker(sandbox, workerInput);
   };
+  const signupPolicy = createRepositoryProductionSignupPolicy({
+    request: async (context, request, readOnly) => {
+      const response = await invokeAuthManagement(
+        context,
+        {
+          version: 1,
+          realm: deps.authRealm,
+          builderOrigin: deps.builderOrigin,
+          scope: {
+            appId: context.row.record.scope.appId,
+            organizationId: context.row.record.scope.organizationId,
+          },
+          request,
+        },
+        readOnly,
+      );
+      return z.object({ result: z.json() }).parse(response).result;
+    },
+  });
   const managedAuth = async (
     context: RepositoryProductionEffectContext,
     proof: Extract<RepositoryProductionCreatorProof, { kind: "managed-invitation" }>,
@@ -580,13 +619,24 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       deps.runtimeBinding.isReady(row, appConnections(row).appRuntime),
     async mutateAppAccess(
       context: RepositoryProductionEffectContext,
-      access: { actorId: string; roles: string[]; active: boolean },
+      access: {
+        actorId: string;
+        roles: string[];
+        active: boolean;
+        signupClaim?: { policyId: string; claimId: string; scopeDigest: string };
+      },
     ) {
       await run(context, "access", false, access);
     },
     async inspectAppAccess(
       context: RepositoryProductionEffectContext,
-      access: { actorId: string; roles: string[]; active: boolean },
+      access: {
+        actorId: string;
+        roles: string[];
+        active: boolean;
+        signupClaim?: { policyId: string; claimId: string; scopeDigest: string };
+        signupGrantReadback?: { operationRef: string; fenceGeneration: number };
+      },
     ) {
       return observe(await run(context, "access", true, access));
     },
@@ -637,6 +687,10 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       return "state" in result ? result : { actorId: result.actorId, state: "verified" };
     },
     async apply(context: RepositoryProductionEffectContext) {
+      if (context.effect === "signup-policy") {
+        await signupPolicy.apply(context);
+        return;
+      }
       if (context.effect === "bind-runtime") {
         await deps.runtimeBinding.apply(context, appConnections(context.row).appRuntime);
         return;
@@ -667,6 +721,9 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       await run(context, context.effect === "allocate-storage" ? "storage" : "schema", false);
     },
     async reconcile(context: RepositoryProductionEffectContext) {
+      if (context.effect === "signup-policy") {
+        return await signupPolicy.reconcile(context);
+      }
       if (context.effect === "bind-runtime") {
         return await deps.runtimeBinding.reconcile(context, appConnections(context.row).appRuntime);
       }

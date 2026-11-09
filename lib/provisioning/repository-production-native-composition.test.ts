@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
   createRepositoryProductionIntentBoundSetup,
+  createRepositoryProductionSignupLeaseGuard,
   assertNoConflictingProductionSetup,
   completeRepositoryProductionInvitation,
   readRepositoryProductionCreatorAccess,
@@ -67,6 +68,7 @@ const fixture = () => {
     "install-schema": { state: "applied" },
     "creator-access": { state: "applied" },
     "bind-runtime": { state: "applied" },
+    "signup-policy": { state: "idle" },
   };
   initial.creatorActorId = "creator";
   initial.privateState = { retainedCredential: "encrypted-fixture" };
@@ -456,4 +458,58 @@ it("preserves a membership rejection after the creator identity read succeeds", 
       },
     ),
   ).rejects.toBe(failure);
+});
+
+describe("Production signup observation lease", () => {
+  it("keeps prelease authorization free of signup observers and forwards the physical fence while held", async () => {
+    let held = false;
+    let current = true;
+    let reads = 0;
+    const assertFence = async () => {
+      if (!held || !current) {
+        throw new Error("physical lease lost");
+      }
+    };
+    const guard = createRepositoryProductionSignupLeaseGuard(async (target, intent, fence) => {
+      expect(target).toEqual(scope);
+      expect(intent).toEqual(revised);
+      await fence();
+      reads += 1;
+      await fence();
+    });
+    await guard.assertNoPending(scope, revised);
+    expect(reads).toBe(0);
+    held = true;
+    await guard.run(assertFence, async () => {
+      await guard.assertNoPending(scope, revised);
+      expect(reads).toBe(1);
+      current = false;
+      await expect(guard.assertNoPending(scope, revised)).rejects.toThrow("physical lease lost");
+      expect(reads).toBe(1);
+    });
+    held = false;
+    await guard.assertNoPending(scope, revised);
+    expect(reads).toBe(1);
+  });
+
+  it("clears the held fence after a blocked continuation and preserves unrelated pending claims", async () => {
+    let reads = 0;
+    const guard = createRepositoryProductionSignupLeaseGuard(
+      async (_target, _intent, assertFence) => {
+        await assertFence();
+        reads += 1;
+        throw new Error("other signup still pending");
+      },
+    );
+    await expect(
+      guard.run(
+        async () => {},
+        async () => {
+          await guard.assertNoPending(scope);
+        },
+      ),
+    ).rejects.toThrow("other signup still pending");
+    await guard.assertNoPending(scope);
+    expect(reads).toBe(1);
+  });
 });

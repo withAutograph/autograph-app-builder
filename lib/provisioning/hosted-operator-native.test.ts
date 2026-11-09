@@ -62,6 +62,7 @@ describe("separate native operator host", () => {
       },
     });
     expect(config.rewrites).toEqual([
+      { destination: { service: "operator" }, source: "/v1/auth-schema-rollout" },
       { destination: { service: "operator" }, source: "/v1/key-custody/possession" },
       { destination: { service: "operator" }, source: "/v1/runtime" },
       { destination: { service: "operator" }, source: "/v1/public-release" },

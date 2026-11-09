@@ -1,4 +1,7 @@
 import { waitUntil } from "@vercel/functions";
+import { createAuthSchemaRolloutNativeHandler } from "./production-auth-schema-rollout-native";
+import { authSchemaRolloutPath } from "./production-auth-schema-rollout-contract";
+import { HostedOperatorError } from "./hosted-operator-contract";
 import { createRepositoryProductionNativeHandler } from "./repository-production-native";
 import {
   repositoryProductionCompletionPath,
@@ -16,9 +19,22 @@ const runtime = createHostedOperatorNativeHandler({
 });
 const production = createRepositoryProductionNativeHandler(process.env, waitUntil);
 const possession = createCustodyPossessionHandler();
+const authSchemaRollout = createAuthSchemaRolloutNativeHandler();
 export default {
   async fetch(request: Request) {
     const { pathname } = new URL(request.url);
+    if (pathname === authSchemaRolloutPath) {
+      try {
+        return await authSchemaRollout(request);
+      } catch (error) {
+        const denied =
+          error instanceof HostedOperatorError && error.code === "authorization_required";
+        return Response.json(
+          { code: denied ? "authorization_required" : "auth_schema_rollout_unavailable" },
+          { status: denied ? 403 : 503, headers: { "cache-control": "no-store" } },
+        );
+      }
+    }
     if ([repositoryProductionPath, repositoryProductionCompletionPath].includes(pathname)) {
       if (request.method !== "POST") {
         return Response.json(

@@ -111,7 +111,9 @@ Production requires an explicit `authOperatorRole` distinct from the Auth schema
 owner (`authResource.migratorRole`) and runtime role. Its restricted permissions
 support managed invitations, existing-organization membership and app access;
 the platform operator prepares the schema and grants separately. Builder does
-not persist or pass an Auth schema-owner connection to Production workers.
+not persist or pass an Auth schema-owner connection to app setup/access workers.
+Separate platform schema maintenance privately resolves its enrolled owner secret
+through the protected Auth schema rollout service.
 The full approved worker plan binds `authOperatorRole`; generated access
 workers receive `authOperator` beside the app and Auth runtime connections.
 The Auth resource, realm digest and schema-owner descriptors stay unchanged.
@@ -300,6 +302,29 @@ Auth access without allocating a database, and role-less apps require their
 explicit admission. Owner and cancellation checks still precede the journal-only
 acknowledgement. This reuses native read-only metadata; it adds no Preview,
 worker snapshot, pin or qualification requirement.
+
+An approved self-signup policy uses the same app lock and access workers. The
+signup journal retains the verified actor, policy, session, resource, return URL
+and approved roles. A fresh verified session may renew that same claim only when
+Auth proves that no grant was ever reserved and no assignment or admission history
+exists. Renewal preserves the claim ID and previous tuple/checkpoints, changes
+the continuation digest, and gives subsequent worker steps distinct identities.
+Missing evidence from older workers never authorizes renewal.
+
+An interrupted reserved grant remains unknown until readback proves its outcome.
+Current authority can observe a complete grant at its original recorded generation
+without replaying writes, even after its signup session expires or signup is
+disabled. This checks positive Auth admission and, for persistent apps, the exact
+kernel binding. Empty approved roles are valid only for apps whose generated
+catalog declares no business roles; named-role apps retain their existing guard.
+
+The owner's existing People removal can close one interrupted signup under a
+fresh app lease. It freezes the exact actor, claim and roles in both journals,
+uses the existing revoke workers, and confirms Auth admission, assignments and
+kernel access are closed before rejecting the original signup journal. Unknown
+outcomes retain that cancellation target for reconciliation. Every other pending
+signup continues to block conflicting mutations; cancellation never renews or
+regrants the claim.
 
 Automatic Auth callbacks try the same physical PostgreSQL transaction lock
 without waiting. A callback returns pending when another continuation holds the

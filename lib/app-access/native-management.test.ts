@@ -354,6 +354,137 @@ const harness = (roleless = false, generated = false) => {
 };
 
 describe("native app access recovery", () => {
+  it("requires current owner authority before dispatching a pending-signup cancellation", async () => {
+    const h = harness(false, true);
+    let dispatched = false;
+    h.deps.cancelPendingSignup = async () => {
+      dispatched = true;
+      return "applied";
+    };
+    const failure = new Error("owner access revoked");
+    h.revokeOwner(failure);
+    await expect(
+      h.service.execute(owner, {
+        action: "remove",
+        clientRequestId: randomUUID(),
+        memberId: "partial",
+      }),
+    ).rejects.toBe(failure);
+    expect(dispatched).toBe(false);
+    expect(h.rows.size).toBe(0);
+    expect(h.accessWrites).toEqual([]);
+  });
+
+  it("cancels an exact pending signup even when no Auth membership is visible", async () => {
+    const h = harness(false, true);
+    const command = {
+      action: "remove" as const,
+      clientRequestId: randomUUID(),
+      memberId: "partial",
+    };
+    let closed = false;
+    h.deps.cancelPendingSignup = async (input) => {
+      expect(input.scope).toEqual(scope);
+      expect(input.actorId).toBe(command.memberId);
+      expect(input.effect.operationRef).toBe(command.clientRequestId);
+      expect(input.mode).toBe("execute");
+      await input.effect.assertCurrent();
+      await input.effect.checkpoint({ kind: "signup-cancellation", actorId: input.actorId });
+      closed = true;
+      return "applied";
+    };
+    await h.service.execute(owner, command);
+    expect(closed).toBe(true);
+    expect(h.rows.get(command.clientRequestId)?.record.state).toBe("applied");
+    expect(h.rows.get(command.clientRequestId)?.record.workerCheckpoints).toContainEqual({
+      kind: "signup-cancellation",
+      actorId: "partial",
+    });
+    expect(h.accessWrites).toEqual([]);
+  });
+
+  it("reconciles an uncertain signup cancellation without dispatching its revoke twice", async () => {
+    const h = harness(false, true);
+    const command = {
+      action: "remove" as const,
+      clientRequestId: randomUUID(),
+      memberId: "partial",
+    };
+    let revocations = 0;
+    h.deps.cancelPendingSignup = async ({ effect, mode }) => {
+      await effect.assertCurrent();
+      if (mode === "reconcile") {
+        expect(effect.readCheckpoints()).toContainEqual({ kind: "signup-cancellation" });
+        return revocations === 1 ? "applied" : "unknown";
+      }
+      await effect.checkpoint({ kind: "signup-cancellation" });
+      revocations += 1;
+      throw new Error("lost revoke reply");
+    };
+    await expect(h.service.execute(owner, command)).rejects.toMatchObject({
+      code: "app_access_unknown",
+    });
+    expect(h.rows.get(command.clientRequestId)?.record.state).toBe("pending");
+    await h.service.execute(owner, command);
+    expect(revocations).toBe(1);
+    expect(h.rows.get(command.clientRequestId)?.record.state).toBe("applied");
+  });
+
+  it.each(["unknown", "absent"] as const)(
+    "retains a pending removal when signup cancellation returns %s",
+    async (result) => {
+      const h = harness();
+      h.people.set("guest", {
+        email: "guest@example.test",
+        id: "guest",
+        name: "Guest",
+        roles: ["reader"],
+      });
+      h.deps.cancelPendingSignup = async () => result;
+      const command = {
+        action: "remove" as const,
+        clientRequestId: randomUUID(),
+        memberId: "guest",
+      };
+      await expect(h.service.execute(owner, command)).rejects.toMatchObject({
+        code: "app_access_unknown",
+      });
+      expect(h.people.has("guest")).toBe(true);
+      expect(h.accessWrites).toEqual([]);
+      expect(h.rows.get(command.clientRequestId)?.record.state).toBe("pending");
+    },
+  );
+
+  it("preserves ordinary removal when no signup matches and never cancels for a role change", async () => {
+    const h = harness();
+    const observedActors: string[] = [];
+    h.deps.cancelPendingSignup = async ({ actorId }) => {
+      observedActors.push(actorId);
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Undefined selects the existing ordinary People path.
+      return undefined;
+    };
+    h.people.set("guest", {
+      email: "guest@example.test",
+      id: "guest",
+      name: "Guest",
+      roles: ["reader"],
+    });
+    await h.service.execute(owner, {
+      action: "change-role",
+      clientRequestId: randomUUID(),
+      memberId: "guest",
+      roles: ["editor"],
+    });
+    expect(observedActors).toEqual([]);
+    await h.service.execute(owner, {
+      action: "remove",
+      clientRequestId: randomUUID(),
+      memberId: "guest",
+    });
+    expect(observedActors).toEqual(["guest"]);
+    expect(h.people.has("guest")).toBe(false);
+  });
+
   it.each([true, false])(
     "keeps saved frontend People usable with current published routing=%s",
     async (published) => {

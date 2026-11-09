@@ -39,6 +39,7 @@ import type {
 import type { ApprovalReceipt } from "@/lib/agent/approval-receipt";
 import type { ExecutionDependencyLayout } from "@/lib/repository/dependency-cache";
 import type { DependencyAttemptResult } from "./checkout-dependencies";
+import type { AppAccessIntent } from "./app-access-intent";
 
 export const APP_BUILDER_WORKFLOW_VERSION = 17 as const;
 export const APP_BUILDER_WORKFLOW_STATE_KEY = "autograph-app-builder.workflow.v17" as const;
@@ -46,6 +47,8 @@ export const UI_PREVIEW_TRANSFER_STATE_KEY =
   "autograph-app-builder.ui-preview-transfer.v1" as const;
 
 export interface AcceptedAppSpec {
+  /** Missing on older accepted specs; Production access defaults to private. */
+  access?: AppAccessIntent;
   frameworkUpgrade?: "latest";
   appId: string;
   artifactPath: string;

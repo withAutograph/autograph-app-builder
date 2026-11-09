@@ -30,7 +30,10 @@ type CreateOptions = Parameters<typeof Sandbox.create>[0];
 /** Private existing-target planning or credential-free genesis; execution independently replans before DDL. */
 export const assertAuthProposalMigrationUrl = (
   value: string,
-  resource: z.infer<typeof authProposalResourceSchema>,
+  resource: Pick<
+    z.infer<typeof authProposalResourceSchema>,
+    "hostname" | "port" | "database" | "migratorRole"
+  >,
 ) => {
   try {
     const url = new URL(value);

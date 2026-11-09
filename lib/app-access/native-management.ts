@@ -19,12 +19,23 @@ type Workers = Pick<
   "invokeAuthManagement" | "mutateAppAccess" | "inspectAppAccess"
 > &
   Partial<Pick<ReturnType<typeof createRepositoryProductionWorkers>, "inspectAcceptedAppAccess">>;
+export interface PendingSignupCancellationInput {
+  scope: RepositoryProductionScope;
+  actorId: string;
+  effect: AppAccessEffectContext;
+  mode: "execute" | "reconcile";
+}
+export type PendingSignupCancellationResult = "applied" | "absent" | "unknown" | undefined;
+
 export interface RepositoryProductionManagementDependencies extends Pick<
   AppAccessManagementDependencies,
   // oxlint-disable-next-line sonarjs/max-union-size -- This enumerates required service ports, not alternative runtime states.
   "resolve" | "assertAuthorized" | "withLease" | "journal"
 > {
   builderOrigin: string;
+  cancelPendingSignup?: (
+    input: PendingSignupCancellationInput,
+  ) => Promise<PendingSignupCancellationResult>;
   readSetup: (scope: RepositoryProductionScope) => Promise<RepositoryProductionRow | undefined>;
   workers: (scope: RepositoryProductionScope) => Workers;
   realm: (scope: RepositoryProductionScope) => Json;
@@ -270,6 +281,20 @@ export const createRepositoryProductionManagement = (
     command: Extract<AppAccessCommand, { action: "change-role" | "remove" }>,
     effect: AppAccessEffectContext,
   ) => {
+    if (command.action === "remove") {
+      const cancelled = await deps.cancelPendingSignup?.({
+        scope,
+        actorId: command.memberId,
+        effect,
+        mode: "execute",
+      });
+      if (cancelled === "applied") {
+        return cancelled;
+      }
+      if (cancelled !== undefined) {
+        throw new AppAccessError("app_access_unknown");
+      }
+    }
     const preimage = readMemberPreimage(effect, command.memberId);
     const people = preimage === undefined ? await members(scope, effect) : [];
     const member = preimage ?? people.find((person) => person.id === command.memberId);
@@ -333,6 +358,17 @@ export const createRepositoryProductionManagement = (
     command: Extract<AppAccessCommand, { action: "change-role" | "remove" }>,
     effect: AppAccessEffectContext,
   ) => {
+    if (command.action === "remove") {
+      const cancelled = await deps.cancelPendingSignup?.({
+        scope,
+        actorId: command.memberId,
+        effect,
+        mode: "reconcile",
+      });
+      if (cancelled !== undefined) {
+        return cancelled;
+      }
+    }
     const people = await members(scope, effect);
     const member = people.find((person) => person.id === command.memberId);
     if (command.action === "remove") {

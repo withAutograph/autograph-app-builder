@@ -111,6 +111,7 @@ export interface RepositoryProductionHandlerDependencies {
     intent: RepositoryProductionIntent;
     setup: ReturnType<typeof createRepositoryProductionSetup>;
   }>;
+  completeSignup?: (policyId: string, claimId: string) => Promise<RepositoryProductionCompletion>;
   management: {
     read: (owner: RepositoryProductionRequestOwner, cursor?: string) => Promise<AppAccessSnapshot>;
     execute: (
@@ -137,14 +138,34 @@ export const createRepositoryProductionHandler =
     try {
       if (pathname === repositoryProductionCompletionPath) {
         const body = z
-          .strictObject({ version: z.literal(1), invitationId: z.uuid() })
+          .union([
+            z.strictObject({ version: z.literal(1), invitationId: z.uuid() }),
+            z.strictObject({
+              version: z.literal(1),
+              kind: z.literal("signup"),
+              policyId: z.uuid(),
+              claimId: z.uuid(),
+            }),
+          ])
           .safeParse(await request.json());
         if (!body.success) {
           return reply({ code: "request_invalid" }, 400);
         }
-        await deps.verifyAuthWorkload(request, body.data.invitationId);
+        await deps.verifyAuthWorkload(
+          request,
+          "kind" in body.data ? body.data.policyId : body.data.invitationId,
+        );
         authenticated = true;
-        const status = await deps.management.completeInvitation(body.data.invitationId);
+        let status: RepositoryProductionCompletion;
+        if ("kind" in body.data) {
+          const complete = deps.completeSignup;
+          if (!complete) {
+            return reply({ code: "app_access_denied" }, 403);
+          }
+          status = await complete(body.data.policyId, body.data.claimId);
+        } else {
+          status = await deps.management.completeInvitation(body.data.invitationId);
+        }
         return reply({ version: 1, status }, status === "ready" ? 200 : 202);
       }
       await deps.verifyBuilderWorkload(request);

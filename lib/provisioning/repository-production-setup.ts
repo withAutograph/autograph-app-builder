@@ -16,6 +16,7 @@ import type {
   RepositoryProductionRow,
   RepositoryProductionScope,
 } from "./repository-production-contract";
+import { repositoryProductionSignupSelection } from "./repository-production-signup-policy";
 
 export interface RepositoryProductionStore {
   read: (scope: RepositoryProductionScope) => Promise<RepositoryProductionRow | undefined>;
@@ -81,10 +82,19 @@ const unfinished = (record: RepositoryProductionRecord) =>
   record.appAccessUpgrade?.state === "pending" ||
   record.creatorRoleUpdate?.state === "pending" ||
   Object.values(record.effects).some((effect) => effect.state === "pending");
-const selectedEffects = (record: RepositoryProductionRecord): RepositoryProductionEffect[] =>
-  record.intent.storage.kind === "none"
-    ? ["creator-access"]
-    : ["allocate-storage", "install-schema", CREATOR_ACCESS_EFFECT, BIND_RUNTIME_EFFECT];
+const selectedEffects = (record: RepositoryProductionRecord): RepositoryProductionEffect[] => {
+  const effects: RepositoryProductionEffect[] =
+    record.intent.storage.kind === "none"
+      ? ["creator-access"]
+      : ["allocate-storage", "install-schema", CREATOR_ACCESS_EFFECT, BIND_RUNTIME_EFFECT];
+  if (
+    record.intent.access?.mode === "self-signup" ||
+    record.effects["signup-policy"].receipt !== undefined
+  ) {
+    effects.push("signup-policy");
+  }
+  return effects;
+};
 
 /** Durable completion only; current owner and approval are checked by the caller. */
 export const repositoryProductionSetupComplete = (record: RepositoryProductionRecord): boolean =>
@@ -134,6 +144,20 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
         }
         next.effects["allocate-storage"] = row.record.effects["allocate-storage"];
         next.effects["creator-access"] = row.record.effects["creator-access"];
+        const previousPolicy = row.record.effects["signup-policy"];
+        if (
+          isDeepStrictEqual(
+            repositoryProductionSignupSelection(row.record.intent),
+            repositoryProductionSignupSelection(intent),
+          )
+        ) {
+          next.effects["signup-policy"] = previousPolicy;
+        } else {
+          next.effects["signup-policy"] = { state: "idle" };
+          if (previousPolicy.receipt !== undefined) {
+            next.effects["signup-policy"].receipt = previousPolicy.receipt;
+          }
+        }
         if (row.record.intent.storage.kind === "none" && intent.storage.kind === "postgres") {
           next.appAccessUpgrade = { commandId: randomUUID(), state: "pending" };
         }
