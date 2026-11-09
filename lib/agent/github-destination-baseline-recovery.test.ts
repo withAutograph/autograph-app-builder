@@ -1,7 +1,15 @@
 /* oxlint-disable eslint/require-await -- Async SDK test doubles preserve the native Promise contract while executing disposable local fixture commands. */
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -81,7 +89,7 @@ const fixture = () => {
         "PATH=/usr/local/bin:/usr/bin:/bin",
         `PATH=${path.dirname(process.execPath)}:/usr/bin:/bin`,
       );
-  const native = (beforeCommand?: () => void): VercelSdkSessionNative => ({
+  const native = (beforeCommand?: () => void, preload?: string): VercelSdkSessionNative => ({
     name: record.workspaceId,
     expiresAt: new Date(Date.now() + 600_000),
     extendTimeout: async () => {
@@ -119,16 +127,20 @@ const fixture = () => {
         throw new TypeError("The SDK session must provide a structured native command.");
       }
       beforeCommand?.();
+      const commandEnvironment: NodeJS.ProcessEnv = {
+        ...process.env,
+        ...options.env,
+        BASH_ENV: "/dev/null",
+        HOME: root,
+        PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin`,
+      };
+      if (preload !== undefined) {
+        commandEnvironment.NODE_OPTIONS = `--require=${preload}`;
+      }
       const output = spawnSync(options.cmd, options.args?.map(mapped) ?? [], {
         cwd: mapped(options.cwd ?? "/workspace"),
         encoding: "utf-8",
-        env: {
-          ...process.env,
-          ...options.env,
-          BASH_ENV: "/dev/null",
-          HOME: root,
-          PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin`,
-        },
+        env: commandEnvironment,
       });
       if (output.error) {
         throw output.error;
@@ -169,6 +181,67 @@ const freshTemplateFixture = async () => {
 };
 
 describe("destination review after retained workspace metadata loss", () => {
+  it.each(["same-baseline", "in-place-checksum-writer"] as const)(
+    "keeps the winning checksum when metadata publication loses its race: %s",
+    async (winner) => {
+      const f = await freshTemplateFixture();
+      try {
+        const manifestPath = path.join(f.metadata, "source-files.json");
+        const checksumPath = path.join(f.metadata, "source-checksums.sha256");
+        const anchor = path.join(f.root, "winning-checksum-anchor");
+        const files = z
+          .array(
+            z.object({
+              mode: z.string(),
+              objectId: z.string(),
+              path: z.string(),
+              sha256: z.string(),
+            }),
+          )
+          .parse(JSON.parse(f.manifest));
+        if (winner === "in-place-checksum-writer") {
+          const [first] = files;
+          if (first === undefined) {
+            throw new Error("Expected original fixture files");
+          }
+          first.sha256 = "f".repeat(64);
+        }
+        const winningManifest = JSON.stringify(files);
+        const winningChecksums = files
+          .map((file) => `${file.sha256}  repository/${file.path}\n`)
+          .join("");
+        // Only the link boundary is interposed. Both writers use real files and
+        // hard links, including an in-place write that preserves the losing inode.
+        const preload = path.join(f.root, "metadata-race.cjs");
+        writeFileSync(
+          preload,
+          `
+          const fs = require("node:fs");
+          const link = fs.linkSync;
+          fs.linkSync = (source, destination) => {
+            if (destination === ${JSON.stringify(manifestPath)}) {
+              fs.linkSync = link;
+              link(${JSON.stringify(checksumPath)}, ${JSON.stringify(anchor)});
+              fs.writeFileSync(destination, ${JSON.stringify(winningManifest)});
+              ${winner === "in-place-checksum-writer" ? `fs.writeFileSync(${JSON.stringify(checksumPath)}, ${JSON.stringify(winningChecksums)});` : ""}
+            }
+            return link(source, destination);
+          };
+        `,
+        );
+        const sandbox = createVercelSdkSession(f.native(undefined, preload));
+        const read = readPreparedSandboxSourceManifest(sandbox, f.record);
+        await (winner === "same-baseline"
+          ? expect(read).resolves.toHaveLength(5)
+          : expect(read).rejects.toThrow("no longer matches its receipt"));
+        expect(readFileSync(manifestPath, "utf-8")).toBe(winningManifest);
+        expect(readFileSync(checksumPath, "utf-8")).toBe(winningChecksums);
+        expect(statSync(checksumPath).ino).toBe(statSync(anchor).ino);
+      } finally {
+        rmSync(f.root, { recursive: true, force: true });
+      }
+    },
+  );
   it.each(["same-baseline", "new-baseline"])(
     "preserves metadata restored after the initial missing-file read: %s",
     async (winner) => {

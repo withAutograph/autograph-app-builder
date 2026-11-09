@@ -124,12 +124,12 @@ try {
         let winnerMatches = false;
         try {
           const winner = JSON.parse(fs.readFileSync(manifestTarget, "utf8"));
-          winnerMatches = createHash("sha256").update(JSON.stringify(winner)).digest("hex") === expected.workspaceDigest;
+          winnerMatches = createHash("sha256").update(JSON.stringify(winner)).digest("hex") === digest;
         } catch { /* The caller will report an unreadable or invalid winning manifest. */ }
         if (!winnerMatches) {
           const owned = fs.statSync(stagedChecksums);
           const current = fs.lstatSync(checksumTarget);
-          if (owned.dev === current.dev && owned.ino === current.ino) fs.unlinkSync(checksumTarget);
+          if (owned.dev === current.dev && owned.ino === current.ino && fs.readFileSync(checksumTarget, "utf8") === checksums) fs.unlinkSync(checksumTarget);
         }
       }
     }
