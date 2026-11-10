@@ -653,6 +653,39 @@ describe("same-session post-merge destination review", () => {
     expect(f.unexpected).not.toHaveBeenCalled();
   });
 
+  it.each(["merged", "closed", "another-base"] as const)(
+    "returns source-refresh ownership context only for the owned current-default-branch merge: %s",
+    async (kind) => {
+      const f = await ownedRevisionTool();
+      f.inspectPr.mockResolvedValue({
+        state: kind === "closed" ? "closed" : "merged",
+        draft: false,
+        checks: "passed",
+        headSha: f.receipt.branchSha,
+        baseBranch: kind === "another-base" ? "another-branch" : f.receipt.baseBranch,
+      });
+      const result = await f.runtime.inspectDraftDestination?.({
+        githubSource: source,
+        ownedAppRevision: {
+          appId: "example",
+          proposalDigest: f.proposal.digest,
+          proposal: f.proposal,
+          installationId: "10",
+        },
+        paths: [path],
+      });
+      if (kind === "merged") {
+        expect(result?.ownedCompletedPublication).toEqual({
+          proposal: f.proposal,
+          installationId: "10",
+        });
+      } else {
+        expect(result?.ownedCompletedPublication).toBeUndefined();
+      }
+      expect(f.unexpected).not.toHaveBeenCalled();
+    },
+  );
+
   it("reviews a deleted originally published app file without repair history", async () => {
     const f = await markerOnlyRevision();
     const newPath = "apps/example/src/new.ts";

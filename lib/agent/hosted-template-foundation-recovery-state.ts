@@ -2,6 +2,7 @@ import { defineState } from "eve/context";
 import type { SourceReceipt } from "../repository/source-receipt";
 import type { PreparedSandboxWorkspace } from "../repository/supported-template";
 import type { HostedTemplateFoundationResult } from "../repository/hosted-template-source-reconciliation";
+import type { OwnedCompletedAppPublication } from "./github-publication-runtime";
 
 /** Completed private source transitions are provenance, never new Build or publication authority. */
 export interface HostedTemplateFoundationRecoveryReceipt {
@@ -18,6 +19,8 @@ export interface HostedTemplateFoundationRecoveryReceipt {
   workspace: PreparedSandboxWorkspace;
   provenance: HostedTemplateFoundationResult["provenance"];
   recoveredByCallId: string;
+  /** Minimal provider-verified original publication; contains no workflow/history snapshots. */
+  publication?: OwnedCompletedAppPublication;
 }
 
 export const hostedTemplateFoundationRecoveryHistory = defineState<

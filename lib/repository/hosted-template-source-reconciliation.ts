@@ -251,7 +251,7 @@ process.stdout.write(JSON.stringify(next));
 }
 `;
 
-/** Runs only after an actual local command failure; no branch-freshness admission policy. */
+/** Reconcile an actual local failure or an explicit same-app source refresh, without a freshness admission policy. */
 export const reconcileHostedTemplateFoundation = async (
   input: HostedTemplateFoundationInput,
 ): Promise<HostedTemplateFoundationResult> => {
