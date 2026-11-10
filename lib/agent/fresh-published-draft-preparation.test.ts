@@ -2,7 +2,12 @@
 /* oxlint-disable eslint/require-await -- External provider boundaries use the production async signatures. */
 import { createHash } from "node:crypto";
 import type { ToolContext } from "eve/tools";
-import type { assertCurrentGitHubDraftProposal, assertExactWorkflowState } from "./workflow-state";
+import { appBuilderWorkflowState, invalidateGitHubDestinationReview } from "./workflow-state";
+import type {
+  AppBuilderWorkflowState,
+  assertCurrentGitHubDraftProposal,
+  assertExactWorkflowState,
+} from "./workflow-state";
 import type {
   RepositoryAccessReceipt,
   repositoryAccessReceiptSchema,
@@ -16,6 +21,13 @@ import { preparePublishedDraftReconciliation } from "./prepare-published-draft-r
 import prepareDraftReconciliationTool from "../../agent/tools/prepare_github_draft_pr_reconciliation";
 import sealDraftReconciliationTool from "../../agent/tools/seal_github_draft_pr_reconciliation";
 import { createChangeSetAcceptanceTool } from "../../agent/tools/accept_change_set";
+import { createAppValidationTool } from "../../agent/tools/validate_app_creation";
+import { executeProposalBoundValidation } from "../repository/target-validation";
+// oxlint-disable-next-line sonarjs/no-internal-api-use -- Scope installed Eve state to this controlled test invocation.
+import {
+  ContextContainer,
+  contextStorage,
+} from "../../node_modules/eve/dist/src/context/container.js";
 import {
   createDraftPullRequestProposal,
   createGitHubInstallationIdentity,
@@ -34,7 +46,6 @@ import { retainedPublishedDraftOriginForReview } from "./published-draft-repair"
 import type { observeNormalizedChangeSet } from "../../agent/tools/change_set_status";
 import type { readPreparedSandboxSourceManifest } from "../repository/supported-template";
 import type { OwnedPublicationReconciliationScope } from "../repository/github-draft-reconciliation";
-import { invalidateGitHubDestinationReview } from "./workflow-state";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Type-only namespace preserves the actual overlay module fixture port.
 import type * as TargetApplyModule from "../repository/target-apply";
 
@@ -45,7 +56,10 @@ type Candidate = DraftReconciliationCandidate & {
   reviewedLineage: Fixture["reviewed"];
   unpublished: string;
 };
-type Workflow = Fixture["currentContext"][typeof workflowKey] | Fixture["reviewed"];
+type Workflow = Extract<
+  AppBuilderWorkflowState,
+  { applyReceipt: TargetApplyModule.TargetApplyReceipt }
+>;
 interface Owned {
   draft: PublishedDraftRepairSource["draft"];
   source: PublishedDraftRepairSource["source"];
@@ -94,7 +108,12 @@ vi.mock("./workflow-state", async (importOriginal) => ({
     assertCurrentGitHubDraftProposal: typeof assertCurrentGitHubDraftProposal;
     assertExactWorkflowState: typeof assertExactWorkflowState;
   }>()),
-  appBuilderWorkflowState: { get: () => mocks.workflow },
+  appBuilderWorkflowState: {
+    get: () => mocks.workflow,
+    update: (transition: (state: Workflow) => Workflow) => {
+      mocks.workflow = transition(mocks.workflow);
+    },
+  },
   updateExactWorkflow: ({
     expected,
     transition,
@@ -177,6 +196,9 @@ vi.mock("./source-bound-sandbox", () => ({
   getSourceBoundSandbox: async () => ({ id: "controlled" }),
 }));
 vi.mock("./product-behavior-state", () => ({ currentProductBehaviorEvidence: () => [] }));
+vi.mock("../testing/test-capability", () => ({
+  hasTestCapability: (capability: string) => capability === "simulated-target",
+}));
 vi.mock("./verified-github-fetch-recovery", () => ({
   prepareWithVerifiedGitHubFetchRecovery: async ({
     prepare,
@@ -511,10 +533,179 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     },
   );
 
-  it.each(["cancelled", "workflow-changed", "candidate-changed"] as const)(
-    "does not return a review refresh after %s during current byte observation",
-    async (change) => {
+  it("validates changed creation bytes before refreshing an owned review from an applied workflow", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const state = structuredClone(fixture.reviewed);
+      const creationRoot = path.join(root, "creation");
+      const appFile = `apps/${state.appSpec.appId}/page.ts`;
+      const creationFile = path.join(creationRoot, appFile);
+      const candidateFile = path.join(mocks.candidate.root, appFile);
+      const creationContent = "export const saved = 'current creation repair';\n";
+      const candidateContent = "export const saved = 'separate draft candidate';\n";
+      for (const file of [creationFile, candidateFile]) {
+        mkdirSync(path.dirname(file), { recursive: true });
+      }
+      writeFileSync(creationFile, creationContent);
+      writeFileSync(candidateFile, candidateContent);
+      const manifest = path.join(creationRoot, `apps/${state.appSpec.appId}/package.json`);
+      writeFileSync(manifest, JSON.stringify({ name: "@fixture/orchard" }));
+      const candidateBefore = structuredClone(mocks.candidate);
+      const applied = { ...state, phase: "applied" as const };
+      Reflect.deleteProperty(applied, "reviewReceipt");
+      Reflect.deleteProperty(applied, "validationReceipt");
+      mocks.workflow = applied;
+      const observe = retainedSource.actualObservation;
+      if (observe === undefined) {
+        throw new Error("Missing real change-set observer");
+      }
+      retainedSource.overlay.mockImplementation(async (_sandbox, observedRoot: string) => {
+        expect(observedRoot).toBe(state.applyReceipt.applyRoot);
+        const content = readFileSync(creationFile, "utf-8");
+        const files = [
+          {
+            path: appFile,
+            mode: "644",
+            digest: createHash("sha256").update(content).digest("hex"),
+          },
+        ];
+        return {
+          files,
+          treeDigest: createHash("sha256").update(JSON.stringify(files)).digest("hex"),
+        };
+      });
+      retainedSource.observed.mockImplementation(observe);
+      const validationContext = {
+        ...ctx,
+        getSandbox: async () => ({
+          id: "controlled",
+          readTextFile: async ({ path: requestedPath }: { path: string }) => {
+            expect(requestedPath).toBe(
+              path.posix.join(
+                state.applyReceipt.applyRoot,
+                `apps/${state.appSpec.appId}/package.json`,
+              ),
+            );
+            return readFileSync(manifest, "utf-8");
+          },
+        }),
+      } as unknown as ToolContext;
+      const refresh = await prepareDraftReconciliationTool.execute(
+        { pullRequestNumber: 42 },
+        validationContext,
+      );
+      expect(refresh).toMatchObject({
+        status: "review_refresh_required",
+        nextCall: {
+          tool: "validate_app_creation",
+          input: { implementationFiles: [], validationTarget: "creation-workspace" },
+        },
+      });
+      expect(mocks.workflow).toEqual(applied);
+      expect(mocks.candidate).toEqual(candidateBefore);
+      expect(mocks.prepare).not.toHaveBeenCalled();
+      if (!("nextCall" in refresh) || refresh.nextCall.tool !== "validate_app_creation") {
+        throw new Error("Expected explicit creation validation continuation");
+      }
+      const commands: { root: string; content: string; exitCode: number }[] = [];
+      let failRequiredCheck = true;
+      const validate = createAppValidationTool({
+        captureRelease: async () => null,
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- This fixture has no backend description; source validation is the behavior under test.
+        describeApp: async () => undefined,
+        executeValidation: async (input) =>
+          await executeProposalBoundValidation({
+            ...input,
+            executor: async ({ validationRoot }) => {
+              expect(validationRoot).toBe(state.applyReceipt.applyRoot);
+              expect(validationRoot).not.toBe(mocks.candidate.root);
+              const content = readFileSync(creationFile, "utf-8");
+              expect(content).toBe(creationContent);
+              const exitCode = failRequiredCheck ? 1 : 0;
+              commands.push({ root: validationRoot, content, exitCode });
+              return {
+                exitCode,
+                stdout: "",
+                stderr: exitCode === 0 ? "" : "Required check failed",
+              };
+            },
+          }),
+        validateBackend: async () => ({ status: "unassessed" }),
+      });
+      const accept = createChangeSetAcceptanceTool({
+        observeChangeSet: observe,
+        reviewSource: async () => {
+          throw new Error("Independent source assessment was not requested");
+        },
+      });
+      await expect(
+        validate.execute(refresh.nextCall.input, validationContext),
+      ).resolves.toMatchObject({
+        status: "needs_repair",
+      });
+      expect(mocks.workflow.phase).toBe("validation_failed");
+      await expect(accept.execute({}, validationContext)).rejects.toThrow("repository validation");
+      expect(mocks.candidate).toEqual(candidateBefore);
+      failRequiredCheck = false;
+      await expect(
+        validate.execute(refresh.nextCall.input, validationContext),
+      ).resolves.toMatchObject({
+        status: "validated",
+      });
+      expect(commands[0]?.exitCode).toBe(1);
+      expect(commands.slice(1).every(({ exitCode }) => exitCode === 0)).toBe(true);
+      const validated = appBuilderWorkflowState.get();
+      if (validated.phase !== "validated") {
+        throw new Error("Expected real creation validation receipt");
+      }
+      const validation = validated.validationReceipt;
+      expect(validation.digest).not.toBe(state.validationReceipt.digest);
+      expect(validation.commands.length).toBeGreaterThan(0);
+      expect(
+        validation.commands.every(
+          ({ validationRoot }) => validationRoot === state.applyReceipt.applyRoot,
+        ),
+      ).toBe(true);
+      expect(mocks.candidate).toEqual(candidateBefore);
+      await accept.execute({}, validationContext);
+      const reviewed = appBuilderWorkflowState.get();
+      if (reviewed.phase !== "reviewed") {
+        throw new Error("Expected fresh current creation review");
+      }
+      expect(reviewed.reviewReceipt.digest).not.toBe(state.reviewReceipt.digest);
+      expect(reviewed.reviewReceipt.validationDigest).toBe(validation.digest);
+      const reviewedFile = reviewed.reviewReceipt.changes.find(
+        ({ path: changedPath }) => changedPath === appFile,
+      );
+      expect(reviewedFile?.after?.digest).toBe(
+        createHash("sha256").update(creationContent).digest("hex"),
+      );
+      await expect(
+        prepareDraftReconciliationTool.execute({ pullRequestNumber: 42 }, validationContext),
+      ).resolves.toMatchObject({ status: "ready_for_validation" });
+      expect(mocks.candidate.pullRequestNumber).toBe(42);
+      expect(mocks.candidate.originalReviewDigest).toBe(reviewed.reviewReceipt.digest);
+      expect(readFileSync(candidateFile, "utf-8")).toBe(candidateContent);
+      expect(readFileSync(creationFile, "utf-8")).toBe(creationContent);
+    });
+  });
+
+  it.each(
+    (["reviewed", "applied"] as const).flatMap((phase) =>
+      (["cancelled", "workflow-changed", "candidate-changed"] as const).map((change) => ({
+        phase,
+        change,
+      })),
+    ),
+  )(
+    "does not return a $phase review refresh after $change during current byte observation",
+    async ({ phase, change }) => {
       mocks.workflow = structuredClone(fixture.reviewed);
+      if (phase === "applied") {
+        const applied = { ...mocks.workflow, phase };
+        Reflect.deleteProperty(applied, "reviewReceipt");
+        Reflect.deleteProperty(applied, "validationReceipt");
+        mocks.workflow = applied;
+      }
       const state = mocks.workflow;
       const controller = new AbortController();
       retainedSource.observed.mockImplementation(async () => {
@@ -527,7 +718,10 @@ describe("owned fresh-template draft preparation after review recovery", () => {
         if (change === "candidate-changed") {
           mocks.candidate = { ...mocks.candidate, root: "/workspace/another-candidate" };
         }
-        return { changeSet: { ...state.reviewReceipt, digest: "f".repeat(64) }, observed: {} };
+        return {
+          changeSet: { ...fixture.reviewed.reviewReceipt, digest: "f".repeat(64) },
+          observed: {},
+        };
       });
       await expect(
         prepareDraftReconciliationTool.execute(

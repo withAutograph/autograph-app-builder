@@ -203,21 +203,24 @@ export const createAppValidationTool = (
 ) =>
   defineTool({
     description:
-      "With no implementation files and a current owned draft, validate that actual isolated candidate through the normal draft-validation service without changing creation-workspace review state. Use repairOnly with implementationFiles to update the already approved app in its private checkout without running checks or requesting another Build. Open the updated app with start_app_preview. Otherwise validate the applied creation workspace at applyReceipt.applyRoot. Use validate_github_draft_pr_reconciliation for explicit candidate validation controls; creation-workspace results do not validate separate draft bytes. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. Set runBrowserTests only when authenticated browser testing is wanted for this app. Report those results separately; a runtime block preserves the technical receipt. Independent paid source assessment can be requested at accept_change_set after implementation and technical checks are ready. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
+      "With no implementation files and a current owned draft, validate that actual isolated candidate through the normal draft-validation service without changing creation-workspace review state. Use repairOnly with implementationFiles to update the already approved app in its private checkout without running checks or requesting another Build. Open the updated app with start_app_preview. After candidate validation, follow its returned candidate-review continuation. Set validationTarget to creation-workspace only when a current app review needs checks of the distinct applied creation checkout at applyReceipt.applyRoot; this runs its real checks and never reuses candidate validation for those bytes. Otherwise validate that applied creation workspace. Use validate_github_draft_pr_reconciliation for explicit candidate validation controls; creation-workspace results do not validate separate draft bytes. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. Set runBrowserTests only when authenticated browser testing is wanted for this app. Report those results separately; a runtime block preserves the technical receipt. Independent paid source assessment can be requested at accept_change_set after implementation and technical checks are ready. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
     // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Keep the workflow phase, cancellation and original failure receipt branches explicit.
     async execute(input, ctx) {
+      ctx.abortSignal?.throwIfAborted();
       const selectedState = appBuilderWorkflowState.get();
       if (input.repairOnly === true && input.implementationFiles.length === 0) {
         throw new Error("Supply the app files to repair before opening a working preview.");
       }
       const candidate = draftReconciliationState.get();
+      const selectCandidate =
+        input.validationTarget !== "creation-workspace" && input.implementationFiles.length === 0;
       if (
-        input.implementationFiles.length === 0 &&
+        selectCandidate &&
         candidate !== null &&
         resolveDraftReviewedWorkflow(selectedState, candidate) !== undefined &&
         currentDraftCandidateSource(selectedState, candidate) !== undefined
       ) {
-        return await validateDraftReconciliation(
+        const result = await validateDraftReconciliation(
           {
             additionalCheckTasks: [],
             incremental: false,
@@ -225,6 +228,12 @@ export const createAppValidationTool = (
           },
           ctx,
         );
+        return result.status === "validated"
+          ? {
+              ...result,
+              nextCall: { tool: "review_github_draft_pr_reconciliation" as const, input: {} },
+            }
+          : result;
       }
       const hasStartedValidation =
         selectedState.phase === "applied" ||
@@ -728,6 +737,7 @@ export const createAppValidationTool = (
     inputSchema: z.object({
       implementationFiles: implementationFilesSchema.default([]),
       repairOnly: z.boolean().optional(),
+      validationTarget: z.literal("creation-workspace").optional(),
       runBrowserTests: z.boolean().optional(),
     }),
   });

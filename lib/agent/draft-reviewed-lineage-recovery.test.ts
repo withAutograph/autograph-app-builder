@@ -19,6 +19,7 @@ import {
   serializeContext,
 } from "../../node_modules/eve/dist/src/context/serialize.js";
 import validateCreation from "../../agent/tools/validate_app_creation";
+import reviewCandidate from "../../agent/tools/review_github_draft_pr_reconciliation";
 import editCandidate from "../../agent/tools/edit_github_draft_pr_candidate";
 import sealCandidate from "../../agent/tools/seal_github_draft_pr_reconciliation";
 import { appBuilderWorkflowState, APP_BUILDER_WORKFLOW_VERSION } from "./workflow-state";
@@ -438,6 +439,63 @@ const prepareEdited = async (f: ReturnType<typeof fixture>) => {
 };
 
 describe("same-session draft review lineage with real shared state and draft bytes", () => {
+  it.each(["applied", "validation_pending", "validation_failed", "validated"] as const)(
+    "continues candidate validation into its actual current review while creation remains %s",
+    async (phase) => {
+      await contextStorage.run(new ContextContainer(), async () => {
+        const f = fixture();
+        await prepareEdited(f);
+        const creationOnly = 'export const value = "unvalidated-creation-only";\n';
+        writeFileSync(path.join(f.repository, appPath), creationOnly);
+        const { reviewReceipt: _priorReview, ...unreviewed } = f.reviewed;
+        void _priorReview;
+        // SAFETY: Preserve the complete lineage bindings while modeling a legacy creation phase.
+        appBuilderWorkflowState.update(() => ({ ...unreviewed, phase }) as AppBuilderWorkflowState);
+        const before = appBuilderWorkflowState.get();
+        const result = z
+          .object({
+            status: z.literal("validated"),
+            nextCall: z.object({
+              tool: z.literal("review_github_draft_pr_reconciliation"),
+              input: z.strictObject({}),
+            }),
+          })
+          .parse(await validateCreation.execute({ implementationFiles: [] }, f.context()));
+        expect(appBuilderWorkflowState.get()).toEqual(before);
+        expect(f.commands.every((entry) => entry.root === f.candidate.root)).toBe(true);
+        expect(readFileSync(path.join(f.repository, appPath), "utf-8")).toBe(creationOnly);
+        await expect(
+          sealCandidate.execute(
+            { expectedReviewDigest: f.reviewed.reviewReceipt.digest },
+            f.context(),
+          ),
+        ).rejects.toThrow();
+        const currentReview = z
+          .object({ reviewDigest: z.string(), resolvedTree: z.string() })
+          .parse(await reviewCandidate.execute(result.nextCall.input, f.context()));
+        expect(draftReconciliationState.get()?.review?.digest).toBe(currentReview.reviewDigest);
+        expect(currentReview.resolvedTree).toBe(
+          draftReconciliationState.get()?.validation?.resolvedTree,
+        );
+        expect(draftReconciliationState.get()?.review?.headSha).toBe(f.candidate.headSha);
+        expect(
+          draftReconciliationState.get()?.review?.headChanges.map((change) => change.path),
+        ).toContain(appPath);
+        expect(appBuilderWorkflowState.get()).toEqual(before);
+        if (phase === "applied") {
+          writeFileSync(
+            path.join(f.candidate.root, appPath),
+            'export const value = "later-edit";\n',
+          );
+          await expect(reviewCandidate.execute(result.nextCall.input, f.context())).rejects.toThrow(
+            "changed after validation",
+          );
+          expect(draftReconciliationState.get()?.review?.digest).toBe(currentReview.reviewDigest);
+        }
+      });
+    },
+  );
+
   it("routes ordinary validation to edited candidate bytes without consuming the original app review", async () => {
     await contextStorage.run(new ContextContainer(), async () => {
       const f = fixture();
@@ -539,6 +597,14 @@ describe("same-session draft review lineage with real shared state and draft byt
       await expect(
         validateCreation.execute({ implementationFiles: [] }, f.context(controller.signal)),
       ).rejects.toThrow("owner cancelled");
+      const before = appBuilderWorkflowState.get();
+      await expect(
+        validateCreation.execute(
+          { implementationFiles: [], validationTarget: "creation-workspace" },
+          f.context(controller.signal),
+        ),
+      ).rejects.toThrow("owner cancelled");
+      expect(appBuilderWorkflowState.get()).toBe(before);
       expect(f.commands).toEqual([]);
       expect(readFileSync(path.join(f.candidate.root, appPath), "utf-8")).toBe(edited);
     });
