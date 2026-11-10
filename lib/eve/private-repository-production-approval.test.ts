@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import type { MessageStreamEvent } from "eve/client";
-import { repositoryProductionApprovalInput } from "../provisioning/repository-production-approval";
+import {
+  repositoryProductionApprovalInput,
+  repositoryProductionApprovalReference,
+} from "../provisioning/repository-production-approval";
+import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contract";
+import type { PrivateOperatorApprovalObservation } from "./private-operator-approval-observation";
 import type {
   RepositoryProductionIntent,
   RepositoryProductionScope,
@@ -20,7 +26,7 @@ const scope: RepositoryProductionScope = {
     issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
     workspaceId: "workspace",
-    ownerUserId: "creator",
+    ownerUserId: "creator-account-private-canary",
   },
   appId: "example",
   repositoryId: "repo",
@@ -43,7 +49,9 @@ const intent: RepositoryProductionIntent = {
   },
 };
 const plan = repositoryProductionApprovalInput(scope, intent);
-const request = (value = plan, callId = "call"): MessageStreamEvent => ({
+const approvalWireInput = z.record(z.string(), z.json());
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This test wire boundary parses JSON shape while preserving malformed domain inputs for the real approval parser.
+const request = (value: unknown = plan, callId = "call"): MessageStreamEvent => ({
   type: "input.requested",
   meta: { at: "2026-11-06T00:00:00Z", id: "request-event" },
   data: {
@@ -55,13 +63,26 @@ const request = (value = plan, callId = "call"): MessageStreamEvent => ({
         kind: "tool-approval",
         requestId: "request",
         prompt: "Set up this app?",
-        action: { kind: "tool-call", toolName: "prepare-app-production", callId, input: value },
+        action: {
+          kind: "tool-call",
+          toolName: "prepare-app-production",
+          callId,
+          input: approvalWireInput.parse(value),
+        },
       },
     ],
   },
 });
+const owner: OperatorOwnerContext = {
+  kind: "direct",
+  authority: scope.authority,
+  principal: { ...scope.authority, scopes: ["autograph:send"] },
+  sessionId: intent.sessionId,
+  adapterSessionId: "native",
+  adapterGeneration: 1,
+};
 const settle = (
-  actor = "creator",
+  actor = scope.authority.ownerUserId,
   outcome: "approved" | "cancelled" = "approved",
 ): MessageStreamEvent => ({
   type: "approval.settled",
@@ -76,6 +97,230 @@ const settle = (
   },
 });
 describe("Production setup consent", () => {
+  it.each([
+    { name: "private database", intent },
+    {
+      name: "roleless frontend",
+      intent: { ...intent, creatorRoles: [], storage: { kind: "none" as const } },
+    },
+    {
+      name: "roleless public signup database",
+      intent: {
+        ...intent,
+        creatorRoles: [],
+        access: { mode: "self-signup" as const, eligibility: "public" as const, appRoles: [] },
+        entryPath: "/example",
+      },
+    },
+    {
+      name: "approved-email signup",
+      intent: {
+        ...intent,
+        creatorEmail: "creator@example.com",
+        access: {
+          mode: "self-signup" as const,
+          eligibility: "approved-email" as const,
+          allowedEmails: ["invitee@example.com"],
+          appRoles: ["editor"],
+        },
+        entryPath: "/example",
+      },
+    },
+  ])("accepts the settled compact reference for $name", ({ intent: selectedIntent }) => {
+    const expected = repositoryProductionApprovalInput(scope, selectedIntent);
+    const reference = repositoryProductionApprovalReference(expected);
+    const capture = createPrivateRepositoryProductionApprovalCapture({
+      callId: "call",
+      plan: expected,
+    });
+    capture.observe(structuredClone(request(reference)));
+    expect(capture.read()).toBeNull();
+    capture.observe(settle());
+    expect(capture.read()).toEqual({ approvalId: "request", approvedByCallId: "call" });
+    expect(reference).not.toHaveProperty("intent");
+    if (selectedIntent.storage.kind === "postgres") {
+      expect(JSON.stringify(reference)).not.toContain(selectedIntent.storage.manifestSha256);
+      expect(JSON.stringify(reference)).not.toContain(selectedIntent.storage.artifactRef);
+    }
+  });
+
+  const reference = repositoryProductionApprovalReference(plan);
+  it.each([
+    { name: "unsupported version", value: { ...reference, version: 3 } },
+    { name: "malformed hash", value: { ...reference, planDigest: "not-a-digest" } },
+    { name: "changed hash", value: { ...reference, planDigest: "c".repeat(64) } },
+    {
+      name: "changed operation",
+      value: { ...reference, operationRef: "11111111-1111-4111-8111-111111111111" },
+    },
+    { name: "changed app", value: { ...reference, appId: "other-app" } },
+    { name: "changed repository identity", value: { ...reference, repositoryId: "other-repo" } },
+    {
+      name: "changed repository",
+      value: { ...reference, review: { ...reference.review, repositoryFullName: "owner/other" } },
+    },
+    {
+      name: "changed storage",
+      value: { ...reference, review: { ...reference.review, storageKind: "none" } },
+    },
+    {
+      name: "excessive roles",
+      value: { ...reference, review: { ...reference.review, creatorRoles: ["admin"] } },
+    },
+    {
+      name: "changed creator",
+      value: { ...reference, review: { ...reference.review, creatorEmail: "other@example.com" } },
+    },
+    {
+      name: "changed access",
+      value: {
+        ...reference,
+        review: {
+          ...reference.review,
+          access: { mode: "self-signup", eligibility: "public", appRoles: [] },
+        },
+      },
+    },
+    { name: "missing review", value: { ...reference, review: null } },
+    { name: "extra top-level field", value: { ...reference, manifestSha256: "b".repeat(64) } },
+    {
+      name: "extra review field",
+      value: { ...reference, review: { ...reference.review, manifestSha256: "b".repeat(64) } },
+    },
+    {
+      name: "extra access field",
+      value: {
+        ...reference,
+        review: { ...reference.review, access: { mode: "private", administrator: true } },
+      },
+    },
+    { name: "legacy plan with reference tag", value: { ...plan, version: 2 } },
+  ])("rejects a compact reference with $name", ({ value }) => {
+    const capture = createPrivateRepositoryProductionApprovalCapture({ callId: "call", plan });
+    capture.observe(request(value));
+    capture.observe(settle());
+    expect(capture.read()).toBeNull();
+  });
+
+  it.each([
+    { name: "another actor", actor: "other", outcome: "approved" as const, callId: "call" },
+    {
+      name: "cancellation",
+      actor: scope.authority.ownerUserId,
+      outcome: "cancelled" as const,
+      callId: "call",
+    },
+    {
+      name: "an old call",
+      actor: scope.authority.ownerUserId,
+      outcome: "approved" as const,
+      callId: "old-call",
+    },
+  ])("rejects compact-reference consent from $name", ({ actor, outcome, callId }) => {
+    const capture = createPrivateRepositoryProductionApprovalCapture({ callId: "call", plan });
+    capture.observe(request(reference, callId));
+    capture.observe(settle(actor, outcome));
+    expect(capture.read()).toBeNull();
+  });
+
+  it.each(["owner", "session"] as const)(
+    "rejects a compact reference before reading history when the %s binding changes",
+    async (variation) => {
+      const changedOwner = {
+        ...owner,
+        authority:
+          variation === "owner" ? { ...owner.authority, ownerUserId: "other" } : owner.authority,
+        sessionId: variation === "session" ? "other-session" : owner.sessionId,
+      };
+      const readHistory = vi
+        .fn<Parameters<typeof readRepositoryProductionApproval>[0]["readHistory"]>()
+        .mockResolvedValue({
+          complete: true,
+          nextNativeIndex: 2,
+          nativeTailIndex: 2,
+        });
+      await expect(
+        readRepositoryProductionApproval({
+          plan,
+          callId: "call",
+          owner: changedOwner,
+          assertOwner: async () => {},
+          readHistory,
+        }),
+      ).rejects.toThrow();
+      expect(readHistory).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not grant compact-reference consent after canonical ownership is lost", async () => {
+    const save = vi.fn(async () => {});
+    await expect(
+      readRepositoryProductionApproval({
+        plan,
+        callId: "call",
+        owner,
+        observation: { save },
+        assertOwner: vi.fn<() => Promise<void>>().mockRejectedValue(new Error("Owner changed")),
+        readHistory: async (_start, observe) => {
+          for (const event of [request(reference), settle()]) {
+            observe(event);
+          }
+          return await Promise.resolve({ complete: true, nextNativeIndex: 2, nativeTailIndex: 2 });
+        },
+      }),
+    ).rejects.toThrow("Owner changed");
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("resumes compact-reference observation from the existing intent cursor and waits for the complete tail", async () => {
+    let checkpoint: PrivateOperatorApprovalObservation = {
+      adapterSessionId: owner.adapterSessionId,
+      adapterGeneration: owner.adapterGeneration,
+      nextNativeIndex: 27,
+      capture: createPrivateRepositoryProductionApprovalCapture({
+        callId: "call",
+        plan,
+      }).snapshot(),
+    };
+    const starts: number[] = [];
+    const readHistory = async (start: number, observe: (event: MessageStreamEvent) => void) => {
+      starts.push(start);
+      if (starts.length === 1) {
+        for (const event of [request(reference), settle()]) {
+          observe(event);
+        }
+        return await Promise.resolve({ complete: false, nextNativeIndex: 29, nativeTailIndex: 30 });
+      }
+      return await Promise.resolve({ complete: true, nextNativeIndex: 30, nativeTailIndex: 30 });
+    };
+    const read = async () =>
+      await readRepositoryProductionApproval({
+        plan,
+        callId: "call",
+        owner,
+        observation: {
+          state: checkpoint,
+          // oxlint-disable-next-line typescript/promise-function-async -- This synchronous fixture checkpoint returns the required promise without changing event ordering.
+          save: (state) => {
+            checkpoint = state;
+            return Promise.resolve();
+          },
+        },
+        assertOwner: async () => {},
+        readHistory,
+      });
+    await expect(read()).rejects.toThrow();
+    expect(checkpoint.nextNativeIndex).toBe(29);
+    expect(checkpoint.capture.request).toEqual({
+      action: "repository-production",
+      planRef: plan.operationRef,
+      planDigest: plan.planDigest,
+      idempotencyKey: scope.appId,
+    });
+    await expect(read()).resolves.toEqual({ approvalId: "request", approvedByCallId: "call" });
+    expect(starts).toEqual([27, 29]);
+  });
+
   it.each(["postgres", "none"] as const)(
     "shows the ordinary setup approval for %s without treating the card as consent",
     (storageKind) => {
@@ -202,7 +447,7 @@ describe("Production setup consent", () => {
     );
     capture.observe(
       settle(
-        variation === "actor" ? "other" : "creator",
+        variation === "actor" ? "other" : scope.authority.ownerUserId,
         variation === "cancelled" ? "cancelled" : "approved",
       ),
     );

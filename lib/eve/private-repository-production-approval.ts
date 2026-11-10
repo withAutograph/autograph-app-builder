@@ -10,7 +10,11 @@ import type {
 } from "./private-operator-approval-observation";
 import type { PrivateHistoryObservation } from "./same-origin-http";
 import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contract";
-import { repositoryProductionApprovalInputSchema } from "../provisioning/repository-production-approval";
+import {
+  repositoryProductionApprovalInputSchema,
+  repositoryProductionApprovalReference,
+  repositoryProductionPrepareInputSchema,
+} from "../provisioning/repository-production-approval";
 import type { RepositoryProductionApprovalInput } from "../provisioning/repository-production-approval";
 
 export const createPrivateRepositoryProductionApprovalCapture = (input: {
@@ -19,6 +23,7 @@ export const createPrivateRepositoryProductionApprovalCapture = (input: {
   state?: PrivateOperatorApprovalCapture;
 }) => {
   const expected = repositoryProductionApprovalInputSchema.parse(input.plan);
+  const expectedReference = repositoryProductionApprovalReference(expected);
   const captureInput: Parameters<typeof createPrivateOperatorApprovalCapture>[0] = {
     request: {
       action: "repository-production",
@@ -44,8 +49,14 @@ export const createPrivateRepositoryProductionApprovalCapture = (input: {
           ) {
             continue;
           }
-          const parsed = repositoryProductionApprovalInputSchema.safeParse(request.action.input);
+          const parsed = repositoryProductionPrepareInputSchema.safeParse(request.action.input);
           if (!parsed.success) {
+            continue;
+          }
+          if ("version" in parsed.data) {
+            if (isDeepStrictEqual(parsed.data, expectedReference)) {
+              capture.acceptRequest(request.requestId, request.action.callId);
+            }
             continue;
           }
           if (
