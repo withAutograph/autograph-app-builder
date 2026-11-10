@@ -70,9 +70,7 @@ export const handleBuilderAppAccess = async (
     handler ??= createDeployment(process.env);
     return await handler(request, sessionId);
   } catch (error) {
-    if (request.method === "GET") {
-      reportRepositoryProductionFailure("access_deployment", "binding_unavailable", error);
-    }
+    reportRepositoryProductionFailure("access_deployment", "binding_unavailable", error);
     const safe =
       error instanceof AppAccessError ? error : new AppAccessError("app_access_unavailable");
     return Response.json(

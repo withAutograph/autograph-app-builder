@@ -9,6 +9,7 @@ import { AppAccessError } from "./errors";
 import { createAppAccessOperatorClient } from "./operator-client";
 import type { AppAccessOwner } from "./operator-client";
 import { createAppAccessRouteHandler } from "./route";
+import { createAppAccessAction } from "./action";
 import { createRepositoryProductionHandler } from "../provisioning/repository-production-dispatcher";
 
 beforeEach(() => {
@@ -69,6 +70,151 @@ const phaseByStage = {
 };
 
 describe("session-owned app access route", () => {
+  it.each(["owner", "token", "transport", "http", "projection", "recheck"] as const)(
+    "diagnoses the actual POST %s failure without changing the invitation result or replaying it",
+    async (stage) => {
+      const secret = "private-credential guest@example.test https://private.example/path";
+      const failure = Object.assign(
+        new TypeError(secret, { cause: { code: "42501", message: secret } }),
+        { status: 502 },
+      );
+      let dispatched = 0;
+      const client = createAppAccessOperatorClient({
+        endpoint: "https://operator.example.test",
+        token: async () => {
+          if (stage === "token") {
+            throw failure;
+          }
+          return "private-workload-token";
+        },
+        fetch: async () => {
+          dispatched += 1;
+          if (stage === "transport") {
+            throw failure;
+          }
+          if (stage === "http") {
+            return new Response(secret, { status: 503 });
+          }
+          if (stage === "projection") {
+            return Response.json({ credentials: secret });
+          }
+          return Response.json(snapshot);
+        },
+      });
+      let resolved = 0;
+      const handle = createAppAccessRouteHandler({
+        origin,
+        ...client,
+        resolveOwner: async () => {
+          resolved += 1;
+          if (stage === "owner" || (stage === "recheck" && resolved === 2)) {
+            throw failure;
+          }
+          return routeOwner;
+        },
+      });
+      const action = createAppAccessAction({ origin, handle });
+      const result = await action({ sessionId: owner.sessionId, command }, new Headers({ origin }));
+      expect(result).toMatchObject({
+        status: "error",
+        code: ["owner", "token", "recheck"].includes(stage)
+          ? "app_access_unavailable"
+          : "app_access_unknown",
+        uncertain: true,
+      });
+      expect(dispatched).toBe(["owner", "token"].includes(stage) ? 0 : 1);
+      const phases = {
+        owner: "access_owner_resolve",
+        token: "access_operator_token",
+        transport: "access_operator_transport",
+        http: "access_operator_http",
+        projection: "access_operator_projection",
+        recheck: "access_owner_recheck",
+      };
+      const entries = vi
+        .mocked(console.warn)
+        .mock.calls.map(([value]) =>
+          z.record(z.string(), z.json()).parse(JSON.parse(String(value))),
+        );
+      expect(entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: "builder.repository_production_failure",
+            phase: phases[stage],
+          }),
+        ]),
+      );
+      if (["transport", "http", "projection"].includes(stage)) {
+        expect(entries).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              phase: "access_operator_command",
+              appAccessCode: "app_access_unknown",
+            }),
+          ]),
+        );
+      }
+      const output = JSON.stringify({ entries, result });
+      for (const value of [
+        secret,
+        command.email,
+        command.clientRequestId,
+        "private-workload-token",
+        "ownerUserId",
+        "operator.example.test",
+        "credentials",
+        "stack",
+        "cause",
+      ]) {
+        expect(output).not.toContain(value);
+      }
+      if (["owner", "token", "transport", "recheck"].includes(stage)) {
+        expect(entries).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              phase: phases[stage],
+              errorKind: "TypeError",
+              sqlState: "42501",
+              httpStatus: 502,
+            }),
+          ]),
+        );
+      }
+      if (stage === "http") {
+        expect(entries).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ phase: phases[stage], httpStatus: 503 }),
+          ]),
+        );
+      }
+    },
+  );
+
+  it("keeps the POST uncertainty and original request when diagnostic logging fails", async () => {
+    vi.mocked(console.warn).mockImplementation(() => {
+      throw new Error("logger unavailable");
+    });
+    let dispatched = 0;
+    const client = createAppAccessOperatorClient({
+      endpoint: "https://operator.example.test",
+      token: async () => "private-token",
+      fetch: async () => {
+        dispatched += 1;
+        throw new Error("private provider rejection");
+      },
+    });
+    const handle = createAppAccessRouteHandler({
+      origin,
+      ...client,
+      resolveOwner: async () => routeOwner,
+    });
+    const action = createAppAccessAction({ origin, handle });
+    expect(
+      await action({ sessionId: owner.sessionId, command }, new Headers({ origin })),
+    ).toMatchObject({ status: "error", code: "app_access_unknown", uncertain: true });
+    expect(dispatched).toBe(1);
+  });
+
   it.each(["owner", "read", "recheck"] as const)(
     "reports a closed %s stage while preserving the actual GET failure response",
     async (stage) => {

@@ -84,7 +84,7 @@ export const createAppAccessRouteHandler =
       }
       const owner = resolved.operatorOwner;
       const cursor = url.searchParams.get("cursor") ?? undefined;
-      phase = "access_operator_read";
+      phase = command === undefined ? "access_operator_read" : "access_operator_command";
       const raw =
         command === undefined
           ? await input.read(owner, cursor)
@@ -103,9 +103,7 @@ export const createAppAccessRouteHandler =
       }
       return Response.json({ ...snapshot, sessionId }, { headers: noStore });
     } catch (error) {
-      if (request.method === "GET") {
-        reportRepositoryProductionFailure(phase, "binding_unavailable", error);
-      }
+      reportRepositoryProductionFailure(phase, "binding_unavailable", error);
       const safe =
         error instanceof AppAccessError ? error : new AppAccessError("app_access_unavailable");
       return Response.json(

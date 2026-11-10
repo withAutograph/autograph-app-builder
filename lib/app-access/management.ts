@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
-import { observeRepositoryProductionPhase } from "../provisioning/repository-production-diagnostic";
+import {
+  observeRepositoryProductionPhase,
+  reportRepositoryProductionFailure,
+} from "../provisioning/repository-production-diagnostic";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { repositoryProductionScopeSchema } from "../provisioning/repository-production-contract";
@@ -179,93 +182,127 @@ export const createAppAccessManagementService = (deps: AppAccessManagementDepend
     raw: AppAccessCommand,
   ): Promise<AppAccessSnapshot> => {
     const command = normalizeCommand(raw);
-    const app = await deps.resolve(owner);
+    const app = await observeRepositoryProductionPhase(
+      "access_scope_resolve",
+      "binding_unavailable",
+      async () => await deps.resolve(owner),
+    );
     if (!app.canManage) {
       throw new AppAccessError("app_access_denied");
     }
-    await deps.assertAuthorized(owner, app.scope, true);
+    await observeRepositoryProductionPhase(
+      "access_command_authorize",
+      "authorization_unavailable",
+      async () => {
+        await deps.assertAuthorized(owner, app.scope, true);
+      },
+    );
     if (
       "roles" in command &&
       command.roles.some((role) => !app.roles.some((allowed) => allowed.id === role))
     ) {
       throw new AppAccessError("app_access_denied");
     }
-    await deps.withLease(app.scope, async (assertFence) => {
-      const assertCurrent = async () => {
-        await assertFence();
-        await deps.assertAuthorized(owner, app.scope, true);
-      };
-      await assertCurrent();
-      // Resolving an uncertain mutation precedes a conflicting access change.
-      const pending = await deps.journal.pending(app.scope);
-      if (pending.some((row) => row.record.command.clientRequestId !== command.clientRequestId)) {
-        throw new AppAccessError("app_access_unknown");
-      }
-      let row = await deps.journal.reserve({
-        kind: "app-access-operation-v1",
-        scope: app.scope,
-        ownerContext: owner.ownerContext,
-        command,
-        state: "pending",
-        dispatched: false,
-        createdAt: new Date().toISOString(),
-        workerCheckpoints: [],
-      });
-      if (
-        !isDeepStrictEqual(row.record.scope, app.scope) ||
-        !isDeepStrictEqual(normalizeCommand(row.record.command), command)
-      ) {
-        throw new AppAccessError("request_id_conflict");
-      }
-      if (row.record.state === "applied") {
-        return;
-      }
-      if (row.record.state === "rejected") {
-        throw new AppAccessError("app_access_denied");
-      }
-      const save = async (record: AppAccessOperation) => {
+    try {
+      await deps.withLease(app.scope, async (assertFence) => {
+        const assertCurrent = async () => {
+          await assertFence();
+          await deps.assertAuthorized(owner, app.scope, true);
+        };
         await assertCurrent();
-        const next = await deps.journal.update(row, record);
-        if (next === undefined) {
+        // Resolving an uncertain mutation precedes a conflicting access change.
+        const pending = await observeRepositoryProductionPhase(
+          "access_command_journal",
+          "binding_unavailable",
+          async () => await deps.journal.pending(app.scope),
+        );
+        if (pending.some((row) => row.record.command.clientRequestId !== command.clientRequestId)) {
           throw new AppAccessError("app_access_unknown");
         }
-        row = next;
-      };
-      const context = {
-        operationRef: command.clientRequestId,
-        createdAt: row.record.createdAt,
-        assertCurrent,
-        readCheckpoints: () => row.record.workerCheckpoints,
-        checkpoint: async (frame: z.infer<ReturnType<typeof z.json>>) => {
-          await save({
-            ...row.record,
-            workerCheckpoints: [...row.record.workerCheckpoints, frame],
-          });
-        },
-      };
-      if (row.record.dispatched) {
-        const result = await deps.reconcile(app.scope, command, context);
-        await assertCurrent();
-        if (result === "unknown") {
-          throw new AppAccessError("app_access_unknown");
+        let row = await observeRepositoryProductionPhase(
+          "access_command_journal",
+          "binding_unavailable",
+          async () =>
+            await deps.journal.reserve({
+              kind: "app-access-operation-v1",
+              scope: app.scope,
+              ownerContext: owner.ownerContext,
+              command,
+              state: "pending",
+              dispatched: false,
+              createdAt: new Date().toISOString(),
+              workerCheckpoints: [],
+            }),
+        );
+        if (
+          !isDeepStrictEqual(row.record.scope, app.scope) ||
+          !isDeepStrictEqual(normalizeCommand(row.record.command), command)
+        ) {
+          throw new AppAccessError("request_id_conflict");
         }
-        if (result === "applied") {
-          await save({ ...row.record, state: "applied" });
+        if (row.record.state === "applied") {
           return;
         }
-      }
-      await save({ ...row.record, dispatched: true });
-      let result: "applied" | "rejected";
-      try {
-        result = await deps.execute(app.scope, command, context);
-      } catch {
-        throw new AppAccessError("app_access_unknown");
-      }
-      await save({ ...row.record, state: result });
-      if (result === "rejected") {
-        throw new AppAccessError("app_access_denied");
-      }
-    });
+        if (row.record.state === "rejected") {
+          throw new AppAccessError("app_access_denied");
+        }
+        const save = async (record: AppAccessOperation) => {
+          await assertCurrent();
+          const next = await observeRepositoryProductionPhase(
+            "access_command_journal",
+            "binding_unavailable",
+            // oxlint-disable-next-line sonarjs/no-nested-functions -- Observe this CAS within its original saved operation and authority closure.
+            async () => await deps.journal.update(row, record),
+          );
+          if (next === undefined) {
+            throw new AppAccessError("app_access_unknown");
+          }
+          row = next;
+        };
+        const context = {
+          operationRef: command.clientRequestId,
+          createdAt: row.record.createdAt,
+          assertCurrent,
+          readCheckpoints: () => row.record.workerCheckpoints,
+          checkpoint: async (frame: z.infer<ReturnType<typeof z.json>>) => {
+            await save({
+              ...row.record,
+              workerCheckpoints: [...row.record.workerCheckpoints, frame],
+            });
+          },
+        };
+        if (row.record.dispatched) {
+          const result = await observeRepositoryProductionPhase(
+            "access_command_reconcile",
+            "binding_unavailable",
+            async () => await deps.reconcile(app.scope, command, context),
+          );
+          await assertCurrent();
+          if (result === "unknown") {
+            throw new AppAccessError("app_access_unknown");
+          }
+          if (result === "applied") {
+            await save({ ...row.record, state: "applied" });
+            return;
+          }
+        }
+        await save({ ...row.record, dispatched: true });
+        let result: "applied" | "rejected";
+        try {
+          result = await deps.execute(app.scope, command, context);
+        } catch (error) {
+          reportRepositoryProductionFailure("access_command_execute", "binding_unavailable", error);
+          throw new AppAccessError("app_access_unknown");
+        }
+        await save({ ...row.record, state: result });
+        if (result === "rejected") {
+          throw new AppAccessError("app_access_denied");
+        }
+      });
+    } catch (error) {
+      reportRepositoryProductionFailure("access_command_lease", "binding_unavailable", error);
+      throw error;
+    }
     return await read(owner);
   };
   // Called only by the operator's authenticated Auth-workload route. Identity is read

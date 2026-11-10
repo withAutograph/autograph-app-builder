@@ -87,7 +87,9 @@ describe("private local preview setup", () => {
     });
   });
 
-  it("reports an actual authenticated missing-roles failure as an app authoring repair without a fallback grant", async () => {
+  it("preserves an empty-role local runtime command failure", async () => {
+    const stderr =
+      "Authenticated runtime requires schema-declared roles or explicit accepted AppSpec roles in APP_RUNTIME_ROLES";
     const run = vi
       .fn()
       .mockResolvedValueOnce({
@@ -97,8 +99,7 @@ describe("private local preview setup", () => {
       })
       .mockResolvedValueOnce({
         exitCode: 1,
-        stderr:
-          "Authenticated runtime requires schema-declared roles or explicit accepted AppSpec roles in APP_RUNTIME_ROLES",
+        stderr,
         stdout: "",
       });
     const result = await prepareAppLocalPreview({
@@ -106,14 +107,54 @@ describe("private local preview setup", () => {
       root: "/workspace/repository",
       sandbox: { run },
     });
-    expect(result).toMatchObject({ exitCode: 1, status: "failed" });
-    expect(result.problem).toContain("CUE authorization roles and model/operation grants");
-    expect(result.problem).toContain("ordinary implementation repair");
-    expect(run).toHaveBeenLastCalledWith({
-      command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
-      env: { APP_RUNTIME_STATE_DIR: runtimeStateDirectory },
-      workingDirectory: "/workspace/repository",
+    expect(result).toMatchObject({ exitCode: 1, status: "failed", stderr });
+  });
+  it("retains a selected validation failure when local setup cannot prepare a role-less app", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: descriptor({ ...generated, authorization: "app-owned", roles: [] }),
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: descriptor({ ...generated, authorization: "app-owned", roles: [] }),
+      })
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stderr: "Authenticated runtime requires schema-declared roles",
+        stdout: "",
+      });
+    await expect(
+      prepareValidationLocalData({
+        appId: "spend-review",
+        root: "/workspace/repository",
+        sandbox: { run },
+      }),
+    ).rejects.toThrow("Authenticated runtime requires schema-declared roles");
+  });
+  it.each([
+    {
+      backend: generated,
+      stderr: "Authenticated runtime requires schema-declared roles",
+    },
+    {
+      backend: { ...generated, roles: [] },
+      stderr: "pg_ctl: could not start server",
+    },
+  ])("preserves other setup failures for $stderr", async ({ backend, stderr }) => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor(backend) })
+      .mockResolvedValueOnce({ exitCode: 2, stderr, stdout: "" });
+    const result = await prepareAppLocalPreview({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run },
     });
+    expect(result).toMatchObject({ exitCode: 2, status: "failed", stderr });
   });
   it("preserves successful empty-role runtime setup instead of imposing an authentication requirement", async () => {
     const run = vi

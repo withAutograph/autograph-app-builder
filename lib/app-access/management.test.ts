@@ -1,6 +1,7 @@
 /* oxlint-disable eslint/require-await -- In-memory adapters implement asynchronous production ports. */
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import type { RepositoryProductionScope } from "../provisioning/repository-production-contract";
 import { AppAccessError } from "./errors";
 import { completeRepositoryProductionInvitation } from "../provisioning/repository-production-native";
@@ -101,6 +102,93 @@ const setup = () => {
 };
 
 describe("managed app access", () => {
+  it.each(["resolve", "authorize", "lease", "journal", "execute", "reconcile"] as const)(
+    "diagnoses a mutating %s failure while preserving its journal and rejection",
+    async (stage) => {
+      const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const f = setup();
+      const command = invite();
+      const privateDetail = "private-credential guest@example.test https://private.example/path";
+      const failure = Object.assign(
+        new Error(privateDetail, { cause: { code: "42501", query: privateDetail } }),
+        { status: 503 },
+      );
+      const reject = async (): Promise<never> => {
+        throw failure;
+      };
+      if (stage === "resolve") {
+        f.deps.resolve = reject;
+      }
+      if (stage === "authorize") {
+        f.deps.assertAuthorized = reject;
+      }
+      if (stage === "lease") {
+        f.deps.withLease = reject;
+      }
+      if (stage === "journal") {
+        f.deps.journal.reserve = reject;
+      }
+      if (stage === "execute" || stage === "reconcile") {
+        f.deps.execute = reject;
+      }
+      if (stage === "reconcile") {
+        await expect(f.service.execute(owner, command)).rejects.toMatchObject({
+          code: "app_access_unknown",
+        });
+        log.mockClear();
+        f.deps.reconcile = reject;
+      }
+      const result = f.service.execute(owner, command);
+      await (stage === "execute"
+        ? expect(result).rejects.toMatchObject({ code: "app_access_unknown" })
+        : expect(result).rejects.toBe(failure));
+      const phases = {
+        resolve: "access_scope_resolve",
+        authorize: "access_command_authorize",
+        lease: "access_command_lease",
+        journal: "access_command_journal",
+        execute: "access_command_execute",
+        reconcile: "access_command_reconcile",
+      };
+      const entries = log.mock.calls.map(([value]) =>
+        z.record(z.string(), z.json()).parse(JSON.parse(String(value))),
+      );
+      expect(entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: "builder.repository_production_failure",
+            phase: phases[stage],
+            errorKind: "Error",
+            sqlState: "42501",
+            httpStatus: 503,
+          }),
+        ]),
+      );
+      const output = JSON.stringify(entries);
+      for (const value of [
+        privateDetail,
+        command.email,
+        command.clientRequestId,
+        "ownerUserId",
+        "stack",
+        "query",
+        "cause",
+      ]) {
+        expect(output).not.toContain(value);
+      }
+      if (stage === "execute" || stage === "reconcile") {
+        expect(f.rows.get(command.clientRequestId)?.record).toMatchObject({
+          state: "pending",
+          dispatched: true,
+          command,
+        });
+        expect(f.rows.size).toBe(1);
+      } else {
+        expect(f.rows.size).toBe(0);
+      }
+    },
+  );
+
   it.each(["resolve", "people"] as const)(
     "reports the actual protected %s read boundary and preserves its rejection",
     async (stage) => {
