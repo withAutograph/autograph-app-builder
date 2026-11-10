@@ -207,7 +207,7 @@ interface InitialDestinationReviewPhase {
 /** Preserve validated/source bytes while discarding authority for the old diff. */
 export const invalidateGitHubDestinationReview = <T extends InitialDestinationReviewPhase>(
   state: T,
-  binding: GitHubDestinationReviewBinding,
+  binding?: GitHubDestinationReviewBinding,
 ) => {
   const validated = { ...state };
   for (const key of [
@@ -215,10 +215,12 @@ export const invalidateGitHubDestinationReview = <T extends InitialDestinationRe
     "githubDraftProposal",
     "existingDraftUpdate",
     "githubDestinationReviewRead",
+    "githubDestinationReview",
   ]) {
     Reflect.deleteProperty(validated, key);
   }
-  return { ...validated, githubDestinationReview: binding, phase: "validated" as const };
+  const next = { ...validated, phase: "validated" as const };
+  return binding === undefined ? next : { ...next, githubDestinationReview: binding };
 };
 
 interface WorkspacePhase {

@@ -20,7 +20,7 @@ describe("Production request failure guidance", () => {
     );
     expect(error.message).toContain("Check its status before retrying");
   });
-  it("guides recovery of the saved publication without replacing acquired source", async () => {
+  it("guides recovery of the saved delivery in the same session", async () => {
     const error = await repositoryProductionResponseError(
       Response.json(
         { code: "app_setup_destination_required", secret: "never expose" },
@@ -28,8 +28,8 @@ describe("Production request failure guidance", () => {
       ),
       "plan",
     );
-    expect(error.message).toContain("existing reviewed publication workflow");
-    expect(error.message).toContain("acquired app source unchanged");
+    expect(error.message).toContain("saved delivery in the same session");
+    expect(error.message).toContain("repository and current source for Production");
     expect(error.message).not.toContain("never expose");
   });
 });

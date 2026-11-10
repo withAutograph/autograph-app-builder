@@ -59,7 +59,7 @@ export const repositoryProductionResponseError = async (
   }
   if (code === "app_setup_destination_required") {
     return new Error(
-      "Builder could not read this app's saved repository destination. Continue its existing reviewed publication workflow in the same session, then check Production setup again. Keep the acquired app source unchanged.",
+      "Builder could not yet resolve this app's repository and current source for Production. Continue its saved delivery in the same session, then check Production setup again.",
     );
   }
   return new Error(

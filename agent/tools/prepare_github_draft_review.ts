@@ -144,13 +144,6 @@ export default defineTool({
     }
     const { target } = resolved;
     const sandbox = await ctx.getSandbox();
-    const { changeSet, observed } = await observeNormalizedChangeSet({ sandbox, state });
-    const pathInput = {
-      sandbox,
-      state,
-      observed,
-      reviewedPaths: changeSet.approvedPaths,
-    };
     const runtime =
       target.destination === undefined
         ? await githubPublicationRuntimeForSession(ctx.session.auth)
@@ -181,6 +174,18 @@ export default defineTool({
     }
     const publishedProposalDigest =
       prior?.proposal.digest ?? state.publishedGitHubDraftProposalDigest;
+    const { changeSet, observed } = await observeNormalizedChangeSet({
+      sandbox,
+      state,
+      destinationReview:
+        publishedProposalDigest === undefined ? undefined : "observe-current-edits",
+    });
+    const pathInput = {
+      sandbox,
+      state,
+      observed,
+      reviewedPaths: changeSet.approvedPaths,
+    };
     let ownedAppRevision: OwnedAppRevisionLookup | undefined;
     if (publishedProposalDigest !== undefined) {
       ownedAppRevision = { appId: state.appSpec.appId, proposalDigest: publishedProposalDigest };
@@ -273,15 +278,31 @@ export default defineTool({
         tool: "prepare_github_draft_pr_reconciliation" as const,
         input: { pullRequestNumber: subject.pullRequestNumber },
       };
+      const currentReviewMatches =
+        state.phase === "reviewed" && state.reviewReceipt.changeSetDigest === changeSet.digest;
+      if (
+        !currentReviewMatches &&
+        (state.phase === "reviewed" ||
+          state.githubDestinationReview !== undefined ||
+          state.publishedGitHubDraftProposalDigest !== subject.proposalDigest)
+      ) {
+        updateExactWorkflow({
+          expected: state,
+          operation: "retiring the initial review for this owned draft",
+          transition: () => ({
+            ...invalidateGitHubDestinationReview(state),
+            publishedGitHubDraftProposalDigest: subject.proposalDigest,
+          }),
+        });
+      }
       return checkedNativeToolResult(
         {
           status: "existing-draft-review-required",
           appId: subject.appId,
           pullRequestNumber: subject.pullRequestNumber,
-          nextCall:
-            state.phase === "reviewed"
-              ? reconciliation
-              : { tool: "accept_change_set" as const, input: {} },
+          nextCall: currentReviewMatches
+            ? reconciliation
+            : { tool: "accept_change_set" as const, input: {} },
           afterReview: reconciliation,
           guidance:
             "Preserve this app's current validated bytes, source and owned draft. Review the current app delta with accept_change_set, then follow afterReview to prepare that same draft's normal reconciliation without a recovery flag. Do not prepare a replacement PR or initial destination review. Candidate validation, review and separate exact update approval remain required before publication.",

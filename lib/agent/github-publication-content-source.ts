@@ -11,6 +11,7 @@ import {
 } from "../repository/target-apply";
 import { readPreparedSandboxSourceManifest } from "../repository/supported-template";
 import { hasTestCapability } from "../testing/test-capability";
+import { ReviewedPublicationSourceChangedError } from "../repository/reviewed-publication-source-changed";
 
 type ReviewedWorkflow = Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
 
@@ -46,9 +47,10 @@ export function publicationContentSourceForReviewedWorkflow(input: {
           input.state.proposal.target.frameworkUpgrade !== undefined,
         ) !== input.state.reviewReceipt.postTreeDigest
       ) {
-        throw new Error(
-          "The selected app changed after review. Review its current files again before publishing the draft pull request.",
-        );
+        throw new ReviewedPublicationSourceChangedError({
+          appId: input.state.appSpec.appId,
+          reviewDigest: input.state.reviewReceipt.digest,
+        });
       }
       return new Map(observed.files.map((file) => [file.path, file]));
     })());

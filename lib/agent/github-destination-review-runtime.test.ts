@@ -426,6 +426,12 @@ describe("same-session post-merge destination review", () => {
     "routes the %s correction to its same-owned open draft without creating a replacement review",
     async (phase) => {
       const f = phase === "validated" ? await markerOnlyRevision() : await ownedRevisionTool();
+      if (f.state.phase === "reviewed" && toolPorts.changeSet !== undefined) {
+        f.state.reviewReceipt = createReviewedChangeSetReceipt(
+          toolPorts.changeSet,
+          "review-current-app",
+        );
+      }
       f.inspectPr.mockResolvedValue({
         state: "open",
         draft: true,
@@ -498,6 +504,53 @@ describe("same-session post-merge destination review", () => {
     expect(f.run).not.toHaveBeenCalled();
     expect(f.compareAndSet).not.toHaveBeenCalled();
     expect(f.unexpected).not.toHaveBeenCalled();
+  });
+
+  it("refreshes a retained reviewed phase after a current app test changes", async () => {
+    const f = await ownedRevisionTool();
+    f.inspectPr.mockResolvedValue({
+      state: "open",
+      draft: true,
+      checks: "pending",
+      headSha: f.receipt.branchSha,
+      baseBranch: f.receipt.baseBranch,
+    });
+    const content = "export const ownedTest = () => 'current record';\n";
+    const change = {
+      path: "apps/example/__tests__/data.test.ts",
+      kind: "added" as const,
+      after: {
+        digest: createHash("sha256").update(content).digest("hex"),
+        mode: "644",
+      },
+    };
+    const current = {
+      ...normalized,
+      changes: [...normalized.changes, change],
+      postTreeDigest: "6".repeat(64),
+    };
+    toolPorts.changeSet = { ...current, digest: hash(current) };
+    toolPorts.observed = {
+      files: [...(toolPorts.observed?.files ?? []), { path: change.path, ...change.after }],
+      treeDigest: current.postTreeDigest,
+    };
+    await expect(prepareDraftReview.execute({}, f.context)).resolves.toMatchObject({
+      status: "existing-draft-review-required",
+      nextCall: { tool: "accept_change_set", input: {} },
+      afterReview: {
+        tool: "prepare_github_draft_pr_reconciliation",
+        input: { pullRequestNumber: f.receipt.pullRequestNumber },
+      },
+    });
+    const refreshed = readToolState();
+    expect(refreshed?.phase).toBe("validated");
+    expect(refreshed?.applyReceipt).toBe(f.state.applyReceipt);
+    expect(refreshed?.validationReceipt).toBe(f.state.validationReceipt);
+    expect(refreshed?.publishedGitHubDraftProposalDigest).toBe(f.proposal.digest);
+    expect(refreshed).not.toHaveProperty("githubDraftProposal");
+    expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+    expect(f.run).not.toHaveBeenCalled();
+    expect(f.compareAndSet).not.toHaveBeenCalled();
   });
 
   it.each(["cancelled", "workspace-changed", "generic-provider-text"] as const)(
