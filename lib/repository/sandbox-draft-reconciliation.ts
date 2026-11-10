@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import { ReviewedPublicationSourceChangedError } from "./reviewed-publication-source-changed";
 
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
@@ -439,20 +440,29 @@ const stageUnpublished = async (
       // oxlint-disable-next-line eslint/no-await-in-loop -- each reviewed postimage is loaded in order.
       file = await unpublished.contentSource.readFile(change.path);
     } catch (error) {
+      if (error instanceof ReviewedPublicationSourceChangedError) {
+        throw error;
+      }
       throw new Error(
         `Builder could not recover unpublished app file ${change.path} from the previous checkout. Its sandbox may have expired before those bytes reached the draft branch. Reopen the current app, recreate and review the missing edit, then prepare a new reconciliation. Cause: ${redact(error instanceof Error ? error.message : String(error)) || "The source returned no detail."}`,
         { cause: error },
       );
     }
+    if (file === null) {
+      throw new Error(
+        `Builder's unpublished app file ${change.path} changed after review. Review it again before reconciling the draft.`,
+      );
+    }
     if (
-      file === null ||
       file.digest !== change.after?.digest ||
       file.mode !== change.after.mode ||
       createHash("sha256").update(file.bytes).digest("hex") !== file.digest
     ) {
-      throw new Error(
-        `Builder's unpublished app file ${change.path} changed after review. Review it again before reconciling the draft.`,
-      );
+      throw new ReviewedPublicationSourceChangedError({
+        appId: input.appId,
+        reviewDigest: unpublished.reviewDigest,
+        path: change.path,
+      });
     }
     const directory = relative.slice(0, relative.lastIndexOf("/"));
     // oxlint-disable-next-line eslint/no-await-in-loop -- the directory must exist before its file.

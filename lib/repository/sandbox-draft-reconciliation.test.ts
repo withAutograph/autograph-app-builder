@@ -35,6 +35,10 @@ import {
 
 import { retireUnusedDraftWorktrees } from "./retire-unused-draft-worktrees";
 import { attachCheckoutDependencyView } from "./dependency-cache";
+import { publicationContentSourceForReviewedWorkflow } from "../agent/github-publication-content-source";
+import type { AppBuilderWorkflowState } from "../agent/workflow-state";
+import { inspectFixtureApplyOverlay, reviewedOverlayTreeDigest } from "./target-apply";
+import { ReviewedPublicationSourceChangedError } from "./reviewed-publication-source-changed";
 
 const temporary: string[] = [];
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -1137,6 +1141,195 @@ describe("isolated draft reconciliation", () => {
     );
     expect(git(checkout, "rev-parse", "HEAD")).toBe(baseSha);
   });
+
+  it("propagates the actual reviewed-overlay mismatch while the private app file is still present", async () => {
+    const { root, sandbox, headSha, baseSha } = fixture();
+    const file = "apps/demo/tests/journey.spec.ts";
+    const privateFile = path.join(root, "repository", file);
+    mkdirSync(path.join(root, ".app-builder"), { recursive: true });
+    writeFileSync(
+      path.join(root, ".app-builder/source-files.json"),
+      JSON.stringify([{ path: file }]),
+    );
+    writeFileSync(privateFile, "reviewed edit\n");
+    const sourceSandbox = Object.assign(sandbox, {
+      // oxlint-disable-next-line typescript/promise-function-async -- The fixture exposes real current disk bytes through the asynchronous Sandbox API.
+      readBinaryFile: (input: { path: string }) =>
+        Promise.resolve(
+          existsSync(path.join(root, input.path))
+            ? readFileSync(path.join(root, input.path))
+            : null,
+        ),
+    });
+    const overlay = await inspectFixtureApplyOverlay(
+      sourceSandbox,
+      "/workspace/repository",
+      "demo",
+    );
+    // SAFETY: This controlled state provides exactly the fields the real content source reads; no workflow mutation or approval is exercised here.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Keep the fixture limited to the content-source boundary.
+    const state = {
+      appSpec: { appId: "demo" },
+      applyReceipt: { applyRoot: "/workspace/repository" },
+      sourceReceipt: { sourceKind: "fresh-template" },
+      proposal: { target: {} },
+      reviewReceipt: {
+        digest: "b".repeat(64),
+        postTreeDigest: reviewedOverlayTreeDigest(overlay, "demo", false),
+      },
+    } as Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
+    const contentSource = publicationContentSourceForReviewedWorkflow({
+      sandbox: sourceSandbox,
+      state,
+    });
+    writeFileSync(privateFile, "newer private edit\n");
+    const preparation = prepareDraftReconciliation({
+      appId: "demo",
+      baseBranch: "main",
+      baseSha,
+      headBranch: "draft",
+      headSha,
+      repository: { name: "arrusted-development", owner: "withAutograph" },
+      sandbox: sourceSandbox,
+      workspaceRoot: root,
+      unpublished: {
+        reviewDigest: state.reviewReceipt.digest,
+        changes: [
+          {
+            path: file,
+            kind: "modified",
+            before: { digest: digest("draft\n"), mode: "644" },
+            after: { digest: digest("reviewed edit\n"), mode: "644" },
+          },
+        ],
+        contentSource,
+      },
+    });
+    await expect(preparation).rejects.toBeInstanceOf(ReviewedPublicationSourceChangedError);
+    await expect(preparation).rejects.toMatchObject({
+      appId: "demo",
+      reviewDigest: state.reviewReceipt.digest,
+    });
+    expect(readFileSync(privateFile, "utf-8")).toBe("newer private edit\n");
+    expect(git(path.join(root, "repository"), "rev-parse", "HEAD")).toBe(headSha);
+  });
+
+  it.each(["digest", "mode", "bytes"] as const)(
+    "reports a present unpublished file's %s mismatch against the current review",
+    async (changed) => {
+      const { root, sandbox, headSha, baseSha } = fixture();
+      const file = "apps/demo/tests/journey.spec.ts";
+      const reviewed = {
+        bytes: Buffer.from("reviewed edit\n"),
+        digest: digest("reviewed edit\n"),
+        mode: "644",
+      };
+      const returned = { ...reviewed };
+      if (changed === "digest") {
+        returned.digest = digest("different metadata");
+      }
+      if (changed === "mode") {
+        returned.mode = "755";
+      }
+      if (changed === "bytes") {
+        returned.bytes = Buffer.from("different bytes\n");
+      }
+      const preparation = prepareDraftReconciliation({
+        appId: "demo",
+        baseBranch: "main",
+        baseSha,
+        headBranch: "draft",
+        headSha,
+        repository: { name: "arrusted-development", owner: "withAutograph" },
+        sandbox,
+        workspaceRoot: root,
+        unpublished: {
+          reviewDigest: "c".repeat(64),
+          changes: [
+            {
+              path: file,
+              kind: "modified",
+              before: { digest: digest("draft\n"), mode: "644" },
+              after: { digest: reviewed.digest, mode: reviewed.mode },
+            },
+          ],
+          contentSource: { readFile: async () => await Promise.resolve(returned) },
+        },
+      });
+      await expect(preparation).rejects.toBeInstanceOf(ReviewedPublicationSourceChangedError);
+      await expect(preparation).rejects.toMatchObject({
+        appId: "demo",
+        reviewDigest: "c".repeat(64),
+        path: file,
+      });
+      expect(readFileSync(path.join(root, "repository", file), "utf-8")).toBe("draft\n");
+    },
+  );
+
+  it.each(["unavailable", "matching-message", "missing"] as const)(
+    "keeps %s source recovery separate from a proven changed review",
+    async (failure) => {
+      const { root, sandbox, headSha, baseSha } = fixture();
+      const file = "apps/demo/tests/journey.spec.ts";
+      const unavailable =
+        failure === "matching-message"
+          ? new Error(
+              new ReviewedPublicationSourceChangedError({
+                appId: "demo",
+                reviewDigest: "d".repeat(64),
+              }).message,
+            )
+          : new Error("Sandbox read is unavailable");
+      let available = false;
+      const input = {
+        appId: "demo",
+        baseBranch: "main",
+        baseSha,
+        headBranch: "draft",
+        headSha,
+        repository: { name: "arrusted-development", owner: "withAutograph" },
+        sandbox,
+        workspaceRoot: root,
+        unpublished: {
+          reviewDigest: "d".repeat(64),
+          changes: [
+            {
+              path: file,
+              kind: "modified" as const,
+              before: { digest: digest("draft\n"), mode: "644" },
+              after: { digest: digest("recovered edit\n"), mode: "644" },
+            },
+          ],
+          contentSource: {
+            readFile: async () => {
+              if (!available) {
+                if (failure === "missing") {
+                  return null;
+                }
+                throw unavailable;
+              }
+              return await Promise.resolve({
+                bytes: Buffer.from("recovered edit\n"),
+                digest: digest("recovered edit\n"),
+                mode: "644",
+              });
+            },
+          },
+        },
+      };
+      const preparation = prepareDraftReconciliation(input);
+      await expect(preparation).rejects.not.toBeInstanceOf(ReviewedPublicationSourceChangedError);
+      if (failure !== "missing") {
+        await expect(preparation).rejects.toMatchObject({ cause: unavailable });
+      }
+      expect(readFileSync(path.join(root, "repository", file), "utf-8")).toBe("draft\n");
+      available = true;
+      const resumed = await prepareDraftReconciliation(input);
+      expect(existsSync(resumed.root)).toBe(true);
+      expect(readFileSync(path.join(resumed.root, file), "utf-8")).toContain("recovered edit\n");
+      expect(readFileSync(path.join(root, "repository", file), "utf-8")).toBe("draft\n");
+    },
+  );
 
   it("explains when unpublished reviewed bytes were lost with the old sandbox", async () => {
     const { root, sandbox, headSha, baseSha } = fixture();

@@ -1,5 +1,6 @@
 /* oxlint-disable unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
+import { observeNormalizedChangeSet } from "./change_set_status";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { setBuilderSandboxNetworkPolicy } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
@@ -7,6 +8,7 @@ import type { ToolContext } from "eve/tools";
 import {
   preparePublishedDraftReconciliation,
   draftInspectionRecoveryForSession,
+  OwnedDraftReviewRefreshRequiredError,
 } from "@/lib/agent/prepare-published-draft-repair";
 import {
   draftPreparationPrerequisiteDiagnostic,
@@ -22,9 +24,15 @@ import {
   draftReconciliationCompletions,
   draftReconciliationState,
   updateExactDraftReconciliation,
+  samePersistedDraftCandidate,
 } from "@/lib/agent/draft-reconciliation-state";
 import type { DraftReconciliationCandidate } from "@/lib/agent/draft-reconciliation-state";
-import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import {
+  appBuilderWorkflowState,
+  assertExactWorkflowState,
+  invalidateGitHubDestinationReview,
+  updateExactWorkflow,
+} from "@/lib/agent/workflow-state";
 import type { AppBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { repositoryAccessReceiptState } from "@/lib/agent/repository-access-state";
 import { prepareWithVerifiedGitHubFetchRecovery } from "@/lib/agent/verified-github-fetch-recovery";
@@ -41,6 +49,70 @@ import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-s
 import { prepareDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
 import type { DraftReconciliationInput } from "@/lib/repository/sandbox-draft-reconciliation";
 import { priorResumedBuildDraftProposal } from "@/lib/agent/existing-app-repair-planning";
+import { ReviewedPublicationSourceChangedError } from "@/lib/repository/reviewed-publication-source-changed";
+
+const currentReviewRefresh = (input: {
+  error: unknown;
+  ctx: ToolContext;
+  workflow: AppBuilderWorkflowState;
+  state: AppBuilderWorkflowState;
+  candidate: DraftReconciliationCandidate | null;
+  pullRequestNumber: number;
+}) => {
+  if (!(input.error instanceof ReviewedPublicationSourceChangedError)) {
+    return null;
+  }
+  input.ctx.abortSignal?.throwIfAborted();
+  assertExactWorkflowState(
+    appBuilderWorkflowState.get(),
+    input.workflow,
+    "current draft app review refresh",
+  );
+  if (!samePersistedDraftCandidate(draftReconciliationState.get(), input.candidate)) {
+    throw new Error("The draft candidate changed before its app review could be refreshed.");
+  }
+  if (input.state.phase !== "reviewed") {
+    throw input.error;
+  }
+  if (
+    input.error.appId !== input.state.appSpec.appId ||
+    input.error.reviewDigest !== input.state.reviewReceipt.digest
+  ) {
+    throw input.error;
+  }
+  if (input.workflow.phase !== "reviewed" && input.workflow.phase !== "validated") {
+    throw input.error;
+  }
+  const publication =
+    input.error instanceof OwnedDraftReviewRefreshRequiredError
+      ? input.error.publicationProposalDigest
+      : input.workflow.publishedGitHubDraftProposalDigest;
+  if (
+    input.workflow.publishedGitHubDraftProposalDigest !== undefined &&
+    publication !== input.workflow.publishedGitHubDraftProposalDigest
+  ) {
+    throw input.error;
+  }
+  const refreshed = invalidateGitHubDestinationReview(input.workflow);
+  if (publication !== undefined) {
+    refreshed.publishedGitHubDraftProposalDigest = publication;
+  }
+  updateExactWorkflow({
+    expected: input.workflow,
+    operation: "retiring the stale owned draft app review",
+    transition: () => refreshed,
+  });
+  return {
+    status: "review_refresh_required" as const,
+    nextCall: { tool: "accept_change_set" as const, input: {} },
+    afterReview: {
+      tool: "prepare_github_draft_pr_reconciliation" as const,
+      input: { pullRequestNumber: input.pullRequestNumber },
+    },
+    recovery:
+      "The current app files are preserved. Accept their current change set, then continue this same draft's reconciliation. Its candidate still needs normal validation, review and exact update approval; no new Build is needed.",
+  };
+};
 
 const assertReconciliationDraftLineage = (input: {
   headBranch: string;
@@ -222,9 +294,25 @@ export default defineTool({
   async execute(input, ctx) {
     ctx.abortSignal?.throwIfAborted();
     const workflow = appBuilderWorkflowState.get();
-    const state =
-      resolveDraftReviewedWorkflow(workflow, draftReconciliationState.get()) ?? workflow;
-    const ownedRecovery = await prepareOwnedDraftRecovery({ ...input, state, ctx });
+    const selectedCandidate = structuredClone(draftReconciliationState.get());
+    const state = resolveDraftReviewedWorkflow(workflow, selectedCandidate) ?? workflow;
+    let ownedRecovery;
+    try {
+      ownedRecovery = await prepareOwnedDraftRecovery({ ...input, state, ctx });
+    } catch (error) {
+      const refresh = currentReviewRefresh({
+        ...input,
+        error,
+        ctx,
+        workflow,
+        state,
+        candidate: selectedCandidate,
+      });
+      if (refresh !== null) {
+        return refresh;
+      }
+      throw error;
+    }
     if (ownedRecovery !== null) {
       return ownedRecovery;
     }
@@ -349,6 +437,26 @@ export default defineTool({
         publishedHeadSha: source.publishedHeadSha,
         resolvedRef: state.githubSource.resolvedRef,
       });
+      const { changeSet } = await observeNormalizedChangeSet({
+        sandbox,
+        state,
+        destinationReview: "observe-current-edits",
+      });
+      ctx.abortSignal?.throwIfAborted();
+      assertExactWorkflowState(
+        appBuilderWorkflowState.get(),
+        workflow,
+        "draft app review observation",
+      );
+      if (!samePersistedDraftCandidate(draftReconciliationState.get(), selectedCandidate)) {
+        throw new Error("The draft candidate changed during app review observation.");
+      }
+      if (changeSet.digest !== state.reviewReceipt.changeSetDigest) {
+        throw new ReviewedPublicationSourceChangedError({
+          appId: state.appSpec.appId,
+          reviewDigest: state.reviewReceipt.digest,
+        });
+      }
       let unpublished: DraftReconciliationInput["unpublished"];
       if (state.reviewReceipt.changes.length !== 0) {
         const changes = { changes: state.reviewReceipt.changes };
@@ -461,6 +569,17 @@ export default defineTool({
       }
       return output;
     } catch (error) {
+      const refresh = currentReviewRefresh({
+        ...input,
+        error,
+        ctx,
+        workflow,
+        state,
+        candidate: selectedCandidate,
+      });
+      if (refresh !== null) {
+        return refresh;
+      }
       annotateDraftWorktreeRetirementError(error, workspaceMaintenance, ctx.abortSignal);
       throw error;
     }

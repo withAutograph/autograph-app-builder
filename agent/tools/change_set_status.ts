@@ -430,6 +430,8 @@ export const observeNormalizedChangeSet = async (input: {
     { phase: "validated" | "reviewed" }
   >;
   sandbox: SandboxSession;
+  /** Internal read-only assessment; never acceptance, sealing or publication authority. */
+  destinationReview?: "observe-current-edits";
 }) => {
   const observed = hasTestCapability("simulated-target")
     ? await inspectFixtureApplyOverlay(
@@ -440,7 +442,7 @@ export const observeNormalizedChangeSet = async (input: {
     : await inspectApplyOverlay(input.sandbox, input.state.applyReceipt.applyRoot);
   const baseline = appBaselineState.get();
   const destination = input.state.githubDestinationReview;
-  if (destination !== undefined) {
+  if (destination !== undefined && input.destinationReview !== "observe-current-edits") {
     assertGitHubDestinationReviewBinding(destination, {
       applyDigest: input.state.applyReceipt.digest,
       postTreeDigest: reviewedOverlayTreeDigest(

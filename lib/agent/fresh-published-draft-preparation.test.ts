@@ -8,11 +8,14 @@ import type {
   repositoryAccessReceiptSchema,
 } from "./repository-access-state";
 import { isDeepStrictEqual } from "node:util";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { preparePublishedDraftReconciliation } from "./prepare-published-draft-repair";
+import prepareDraftReconciliationTool from "../../agent/tools/prepare_github_draft_pr_reconciliation";
+import sealDraftReconciliationTool from "../../agent/tools/seal_github_draft_pr_reconciliation";
+import { createChangeSetAcceptanceTool } from "../../agent/tools/accept_change_set";
 import {
   createDraftPullRequestProposal,
   createGitHubInstallationIdentity,
@@ -31,6 +34,9 @@ import { retainedPublishedDraftOriginForReview } from "./published-draft-repair"
 import type { observeNormalizedChangeSet } from "../../agent/tools/change_set_status";
 import type { readPreparedSandboxSourceManifest } from "../repository/supported-template";
 import type { OwnedPublicationReconciliationScope } from "../repository/github-draft-reconciliation";
+import { invalidateGitHubDestinationReview } from "./workflow-state";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type-only namespace preserves the actual overlay module fixture port.
+import type * as TargetApplyModule from "../repository/target-apply";
 
 type Fixture = Awaited<ReturnType<typeof freshFixture>>;
 type Candidate = DraftReconciliationCandidate & {
@@ -80,6 +86,7 @@ const mocks = vi.hoisted(() => ({
   ownedProposalDigests: [] as string[],
   onSourceRead: undefined as undefined | (() => void),
   prepare: vi.fn<(request: PrepareRequest) => Promise<Candidate & { created: boolean }>>(),
+  inspectCandidate: vi.fn(),
 }));
 
 vi.mock("./workflow-state", async (importOriginal) => ({
@@ -169,6 +176,7 @@ vi.mock("./deployment-repository-access-runtime", () => ({
 vi.mock("./source-bound-sandbox", () => ({
   getSourceBoundSandbox: async () => ({ id: "controlled" }),
 }));
+vi.mock("./product-behavior-state", () => ({ currentProductBehaviorEvidence: () => [] }));
 vi.mock("./verified-github-fetch-recovery", () => ({
   prepareWithVerifiedGitHubFetchRecovery: async ({
     prepare,
@@ -179,16 +187,28 @@ vi.mock("./verified-github-fetch-recovery", () => ({
 vi.mock("../repository/sandbox-draft-reconciliation", () => ({
   prepareDraftReconciliation: mocks.prepare,
   preparePublishedDraftRepairCandidate: vi.fn(),
+  inspectDraftReconciliation: mocks.inspectCandidate,
 }));
 
 const retainedSource = vi.hoisted(() => ({
   observed: vi.fn(),
   original: vi.fn(),
+  overlay: vi.fn(),
+  actualObservation: undefined as typeof observeNormalizedChangeSet | undefined,
 }));
-vi.mock("../../agent/tools/change_set_status", async (importOriginal) => ({
-  ...(await importOriginal<{ observeNormalizedChangeSet: typeof observeNormalizedChangeSet }>()),
-  observeNormalizedChangeSet: retainedSource.observed,
+vi.mock("../../agent/tools/change_set_status", async (importOriginal) => {
+  const actual = await importOriginal<{
+    observeNormalizedChangeSet: typeof observeNormalizedChangeSet;
+  }>();
+  retainedSource.actualObservation = actual.observeNormalizedChangeSet;
+  return { ...actual, observeNormalizedChangeSet: retainedSource.observed };
+});
+vi.mock("../repository/target-apply", async (importOriginal) => ({
+  ...(await importOriginal<typeof TargetApplyModule>()),
+  inspectApplyOverlay: retainedSource.overlay,
+  inspectFixtureApplyOverlay: retainedSource.overlay,
 }));
+vi.mock("./app-baseline-state", () => ({ appBaselineState: { get: () => {} } }));
 vi.mock("../repository/supported-template", async (importOriginal) => ({
   ...(await importOriginal<{
     readPreparedSandboxSourceManifest: typeof readPreparedSandboxSourceManifest;
@@ -199,7 +219,11 @@ vi.mock("../repository/supported-template", async (importOriginal) => ({
 describe("owned fresh-template draft preparation after review recovery", () => {
   let fixture: Fixture;
   let root: string;
-  const ctx = { callId: "prepare", session: { id: "logical-original", auth: {} } } as ToolContext;
+  const ctx = {
+    callId: "prepare",
+    session: { id: "logical-original", auth: {}, turn: { id: "current-app-turn" } },
+    getSandbox: async () => ({ id: "controlled" }),
+  } as unknown as ToolContext;
   beforeEach(async () => {
     fixture = await freshFixture();
     root = mkdtempSync(path.join(tmpdir(), "builder-fresh-owned-"));
@@ -239,11 +263,23 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     mocks.onSourceRead = undefined;
     mocks.prepare.mockReset();
+    mocks.inspectCandidate.mockReset();
     mocks.prepare.mockImplementation(async (request) => ({
       ...structuredClone(mocks.candidate),
       root: request.previousCandidate.root,
       created: false,
     }));
+    retainedSource.observed.mockReset().mockImplementation(async () => {
+      const state =
+        mocks.workflow.phase === "reviewed" ? mocks.workflow : mocks.candidate.reviewedLineage;
+      return {
+        changeSet: { ...state.reviewReceipt, digest: state.reviewReceipt.changeSetDigest },
+        observed: {
+          files: state.applyReceipt.postTree,
+          treeDigest: state.reviewReceipt.postTreeDigest,
+        },
+      };
+    });
   });
   afterEach(() => {
     rmSync(root, { force: true, recursive: true });
@@ -367,6 +403,141 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     mocks.classify.mockResolvedValue("recorded");
     return state;
   };
+
+  it.each([false, true])(
+    "refreshes a stale creation review before acquiring a candidate (retained destination %s)",
+    async (retainedDestination) => {
+      mocks.workflow = structuredClone(fixture.reviewed);
+      const state = mocks.workflow;
+      if (retainedDestination) {
+        state.githubDestinationReview = createGitHubDestinationReviewBinding({
+          applyDigest: state.applyReceipt.digest,
+          validationDigest: state.validationReceipt.digest,
+          postTreeDigest: state.reviewReceipt.postTreeDigest,
+          candidatePaths: state.reviewReceipt.approvedPaths,
+          installation: installation("resolve-existing-source"),
+          repository: mocks.owned.source.repository,
+          preTree: state.applyReceipt.preTree,
+        });
+      }
+      const appFile = `apps/${state.appSpec.appId}/__tests__/data.test.ts`;
+      const file = path.join(root, appFile);
+      const content = "export const reopenedRecord = () => 'saved';\n";
+      mkdirSync(path.dirname(file), { recursive: true });
+      writeFileSync(file, content);
+      const after = {
+        digest: createHash("sha256").update(content).digest("hex"),
+        mode: "644",
+      };
+      const changes = [
+        ...state.reviewReceipt.changes,
+        { path: appFile, kind: "added" as const, after },
+      ];
+      let current = deriveNormalizedChangeSet(
+        {
+          ...state.applyReceipt,
+          changes,
+          postTreeDigest: createHash("sha256").update(JSON.stringify(changes)).digest("hex"),
+        },
+        state.validationReceipt,
+        state.proposal.contractDigest,
+        state.sourceReceipt.contractDigest,
+      );
+      const observed = {
+        changeSet: current,
+        observed: { files: [{ path: appFile, ...after }], treeDigest: current.postTreeDigest },
+      };
+      if (retainedDestination) {
+        const observe = retainedSource.actualObservation;
+        if (observe === undefined) {
+          throw new Error("Missing real change-set observer");
+        }
+        retainedSource.overlay.mockResolvedValue(observed.observed);
+        retainedSource.observed.mockImplementation(observe);
+        const withoutOldDestination = invalidateGitHubDestinationReview(state);
+        const observation = await observe({
+          sandbox: await ctx.getSandbox(),
+          state: withoutOldDestination,
+        });
+        current = observation.changeSet;
+      } else {
+        retainedSource.observed.mockResolvedValue(observed);
+      }
+      await expect(
+        prepareDraftReconciliationTool.execute({ pullRequestNumber: 42 }, ctx),
+      ).resolves.toMatchObject({
+        status: "review_refresh_required",
+        nextCall: { tool: "accept_change_set", input: {} },
+        afterReview: {
+          tool: "prepare_github_draft_pr_reconciliation",
+          input: { pullRequestNumber: 42 },
+        },
+      });
+      expect(readFileSync(file, "utf-8")).toBe(content);
+      expect(mocks.workflow.phase).toBe("validated");
+      expect(mocks.workflow.applyReceipt).toBe(state.applyReceipt);
+      expect(mocks.workflow.validationReceipt).toBe(state.validationReceipt);
+      expect(mocks.workflow.sourceReceipt).toBe(state.sourceReceipt);
+      expect(mocks.workflow).not.toHaveProperty("githubDestinationReview");
+      expect(mocks.workflow).not.toHaveProperty("reviewReceipt");
+      expect(mocks.prepare).not.toHaveBeenCalled();
+      const accept = createChangeSetAcceptanceTool({
+        observeChangeSet: retainedSource.observed,
+        reviewSource: async () => {
+          throw new Error("Independent source assessment was not requested");
+        },
+      });
+      await accept.execute({}, ctx);
+      expect(mocks.workflow.phase).toBe("reviewed");
+      if (mocks.workflow.phase !== "reviewed") {
+        throw new Error("Expected the current app review");
+      }
+      expect(mocks.workflow.reviewReceipt.changeSetDigest).toBe(current.digest);
+      expect(mocks.workflow.reviewReceipt.digest).not.toBe(state.reviewReceipt.digest);
+      expect(mocks.workflow.reviewReceipt.approvedPaths).toContain(appFile);
+      expect(mocks.workflow.applyReceipt).toBe(state.applyReceipt);
+      await expect(
+        sealDraftReconciliationTool.execute(
+          { expectedReviewDigest: state.reviewReceipt.digest },
+          ctx,
+        ),
+      ).rejects.toThrow();
+      expect(mocks.inspectCandidate).not.toHaveBeenCalled();
+      expect(mocks.workflow).not.toHaveProperty("githubDraftProposal");
+      await expect(
+        prepareDraftReconciliationTool.execute({ pullRequestNumber: 42 }, ctx),
+      ).resolves.toMatchObject({ status: "ready_for_validation" });
+      expect(readFileSync(file, "utf-8")).toBe(content);
+    },
+  );
+
+  it.each(["cancelled", "workflow-changed", "candidate-changed"] as const)(
+    "does not return a review refresh after %s during current byte observation",
+    async (change) => {
+      mocks.workflow = structuredClone(fixture.reviewed);
+      const state = mocks.workflow;
+      const controller = new AbortController();
+      retainedSource.observed.mockImplementation(async () => {
+        if (change === "cancelled") {
+          controller.abort();
+        }
+        if (change === "workflow-changed") {
+          mocks.workflow = { ...state, workspace: { ...state.workspace, workspaceId: "foreign" } };
+        }
+        if (change === "candidate-changed") {
+          mocks.candidate = { ...mocks.candidate, root: "/workspace/another-candidate" };
+        }
+        return { changeSet: { ...state.reviewReceipt, digest: "f".repeat(64) }, observed: {} };
+      });
+      await expect(
+        prepareDraftReconciliationTool.execute(
+          { pullRequestNumber: 42 },
+          { ...ctx, abortSignal: controller.signal },
+        ),
+      ).rejects.toThrow();
+      expect(mocks.prepare).not.toHaveBeenCalled();
+    },
+  );
 
   it("repairs the next published PR instead of the old retained merged PR", async () => {
     const state = secondPublication();

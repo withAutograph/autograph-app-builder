@@ -397,12 +397,31 @@ delta; that internal review does not require an initial destination review.
 The returned `afterReview` then uses normal
 `prepare_github_draft_pr_reconciliation` with the PR number from the canonical
 successful publication receipt and no reopen/recovery flag. An already-reviewed
-correction goes directly to that step. The original app, source, workspace,
+correction goes directly to that step only when its current normalized change
+set still matches the reviewed subject. A retained `reviewed` phase alone does
+not establish that later app or test edits have been reviewed. The original app, source, workspace,
 validation and publication marker stay intact. This routing observation grants
 no update consent: the existing owned-head/base preparation, current-byte
 validation, candidate review and separate exact publication approval still
 apply. A generic provider error cannot supply this continuation; cancellation,
 concurrent workflow changes and uncertain publication remain failures.
+
+Normal reconciliation checks the same current app-review subject after proving
+the owned publication and before acquiring a merge candidate. If the current
+bytes differ, it returns `review_refresh_required` with the ordinary
+`accept_change_set` continuation for the same PR. Current app files and prior
+private candidates stay intact. At that owned boundary, the obsolete initial
+destination snapshot, review and seal are retired; the verified publication
+marker and original validation evidence are retained unchanged in scope. The
+ordinary `validated` continuation lets Builder review the current app delta;
+it does not turn the old commands into validation of edited bytes. The new
+candidate still runs its own current-byte validation before any update.
+Refreshing review grants no publication consent
+and introduces no new Build approval. A concurrent observed review mismatch is
+kept distinct from unavailable or missing source bytes, so Builder does not ask
+the creator to recreate a file that is still present. Unknown source-read
+failures retain their existing recovery. Candidate validation and the later
+exact reviewed update approval remain required.
 
 A closed or merged PR authorizes only a new review against the current default
 branch. Its historic head and base can have changed without transferring any
