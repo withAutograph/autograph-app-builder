@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { operatorPublicResultSchema } from "./hosted-operator-contract";
-import { operatorExecutionStage } from "./hosted-operator-consent-diagnostic";
+import {
+  operatorExecutionStage,
+  operatorWorkerFailureCode,
+} from "./hosted-operator-consent-diagnostic";
 import type { OperatorExecutionStage } from "./hosted-operator-consent-diagnostic";
 
 const failureSchema = z.strictObject({
@@ -83,6 +86,11 @@ const failureSchema = z.strictObject({
     .optional(),
   requestAborted: z.boolean().optional(),
   launcherStage: operatorExecutionStage.optional(),
+  workerFailure: operatorWorkerFailureCode.optional(),
+  workerOperation: z
+    .enum(["storage", "schema", "access", "membership", "auth-management"])
+    .optional(),
+  workerReadOnly: z.boolean().optional(),
   reason: z
     .enum([
       "approval_required",
@@ -198,6 +206,7 @@ export const reportRepositoryProductionFailure = (
   error?: unknown,
   signal?: AbortSignal,
   launcherStage?: OperatorExecutionStage,
+  worker?: Pick<Failure, "workerFailure" | "workerOperation" | "workerReadOnly">,
 ): void => {
   try {
     const message = z.string().safeParse(ownData(error, "message"));
@@ -212,6 +221,13 @@ export const reportRepositoryProductionFailure = (
     const httpStatus = statuses
       .map((value) => failureSchema.shape.httpStatus.unwrap().safeParse(value))
       .find((value) => value.success);
+    const workerFailure = operatorWorkerFailureCode.safeParse(ownData(worker, "workerFailure"));
+    const workerOperation = failureSchema.shape.workerOperation
+      .unwrap()
+      .safeParse(ownData(worker, "workerOperation"));
+    const workerReadOnly = failureSchema.shape.workerReadOnly
+      .unwrap()
+      .safeParse(ownData(worker, "workerReadOnly"));
     console.warn(
       JSON.stringify(
         failureSchema.parse({
@@ -232,6 +248,9 @@ export const reportRepositoryProductionFailure = (
           ...(signal === undefined ? {} : { requestAborted: signal.aborted }),
           // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(launcherStage === undefined ? {} : { launcherStage }),
+          workerFailure: workerFailure.success ? workerFailure.data : undefined,
+          workerOperation: workerOperation.success ? workerOperation.data : undefined,
+          workerReadOnly: workerReadOnly.success ? workerReadOnly.data : undefined,
         }),
       ),
     );

@@ -13,6 +13,82 @@ import {
 afterEach(() => vi.restoreAllMocks());
 
 describe("private Production failure diagnostics", () => {
+  it("retains the closed worker failure and operation without private metadata", () => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const worker = {
+      workerFailure: "effect_failed" as const,
+      workerOperation: "auth-management" as const,
+      workerReadOnly: true,
+      operationId: "private-operation-id",
+      sql: "private SQL values",
+      url: "postgresql://private:password@host/database",
+      cause: new Error("private token"),
+    };
+    reportRepositoryProductionFailure(
+      "setup_prepare",
+      "setup_unavailable",
+      new HostedOperatorError("operator_unavailable"),
+      undefined,
+      "worker_protocol",
+      worker,
+    );
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({
+      workerFailure: "effect_failed",
+      workerOperation: "auth-management",
+      workerReadOnly: true,
+      operatorCode: "operator_unavailable",
+    });
+    expect(JSON.stringify(log.mock.calls)).not.toContain("private");
+    expect(JSON.stringify(log.mock.calls)).not.toContain("postgresql:");
+  });
+
+  it("drops invalid worker metadata and never invokes its accessors", () => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const accessor = vi.fn(() => {
+      throw new Error("private accessor");
+    });
+    const inherited = {};
+    Object.setPrototypeOf(inherited, {
+      workerFailure: "effect_failed",
+      workerOperation: "auth-management",
+      workerReadOnly: true,
+    });
+    for (const worker of [
+      Object.defineProperties(
+        {},
+        {
+          workerFailure: { get: accessor },
+          workerOperation: { get: accessor },
+          workerReadOnly: { get: accessor },
+        },
+      ),
+      Object.defineProperties(
+        {},
+        {
+          workerFailure: { value: "private failure" },
+          workerOperation: { value: "private operation" },
+          workerReadOnly: { value: "private flag" },
+        },
+      ),
+      inherited,
+    ]) {
+      reportRepositoryProductionFailure(
+        "setup_prepare",
+        "setup_unavailable",
+        undefined,
+        undefined,
+        "worker_protocol",
+        worker,
+      );
+    }
+    expect(accessor).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledTimes(3);
+    expect(JSON.stringify(log.mock.calls)).not.toContain("private");
+    expect(JSON.stringify(log.mock.calls)).not.toContain("workerFailure");
+    expect(JSON.stringify(log.mock.calls)).not.toContain("workerOperation");
+    expect(JSON.stringify(log.mock.calls)).not.toContain("workerReadOnly");
+  });
+
   it("projects only an allowlisted app access code without its private exception details", () => {
     const log = vi.spyOn(console, "warn").mockImplementation(() => {});
     const failure = new AppAccessError("app_access_unknown");

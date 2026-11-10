@@ -488,6 +488,16 @@ export const projectResourceReadbackDiagnostic = (
   }
 };
 
+export const operatorWorkerFailureCode = z.enum([
+  "startup_rejected",
+  "authority_denied",
+  "effect_failed",
+  "readback_unknown",
+  "protocol_failure",
+  "cancelled",
+  "timeout",
+]);
+
 const operatorExecutionFailure = operatorPlanningFailure
   .omit({ nativeStoreFailure: true, stage: true })
   .extend({
@@ -501,17 +511,7 @@ const operatorExecutionFailure = operatorPlanningFailure
     httpStatus: z.number().int().min(100).max(599).optional(),
     commandExit: z.enum(["zero", "nonzero"]).optional(),
     protocol: z.enum(["incomplete", "unknown"]).optional(),
-    workerFailure: z
-      .enum([
-        "startup_rejected",
-        "authority_denied",
-        "effect_failed",
-        "readback_unknown",
-        "protocol_failure",
-        "cancelled",
-        "timeout",
-      ])
-      .optional(),
+    workerFailure: operatorWorkerFailureCode.optional(),
   })
   .transform(({ authStartup, resourceReadback, ...failure }) => {
     const projected =
