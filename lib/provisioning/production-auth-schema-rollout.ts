@@ -19,6 +19,7 @@ import type {
 import type { AuthSchemaRolloutProfile } from "./production-auth-schema-rollout-configuration";
 import type { PrivateOperatorApprovalObservation } from "../eve/private-operator-approval-observation";
 import { observeAuthSchemaRolloutPhaseSync } from "./production-auth-schema-rollout-diagnostic";
+import { reportAuthSchemaApprovalDiagnosticFailure } from "../eve/auth-schema-approval-diagnostic";
 
 export interface AuthSchemaRolloutStore {
   read: (
@@ -54,6 +55,11 @@ export interface AuthSchemaRolloutPorts {
     save: (observation: PrivateOperatorApprovalObservation) => Promise<void>;
     assertCurrent: () => Promise<void>;
   }) => Promise<{ approvalId: string; approvedByCallId: string } | null>;
+  /** Read-only diagnostics for an already observed, uncaptured approval prefix; grants no authority. */
+  diagnoseApproval?: (
+    row: AuthSchemaRolloutRow,
+    assertCurrent: () => Promise<void>,
+  ) => Promise<void>;
   apply: (
     row: AuthSchemaRolloutRow,
     assertCurrent: () => Promise<void>,
@@ -197,6 +203,36 @@ export const createAuthSchemaRollout = (ports: AuthSchemaRolloutPorts) => {
       return { version: 1 as const, plan: row.record.plan };
     },
     async status(owner: OperatorOwnerContext, operationRef: string) {
+      const row = await read(owner, operationRef);
+      const observed = row.record.approvalObservation;
+      if (ports.diagnoseApproval === undefined || observed === undefined) {
+        return status(row);
+      }
+      const eligible = [
+        row.record.state === "planned",
+        row.record.approval === undefined,
+        row.record.checkpoints.length === 0,
+        observed.adapterSessionId === owner.adapterSessionId,
+        observed.adapterGeneration === owner.adapterGeneration,
+        observed.nextNativeIndex > 0,
+        observed.capture.entries.length === 0,
+        observed.capture.ownerUserId === owner.authority.ownerUserId,
+        observed.capture.request.action === "auth-schema-rollout",
+        observed.capture.request.planRef === row.record.plan.operationRef,
+        observed.capture.request.planDigest === row.record.plan.planDigest,
+        observed.capture.request.idempotencyKey === authSchemaRolloutDigest(row.record.plan),
+      ].every(Boolean);
+      if (!eligible) {
+        return status(row);
+      }
+      try {
+        await ports.diagnoseApproval(row, async () => {
+          await authorize(owner, row.record.plan.scope, row.record);
+        });
+      } catch {
+        reportAuthSchemaApprovalDiagnosticFailure();
+      }
+      // A failed diagnostic never hides current owner/enrollment/journal errors or returns a stale status.
       return status(await read(owner, operationRef));
     },
     async execute(

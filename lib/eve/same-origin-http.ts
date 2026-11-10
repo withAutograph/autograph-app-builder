@@ -1614,6 +1614,8 @@ export interface PrivateHistoryRequest {
   sessionId: string;
   adapterSessionId: string;
   startIndex: number;
+  /** Internal diagnostic prefix only; stopping before the actual tail is never complete approval history. */
+  endIndexExclusive?: number;
   onEvent: (event: MessageStreamEvent) => void | Promise<void>;
 }
 
@@ -1683,10 +1685,14 @@ export function createSameOriginEveTransport(input: {
             if (authorized !== true) {
               throw new SubmissionRejectedBeforeDispatchError("session_access_denied");
             }
+            let nextNativeIndex = z.number().int().nonnegative().parse(request.startIndex);
+            const endIndexExclusive =
+              request.endIndexExclusive === undefined
+                ? undefined
+                : z.number().int().gt(nextNativeIndex).parse(request.endIndexExclusive);
             const readTrace = createHostedReadTrace({ sessionId: request.adapterSessionId });
             const signal = AbortSignal.timeout(SESSION_READ_TIMEOUT_MS);
             const stopWatching = readTrace.watch(signal);
-            let nextNativeIndex = z.number().int().nonnegative().parse(request.startIndex);
             let nativeTailIndex: number | undefined;
             let eventInFlight = false;
             let complete = true;
@@ -1714,6 +1720,16 @@ export function createSameOriginEveTransport(input: {
                   readTrace.set("nativeNextIndex", nextNativeIndex);
                   readTrace.enter("decode");
                   eventInFlight = false;
+                  if (
+                    endIndexExclusive !== undefined &&
+                    nextNativeIndex >= endIndexExclusive &&
+                    nativeTailIndex !== undefined &&
+                    nextNativeIndex <= nativeTailIndex
+                  ) {
+                    // Cancel only an actual prefix. At the tail, retain normal EOF/trailing-frame validation.
+                    complete = false;
+                    break;
+                  }
                 }
               } catch (error) {
                 if (
@@ -1728,7 +1744,10 @@ export function createSameOriginEveTransport(input: {
               if (nativeTailIndex === undefined) {
                 throw new HostedSessionReadTimeoutError();
               }
-              if (complete) {
+              if (
+                complete ||
+                (endIndexExclusive !== undefined && nextNativeIndex >= endIndexExclusive)
+              ) {
                 readTrace.completed();
               } else {
                 readTrace.failed();
