@@ -24,7 +24,8 @@ const privateRoot = join(input.stateRoot, createHash("sha256").update(root + inp
 mkdirSync(privateRoot, { recursive: true, mode: 448 });
 const key = createHash("sha256").update(input.sessionId).digest("hex");
 const planPath = join(privateRoot, key + ".json");
-let checkpointRef = "refs/app-builder/source-checkpoints/" + key;
+let checkpointRef = input.checkpointRef ?? "refs/app-builder/source-checkpoints/" + key;
+if (!/^refs\/app-builder\/source-checkpoints\/[a-f0-9]+(?:\/[a-f0-9]+)?$/.test(checkpointRef)) throw Error("Source checkpoint identity is invalid.");
 const temporary = mkdtempSync(join(privateRoot, "index-"));
 const { APP_BUILDER_SOURCE_READ_TOKEN: sourceReadToken, ...childEnvironment } = process.env;
 const baseEnv = { ...childEnvironment, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_SYSTEM: "/dev/null", GIT_CONFIG_GLOBAL: "/dev/null", GIT_ATTR_NOSYSTEM: "1", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "/usr/bin/false", SSH_ASKPASS: "/usr/bin/false", GIT_AUTHOR_NAME: "Autograph Builder", GIT_AUTHOR_EMAIL: "builder@autograph.so", GIT_COMMITTER_NAME: "Autograph Builder", GIT_COMMITTER_EMAIL: "builder@autograph.so" };

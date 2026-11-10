@@ -71,6 +71,12 @@ interface TargetValidationBinding {
   changedContentDigest: string;
 }
 
+/** Current execution input supplied only by an owned private-source transition. */
+export type ValidationExecutionFoundation = Pick<
+  TargetValidationBinding,
+  "sourceReceiptDigest" | "sourceSha" | "sourceTree" | "eligibilityDigest" | "workspaceDigest"
+>;
+
 export interface PlannedValidationCommand {
   name: TargetValidationCommandName;
   command: TargetValidationCommand;
@@ -427,11 +433,13 @@ export const createTargetValidationAttempt = (
   apply: TargetApplyReceipt,
   startedByCallId: string,
   testShards: readonly string[] = SUPPORTED_VALIDATION_TEST_SHARDS,
+  executionFoundation?: ValidationExecutionFoundation,
 ): TargetValidationAttemptReceipt => {
   const unsigned = {
     status: "pending" as const,
     version: 3 as const,
     ...validationBinding(apply, testShards),
+    ...executionFoundation,
     commands: supportedValidationCommands(apply.targetReceipt.appId, testShards).map(
       ({ command, name }) => ({
         command,
