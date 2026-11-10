@@ -685,8 +685,18 @@ approval boundary and when its reviewed publication changes. It retains the
 app/AppSpec, review, publication/reconciliation and installation identities,
 known managed Production requirements, and the exact invocation's input digest,
 owner, generation and Stop revision. These are scope facts, not a separate human
-approval. Durable child workflow steps re-read the current canonical owner and
-projection instead of reading child-local Builder state. A changed publication,
+approval. At first capture, canonical owner authentication does not depend on an
+older delivery projection. Builder can refresh an absent projection or one bound
+to a replaced adapter only when the parent's actual retained Build grant matches
+the current app, AppSpec, internal Build proposal, logical session and workspace.
+It rechecks that approved scope across capture and persistence, verifies the
+durable current call and review, and rejects any concurrent owner change before
+offering Ready approval. A decision label, retained review or setup approval
+cannot substitute for the Build grant. Closed diagnostics distinguish missing or
+mismatched projections, owner changes and captured-scope failures without logging
+private identities or credentials. Durable child workflow steps re-read the
+current canonical owner and projection instead of reading child-local Builder
+state. A changed publication,
 owner or cancelled execution cannot reuse the old call. The native cancellation
 hook retires that turn's calls durably, including local Stop/resume; an unrelated
 failed or blocked step does not retire approval. Missing previously
