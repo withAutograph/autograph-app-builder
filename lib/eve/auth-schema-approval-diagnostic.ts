@@ -5,6 +5,8 @@ import { z } from "zod";
 import type { MessageStreamEvent } from "eve/client";
 import {
   authSchemaRolloutApprovalSchema,
+  authSchemaRolloutApprovalReferenceSchema,
+  authSchemaRolloutApprovalReference,
   authSchemaRolloutDigest,
 } from "../provisioning/production-auth-schema-rollout-contract";
 import type { AuthSchemaRolloutApproval } from "../provisioning/production-auth-schema-rollout-contract";
@@ -14,11 +16,14 @@ type Json = z.infer<ReturnType<typeof z.json>>;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const topKeys = Object.keys(authSchemaRolloutApprovalSchema.shape);
 const topKeySet = new Set(topKeys);
+const referenceKeys = Object.keys(authSchemaRolloutApprovalReferenceSchema.shape);
+const referenceKeySet = new Set(referenceKeys);
 const OUTPUT_LIMIT = 32;
 const APPLY_TOOL = "apply-production-auth-schema-rollout";
 const TOOL_APPROVAL = "tool-approval";
 const pathKeys = new Set([
   ...topKeys,
+  ...referenceKeys,
   "authority",
   "issuer",
   "audience",
@@ -100,6 +105,14 @@ const issuePath = (path: PropertyKey[]) =>
     return typeof part === "string" && pathKeys.has(part) ? part : "other";
   });
 
+const schemaIssueProjection = (issues: z.ZodError["issues"]) => ({
+  schemaIssueCount: issues.length,
+  schemaIssuesOmitted: Math.max(0, issues.length - OUTPUT_LIMIT),
+  schemaIssues: issues
+    .slice(0, OUTPUT_LIMIT)
+    .map((issue) => ({ code: issue.code, path: issuePath(issue.path) })),
+});
+
 /** Closed comparison only. It cannot accept an approval or expose SQL, identities, arbitrary keys or issue messages. */
 export const projectAuthSchemaApprovalInput = (
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Actual native tool input is untrusted until parsed.
@@ -115,6 +128,27 @@ export const projectAuthSchemaApprovalInput = (
   }
   const object = data !== null && typeof data === "object" && !Array.isArray(data) ? data : {};
   const keys = Object.keys(object);
+  if (object.version === 2) {
+    const reference = authSchemaRolloutApprovalReference(expected);
+    const referenceFields = z.record(z.string(), z.json()).parse(reference);
+    const parsedReference = authSchemaRolloutApprovalReferenceSchema.safeParse(data);
+    return {
+      inputKind: inputKind(input),
+      comparisonKind: "reference",
+      jsonAvailable: true,
+      knownTopKeysPresent: referenceKeys.filter((key) => Object.hasOwn(object, key)),
+      unknownTopKeyCount: keys.filter((key) => !referenceKeySet.has(key)).length,
+      schemaValid: parsedReference.success,
+      ...schemaIssueProjection(parsedReference.success ? [] : parsedReference.error.issues),
+      inputSha256: authSchemaRolloutDigest(data),
+      expectedReferenceSha256: authSchemaRolloutDigest(reference),
+      expectedPlanSha256: authSchemaRolloutDigest(expected),
+      referenceEqual: parsedReference.success && isDeepStrictEqual(parsedReference.data, reference),
+      fieldsEqual: Object.fromEntries(
+        referenceKeys.map((key) => [key, isDeepStrictEqual(object[key], referenceFields[key])]),
+      ),
+    };
+  }
   const expectedFields = z.record(z.string(), z.json()).parse(expected);
   const parsed = authSchemaRolloutApprovalSchema.safeParse(data);
   const actualEffects = Array.isArray(object.effects) ? object.effects : [];
@@ -124,15 +158,7 @@ export const projectAuthSchemaApprovalInput = (
     knownTopKeysPresent: topKeys.filter((key) => Object.hasOwn(object, key)),
     unknownTopKeyCount: keys.filter((key) => !topKeySet.has(key)).length,
     schemaValid: parsed.success,
-    schemaIssueCount: parsed.success ? 0 : parsed.error.issues.length,
-    schemaIssuesOmitted: parsed.success
-      ? 0
-      : Math.max(0, parsed.error.issues.length - OUTPUT_LIMIT),
-    schemaIssues: parsed.success
-      ? []
-      : parsed.error.issues
-          .slice(0, OUTPUT_LIMIT)
-          .map((issue) => ({ code: issue.code, path: issuePath(issue.path) })),
+    ...schemaIssueProjection(parsed.success ? [] : parsed.error.issues),
     inputSha256: authSchemaRolloutDigest(data),
     expectedSha256: authSchemaRolloutDigest(expected),
     fullPlanEqual: parsed.success && isDeepStrictEqual(parsed.data, expected),

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contract";
+import { authSchemaRolloutApprovalReference } from "../provisioning/production-auth-schema-rollout-contract";
 import type { AuthSchemaRolloutApproval } from "../provisioning/production-auth-schema-rollout-contract";
 import { createAuthSchemaRolloutClient } from "./auth-schema-rollout-client";
 
@@ -58,6 +60,11 @@ const plan: AuthSchemaRolloutApproval = {
   ],
 };
 const status = { version: 1, operationRef: plan.operationRef, state: "planned" };
+const review = (selected = plan) => ({
+  version: 1,
+  plan: selected,
+  approvalReference: authSchemaRolloutApprovalReference(selected),
+});
 const setup = (endpoint = "https://operator.example/") => {
   const controller = new AbortController();
   const fetch = vi.fn<typeof globalThis.fetch>();
@@ -77,7 +84,7 @@ describe("internal Production Auth schema rollout transport", () => {
   it("plans against the canonical owner with workload authentication and no redirects", async () => {
     const fixture = setup();
     fixture.fetch.mockResolvedValue(Response.json({ version: 1, plan }));
-    await expect(fixture.client.plan("shared-auth")).resolves.toEqual({ version: 1, plan });
+    await expect(fixture.client.plan("shared-auth")).resolves.toEqual(review());
     expect(fixture.fetch).toHaveBeenCalledWith(
       new URL("https://operator.example/v1/auth-schema-rollout"),
       {
@@ -114,6 +121,56 @@ describe("internal Production Auth schema rollout transport", () => {
         planDigest: plan.planDigest,
         approvedByCallId: "current-call",
       }),
+    );
+  });
+
+  it("rereads the original saved plan and reference without creating a replacement plan", async () => {
+    const fixture = setup();
+    fixture.fetch.mockResolvedValue(Response.json(review()));
+    await expect(fixture.client.review(plan.operationRef)).resolves.toEqual(review());
+    expect(fixture.fetch.mock.calls[0]?.[1]?.body).toBe(
+      JSON.stringify({
+        version: 1,
+        action: "review",
+        sessionId: "session",
+        ownerContext,
+        operationRef: plan.operationRef,
+      }),
+    );
+  });
+
+  it("sends only the exact server-derived reference with the fresh native call identity", async () => {
+    const fixture = setup();
+    fixture.fetch.mockResolvedValue(Response.json(status));
+    const reference = authSchemaRolloutApprovalReference(plan);
+    await expect(fixture.client.apply(reference)).resolves.toEqual(status);
+    const body = z.string().parse(fixture.fetch.mock.calls[0]?.[1]?.body);
+    expect(JSON.parse(body)).toEqual({
+      version: 1,
+      action: "execute",
+      sessionId: "session",
+      ownerContext,
+      operationRef: reference.operationRef,
+      planDigest: reference.planDigest,
+      approvalDigest: reference.approvalDigest,
+      approvedByCallId: "current-call",
+    });
+    expect(body).not.toContain(plan.effects[0]?.sql);
+  });
+
+  it("rejects a returned reference that does not bind the full saved plan", async () => {
+    const fixture = setup();
+    fixture.fetch.mockResolvedValue(
+      Response.json({
+        ...review(),
+        approvalReference: {
+          ...authSchemaRolloutApprovalReference(plan),
+          approvalDigest: "0".repeat(64),
+        },
+      }),
+    );
+    await expect(fixture.client.review(plan.operationRef)).rejects.toThrow(
+      "auth_schema_rollout_scope_mismatch",
     );
   });
 

@@ -9,7 +9,7 @@ import {
 } from "../eve/private-continuity-approval";
 import { tenantExportApprovalInputSchema } from "../eve/private-export-approval";
 import { z } from "zod";
-import { authSchemaRolloutApprovalSchema } from "../provisioning/production-auth-schema-rollout-contract";
+import { authSchemaRolloutApplyInputSchema } from "../provisioning/production-auth-schema-rollout-contract";
 import {
   nativeTargetOnboardingPlanSchema,
   nativeTargetOnboardingPlanDigest,
@@ -770,9 +770,12 @@ export const publicApprovalDescription = (
   toolName?: string,
 ): string | undefined => {
   if (toolName === "apply-production-auth-schema-rollout") {
-    const parsed = authSchemaRolloutApprovalSchema.safeParse(input);
+    const parsed = authSchemaRolloutApplyInputSchema.safeParse(input);
     if (!parsed.success) {
       return undefined;
+    }
+    if (parsed.data.version === 2) {
+      return `Platform administrator approval: update the existing ${parsed.data.resourceLabel} sign-in schema and restricted access permissions using the exact saved plan reviewed above. Saved plan SHA-256: ${parsed.data.approvalDigest}. This service rollout preserves existing accounts and app data and does not create app memberships or activate deployments.`;
     }
     const effects = [...new Set(parsed.data.effects.map((effect) => effect.owner))].join(", ");
     return `Platform administrator approval: update the existing ${parsed.data.resourceLabel} sign-in schema and restricted access permissions using the reviewed plan. Planned effects: ${effects || "verify the current schema"}. This service rollout preserves existing accounts and app data and does not create app memberships or activate deployments.`;

@@ -5,6 +5,7 @@ import { HostedOperatorError, workerEffectCheckpointFrameSchema } from "./hosted
 import type { OperatorOwnerContext, WorkerEffectCheckpointFrame } from "./hosted-operator-contract";
 import {
   authSchemaRolloutApprovalSchema,
+  authSchemaRolloutApprovalReference,
   authSchemaRolloutDigest,
   authSchemaRolloutOperationRef,
   authSchemaRolloutRecordSchema,
@@ -202,6 +203,14 @@ export const createAuthSchemaRollout = (ports: AuthSchemaRolloutPorts) => {
       }
       return { version: 1 as const, plan: row.record.plan };
     },
+    async review(owner: OperatorOwnerContext, operationRef: string) {
+      const row = await read(owner, operationRef);
+      return {
+        version: 1 as const,
+        plan: row.record.plan,
+        approvalReference: authSchemaRolloutApprovalReference(row.record.plan),
+      };
+    },
     async status(owner: OperatorOwnerContext, operationRef: string) {
       const row = await read(owner, operationRef);
       const observed = row.record.approvalObservation;
@@ -240,9 +249,14 @@ export const createAuthSchemaRollout = (ports: AuthSchemaRolloutPorts) => {
       operationRef: string,
       planDigest: string,
       callId: string,
+      approvalDigest?: string,
     ) {
       const original = await read(owner, operationRef);
-      if (original.record.plan.planDigest !== planDigest) {
+      if (
+        original.record.plan.planDigest !== planDigest ||
+        (approvalDigest !== undefined &&
+          authSchemaRolloutDigest(original.record.plan) !== approvalDigest)
+      ) {
         throw mismatch();
       }
       return await ports.withLease(original, async (assertFence) => {

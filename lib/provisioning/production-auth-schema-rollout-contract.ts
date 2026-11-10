@@ -72,6 +72,22 @@ export const authSchemaRolloutApprovalSchema = z.strictObject({
   effects: z.array(z.strictObject({ owner: id, sql: z.string(), sha256: hash })),
 });
 export type AuthSchemaRolloutApproval = z.infer<typeof authSchemaRolloutApprovalSchema>;
+/** A v2 native approval references the complete server-frozen v1 plan without copying SQL. */
+export const authSchemaRolloutApprovalReferenceSchema = z.strictObject({
+  version: z.literal(2),
+  operationRef: z.uuid(),
+  planDigest: hash,
+  approvalDigest: hash,
+  resourceLabel: id,
+});
+export type AuthSchemaRolloutApprovalReference = z.infer<
+  typeof authSchemaRolloutApprovalReferenceSchema
+>;
+export const authSchemaRolloutApplyInputSchema = z.discriminatedUnion("version", [
+  authSchemaRolloutApprovalSchema,
+  authSchemaRolloutApprovalReferenceSchema,
+]);
+export type AuthSchemaRolloutApplyInput = z.infer<typeof authSchemaRolloutApplyInputSchema>;
 export const authSchemaRolloutStatusSchema = z.strictObject({
   version: z.literal(1),
   operationRef: z.uuid(),
@@ -81,6 +97,9 @@ export const authSchemaRolloutStatusSchema = z.strictObject({
 export const authSchemaRolloutPlanResponseSchema = z.strictObject({
   version: z.literal(1),
   plan: authSchemaRolloutApprovalSchema,
+});
+export const authSchemaRolloutReviewResponseSchema = authSchemaRolloutPlanResponseSchema.extend({
+  approvalReference: authSchemaRolloutApprovalReferenceSchema,
 });
 export const authSchemaRolloutRecordSchema = z.strictObject({
   version: z.literal(1),
@@ -105,6 +124,18 @@ export interface AuthSchemaRolloutRow {
 }
 export const authSchemaRolloutDigest = (value: z.infer<ReturnType<typeof z.json>>) =>
   createHash("sha256").update(centralHostCanonicalBytes(value)).digest("hex");
+export const authSchemaRolloutApprovalReference = (
+  plan: AuthSchemaRolloutApproval,
+): AuthSchemaRolloutApprovalReference => {
+  const frozen = authSchemaRolloutApprovalSchema.parse(plan);
+  return {
+    version: 2,
+    operationRef: frozen.operationRef,
+    planDigest: frozen.planDigest,
+    approvalDigest: authSchemaRolloutDigest(frozen),
+    resourceLabel: frozen.resourceLabel,
+  };
+};
 export const authSchemaRolloutOperationRef = (
   scope: AuthSchemaRolloutScope,
   planDigest: string,

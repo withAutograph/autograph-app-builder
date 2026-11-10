@@ -6,10 +6,11 @@ ordinary app delivery. Creators continue using normal Builder setup and
 provider-owned native deployment.
 
 The protected operator exposes `POST /v1/auth-schema-rollout` with closed actions
-`plan`, `status`, and `execute`. Requests carry the trusted Builder workload,
+`plan`, `review`, `status`, and `execute`. Requests carry the trusted Builder workload,
 current canonical owner context and session. Planning selects an enrolled
-`profileId`; status and execution select a saved `operationRef`. Execution also
-carries the saved `planDigest` and native approval call identity. Requests cannot
+`profileId`; review, status and execution select a saved `operationRef`. Execution
+also carries the saved `planDigest`, native approval call identity, and, for a v2
+approval reference, the SHA-256 of the complete saved approval plan. Requests cannot
 supply SQL, resource identities, credentials, roles, binaries or arbitrary commands.
 
 ## Deployment enrollment
@@ -74,7 +75,10 @@ opaque hashes, and per-effect equality/byte counts. It never logs input values,
 SQL, arbitrary property names, credentials or caller/resource identities. Each
 status read reports at most 32 matching requests and their first settlements,
 32 schema issues and 32 effect comparisons per request, with totals and omitted
-counts; unrelated input requests contribute only aggregate counts.
+counts; unrelated input requests contribute only aggregate counts. Version 2
+inputs are diagnosed as strict references against the independently derived saved
+reference, with reference-field equality and the full saved-plan hash; they are
+not misreported as malformed or incomplete SQL plans.
 The private history reader stops at that observation's exclusive cursor;
 `prefixComplete` describes that diagnostic range only. Stopping before the real
 native tail always retains `complete:false`, so a diagnostic prefix cannot prove
@@ -87,10 +91,36 @@ The existing tenant-owned `builder_provisioning_journal` stores separate
 `production-auth-schema-rollout-v1` records. Each freezes the complete original
 schema proposal, catalog/source, worker, sandbox, connection **reference**,
 resource, role and session. Review shows the existing resource's human label and
-concrete schema/permission effects. Eve's native approval must match the entire
-reviewed input, current administrator, tool and call; a caller digest is not consent.
+concrete schema/permission effects. Planning returns that full frozen plan and a
+`approvalReference` derived from the authenticated server-frozen plan: a strict version 2 object containing only
+`operationRef`, `planDigest`, `approvalDigest` and `resourceLabel`. Its
+`approvalDigest` is the canonical SHA-256 of the complete saved version 1 approval
+plan, including every SQL effect, resource, authority, role and worker/source
+binding. The native approval card shows the enrolled label and complete saved-plan
+digest; the model passes the returned reference without copying SQL.
 
-Execution verifies approval before resolving mutation credentials. A physical
+The existing plan tool accepts `{operationRef, review:true}` to read the original
+frozen plan and reference after an interrupted or rejected approval. This
+owner- and enrollment-checked read performs no proposal, lease, credential lookup,
+history scan or journal write. The native plan and status responses retain their
+original API shapes for existing clients; the current server-side plan tool
+appends its derived reference after checking the returned plan's owner/profile.
+Review neither
+creates a replacement operation nor changes the saved approval cursor.
+
+Eve's native approval must match either the entire exact legacy version 1 plan
+or the exact version 2 reference derived independently from that saved plan, plus
+the current administrator, tool, call and complete native owner settlement. Both
+schemas reject unknown fields; mixed, partial or malformed full inputs never
+fall back to references. A caller digest alone is not consent. A changed legacy
+card remains rejected; the administrator must approve a fresh exact reference
+request. Incremental capture continues after the existing observation cursor,
+without resetting history or adopting the old rejected approval.
+
+Execution compares any supplied reference digest against the full original plan
+before acquiring its lease, and verifies native approval before resolving
+mutation credentials. Only the journal's original plan/proposal is executed;
+reference input cannot supply or replace SQL, resource, role, worker or runtime. A physical
 PostgreSQL lease spans sessions and rollout operations on the same Auth database,
 with a new fence per continuation. A separate Production schema launcher admits
 only `auth-protected-schema` and read-only `auth-protected-schema-readback` in
