@@ -390,6 +390,20 @@ owned PR through GitHub. An open PR keeps its existing update or reconciliation
 workflow. Missing, pending, foreign or unavailable publication evidence never
 authorizes a replacement PR.
 
+For a verified owned open draft, `prepare_github_draft_review` returns a
+same-draft continuation instead of preparing a new-PR destination snapshot. A
+validated correction first uses `accept_change_set` to review its current app
+delta; that internal review does not require an initial destination review.
+The returned `afterReview` then uses normal
+`prepare_github_draft_pr_reconciliation` with the PR number from the canonical
+successful publication receipt and no reopen/recovery flag. An already-reviewed
+correction goes directly to that step. The original app, source, workspace,
+validation and publication marker stay intact. This routing observation grants
+no update consent: the existing owned-head/base preparation, current-byte
+validation, candidate review and separate exact publication approval still
+apply. A generic provider error cannot supply this continuation; cancellation,
+concurrent workflow changes and uncertain publication remain failures.
+
 A closed or merged PR authorizes only a new review against the current default
 branch. Its historic head and base can have changed without transferring any
 approval: this path never writes the retired PR. Active draft updates, Ready and

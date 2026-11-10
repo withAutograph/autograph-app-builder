@@ -23,7 +23,11 @@ import {
   priorOwnedAppDraftPublication,
 } from "@/lib/agent/existing-app-repair-planning";
 import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
-import type { OwnedAppRevisionLookup } from "@/lib/agent/github-publication-runtime";
+import { OwnedOpenDraftReviewRequiredError } from "@/lib/agent/github-publication-runtime";
+import type {
+  GitHubPublicationRuntime,
+  OwnedAppRevisionLookup,
+} from "@/lib/agent/github-publication-runtime";
 
 export const initialDraftCandidatePaths = async (
   input: Parameters<typeof observeNormalizedChangeSet>[0] & {
@@ -96,7 +100,7 @@ const assertRetainedRegistrationUnchanged = (
 
 export default defineTool({
   description:
-    "Prepare a new draft-PR review against the recorded repository's current default branch. After this same app's owned PR has merged or closed, reuse its saved session and private workspace to review the app's new changes; Builder reads the retained publication from its owned journal even after validation discarded the old review. An open or uncertain prior publication still requires its existing update or reconciliation workflow. For a new app with no destination, follow the returned destination setup link for this same saved build. Supply destination only when the user explicitly chose an existing repository. Preserve the validated private app and original source provenance while invalidating the old review and seal. Use change_set_status with contentSide before or after to inspect destination content as needed. Then accept_change_set, seal the new proposal, and request separate publication approval. This never writes GitHub or updates an existing PR.",
+    "Prepare a new draft-PR review against the recorded repository's current default branch. After this same app's owned PR has merged or closed, reuse its saved session and private workspace to review the app's new changes; Builder reads the retained publication from its owned journal even after validation discarded the old review. For its verified open draft, follow the returned nextCall: accept the current app delta, then prepare reconciliation for that same server-observed PR without a recovery flag. That app review does not require another initial destination review. Uncertain prior publication still requires its existing recovery. For a new app with no destination, follow the returned destination setup link for this same saved build. Supply destination only when the user explicitly chose an existing repository. Preserve the validated private app and original source provenance while invalidating the old review and seal. Use change_set_status with contentSide before or after to inspect destination content as needed. Then accept_change_set, seal the new proposal, and request separate publication approval. This never writes GitHub or updates an existing PR.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "validated" && state.phase !== "reviewed") {
@@ -194,49 +198,101 @@ export default defineTool({
       publishedProposalDigest === undefined
         ? await initialDraftCandidatePaths(pathInput)
         : undefined;
-    const destination = await runtime.inspectDraftDestination({
-      existingProposal:
-        (state.phase === "reviewed" ? state.githubDraftProposal?.proposal : undefined) ??
-        retainedPublication?.proposal ??
-        priorResumedBuildDraftProposal(state, ctx.session.id),
-      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
-      ...(publishedProposalDigest === undefined
-        ? {}
-        : {
-            ownedAppRevision,
-            prepareCandidatePaths: async (
-              ownedMergedPublication: boolean,
-              publishedPaths: readonly string[],
-            ) => {
-              ctx.abortSignal?.throwIfAborted();
-              assertExactWorkflowState(
-                appBuilderWorkflowState.get(),
-                state,
-                "revision preparation",
-              );
-              selectedPaths = await initialDraftCandidatePaths(
-                {
-                  ...pathInput,
-                  reviewedPaths: [
-                    ...pathInput.reviewedPaths,
-                    ...(prior?.appChangedPaths ?? []),
-                    ...(ownedMergedPublication
-                      ? publishedPaths.filter((path) =>
-                          path.startsWith(`apps/${state.appSpec.appId}/`),
-                        )
-                      : []),
-                  ],
-                },
-                undefined,
-                ownedMergedPublication,
-                !ownedMergedPublication,
-              );
-              return selectedPaths.candidatePaths;
-            },
-          }),
-      ...target,
-      paths: selectedPaths?.candidatePaths ?? [],
-    });
+    let destination: Awaited<
+      ReturnType<NonNullable<GitHubPublicationRuntime["inspectDraftDestination"]>>
+    >;
+    try {
+      destination = await runtime.inspectDraftDestination({
+        existingProposal:
+          (state.phase === "reviewed" ? state.githubDraftProposal?.proposal : undefined) ??
+          retainedPublication?.proposal ??
+          priorResumedBuildDraftProposal(state, ctx.session.id),
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
+        ...(publishedProposalDigest === undefined
+          ? {}
+          : {
+              ownedAppRevision,
+              prepareCandidatePaths: async (
+                ownedMergedPublication: boolean,
+                publishedPaths: readonly string[],
+              ) => {
+                ctx.abortSignal?.throwIfAborted();
+                assertExactWorkflowState(
+                  appBuilderWorkflowState.get(),
+                  state,
+                  "revision preparation",
+                );
+                selectedPaths = await initialDraftCandidatePaths(
+                  {
+                    ...pathInput,
+                    reviewedPaths: [
+                      ...pathInput.reviewedPaths,
+                      ...(prior?.appChangedPaths ?? []),
+                      ...(ownedMergedPublication
+                        ? publishedPaths.filter((path) =>
+                            path.startsWith(`apps/${state.appSpec.appId}/`),
+                          )
+                        : []),
+                    ],
+                  },
+                  undefined,
+                  ownedMergedPublication,
+                  !ownedMergedPublication,
+                );
+                return selectedPaths.candidatePaths;
+              },
+            }),
+        ...target,
+        paths: selectedPaths?.candidatePaths ?? [],
+      });
+    } catch (error) {
+      ctx.abortSignal?.throwIfAborted();
+      assertExactWorkflowState(appBuilderWorkflowState.get(), state, "publication lookup");
+      if (!(error instanceof OwnedOpenDraftReviewRequiredError)) {
+        throw error;
+      }
+      const { subject } = error;
+      const repositoryId =
+        target.destination === undefined
+          ? target.githubSource.repository.repositoryId
+          : target.destination.repositoryId;
+      const sameOwnedPublication = [
+        ownedAppRevision !== undefined,
+        subject.appId === state.appSpec.appId,
+        subject.proposalDigest === ownedAppRevision?.proposalDigest,
+        subject.repositoryId === repositoryId,
+        ownedAppRevision?.installationId === undefined ||
+          subject.installationId === ownedAppRevision.installationId,
+      ].every(Boolean);
+      if (!sameOwnedPublication) {
+        throw new Error("The owned draft continuation changed its app or repository binding.", {
+          cause: error,
+        });
+      }
+      const reconciliation = {
+        tool: "prepare_github_draft_pr_reconciliation" as const,
+        input: { pullRequestNumber: subject.pullRequestNumber },
+      };
+      return checkedNativeToolResult(
+        {
+          status: "existing-draft-review-required",
+          appId: subject.appId,
+          pullRequestNumber: subject.pullRequestNumber,
+          nextCall:
+            state.phase === "reviewed"
+              ? reconciliation
+              : { tool: "accept_change_set" as const, input: {} },
+          afterReview: reconciliation,
+          guidance:
+            "Preserve this app's current validated bytes, source and owned draft. Review the current app delta with accept_change_set, then follow afterReview to prepare that same draft's normal reconciliation without a recovery flag. Do not prepare a replacement PR or initial destination review. Candidate validation, review and separate exact update approval remain required before publication.",
+        },
+        {
+          callId: ctx.callId,
+          toolName: "prepare_github_draft_review",
+          turnId: ctx.session.turn.id,
+        },
+      );
+    }
     ctx.abortSignal?.throwIfAborted();
     assertExactWorkflowState(
       appBuilderWorkflowState.get(),

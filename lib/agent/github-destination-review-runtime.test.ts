@@ -422,6 +422,119 @@ const markerOnlyRevision = async () => {
 };
 
 describe("same-session post-merge destination review", () => {
+  it.each(["validated", "reviewed"] as const)(
+    "routes the %s correction to its same-owned open draft without creating a replacement review",
+    async (phase) => {
+      const f = phase === "validated" ? await markerOnlyRevision() : await ownedRevisionTool();
+      f.inspectPr.mockResolvedValue({
+        state: "open",
+        draft: true,
+        checks: "pending",
+        headSha: f.receipt.branchSha,
+        baseBranch: f.receipt.baseBranch,
+      });
+      const reconciliation = {
+        tool: "prepare_github_draft_pr_reconciliation",
+        input: { pullRequestNumber: f.receipt.pullRequestNumber },
+      };
+      await expect(prepareDraftReview.execute({}, f.context)).resolves.toMatchObject({
+        status: "existing-draft-review-required",
+        pullRequestNumber: f.receipt.pullRequestNumber,
+        nextCall: phase === "validated" ? { tool: "accept_change_set", input: {} } : reconciliation,
+        afterReview: reconciliation,
+      });
+      expect(toolPorts.state).toBe(f.state);
+      expect(toolPorts.state?.publishedGitHubDraftProposalDigest).toBe(f.proposal.digest);
+      expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+      expect(f.compareAndSet).not.toHaveBeenCalled();
+      expect(f.unexpected).not.toHaveBeenCalled();
+    },
+  );
+
+  it("accepts the current app delta before continuing the same draft without a new destination review", async () => {
+    const f = await markerOnlyRevision();
+    f.inspectPr.mockResolvedValue({
+      state: "open",
+      draft: true,
+      checks: "pending",
+      headSha: f.receipt.branchSha,
+      baseBranch: f.receipt.baseBranch,
+    });
+    await expect(prepareDraftReview.execute({}, f.context)).resolves.toMatchObject({
+      nextCall: { tool: "accept_change_set", input: {} },
+    });
+    const accept = createChangeSetAcceptanceTool({
+      // oxlint-disable-next-line eslint/require-await -- The actual acceptance tool observes controlled current app bytes.
+      observeChangeSet: async () => {
+        if (toolPorts.changeSet === undefined || toolPorts.observed === undefined) {
+          throw new Error("Missing current app fixture");
+        }
+        return { changeSet: toolPorts.changeSet, observed: toolPorts.observed };
+      },
+      // oxlint-disable-next-line eslint/require-await -- This internal review does not request a paid source assessment.
+      reviewSource: async () => {
+        throw new Error("Unexpected independent source assessment");
+      },
+    });
+    await accept.execute({}, f.context);
+    const accepted = readToolState();
+    if (accepted?.phase !== "reviewed") {
+      throw new Error("Expected the current app review");
+    }
+    expect(accepted.reviewReceipt.digest).not.toBe(review.digest);
+    expect(accepted.reviewReceipt.changeSetDigest).toBe(toolPorts.changeSet?.digest);
+    expect(accepted.publishedGitHubDraftProposalDigest).toBe(f.proposal.digest);
+    expect(accepted).not.toHaveProperty("githubDestinationReview");
+    expect(accepted).not.toHaveProperty("githubDraftProposal");
+    expect(accepted.applyReceipt).toBe(f.state.applyReceipt);
+    expect(accepted.validationReceipt).toBe(f.state.validationReceipt);
+    await expect(prepareDraftReview.execute({}, f.context)).resolves.toMatchObject({
+      nextCall: {
+        tool: "prepare_github_draft_pr_reconciliation",
+        input: { pullRequestNumber: f.receipt.pullRequestNumber },
+      },
+    });
+    expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+    expect(f.run).not.toHaveBeenCalled();
+    expect(f.compareAndSet).not.toHaveBeenCalled();
+    expect(f.unexpected).not.toHaveBeenCalled();
+  });
+
+  it.each(["cancelled", "workspace-changed", "generic-provider-text"] as const)(
+    "does not return an owned draft continuation after %s",
+    async (failure) => {
+      const f = await markerOnlyRevision();
+      // oxlint-disable-next-line typescript/promise-function-async -- Provider observations retain their asynchronous interface.
+      f.inspectPr.mockImplementation(() => {
+        if (failure === "generic-provider-text") {
+          throw new Error(
+            "This app already has an owned open draft. Continue its current app review and update.",
+          );
+        }
+        if (failure === "cancelled") {
+          f.cancellation.abort();
+        } else {
+          toolPorts.state = {
+            ...f.state,
+            workspace: { ...f.state.workspace, workspaceId: "other-workspace" },
+          };
+        }
+        return Promise.resolve({
+          state: "open",
+          draft: true,
+          checks: "pending",
+          headSha: f.receipt.branchSha,
+          baseBranch: f.receipt.baseBranch,
+        });
+      });
+      await expect(prepareDraftReview.execute({}, f.context)).rejects.toThrow();
+      expect(toolPorts.state?.publishedGitHubDraftProposalDigest).toBe(f.proposal.digest);
+      expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+      expect(f.compareAndSet).not.toHaveBeenCalled();
+      expect(f.unexpected).not.toHaveBeenCalled();
+    },
+  );
+
   it("reviews and accepts a repaired app using only its retained owned publication marker", async () => {
     const f = await markerOnlyRevision();
     await prepareDraftReview.execute({}, f.context);
@@ -563,7 +676,7 @@ describe("same-session post-merge destination review", () => {
   );
 
   it.each([
-    "open",
+    "ready",
     "pending",
     "provider-failure",
     "missing-proposal",
@@ -574,10 +687,10 @@ describe("same-session post-merge destination review", () => {
     "preserves the marker-only repaired app when its prior publication is %s",
     async (kind) => {
       const f = await markerOnlyRevision();
-      if (kind === "open") {
+      if (kind === "ready") {
         f.inspectPr.mockResolvedValue({
           state: "open",
-          draft: true,
+          draft: false,
           checks: "pending",
           headSha: f.receipt.branchSha,
           baseBranch: f.receipt.baseBranch,
@@ -911,7 +1024,7 @@ describe("same-session post-merge destination review", () => {
   });
 
   it.each([
-    "open",
+    "ready",
     "foreign-installation",
     "foreign-app",
     "foreign-repository",
@@ -920,9 +1033,9 @@ describe("same-session post-merge destination review", () => {
   ])("does not authorize revision paths from %s publication", async (kind) => {
     const f = await ownedRevisionTool();
     Object.assign(f.state, { existingDraftUpdate: { proposal: { digest: "retained-update" } } });
-    if (kind === "open") {
+    if (kind === "ready") {
       f.inspectPr.mockResolvedValue({
-        state: kind,
+        state: "open",
         draft: false,
         checks: "passed",
         headSha: f.receipt.branchSha,
