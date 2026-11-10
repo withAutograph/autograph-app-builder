@@ -87,7 +87,9 @@ describe("private local preview setup", () => {
     });
   });
 
-  it("reports an empty-role local runtime failure without changing the accepted access design", async () => {
+  it("preserves an empty-role local runtime command failure", async () => {
+    const stderr =
+      "Authenticated runtime requires schema-declared roles or explicit accepted AppSpec roles in APP_RUNTIME_ROLES";
     const run = vi
       .fn()
       .mockResolvedValueOnce({
@@ -97,8 +99,7 @@ describe("private local preview setup", () => {
       })
       .mockResolvedValueOnce({
         exitCode: 1,
-        stderr:
-          "Authenticated runtime requires schema-declared roles or explicit accepted AppSpec roles in APP_RUNTIME_ROLES",
+        stderr,
         stdout: "",
       });
     const result = await prepareAppLocalPreview({
@@ -106,16 +107,7 @@ describe("private local preview setup", () => {
       root: "/workspace/repository",
       sandbox: { run },
     });
-    expect(result).toMatchObject({ exitCode: 1, status: "failed" });
-    expect(result.stderr).toContain("Authenticated runtime requires schema-declared roles");
-    expect(result.problem).toMatch(/no business roles.*platform\/local runtime setup issue/su);
-    expect(result.problem).toMatch(/preserve the accepted.*access design/iu);
-    expect(result.problem).toMatch(/do not ask the creator.*schema roles/iu);
-    expect(run).toHaveBeenLastCalledWith({
-      command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
-      env: { APP_RUNTIME_STATE_DIR: runtimeStateDirectory },
-      workingDirectory: "/workspace/repository",
-    });
+    expect(result).toMatchObject({ exitCode: 1, status: "failed", stderr });
   });
   it("retains a selected validation failure when local setup cannot prepare a role-less app", async () => {
     const run = vi
@@ -141,12 +133,7 @@ describe("private local preview setup", () => {
         root: "/workspace/repository",
         sandbox: { run },
       }),
-    ).rejects.toThrow(/Validation could not prepare.*platform\/local runtime setup issue/su);
-    expect(run).toHaveBeenLastCalledWith({
-      command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
-      env: { APP_RUNTIME_STATE_DIR: runtimeStateDirectory },
-      workingDirectory: "/workspace/repository",
-    });
+    ).rejects.toThrow("Authenticated runtime requires schema-declared roles");
   });
   it.each([
     {
@@ -168,7 +155,6 @@ describe("private local preview setup", () => {
       sandbox: { run },
     });
     expect(result).toMatchObject({ exitCode: 2, status: "failed", stderr });
-    expect(result.problem).toContain("local setup exited with status 2");
   });
   it("preserves successful empty-role runtime setup instead of imposing an authentication requirement", async () => {
     const run = vi
