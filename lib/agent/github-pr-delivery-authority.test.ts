@@ -1,5 +1,5 @@
 /* oxlint-disable sonarjs/no-internal-api-use -- Real Eve context isolation reproduces workflow children without parent Builder state. */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { WorkflowStepToolContext } from "eve/tools";
 import type { HookContext, HookEvent } from "eve/hooks";
 import {
@@ -9,8 +9,17 @@ import {
 import continueApprovedBuild from "../../agent/hooks/continue-approved-build";
 import {
   diagnosticBuildDecisionState,
+  emitCurrentBuildWorkflowProjection,
   recordApprovedBuildDecision,
 } from "./approved-build-continuation-runtime";
+import {
+  requestPrivateApplyApproval,
+  recordApprovedPrivateApply,
+  readPrivateApplyAuthority,
+  retainPrivateApplyDenials,
+} from "./private-apply-authority";
+import { privateApplyDenialEvents } from "../eve/private-apply-denial.test-fixture";
+import { observePrivateApplyDenials } from "../eve/private-apply-denial-evidence";
 import {
   captureGitHubPrDeliveryAuthority,
   readGitHubPrDeliveryAuthority,
@@ -19,6 +28,7 @@ import type { GitHubPrDeliveryOwnerSnapshot } from "./github-pr-delivery-authori
 import {
   captureGitHubPrDeliveryCallScope,
   currentGitHubPrDeliveryAuthorityProjection,
+  githubPrDeliveryInputDigest,
 } from "./github-pr-delivery-authority-state";
 import { continueGitHubPrDeliveryWithPorts } from "./github-pr-delivery-execution";
 import type { GitHubPrDeliveryStepPorts } from "./github-pr-delivery-execution";
@@ -87,6 +97,33 @@ const installReviewedParent = (input: GitHubPrDeliveryApproval, managedSetup: bo
   } as Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
   appBuilderWorkflowState.update(() => state);
   managedProductionDeliveryRequirements.update(() => (managedSetup ? [managed] : []));
+};
+
+const approveCurrentBuild = () => {
+  const state = appBuilderWorkflowState.get();
+  if (!("proposal" in state)) {
+    throw new Error("Missing controlled Build proposal");
+  }
+  const scope = {
+    appId: state.appSpec.appId,
+    appSpecDigest: state.appSpec.digest,
+    proposalDigest: state.proposal.digest,
+    sessionId,
+    workspaceId: state.workspace.workspaceId,
+  };
+  requestPrivateApplyApproval(scope, "actual-approved-build");
+  recordApprovedPrivateApply(scope, "actual-approved-build");
+};
+
+const replaceCurrentProposal = () => {
+  const state = appBuilderWorkflowState.get();
+  if (state.phase !== "reviewed") {
+    throw new Error("Missing controlled reviewed app");
+  }
+  appBuilderWorkflowState.update(() => ({
+    ...state,
+    proposal: { ...state.proposal, digest: "5".repeat(64) },
+  }));
 };
 
 const capturedParent = (input = approval, managedSetup = false) =>
@@ -196,6 +233,298 @@ const delivery = (snapshot: GitHubPrDeliveryOwnerSnapshot, alreadyReady = false)
 };
 
 describe("GitHub delivery authority across workflow child contexts", () => {
+  it.each(["missing", "stale-adapter"] as const)(
+    "captures a first Ready call from the actual approved Build with a %s prior projection",
+    async (prior) => {
+      await contextStorage.run(new ContextContainer(), async () => {
+        installReviewedParent(approval, true);
+        approveCurrentBuild();
+        const ctx = context();
+        const owner = {
+          ownerKey: "fixture-owner",
+          adapterSessionId: sessionId,
+          adapterGeneration: 2,
+          cancellationRevision: 0,
+        };
+        let decision = prior === "missing" ? undefined : capturedParent().snapshot.decision;
+        if (decision !== undefined) {
+          decision.adapterSessionId = "previous-physical-adapter";
+        }
+        const readOwner = async (): Promise<GitHubPrDeliveryOwnerSnapshot> => {
+          if (decision === undefined || decision.adapterSessionId !== owner.adapterSessionId) {
+            throw new Error("The prior parent projection is unavailable");
+          }
+          return await Promise.resolve({ owner, decision });
+        };
+        const ports = {
+          readOwnerBinding: async () => await Promise.resolve(owner),
+          readOwner,
+          persist: async () => {
+            await emitCurrentBuildWorkflowProjection(ctx);
+            const current = diagnosticBuildDecisionState.get();
+            if (current === null) {
+              throw new Error("The parent did not persist its actual current projection");
+            }
+            decision = current;
+          },
+        };
+        await captureGitHubPrDeliveryAuthority(approval, ctx, ports);
+        const durable = await readOwner();
+        await contextStorage.run(new ContextContainer(), async () => {
+          const current = await readGitHubPrDeliveryAuthority(approval, ctx, readOwner);
+          expect(current.subject).toMatchObject({ appId, appSpecDigest });
+          expect(current.requirements).toContainEqual(managed);
+          expect(appBuilderWorkflowState.get().phase).toBe("empty");
+        });
+        expect(durable.decision.githubDelivery?.calls).toMatchObject([
+          { callId: ctx.callId, owner, inputDigest: githubPrDeliveryInputDigest(approval) },
+        ]);
+      });
+    },
+  );
+
+  it.each(["missing", "app", "spec", "proposal", "session", "workspace"] as const)(
+    "does not bootstrap Ready from a missing or foreign %s Build grant",
+    async (binding) => {
+      await contextStorage.run(new ContextContainer(), async () => {
+        installReviewedParent(approval, false);
+        const ctx = context();
+        if (binding !== "missing") {
+          const grant = {
+            appId,
+            appSpecDigest,
+            proposalDigest: "9".repeat(64),
+            sessionId,
+            workspaceId: "owned-sandbox",
+          };
+          if (binding === "app") {
+            grant.appId = "other-app";
+          }
+          if (binding === "spec") {
+            grant.appSpecDigest = "8".repeat(64);
+          }
+          if (binding === "proposal") {
+            grant.proposalDigest = "7".repeat(64);
+          }
+          if (binding === "session") {
+            grant.sessionId = "other-session";
+          }
+          if (binding === "workspace") {
+            grant.workspaceId = "other-workspace";
+          }
+          requestPrivateApplyApproval(grant, "foreign-approved-build");
+          recordApprovedPrivateApply(grant, "foreign-approved-build");
+        }
+        let persists = 0;
+        const f = capturedParent();
+        const ports = {
+          readOwnerBinding: async () => await Promise.resolve(f.snapshot.owner),
+          readOwner: async () => await Promise.resolve(f.snapshot),
+          persist: async () => {
+            persists += 1;
+            await Promise.resolve();
+          },
+        };
+        await expect(captureGitHubPrDeliveryAuthority(approval, ctx, ports)).rejects.toMatchObject({
+          reason: "build-approval-unavailable",
+        });
+        expect(persists).toBe(0);
+        expect(currentGitHubPrDeliveryAuthorityProjection().calls).toEqual([]);
+      });
+    },
+  );
+
+  it("does not transfer an older Build approval to a denied successor proposal", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      installReviewedParent(approval, false);
+      approveCurrentBuild();
+      const priorGrant = readPrivateApplyAuthority().grant;
+      const state = appBuilderWorkflowState.get();
+      if (state.phase !== "reviewed") {
+        throw new Error("Missing controlled reviewed app");
+      }
+      appBuilderWorkflowState.update(() => ({
+        ...state,
+        proposal: { ...state.proposal, digest: "6".repeat(64) },
+      }));
+      const nextScope = { ...priorGrant, proposalDigest: "6".repeat(64) };
+      if (priorGrant === null) {
+        throw new Error("Missing actual original Build approval");
+      }
+      requestPrivateApplyApproval({ ...priorGrant, ...nextScope }, "denied-successor-build");
+      retainPrivateApplyDenials({
+        expected: readPrivateApplyAuthority(),
+        proofs: observePrivateApplyDenials({
+          sessionId,
+          calls: ["denied-successor-build"],
+          events: privateApplyDenialEvents("denied-successor-build"),
+        }),
+      });
+      expect(readPrivateApplyAuthority()).toMatchObject({ grant: priorGrant, pending: [] });
+      const f = capturedParent();
+      let persists = 0;
+      const ports = {
+        readOwnerBinding: async () => await Promise.resolve(f.snapshot.owner),
+        readOwner: async () => await Promise.resolve(f.snapshot),
+        persist: async () => {
+          persists += 1;
+          await Promise.resolve();
+        },
+      };
+      await expect(
+        captureGitHubPrDeliveryAuthority(approval, context(), ports),
+      ).rejects.toMatchObject({
+        reason: "build-approval-unavailable",
+      });
+      expect(persists).toBe(0);
+    });
+  });
+
+  it("retains the actual approval refusal if diagnostic delivery fails", async () => {
+    const logger = vi.spyOn(console, "info").mockImplementation(() => {
+      throw new Error("Diagnostic sink unavailable");
+    });
+    try {
+      await contextStorage.run(new ContextContainer(), async () => {
+        installReviewedParent(approval, false);
+        const f = capturedParent();
+        await expect(captureGitHubPrDeliveryAuthority(approval, f.ctx)).rejects.toMatchObject({
+          reason: "build-approval-unavailable",
+        });
+      });
+    } finally {
+      logger.mockRestore();
+    }
+  });
+
+  it("honors cancellation during the canonical owner read before persisting a Ready call", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      installReviewedParent(approval, false);
+      approveCurrentBuild();
+      const controller = new AbortController();
+      const ctx = context(controller);
+      const cancelled = new Error("Actual native cancellation");
+      const f = capturedParent();
+      let persists = 0;
+      const ports = {
+        readOwnerBinding: async () => {
+          controller.abort(cancelled);
+          return await Promise.resolve(f.snapshot.owner);
+        },
+        readOwner: async () => await Promise.resolve(f.snapshot),
+        persist: async () => {
+          persists += 1;
+          await Promise.resolve();
+        },
+      };
+      await expect(captureGitHubPrDeliveryAuthority(approval, ctx, ports)).rejects.toBe(cancelled);
+      expect(persists).toBe(0);
+      expect(currentGitHubPrDeliveryAuthorityProjection().calls).toEqual([]);
+    });
+  });
+
+  it.each(["owner", "worker", "generation", "stop"] as const)(
+    "does not offer Ready approval when the canonical %s changes during persistence",
+    async (binding) => {
+      await contextStorage.run(new ContextContainer(), async () => {
+        installReviewedParent(approval, false);
+        approveCurrentBuild();
+        const f = capturedParent();
+        const before = structuredClone(f.snapshot.owner);
+        const ports = {
+          readOwnerBinding: async () => await Promise.resolve(before),
+          readOwner: async () => await Promise.resolve(f.snapshot),
+          persist: async () => {
+            if (binding === "owner") {
+              f.snapshot.owner.ownerKey = "different-owner";
+            }
+            if (binding === "worker") {
+              f.snapshot.owner.adapterSessionId = "different-worker";
+            }
+            if (!("adapterGeneration" in f.snapshot.owner)) {
+              throw new Error("Expected hosted owner");
+            }
+            if (binding === "generation") {
+              f.snapshot.owner.adapterGeneration += 1;
+            }
+            if (binding === "stop") {
+              f.snapshot.owner.cancellationRevision += 1;
+            }
+            await Promise.resolve();
+          },
+        };
+        await expect(
+          captureGitHubPrDeliveryAuthority(approval, f.ctx, ports),
+        ).rejects.toMatchObject({
+          reason: "owner-changed",
+        });
+      });
+    },
+  );
+
+  it.each(["owner-read", "persist"] as const)(
+    "does not transfer Ready capture to an unapproved successor during %s",
+    async (boundary) => {
+      await contextStorage.run(new ContextContainer(), async () => {
+        installReviewedParent(approval, false);
+        approveCurrentBuild();
+        const f = capturedParent();
+        let persists = 0;
+        const ports = {
+          readOwnerBinding: async () => {
+            if (boundary === "owner-read") {
+              replaceCurrentProposal();
+            }
+            return await Promise.resolve(f.snapshot.owner);
+          },
+          readOwner: async () => await Promise.resolve(f.snapshot),
+          persist: async () => {
+            persists += 1;
+            replaceCurrentProposal();
+            await Promise.resolve();
+          },
+        };
+        await expect(
+          captureGitHubPrDeliveryAuthority(approval, f.ctx, ports),
+        ).rejects.toMatchObject({
+          reason: "build-approval-unavailable",
+        });
+        expect(persists).toBe(boundary === "owner-read" ? 0 : 1);
+      });
+    },
+  );
+
+  it("rechecks the persisted current review before requesting actual Ready approval", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      installReviewedParent(approval, false);
+      approveCurrentBuild();
+      const f = capturedParent();
+      const ports = {
+        readOwnerBinding: async () => await Promise.resolve(f.snapshot.owner),
+        readOwner: async () => await Promise.resolve(f.snapshot),
+        persist: async () => {
+          const state = appBuilderWorkflowState.get();
+          if (state.phase !== "reviewed") {
+            throw new Error("Missing controlled reviewed app");
+          }
+          appBuilderWorkflowState.update(() => ({
+            ...state,
+            reviewReceipt: { ...state.reviewReceipt, digest: "4".repeat(64) },
+          }));
+          await emitCurrentBuildWorkflowProjection(f.ctx);
+          const current = diagnosticBuildDecisionState.get();
+          if (current === null) {
+            throw new Error("Missing actual persisted projection");
+          }
+          f.snapshot.decision = current;
+        },
+      };
+      await expect(captureGitHubPrDeliveryAuthority(approval, f.ctx, ports)).rejects.toMatchObject({
+        reason: "captured-call-mismatch",
+      });
+    });
+  });
+
   it("marks Ready then merges the same approved revision after checks without parent Builder state", async () => {
     const f = capturedParent();
     const run = delivery(f.snapshot);
@@ -420,6 +749,7 @@ describe("GitHub delivery authority across workflow child contexts", () => {
     f.snapshot.decision.githubDelivery = { ...original, calls: [] };
     await contextStorage.run(new ContextContainer(), async () => {
       installReviewedParent(approval, false);
+      approveCurrentBuild();
       await captureGitHubPrDeliveryAuthority(approval, f.ctx, {
         readOwner: async () => await Promise.resolve(f.snapshot),
         persist: async () => {
@@ -614,6 +944,7 @@ describe("GitHub delivery authority across workflow child contexts", () => {
   it("rejects a changed parent owner while capturing scope without treating it as approval", async () => {
     await contextStorage.run(new ContextContainer(), async () => {
       installReviewedParent(approval, false);
+      approveCurrentBuild();
       const f = capturedParent();
       let reads = 0;
       let persists = 0;
