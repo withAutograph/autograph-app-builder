@@ -4,6 +4,7 @@ import type { z } from "zod";
 import type { appDescriptionSchema } from "../repository/app-description";
 import path from "node:path";
 import { localRuntimeEnvironmentPath } from "../repository/runtime-environment";
+import { HostedTemplateFoundationUnavailableError } from "../repository/hosted-template-source-reconciliation";
 
 import {
   appDeclaresLocalSetup,
@@ -310,5 +311,134 @@ describe("private local preview setup", () => {
     expect(result).toMatchObject({ exitCode: null, status: "failed" });
     expect(result.problem).toContain("sandbox command runner");
     expect(JSON.stringify(result)).not.toContain("token=secret");
+  });
+});
+
+describe("automatic retained foundation recovery", () => {
+  const failed = {
+    exitCode: 1,
+    stderr: "Authenticated runtime requires schema-declared roles",
+    stdout: "local setup started",
+  };
+  const harness = (
+    outcomes: { exitCode: number; stderr: string; stdout: string }[],
+    onSetup?: () => void,
+  ) => {
+    let setups = 0;
+    const environments: (Record<string, string> | undefined)[] = [];
+    const run = vi.fn(
+      async ({ command, env }: { command: string; env?: Record<string, string> }) => {
+        await Promise.resolve();
+        if (command.includes("app:describe")) {
+          return { exitCode: 0, stderr: "", stdout: descriptor({ ...generated, roles: [] }) };
+        }
+        setups += 1;
+        environments.push(env);
+        onSetup?.();
+        const next = outcomes.shift();
+        if (next === undefined) {
+          throw new Error("Unexpected setup retry");
+        }
+        return next;
+      },
+    );
+    return { run, environments, setups: () => setups };
+  };
+  it("retries the actual local task once after same-session foundation recovery", async () => {
+    const h = harness([failed, { exitCode: 0, stderr: "", stdout: "runtime ready" }]);
+    const recover = vi.fn(async () => await Promise.resolve(true));
+    const result = await prepareAppLocalPreview({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run: h.run },
+      recover,
+    });
+    expect(result).toMatchObject({ status: "prepared", exitCode: 0, stdout: "runtime ready" });
+    expect(h.setups()).toBe(2);
+    expect(recover).toHaveBeenCalledTimes(1);
+    expect(h.environments.every((env) => env?.APP_RUNTIME_ROLES === undefined)).toBe(true);
+  });
+  it("retains the failed command when no newer foundation is available", async () => {
+    const h = harness([failed]);
+    const result = await prepareAppLocalPreview({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run: h.run },
+      recover: async () => await Promise.resolve(false),
+    });
+    expect(result).toMatchObject({ ...failed, status: "failed" });
+    expect(h.setups()).toBe(1);
+  });
+  it("retains command evidence when the recovery service is unavailable", async () => {
+    const h = harness([failed]);
+    const result = await prepareAppLocalPreview({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run: h.run },
+      recover: async () => await Promise.reject(new HostedTemplateFoundationUnavailableError()),
+    });
+    expect(result).toMatchObject({ ...failed, status: "failed" });
+    expect(h.setups()).toBe(1);
+  });
+  it("propagates owner and integrity failures without a local fallback", async () => {
+    const h = harness([failed]);
+    const ownerChanged = new Error("current owner changed");
+    const recover = async () => await Promise.reject(ownerChanged);
+    await expect(
+      prepareAppLocalPreview({
+        appId: "spend-review",
+        root: "/workspace/repository",
+        sandbox: { run: h.run },
+        recover,
+      }),
+    ).rejects.toBe(ownerChanged);
+    expect(h.setups()).toBe(1);
+  });
+  it("returns the actual retried command failure without another recovery loop", async () => {
+    const again = {
+      exitCode: 2,
+      stderr: "pg_ctl: could not start server",
+      stdout: "new setup started",
+    };
+    const h = harness([failed, again]);
+    const recover = vi.fn(async () => await Promise.resolve(true));
+    const result = await prepareAppLocalPreview({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run: h.run },
+      recover,
+    });
+    expect(result).toMatchObject({ ...again, status: "failed" });
+    expect(h.setups()).toBe(2);
+    expect(recover).toHaveBeenCalledTimes(1);
+  });
+  it("propagates cancellation before recovery dispatch", async () => {
+    const abort = new AbortController();
+    const h = harness([failed], () => {
+      abort.abort();
+    });
+    const recover = vi.fn(async () => await Promise.resolve(true));
+    await expect(
+      prepareAppLocalPreview({
+        appId: "spend-review",
+        root: "/workspace/repository",
+        sandbox: { run: h.run },
+        signal: abort.signal,
+        recover,
+      }),
+    ).rejects.toThrow();
+    expect(recover).not.toHaveBeenCalled();
+  });
+  it("does not recover without an actual command exit failure", async () => {
+    const h = harness([]);
+    const recover = vi.fn(async () => await Promise.resolve(true));
+    const result = await prepareAppLocalPreview({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run: h.run },
+      recover,
+    });
+    expect(result).toMatchObject({ status: "failed", exitCode: null });
+    expect(recover).not.toHaveBeenCalled();
   });
 });

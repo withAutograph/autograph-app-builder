@@ -17,6 +17,8 @@ import type {
   PreparedRuntimeExecution,
   PreparedRuntimeExecutionContext,
 } from "@/lib/agent/prepared-runtime-execution";
+import { recoverHostedTemplateFoundation } from "@/lib/agent/hosted-template-foundation-recovery";
+import { HostedTemplateFoundationUnavailableError } from "@/lib/repository/hosted-template-source-reconciliation";
 
 const GENERATED_POSTGRES_BACKEND = "generated-postgres";
 
@@ -60,7 +62,7 @@ const safeOutput = (value: string): string =>
     .slice(-6000)
     .trim();
 
-export const prepareAppLocalPreview = async (input: {
+interface AppLocalPreviewInput {
   appId: string;
   root: string;
   sandbox: Pick<SandboxSession, "run"> & Partial<Pick<SandboxSession, "spawn">>;
@@ -69,7 +71,11 @@ export const prepareAppLocalPreview = async (input: {
   /** Read from the exact server-owned local runtime binding; never model input. */
   expectedPreviousAuthOrigin?: string;
   execution?: PreparedRuntimeExecutionContext;
-}) => {
+  /** Trusted same-session source recovery; never a model-supplied callback. */
+  recover?: () => Promise<boolean>;
+}
+
+const prepareAppLocalPreviewOnce = async (input: AppLocalPreviewInput) => {
   const runtime = input.execution ? await resolvePreparedRuntimeExecution(input.execution) : null;
   if (runtime) {
     if (input.authOrigin !== undefined) {
@@ -154,6 +160,7 @@ export const prepareAppLocalPreview = async (input: {
     }
     return { command, exitCode: 0, status: "prepared" as const, stderr, stdout };
   } catch (error) {
+    input.signal?.throwIfAborted();
     const detail = safeOutput(error instanceof Error ? error.message : String(error));
     return {
       command,
@@ -166,6 +173,34 @@ export const prepareAppLocalPreview = async (input: {
   }
 };
 
+export const prepareAppLocalPreview = async (input: AppLocalPreviewInput) => {
+  const first = await prepareAppLocalPreviewOnce(input);
+  if (first.status !== "failed" || first.exitCode === null || input.recover === undefined) {
+    return first;
+  }
+  input.signal?.throwIfAborted();
+  let changed: boolean;
+  try {
+    changed = await input.recover();
+  } catch (error) {
+    input.signal?.throwIfAborted();
+    if (!(error instanceof HostedTemplateFoundationUnavailableError)) {
+      throw error;
+    }
+    return { ...first, problem: `${first.problem}\n${error.message}` };
+  }
+  input.signal?.throwIfAborted();
+  if (!changed) {
+    return first;
+  }
+  // The failed command already selected local execution; no historical hosted
+  // runtime or captured old workflow state can replace that path during retry.
+  const localInput = { ...input };
+  delete localInput.execution;
+  delete localInput.recover;
+  return await prepareAppLocalPreviewOnce(localInput);
+};
+
 /** Start declared local data before validation so test runners do not own the server's output pipe. */
 export const prepareValidationLocalData = async (input: {
   appId: string;
@@ -173,6 +208,7 @@ export const prepareValidationLocalData = async (input: {
   sandbox: Pick<SandboxSession, "run">;
   signal?: AbortSignal;
   execution?: PreparedRuntimeExecutionContext;
+  recover?: () => Promise<boolean>;
 }): Promise<PreparedRuntimeExecution | null> => {
   const runtime = input.execution ? await resolvePreparedRuntimeExecution(input.execution) : null;
   if (runtime) {
@@ -218,6 +254,8 @@ export default defineTool({
       root,
       sandbox,
       signal: ctx.abortSignal,
+      recover: async () =>
+        await recoverHostedTemplateFoundation(ctx, { appId: selected.appId, root }),
     });
   },
   inputSchema: z.strictObject({ appId: appIdSchema.optional() }),

@@ -6,6 +6,7 @@ import type { ImplementationFile } from "./apply-implementation-files";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import { assertApprovedPrivateApplySession } from "./private-apply-authority";
 import { applyPrivateComputeCheckPolicy } from "../repository/private-compute-check-policy";
+import { resolveHostedTemplateFoundationBinding } from "./hosted-template-foundation-binding";
 
 type AppliedState = Pick<
   Extract<AppBuilderWorkflowState, { phase: "applied" }>,
@@ -59,14 +60,17 @@ export const prepareValidationPrivateComputeRepair = (
     return undefined;
   }
   const { appId } = state.appSpec;
+  const recovered = resolveHostedTemplateFoundationBinding(state, input.sessionId);
+  const approvedWorkspace = recovered?.approvedWorkspace ?? state.workspace;
+  const approvedSource = recovered?.approvedSourceReceipt ?? state.sourceReceipt;
   if (
     profile.checkPolicy.path !== `apps/${appId}/.config/mise/tasks/check` ||
     state.proposal.target.contract.appId !== appId ||
     state.proposal.target.contract.appSpec.sha256 !== state.appSpec.digest ||
     state.applyReceipt.appSpecDigest !== state.appSpec.digest ||
     state.applyReceipt.proposalDigest !== state.proposal.digest ||
-    state.applyReceipt.workspaceDigest !== state.workspace.workspaceDigest ||
-    state.applyReceipt.sourceReceiptDigest !== state.sourceReceipt.digest ||
+    state.applyReceipt.workspaceDigest !== approvedWorkspace.workspaceDigest ||
+    state.applyReceipt.sourceReceiptDigest !== approvedSource.digest ||
     state.applyReceipt.applyRoot !== state.workspace.workspacePath
   ) {
     throw new Error(

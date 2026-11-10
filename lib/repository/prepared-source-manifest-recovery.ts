@@ -4,14 +4,14 @@ import type { PreparedSandboxWorkspace } from "./supported-template";
 
 // Git writes potentially large source bytes to temporary files. Hashing and
 // parsing use fixed-size reads; neither stdout nor a blob is buffered in memory.
-const recoveryProgram = String.raw`
+export const preparedSourceManifestRecoveryProgram = String.raw`
 const { spawnSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { tmpdir } = require("node:os");
 const expected = JSON.parse(process.argv[1]);
-const directory = path.resolve(expected.workspacePath, "../.app-builder");
+const directory = expected.manifestDirectory ?? path.resolve(expected.workspacePath, "../.app-builder");
 const manifestTarget = path.join(directory, "source-files.json");
 if (expected.manifestDigest === undefined && fs.existsSync(manifestTarget)) process.exit(0);
 const temporary = fs.mkdtempSync(path.join(tmpdir(), "builder-source-baseline-"));
@@ -153,7 +153,7 @@ const runPreparedSourceManifestProof = async (
     throw new Error("Builder cannot recover source metadata in a different app workspace.");
   }
   const result = await sandbox.run({
-    command: `node -e ${shellQuote(recoveryProgram)} ${shellQuote(JSON.stringify({ ...workspace, manifestDigest }))}`,
+    command: `node -e ${shellQuote(preparedSourceManifestRecoveryProgram)} ${shellQuote(JSON.stringify({ ...workspace, manifestDigest }))}`,
     workingDirectory: workspace.workspacePath,
   });
   if (result.exitCode !== 0) {

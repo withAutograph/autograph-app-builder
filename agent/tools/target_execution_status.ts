@@ -30,6 +30,7 @@ export default defineTool({
       expectedProposalDigest,
       sandbox: await ctx.getSandbox(),
       state: current,
+      sessionId: ctx.session.id,
     });
   },
   inputSchema: z.object({
