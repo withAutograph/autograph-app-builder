@@ -282,6 +282,13 @@ value mismatches, without recording provider bodies, validation inputs, URLs,
 credentials or values. Reconciliation reuses the existing owned row; it does not
 rewrite a conflicting or uncertain variable.
 
+Protected worker failures retain their existing closed lifecycle failure code in
+the internal Production diagnostic, together with the fixed operation family and
+read-only flag. These distinguish startup rejection from an effect failure and
+Auth inspection from access mutation without recording operation IDs, worker
+output, SQL, credentials or exception text. Logging does not change the original
+failure, cleanup, approval or retry behavior.
+
 The People page and public delivery tools use the same endpoint. Ordinary
 invitation completion accepts only an invitation ID from the authorized Auth
 workload, reads the stored inviter and verified invitee, and rechecks current

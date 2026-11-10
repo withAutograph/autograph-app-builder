@@ -2518,6 +2518,11 @@ export const runRepositoryProductionFileSpool = async (
       error,
       input.signal,
       execution.stage,
+      {
+        workerFailure: execution.workerFailure,
+        workerOperation: input.operation,
+        workerReadOnly: input.readOnly,
+      },
     );
     throw error;
   }

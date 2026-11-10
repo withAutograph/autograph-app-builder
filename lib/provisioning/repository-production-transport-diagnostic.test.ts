@@ -129,7 +129,7 @@ it("identifies an existing transport scope refusal without dispatch or private c
   expect(output).not.toContain("private");
 });
 
-const pinnedTransport = (pinMatches = true) => {
+const pinnedTransport = (pinMatches = true, failureCode?: "startup_rejected" | "effect_failed") => {
   const catalog = structuredClone(receipt);
   catalog.workers.resources = {
     ...catalog.workers.resources,
@@ -148,10 +148,28 @@ const pinnedTransport = (pinMatches = true) => {
     },
   };
   let catalogRead = false;
+  const lifecycle = failureCode
+    ? [
+        ...(failureCode === "effect_failed" ? [{ kind: "worker_started" }] : []),
+        {
+          kind: "worker_failed",
+          failure_code: failureCode,
+          auth_startup: { stage: "private credential and SQL details" },
+        },
+      ]
+    : [];
   const command = {
     kill: vi.fn(async () => {}),
     async *logs() {
-      yield { stream: "stdout", data: "private protocol body\n" };
+      if (lifecycle.length === 0) {
+        yield { stream: "stdout", data: "private protocol body\n" };
+      }
+      for (let index = 0; index < lifecycle.length; index += 1) {
+        yield {
+          stream: "stdout",
+          data: `${JSON.stringify({ kind: "protected_installer_lifecycle_ready", version: 1, run_id: runId, frame_id: index + 1 })}\n`,
+        };
+      }
     },
     wait: vi.fn(async () => ({ exitCode: 0 })),
   };
@@ -161,12 +179,27 @@ const pinnedTransport = (pinMatches = true) => {
     extendTimeout: vi.fn(async () => {}),
     fs: {
       mkdir: vi.fn(async () => {}),
+      lstat: vi.fn(async () => ({ isFile: () => true, size: 512 })),
       readFile: vi.fn(async () => {
         catalogRead = true;
         return catalogBytes;
       }),
       rm: vi.fn(async () => {}),
     },
+    readFileToBuffer: vi.fn(async ({ path: file }: { path: string }) => {
+      const frame = /\/lifecycle\/(?<frameId>\d+)\.(?<format>ready|json)$/u.exec(file);
+      if (frame?.groups === undefined) {
+        throw new Error("unexpected spool read");
+      }
+      const frameId = Number(frame.groups.frameId);
+      return Buffer.from(
+        JSON.stringify(
+          frame.groups.format === "ready"
+            ? { version: 1, run_id: runId, frame_id: frameId }
+            : { version: 1, run_id: runId, ...lifecycle[frameId - 1] },
+        ),
+      );
+    }),
     runCommand: vi.fn(async ({ detached }: { detached?: boolean }) =>
       detached
         ? command
@@ -184,6 +217,34 @@ const pinnedTransport = (pinMatches = true) => {
   const createSandbox = vi.fn(async () => sandbox as never);
   return { catalogRead: () => catalogRead, command, createSandbox, request, sandbox };
 };
+
+it.each(["startup_rejected", "effect_failed"] as const)(
+  "retains worker lifecycle failure %s after the original rejection and cleanup",
+  async (failureCode) => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const f = pinnedTransport(true, failureCode);
+    await expect(
+      runRepositoryProductionFileSpool(configuration, f.request, {
+        createSandbox: f.createSandbox,
+      }),
+    ).rejects.toMatchObject({ code: "operator_unavailable" });
+    expect(f.command.kill).toHaveBeenCalledOnce();
+    expect(f.sandbox.delete).toHaveBeenCalledOnce();
+    expect(f.request.recordCheckpoint).not.toHaveBeenCalled();
+    expect(
+      f.sandbox.readFileToBuffer.mock.calls.some(([file]) =>
+        file.path.endsWith(`/lifecycle/${failureCode === "effect_failed" ? 2 : 1}.json`),
+      ),
+    ).toBe(true);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining(`"workerFailure":"${failureCode}"`));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('"launcherStage":"worker_protocol"'));
+    const output = JSON.stringify(log.mock.calls);
+    expect(output).not.toContain("private");
+    expect(output).not.toContain(f.request.directDatabaseUrl);
+    expect(output).not.toContain(context.resource.database);
+    expect(output).not.toContain(runId);
+  },
+);
 
 it("retains the actual pin-refusal stage after deleting the owned Sandbox", async () => {
   const log = vi.spyOn(console, "warn").mockImplementation(() => {});
