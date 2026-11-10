@@ -4,7 +4,11 @@ import { RepositoryProductionDestinationRequiredError } from "./repository-produ
 import { z } from "zod";
 import { appAccessCommandSchema, appAccessSnapshotSchema } from "../app-access/contracts";
 import type { AppAccessCommand, AppAccessSnapshot } from "../app-access/contracts";
-import { repositoryProductionApprovalInput } from "./repository-production-approval";
+import {
+  repositoryProductionApprovalInput,
+  repositoryProductionApprovalReferenceSchema,
+} from "./repository-production-approval";
+import type { RepositoryProductionApprovalReference } from "./repository-production-approval";
 import { observeRepositoryProductionPhase } from "./repository-production-diagnostic";
 import { operatorOwnerContextSchema } from "./hosted-operator-contract";
 import type { OperatorOwnerContext } from "./hosted-operator-contract";
@@ -99,6 +103,7 @@ export const repositoryProductionRequestSchema = z.discriminatedUnion("action", 
     ...ownerFields,
     action: z.literal("prepare"),
     approvedByCallId: z.string().min(1),
+    approvalReference: repositoryProductionApprovalReferenceSchema.optional(),
     creatorEmail: z
       .email()
       .transform((email) => email.toLowerCase())
@@ -123,6 +128,7 @@ export interface RepositoryProductionHandlerDependencies {
     owner: RepositoryProductionRequestOwner,
     approvedByCallId: string,
     creatorEmail?: string,
+    approvalReference?: RepositoryProductionApprovalReference,
   ) => Promise<{
     scope: RepositoryProductionScope;
     intent: RepositoryProductionIntent;
@@ -242,7 +248,15 @@ export const createRepositoryProductionHandler =
           appAccessSnapshotSchema.parse(await deps.management.execute(owner, body.command)),
         );
       }
-      const resolved = await deps.resolveSetup(owner, body.approvedByCallId, body.creatorEmail);
+      const resolved =
+        body.approvalReference === undefined
+          ? await deps.resolveSetup(owner, body.approvedByCallId, body.creatorEmail)
+          : await deps.resolveSetup(
+              owner,
+              body.approvedByCallId,
+              body.creatorEmail,
+              body.approvalReference,
+            );
       if (resolved.scope.appId !== body.appId || resolved.intent.sessionId !== body.sessionId) {
         return reply({ code: "app_access_denied" }, 403);
       }

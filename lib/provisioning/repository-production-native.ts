@@ -66,6 +66,7 @@ import { resolveRepositoryProductionDestination } from "./repository-production-
 import {
   repositoryProductionApprovalInput,
   repositoryProductionApprovalDigest,
+  assertRepositoryProductionApprovalReference,
 } from "./repository-production-approval";
 import {
   repositoryProductionScopeSchema,
@@ -1106,9 +1107,13 @@ export const createRepositoryProductionNativeHandler =
           await selectCreatorEmail(found, selected);
           return { scope: found.scope, intent: found.intent };
         },
-        resolveSetup: async (owner, approvedByCallId, creatorEmail) => {
+        resolveSetup: async (owner, approvedByCallId, creatorEmail, approvalReference) => {
           const found = await resolve(owner);
           await selectCreatorEmail(found, creatorEmail);
+          const currentPlan = repositoryProductionApprovalInput(found.scope, found.intent);
+          if (approvalReference !== undefined) {
+            assertRepositoryProductionApprovalReference(currentPlan, approvalReference);
+          }
           const transport = createNativeTargetApprovalHistoryTransport({
             builderOrigin,
             owner: {
@@ -1129,7 +1134,7 @@ export const createRepositoryProductionNativeHandler =
             throw new Error("repository_production_approval_unavailable");
           }
           const approved = await readRepositoryProductionApproval({
-            plan: repositoryProductionApprovalInput(found.scope, found.intent),
+            plan: currentPlan,
             callId: approvedByCallId,
             owner: owner.ownerContext,
             assertOwner: found.assertCurrentOwner,
