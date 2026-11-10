@@ -1,4 +1,5 @@
 import { workspaceBinInstallCommand } from "../repository/workspace-bin-install";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { PRIVATE_COMPUTE_CHECK_TASK } from "../sandbox/private-compute-profile";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -626,7 +627,11 @@ describe("behavior evidence invalidation during validation repair", () => {
       productAcceptance: { productStatus: "unassessed" },
       productBehaviorEvidence: [],
       sourceAssessment: { reviewCompleted: false, status: "unassessed" },
-      status: "needs_repair",
+      draftReview: {
+        status: "available",
+        nextCall: { tool: "prepare_github_draft_review", input: {} },
+      },
+      status: "validated",
       technicalStatus: "passed",
     });
   });
@@ -775,9 +780,92 @@ describe("behavior evidence invalidation during validation repair", () => {
       expect(mocks.browser).toHaveBeenCalledOnce();
       expect(result).toMatchObject({
         backendValidation: { status },
+        draftReview: {
+          status: "available",
+          nextCall: { tool: "prepare_github_draft_review", input: {} },
+        },
         reused: false,
-        status: "needs_repair",
+        status: "validated",
         technicalStatus: "passed",
+      });
+    },
+  );
+
+  it.each([null, "check-build", "test"] as const)(
+    "offers draft review after actual technical command outcomes, preserving browser failure (%s)",
+    async (failedCommand) => {
+      mocks.state.current = { ...workflow("validated"), phase: "applied" };
+      mocks.describe.mockResolvedValue({
+        backend: { kind: "generated-postgres" },
+        validation: { browser: { task: "test-e2e" } },
+      });
+      const browserFailure = {
+        status: "failed",
+        exitCode: 1,
+        problem: "Save and reopen assertion failed",
+      };
+      mocks.browser.mockResolvedValue(browserFailure);
+      const commands: { name: string; exitCode: number }[] = [];
+      // oxlint-disable-next-line eslint/require-await -- The validation port returns a promise while controlled child commands execute synchronously.
+      mocks.execute.mockImplementation(async () => {
+        // Execute test-owned check/build and test commands; no repository or provider effects.
+        for (const name of ["check-build", "test"]) {
+          const result = spawnSync(process.execPath, [
+            "-e",
+            name === failedCommand
+              ? "process.exitCode = 1"
+              : "require('node:assert/strict').equal(1 + 1, 2)",
+          ]);
+          const exitCode = result.status ?? 1;
+          commands.push({ name, exitCode });
+          if (exitCode !== 0) {
+            return {
+              ok: false,
+              receipt: {
+                attemptDigest: "attempt",
+                commandFailure: { name, exitCode },
+                commands,
+                reason: "command-failed",
+              },
+            };
+          }
+        }
+        return { ok: true, receipt: { attemptDigest: "attempt", commands } };
+      });
+      const result = await validateAppCreation.execute(
+        { implementationFiles: [], runBrowserTests: true },
+        // SAFETY: The actual tool needs only the controlled session and Sandbox ports below.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Controlled tool context, no hosted authority.
+        {
+          callId: "validate-draft-first",
+          // oxlint-disable-next-line eslint/require-await -- Return the controlled Sandbox through the real asynchronous tool port.
+          getSandbox: async () => ({ id: "validation-sandbox" }),
+          session: { auth: {}, id: "session" },
+        } as never,
+      );
+      if (failedCommand !== null) {
+        expect(result).toMatchObject({ status: "needs_repair" });
+        expect(result).not.toHaveProperty("draftReview");
+        expect(result).not.toHaveProperty("technicalStatus", "passed");
+        expect(mocks.state.current.phase).toBe("validation_failed");
+        expect(commands.at(-1)).toEqual({ name: failedCommand, exitCode: 1 });
+        expect(mocks.browser).not.toHaveBeenCalled();
+        return;
+      }
+      expect(commands).toEqual([
+        { name: "check-build", exitCode: 0 },
+        { name: "test", exitCode: 0 },
+      ]);
+      expect(mocks.state.current.phase).toBe("validated");
+      expect(result).toMatchObject({
+        status: "validated",
+        technicalStatus: "passed",
+        backendValidation: browserFailure,
+        productAcceptance: { productStatus: "unassessed" },
+        draftReview: {
+          status: "available",
+          nextCall: { tool: "prepare_github_draft_review", input: {} },
+        },
       });
     },
   );

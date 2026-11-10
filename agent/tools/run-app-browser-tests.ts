@@ -17,6 +17,7 @@ import { browserTestSelectionSchema } from "@/lib/agent/browser-test-selection";
 import type { BrowserTestSelection } from "@/lib/agent/browser-test-selection";
 import { priorValidatedPrivateArtifact } from "@/lib/agent/prior-validated-private-artifact";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
+import { draftReviewAfterTechnicalValidation } from "@/lib/agent/draft-review-continuation";
 import { resolvePreparedRuntimeExecution } from "@/lib/agent/prepared-runtime-execution";
 import type {
   PreparedRuntimeExecution,
@@ -163,16 +164,16 @@ export default defineTool({
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     const sandbox = await ctx.getSandbox();
-    const priorArtifact =
-      input.artifact === "prior-validated"
-        ? await priorValidatedPrivateArtifact({
-            appId: input.appId,
-            sandbox,
-            state,
-            sessionId: ctx.session.id,
-            signal: ctx.abortSignal,
-          })
-        : undefined;
+    const usingPriorArtifact = input.artifact === "prior-validated";
+    const priorArtifact = usingPriorArtifact
+      ? await priorValidatedPrivateArtifact({
+          appId: input.appId,
+          sandbox,
+          state,
+          sessionId: ctx.session.id,
+          signal: ctx.abortSignal,
+        })
+      : undefined;
     const selected =
       priorArtifact ??
       (await runnableSelectedApp({
@@ -182,7 +183,7 @@ export default defineTool({
           await resolveAcceptanceRuntimeRoot({ appId, ctx, fallbackRoot: root, sandbox, state }),
       }));
     const { root } = selected;
-    return await runAppBrowserTests({
+    const result = await runAppBrowserTests({
       appId: selected.appId,
       execution: {
         appId: selected.appId,
@@ -200,6 +201,17 @@ export default defineTool({
       selection: input.selection,
       priorArtifact,
     });
+    ctx.abortSignal.throwIfAborted();
+    if (result.status === "failed" && !usingPriorArtifact) {
+      const current = appBuilderWorkflowState.get();
+      if ("appSpec" in current && current.appSpec.appId === selected.appId) {
+        const draftReview = draftReviewAfterTechnicalValidation(current);
+        if (draftReview !== undefined) {
+          return { ...result, draftReview };
+        }
+      }
+    }
+    return result;
   },
   inputSchema: z.strictObject({
     artifact: z.literal("prior-validated").optional(),

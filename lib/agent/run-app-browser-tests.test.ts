@@ -1,12 +1,24 @@
+/* oxlint-disable eslint/require-await -- Controlled asynchronous tool ports preserve real Promise and cancellation boundaries. */
 import type { SandboxSession } from "eve/sandbox";
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { prepareAppLocalPreview } from "../../agent/tools/prepare-app-local-preview";
 import { localRuntimeEnvironmentPath } from "../repository/runtime-environment";
 
-import { appBrowserTestCommand, runAppBrowserTests } from "../../agent/tools/run-app-browser-tests";
+import browserTool, {
+  appBrowserTestCommand,
+  runAppBrowserTests,
+} from "../../agent/tools/run-app-browser-tests";
+import { appBuilderWorkflowState } from "./workflow-state";
+import type { AppBuilderWorkflowState } from "./workflow-state";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on selected-app resolution while exercising the real standalone tool result.
+import * as selectedApp from "./runnable-selected-app";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Supply an owned prior artifact without loading a provider workspace.
+import * as priorArtifactReader from "./prior-validated-private-artifact";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Keep actual tool orchestration while controlling only the completed browser task.
+import * as browserRunner from "./app-browser-test-runner";
 
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on the actual prepared runtime resolver for this local browser boundary.
 import * as preparedRuntime from "./prepared-runtime-execution";
@@ -15,6 +27,132 @@ import type { PreparedRuntimeExecution } from "./prepared-runtime-execution";
 import { runAppBrowserTests as runResolvedAppBrowserTests } from "./app-browser-test-runner";
 
 type SandboxRunOptions = Parameters<SandboxSession["run"]>[0];
+
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Exercise the authored execute function without launching the agent runtime.
+vi.mock(import("eve/tools"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  defineTool: <T>(definition: T) => definition,
+}));
+
+afterEach(() => vi.restoreAllMocks());
+
+const browserToolFixture = (phase: "validated" | "applied" = "validated") => {
+  // SAFETY: These controlled ports read only the workflow phase and accepted app identity.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The source selection port is replaced below; no incomplete receipt is admitted to production logic.
+  const state = { phase, appSpec: { appId: "spend-review" } } as Extract<
+    AppBuilderWorkflowState,
+    { phase: "validated" | "applied" }
+  >;
+  const stateRead = vi.spyOn(appBuilderWorkflowState, "get").mockReturnValue(state);
+  vi.spyOn(selectedApp, "runnableSelectedApp").mockResolvedValue({
+    appId: "spend-review",
+    root: "/workspace/repository",
+    revision: "current-apply",
+    reusable: true,
+  });
+  vi.spyOn(preparedRuntime, "resolvePreparedRuntimeExecution").mockResolvedValue(null);
+  vi.spyOn(workingPreviewState, "get").mockReturnValue(null);
+  const failure = {
+    command: appBrowserTestCommand("spend-review"),
+    diagnostic: { categories: ["assertion" as const], stages: [] },
+    exitCode: 1,
+    problem: "An app-owned browser assertion failed.",
+    status: "failed" as const,
+    stdout: "[private browser] failed: Save then reopen",
+    stderr: "",
+  };
+  const browser = vi.spyOn(browserRunner, "runAppBrowserTests").mockResolvedValue(failure);
+  const run = vi
+    .fn<SandboxSession["run"]>()
+    .mockResolvedValue({ exitCode: 0, stdout: "null", stderr: "" });
+  const controller = new AbortController();
+  // SAFETY: The real execute path reads only these session, Sandbox and cancellation capabilities.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The fixture supplies every capability reached by the controlled browser path.
+  const ctx = {
+    abortSignal: controller.signal,
+    getSandbox: async () => ({ id: "owned", run }),
+    session: { auth: null, id: "owner-session" },
+  } as never;
+  return { browser, controller, ctx, failure, state, stateRead };
+};
+
+describe("standalone browser failure continuation", () => {
+  it("adds requested-delivery draft review after technical validation without changing browser failure facts", async () => {
+    const f = browserToolFixture();
+    const result = await browserTool.execute({}, f.ctx);
+    expect(result).toMatchObject({
+      ...f.failure,
+      draftReview: {
+        status: "available",
+        nextCall: { tool: "prepare_github_draft_review", input: {} },
+      },
+    });
+    expect(result).toHaveProperty(
+      "draftReview.guidance",
+      expect.stringContaining("For requested GitHub delivery"),
+    );
+  });
+
+  it("does not add draft review for unvalidated current source", async () => {
+    const f = browserToolFixture("applied");
+    const result = await browserTool.execute({}, f.ctx);
+    expect(result).toMatchObject(f.failure);
+    expect(result).not.toHaveProperty("draftReview");
+  });
+
+  it("keeps a passing browser result unchanged", async () => {
+    const f = browserToolFixture();
+    const passed = {
+      command: f.failure.command,
+      exitCode: 0,
+      status: "passed" as const,
+      stdout: "passed",
+      stderr: "",
+    };
+    f.browser.mockResolvedValue(passed);
+    expect(await browserTool.execute({}, f.ctx)).toEqual(passed);
+  });
+
+  it("never recommends current draft review from a failed prior-validated artifact", async () => {
+    const f = browserToolFixture();
+    vi.spyOn(priorArtifactReader, "priorValidatedPrivateArtifact").mockResolvedValue({
+      appId: "spend-review",
+      root: "/workspace/prior-artifact",
+      revision: "prior-apply",
+      validationDigest: "prior-validation",
+      reusable: true,
+      assertCurrent: () => {},
+      verifyCurrent: async () => {},
+    });
+    const result = await browserTool.execute({ artifact: "prior-validated" }, f.ctx);
+    expect(result).toMatchObject({ status: "failed", reason: "private-preview-refresh-required" });
+    expect(result).not.toHaveProperty("draftReview");
+  });
+
+  it("does not attach another app's current draft to the completed browser result", async () => {
+    const f = browserToolFixture();
+    f.browser.mockImplementation(async () => {
+      f.stateRead.mockReturnValue({
+        ...f.state,
+        appSpec: { ...f.state.appSpec, appId: "other-app" },
+      });
+      return f.failure;
+    });
+    const result = await browserTool.execute({}, f.ctx);
+    expect(result).toMatchObject(f.failure);
+    expect(result).not.toHaveProperty("draftReview");
+  });
+
+  it("preserves cancellation instead of turning the result into a review continuation", async () => {
+    const f = browserToolFixture();
+    const cancellation = new Error("cancelled by owner");
+    f.browser.mockImplementation(async () => {
+      f.controller.abort(cancellation);
+      return f.failure;
+    });
+    await expect(browserTool.execute({}, f.ctx)).rejects.toBe(cancellation);
+  });
+});
 
 describe("private app browser tests", () => {
   const marker = "[private browser prerequisite] private-preview-refresh-required";

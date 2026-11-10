@@ -55,6 +55,22 @@ Ordinary build validation skips authenticated browser preparation and browser
 tasks. Builder can opt into a declared app browser task with `runBrowserTests`
 when that task serves the app’s testing needs.
 
+For requested GitHub delivery, passing repository build and declared app tests
+produce a technically validated, reviewable candidate. The tool keeps that
+technical result successful when an optional private browser check fails or is
+unavailable, retaining the separate browser failure and unverified acceptance.
+Builder continues normal destination review and native draft-publication approval
+before optional browser qualification. This saves reviewable work without claiming
+the app is usable, Ready, merged or deployed. Actual build or test command failure
+still requires repair, and exact reviewed-source approvals and required CI remain
+in force.
+
+A saved starter checkout adopts a needed shared test-tool repair through the
+ordinary open owned draft's current-base reconciliation and candidate validation.
+The original app edits, session, destination and resources remain retained. Builder
+performs that continuation and reruns the affected app-owned behavior checks; an
+outside evaluator neither drives internal stages nor hot-patches shared source.
+
 Browser and continuity check progress reflects the returned check outcome,
 not merely completion of the tool call. A failed, cancelled, missing or
 unassessed check outcome is never a pass. Successful technical validation

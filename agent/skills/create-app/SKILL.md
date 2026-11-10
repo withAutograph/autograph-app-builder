@@ -304,6 +304,18 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    unset for ordinary delivery. An independent assessment is optional and may
    be requested explicitly when it serves the app's needs. Report any
    assessment and its findings as advisory evidence.
+   For requested GitHub delivery, save that technically validated source through
+   normal destination review and the separate native draft-publication approval
+   before optional private browser qualification. A failed or unavailable browser
+   check stays failed or unverified and does not turn passing repository commands
+   into a failure or prevent draft review. A draft is reviewable work, not a usable
+   app, Ready, merge or deployment. Keep repairing accepted behavior.
+   If the retained starter checkout lacks an identified shared tooling repair now
+   present in the destination repository, publish the ordinary reviewed repair
+   draft, then use that open draft's normal reconciliation and candidate validation
+   to adopt the current base and rerun the affected browser tests. Preserve the
+   original private work and app resources; do not replace source or hot-patch
+   shared files. Builder handles this continuation without outside stage instructions.
    Repair cited product contradictions through `validate_app_creation` with
    corrected implementation files, then accept the repaired change set again.
    Read cited findings through `change_set_status` with `view: "acceptance"`,

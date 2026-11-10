@@ -287,6 +287,20 @@ For reviewed delivery of applied changes, call `validate_app_creation` in the ap
 private checkout after apply succeeds. Published-version restoration may proceed
 first while that candidate's work remains deferred. Applied files are not
 validated files. Successful repository commands establish technical validation.
+For requested GitHub delivery, continue normal destination review and native draft
+publication approval after those commands pass, before optional private browser
+qualification. A failed, blocked or unavailable optional browser check remains
+failed or unverified; it does not invalidate passed repository commands or prevent
+saving a reviewable draft. Draft publication does not claim a usable app or authorize
+Ready, merge or deployment. Keep implementing and verifying accepted behavior.
+When a shared test-tool repair has landed in the destination repository but the
+retained starter checkout still has the old tool, preserve the same app and work.
+After ordinary draft publication, use `prepare_github_draft_pr_reconciliation` for
+that open owned draft to adopt its current base in a private candidate, then use
+`validate_github_draft_pr_reconciliation` with the affected browser selection.
+Continue the existing review and exact publication/update approvals for changed
+source. Do not replace the saved source, patch shared tooling through the app editor,
+repeat unchanged failures in the old checkout, or ask the creator to manage these steps.
 Run app-owned behavior checks when the app calls for them and report what they
 cover. Inspect `change_set_status` and call `accept_change_set` after the build
 succeeds. Leave `runSourceReview` unset for ordinary delivery. Set it only when

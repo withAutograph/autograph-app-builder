@@ -21,6 +21,7 @@ import { runAppBrowserTests } from "./run-app-browser-tests";
 import { unavailableSourceAssessment } from "@/lib/agent/product-source-review";
 import { productRequestState } from "@/lib/agent/product-source-review-state";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
+import { draftReviewAfterTechnicalValidation } from "@/lib/agent/draft-review-continuation";
 import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
 import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
 import { validateDraftReconciliation } from "./validate_github_draft_pr_reconciliation";
@@ -150,9 +151,6 @@ const prepareBackendValidationRuntime = async (
     };
   }
 };
-
-const backendValidationStatus = (status: string) =>
-  status === "failed" || status === "blocked" ? ("needs_repair" as const) : ("validated" as const);
 
 export interface AppValidationRuntime {
   prepareSchemaInput?: typeof prepareCompiledSchemaPredecessorsForValidationForSession;
@@ -624,6 +622,7 @@ export const createAppValidationTool = (
       return {
         attemptDigest: result.receipt.attemptDigest,
         backendValidation,
+        draftReview: draftReviewAfterTechnicalValidation(appBuilderWorkflowState.get()),
         commandCount: result.receipt.commands.length,
         logs: result.receipt.commands.map((command) => {
           const summary: ValidationCommandSummary = { name: command.name };
@@ -641,7 +640,7 @@ export const createAppValidationTool = (
         productionHandoff,
         reused: false,
         sourceAssessment,
-        status: backendValidationStatus(backendValidation.status),
+        status: "validated" as const,
         technicalStatus: "passed" as const,
       };
     },
