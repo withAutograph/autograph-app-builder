@@ -704,6 +704,23 @@ managed setup remains blocked by the existing Production check. One approved
 workflow covers Ready, waiting for Check and merge, including a PR already Ready.
 Old finished calls are not migrated or resurrected by this recovery.
 
+An owned open PR that has already become Ready can be corrected through the same
+private preparation, validation, review and approved update flow. Builder proves
+its canonical tenant publication, current repository/PR/branch/head and origin;
+an adopted draft alone does not authorize changing a Ready PR. The server seals
+`returnToDraft: true` into that exact update or reconciliation proposal and its
+approval receipt. The ordinary update approval plainly covers returning that
+Ready PR to draft and publishing the reviewed correction; omitting or altering
+the transition invalidates the receipt. Older proposals remain draft-only.
+After approval, Builder uses GitHub's native draft conversion with the verified
+PR node ID, reads back the same owned head as a draft, then applies the existing
+expected-head update. A lost conversion response is reconciled by that readback;
+an interrupted same-head conversion resumes without another conversion. A moved,
+closed or foreign PR cannot receive the correction. The cancelled delivery call
+stays cancelled, and the revised publication needs its own Ready/merge approval
+and required checks. No GitHub action or database details are delegated to the
+creator, and no deployment or app-test gate is added.
+
 The GitHub App installation needs Actions read, Pull requests write for Ready, and
 Contents write for both Ready and merge. The provider requests a repository-scoped token
 attenuated for each operation. GitHub applies its own review and merge policy.

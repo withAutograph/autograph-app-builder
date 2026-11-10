@@ -422,9 +422,14 @@ const markerOnlyRevision = async () => {
 };
 
 describe("same-session post-merge destination review", () => {
-  it.each(["validated", "reviewed"] as const)(
-    "routes the %s correction to its same-owned open draft without creating a replacement review",
-    async (phase) => {
+  it.each([
+    { phase: "validated", draft: true },
+    { phase: "reviewed", draft: true },
+    { phase: "validated", draft: false },
+    { phase: "reviewed", draft: false },
+  ] as const)(
+    "routes the $phase correction to its same-owned open PR (draft=$draft) without creating a replacement review",
+    async ({ phase, draft }) => {
       const f = phase === "validated" ? await markerOnlyRevision() : await ownedRevisionTool();
       if (f.state.phase === "reviewed" && toolPorts.changeSet !== undefined) {
         f.state.reviewReceipt = createReviewedChangeSetReceipt(
@@ -434,7 +439,7 @@ describe("same-session post-merge destination review", () => {
       }
       f.inspectPr.mockResolvedValue({
         state: "open",
-        draft: true,
+        draft,
         checks: "pending",
         headSha: f.receipt.branchSha,
         baseBranch: f.receipt.baseBranch,
@@ -762,7 +767,6 @@ describe("same-session post-merge destination review", () => {
   );
 
   it.each([
-    "ready",
     "pending",
     "provider-failure",
     "missing-proposal",
@@ -773,15 +777,6 @@ describe("same-session post-merge destination review", () => {
     "preserves the marker-only repaired app when its prior publication is %s",
     async (kind) => {
       const f = await markerOnlyRevision();
-      if (kind === "ready") {
-        f.inspectPr.mockResolvedValue({
-          state: "open",
-          draft: false,
-          checks: "pending",
-          headSha: f.receipt.branchSha,
-          baseBranch: f.receipt.baseBranch,
-        });
-      }
       if (kind === "pending") {
         f.readReceipt.mockResolvedValue(pendingReceipt(f.proposal));
       }
@@ -1110,7 +1105,6 @@ describe("same-session post-merge destination review", () => {
   });
 
   it.each([
-    "ready",
     "foreign-installation",
     "foreign-app",
     "foreign-repository",
@@ -1119,15 +1113,6 @@ describe("same-session post-merge destination review", () => {
   ])("does not authorize revision paths from %s publication", async (kind) => {
     const f = await ownedRevisionTool();
     Object.assign(f.state, { existingDraftUpdate: { proposal: { digest: "retained-update" } } });
-    if (kind === "ready") {
-      f.inspectPr.mockResolvedValue({
-        state: "open",
-        draft: false,
-        checks: "passed",
-        headSha: f.receipt.branchSha,
-        baseBranch: f.receipt.baseBranch,
-      });
-    }
     if (kind === "foreign-installation") {
       const { prior } = toolPorts;
       if (prior === undefined) {

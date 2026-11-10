@@ -1713,163 +1713,241 @@ describe("existing draft publication origin", () => {
 });
 
 describe("existing draft update provider", () => {
-  it("uses an exact expected branch OID in GitHub's atomic updateRefs mutation", async () => {
-    const head = "3".repeat(40);
-    const headTree = "4".repeat(40);
-    const newCommit = "5".repeat(40);
-    let observedHead = head;
-    let recoveredMessage = `Update draft pull request #1500\n\nApp-Builder-Idempotency: ${"b".repeat(64)}\nApp-Builder-Origin: ${"d".repeat(64)}`;
-    const { content } = unicodeDraftMaterial(false, false, ["apps/demo/page.tsx"]);
-    const proposal = {
-      approvedPaths: content.approvedPaths,
-      baseBranch: "main",
-      branchName: `app-builder/review-${"d".repeat(20)}`,
-      changeSetDigest: content.changeSetDigest,
-      changedContentDigest: content.changedContentDigest,
-      digest: "a".repeat(64),
-      expectedHeadSha: head,
-      expectedHeadTree: headTree,
-      idempotencyKey: "b".repeat(64),
-      installationIdentityDigest: "c".repeat(64),
-      intendedOutcome: "update-existing-draft-pull-request" as const,
-      name: "example-app",
-      originMarker: "d".repeat(64),
-      owner: "withAutograph",
-      priorPublicationDigest: "d".repeat(64),
-      pullRequestId: "150000",
-      pullRequestNumber: 1500,
-      repositoryId: "100",
-      reviewDigest: content.reviewDigest,
-      version: 1 as const,
-    } satisfies ExistingDraftUpdateProposal;
-    const calls: { url: string; body: unknown }[] = [];
-    // oxlint-disable-next-line eslint/complexity, eslint/require-await, sonarjs/cognitive-complexity -- focused GitHub HTTP double
-    const implementation: typeof fetch = async (request, init = {}) => {
-      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
-      const url = String(request);
-      const method = init.method ?? "GET";
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
-      const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
-      calls.push({ body, url });
-      if (url.endsWith("/app")) {
-        return json({ id: 123, slug: "autograph-app-builder" });
+  it.each([
+    "draft",
+    "ready",
+    "lost-conversion-response",
+    "already-draft",
+    "not-approved",
+    "unobserved-conversion",
+    "moved-during-conversion",
+    "closed",
+    "foreign-repository",
+  ])(
+    "uses exact head guards for %s repair and GitHub's atomic updateRefs mutation",
+    async (mode) => {
+      const head = "3".repeat(40);
+      const headTree = "4".repeat(40);
+      const newCommit = "5".repeat(40);
+      let observedHead = head;
+      let draft = mode === "draft" || mode === "already-draft";
+      let recoveredMessage = `Update draft pull request #1500\n\nApp-Builder-Idempotency: ${"b".repeat(64)}\nApp-Builder-Origin: ${"d".repeat(64)}`;
+      const { content } = unicodeDraftMaterial(false, false, ["apps/demo/page.tsx"]);
+      const proposal = {
+        approvedPaths: content.approvedPaths,
+        baseBranch: "main",
+        branchName: `app-builder/review-${"d".repeat(20)}`,
+        changeSetDigest: content.changeSetDigest,
+        changedContentDigest: content.changedContentDigest,
+        digest: "a".repeat(64),
+        expectedHeadSha: head,
+        expectedHeadTree: headTree,
+        idempotencyKey: "b".repeat(64),
+        installationIdentityDigest: "c".repeat(64),
+        intendedOutcome: "update-existing-draft-pull-request" as const,
+        name: "example-app",
+        originMarker: "d".repeat(64),
+        owner: "withAutograph",
+        priorPublicationDigest: "d".repeat(64),
+        pullRequestId: "150000",
+        pullRequestNumber: 1500,
+        repositoryId: "100",
+        reviewDigest: content.reviewDigest,
+        version: 1 as const,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Exercise both legacy omitted metadata and the exact approved Ready correction.
+        ...(mode === "draft" || mode === "not-approved" ? {} : { returnToDraft: true as const }),
+      } satisfies ExistingDraftUpdateProposal;
+      const calls: { url: string; body: unknown }[] = [];
+      // oxlint-disable-next-line eslint/complexity, eslint/require-await, sonarjs/cognitive-complexity -- focused GitHub HTTP double
+      const implementation: typeof fetch = async (request, init = {}) => {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
+        const url = String(request);
+        const method = init.method ?? "GET";
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
+        const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
+        calls.push({ body, url });
+        if (url.endsWith("/app")) {
+          return json({ id: 123, slug: "autograph-app-builder" });
+        }
+        if (url.endsWith("/app/installations/456/access_tokens")) {
+          return json(
+            {
+              permissions: z.object({ permissions: z.unknown() }).parse(body).permissions,
+              token: "ghs_operation_scoped_installation_token",
+            },
+            201,
+          );
+        }
+        if (url.endsWith("/repositories/100")) {
+          return json({
+            default_branch: "main",
+            id: 100,
+            name: "example-app",
+            owner: { login: "withAutograph" },
+            private: true,
+          });
+        }
+        if (url.endsWith("/repos/withAutograph/example-app/commits/HEAD")) {
+          return json({ commit: { tree: { sha: sourceTree } }, sha: sourceSha });
+        }
+        if (
+          url.endsWith("/repos/withAutograph/example-app/actions/variables?per_page=100&page=1")
+        ) {
+          return json({ variables: [] });
+        }
+        if (url.endsWith("/repos/withAutograph/example-app/pulls/1500")) {
+          return json({
+            base: { ref: "main", repo: { id: 100 } },
+            body: `<!-- App-Builder-Idempotency: ${"d".repeat(64)} -->`,
+            draft,
+            head: {
+              ref: proposal.branchName,
+              repo: { id: mode === "foreign-repository" ? 999 : 100 },
+              sha: observedHead,
+            },
+            id: 150_000,
+            node_id: "PR_NODE_1500",
+            number: 1500,
+            state: mode === "closed" ? "closed" : "open",
+            user: { id: 900, login: "autograph-app-builder[bot]", type: "Bot" },
+          });
+        }
+        if (url.endsWith(`/git/ref/heads/${proposal.branchName}`)) {
+          return json({ node_id: "REF_NODE", object: { sha: observedHead } });
+        }
+        if (url.endsWith(`/commits/${head}`) || url.endsWith(`/commits/${"8".repeat(40)}`)) {
+          return json({
+            commit: {
+              message: `Add demo\n\nApp-Builder-Idempotency: ${"d".repeat(64)}`,
+              tree: { sha: headTree },
+            },
+            sha: head,
+          });
+        }
+        if (url.endsWith(`/git/commits/${newCommit}`)) {
+          return json({
+            message: recoveredMessage,
+            parents: [{ sha: head }],
+            tree: { sha: "7".repeat(40) },
+          });
+        }
+        if (url.endsWith(`/commits/${newCommit}`)) {
+          return json({
+            commit: { message: recoveredMessage, tree: { sha: "7".repeat(40) } },
+            sha: newCommit,
+          });
+        }
+        if (url.endsWith(`/git/trees/${headTree}`) && method === "GET") {
+          return json({ tree: [], truncated: false });
+        }
+        if (url.endsWith("/git/blobs") && method === "POST") {
+          return json({ sha: "6".repeat(40) }, 201);
+        }
+        if (url.endsWith("/git/trees") && method === "POST") {
+          return json({ sha: "7".repeat(40) }, 201);
+        }
+        if (url.endsWith("/git/commits") && method === "POST") {
+          return json({ sha: newCommit }, 201);
+        }
+        if (url.endsWith("/repos/withAutograph/example-app") && method === "GET") {
+          return json({ id: 100, node_id: "REPO_NODE" });
+        }
+        if (url.endsWith("/graphql") && method === "POST") {
+          const mutation = z
+            .object({ query: z.string(), variables: z.record(z.string(), z.string()) })
+            .parse(body);
+          if (mutation.query.includes("convertPullRequestToDraft")) {
+            expect(mutation.variables).toEqual({ id: "PR_NODE_1500" });
+            draft = mode !== "unobserved-conversion";
+            if (mode === "moved-during-conversion") {
+              observedHead = "8".repeat(40);
+            }
+            if (mode === "lost-conversion-response") {
+              throw new Error("Conversion response lost");
+            }
+            return json({
+              data: {
+                convertPullRequestToDraft: { pullRequest: { id: "PR_NODE_1500", isDraft: true } },
+              },
+            });
+          }
+          return json({ data: { updateRefs: { clientMutationId: null } } });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      };
+      const provider = createProvider(implementation);
+      if (["not-approved", "closed", "foreign-repository"].includes(mode)) {
+        await expect(provider.updateExistingDraft(proposal, content)).resolves.toMatchObject({
+          status: "rejected",
+          code: "pull-request-changed",
+        });
+        expect(calls.some(({ url }) => url.endsWith("/graphql"))).toBe(false);
+        expect(calls.some(({ url }) => url.endsWith("/git/commits"))).toBe(false);
+        return;
       }
-      if (url.endsWith("/app/installations/456/access_tokens")) {
-        return json(
-          {
-            permissions: z.object({ permissions: z.unknown() }).parse(body).permissions,
-            token: "ghs_operation_scoped_installation_token",
-          },
-          201,
+      if (["unobserved-conversion", "moved-during-conversion"].includes(mode)) {
+        await expect(provider.updateExistingDraft(proposal, content)).rejects.toThrow(
+          "pull-request-changed",
         );
+        expect(calls.some(({ url }) => url.endsWith("/git/commits"))).toBe(false);
+        expect(
+          calls.some(
+            ({ url, body }) =>
+              url.endsWith("/graphql") &&
+              z.object({ query: z.string() }).parse(body).query.includes("updateRefs"),
+          ),
+        ).toBe(false);
+        return;
       }
-      if (url.endsWith("/repositories/100")) {
-        return json({
-          default_branch: "main",
-          id: 100,
-          name: "example-app",
-          owner: { login: "withAutograph" },
-          private: true,
-        });
-      }
-      if (url.endsWith("/repos/withAutograph/example-app/commits/HEAD")) {
-        return json({ commit: { tree: { sha: sourceTree } }, sha: sourceSha });
-      }
-      if (url.endsWith("/repos/withAutograph/example-app/actions/variables?per_page=100&page=1")) {
-        return json({ variables: [] });
-      }
-      if (url.endsWith("/repos/withAutograph/example-app/pulls/1500")) {
-        return json({
-          base: { ref: "main", repo: { id: 100 } },
-          body: `<!-- App-Builder-Idempotency: ${"d".repeat(64)} -->`,
-          draft: true,
-          head: { ref: proposal.branchName, repo: { id: 100 }, sha: observedHead },
-          id: 150_000,
-          number: 1500,
-          state: "open",
-          user: { id: 900, login: "autograph-app-builder[bot]", type: "Bot" },
-        });
-      }
-      if (url.endsWith(`/git/ref/heads/${proposal.branchName}`)) {
-        return json({ node_id: "REF_NODE", object: { sha: observedHead } });
-      }
-      if (url.endsWith(`/commits/${head}`)) {
-        return json({
-          commit: {
-            message: `Add demo\n\nApp-Builder-Idempotency: ${"d".repeat(64)}`,
-            tree: { sha: headTree },
-          },
-          sha: head,
-        });
-      }
-      if (url.endsWith(`/git/commits/${newCommit}`)) {
-        return json({
-          message: recoveredMessage,
-          parents: [{ sha: head }],
-          tree: { sha: "7".repeat(40) },
-        });
-      }
-      if (url.endsWith(`/commits/${newCommit}`)) {
-        return json({
-          commit: { message: recoveredMessage, tree: { sha: "7".repeat(40) } },
-          sha: newCommit,
-        });
-      }
-      if (url.endsWith(`/git/trees/${headTree}`) && method === "GET") {
-        return json({ tree: [], truncated: false });
-      }
-      if (url.endsWith("/git/blobs") && method === "POST") {
-        return json({ sha: "6".repeat(40) }, 201);
-      }
-      if (url.endsWith("/git/trees") && method === "POST") {
-        return json({ sha: "7".repeat(40) }, 201);
-      }
-      if (url.endsWith("/git/commits") && method === "POST") {
-        return json({ sha: newCommit }, 201);
-      }
-      if (url.endsWith("/repos/withAutograph/example-app") && method === "GET") {
-        return json({ id: 100, node_id: "REPO_NODE" });
-      }
-      if (url.endsWith("/graphql") && method === "POST") {
-        return json({ data: { updateRefs: { clientMutationId: null } } });
-      }
-      throw new Error(`Unexpected URL: ${url}`);
-    };
-    const provider = createProvider(implementation);
-    await expect(provider.updateExistingDraft(proposal, content)).resolves.toEqual({
-      requestId: "REQUEST_1",
-      status: "accepted",
-    });
-    const graphql = z
-      .object({ query: z.string(), variables: z.record(z.string(), z.string()) })
-      .parse(calls.find(({ url }) => url.endsWith("/graphql"))?.body);
-    expect(graphql.query).toContain("updateRefs");
-    expect(graphql.variables).toEqual({
-      afterOid: newCommit,
-      beforeOid: head,
-      name: `refs/heads/${proposal.branchName}`,
-      repositoryId: "REPO_NODE",
-    });
-    observedHead = newCommit;
-    const observed = await provider.inspectExistingDraft({
-      name: proposal.name,
-      number: proposal.pullRequestNumber,
-      owner: proposal.owner,
-      repositoryId: proposal.repositoryId,
-    });
-    expect(observed.verifiedBuilderOrigin).toEqual({
-      appId: "123",
-      authorId: "900",
-      marker: "d".repeat(64),
-    });
-    await expect(provider.inspectAppliedDraftUpdate(proposal, content, observed)).resolves.toBe(
-      true,
-    );
-    recoveredMessage = "A same-content commit from elsewhere";
-    await expect(provider.inspectAppliedDraftUpdate(proposal, content, observed)).resolves.toBe(
-      false,
-    );
-  });
+      await expect(provider.updateExistingDraft(proposal, content)).resolves.toEqual({
+        requestId: "REQUEST_1",
+        status: "accepted",
+      });
+      const graphql = z
+        .object({ query: z.string(), variables: z.record(z.string(), z.string()) })
+        .parse(
+          calls.find(
+            ({ url, body }) =>
+              url.endsWith("/graphql") &&
+              z.object({ query: z.string() }).parse(body).query.includes("updateRefs"),
+          )?.body,
+        );
+      expect(draft).toBe(true);
+      expect(
+        calls.filter(
+          ({ url, body }) =>
+            url.endsWith("/graphql") &&
+            z.object({ query: z.string() }).parse(body).query.includes("convertPullRequestToDraft"),
+        ),
+      ).toHaveLength(mode === "ready" || mode === "lost-conversion-response" ? 1 : 0);
+      expect(graphql.query).toContain("updateRefs");
+      expect(graphql.variables).toEqual({
+        afterOid: newCommit,
+        beforeOid: head,
+        name: `refs/heads/${proposal.branchName}`,
+        repositoryId: "REPO_NODE",
+      });
+      observedHead = newCommit;
+      const observed = await provider.inspectExistingDraft({
+        name: proposal.name,
+        number: proposal.pullRequestNumber,
+        owner: proposal.owner,
+        repositoryId: proposal.repositoryId,
+      });
+      expect(observed.verifiedBuilderOrigin).toEqual({
+        appId: "123",
+        authorId: "900",
+        marker: "d".repeat(64),
+      });
+      await expect(provider.inspectAppliedDraftUpdate(proposal, content, observed)).resolves.toBe(
+        true,
+      );
+      recoveredMessage = "A same-content commit from elsewhere";
+      await expect(provider.inspectAppliedDraftUpdate(proposal, content, observed)).resolves.toBe(
+        false,
+      );
+    },
+  );
 });
 
 describe("existing draft reconciliation provider", () => {

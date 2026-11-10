@@ -1746,7 +1746,7 @@ describe("existing draft PR updates", () => {
       // oxlint-disable-next-line eslint/require-await -- in-memory test provider
       async updateDraft() {
         updates += 1;
-        observed = { ...observed, headSha: "6".repeat(40), headTree: "7".repeat(40) };
+        observed = { ...observed, draft: true, headSha: "6".repeat(40), headTree: "7".repeat(40) };
         if (loseResponse) {
           throw new Error("GitHub response was lost after ref update");
         }
@@ -1766,6 +1766,89 @@ describe("existing draft PR updates", () => {
       },
     };
   };
+
+  it("seals an exact owned Ready correction and returns its approved update to draft", async () => {
+    const publisher = new Adapter();
+    const original = draftProposal(publisher);
+    const publication = await publishApprovedDraftPullRequest({
+      adapter: publisher,
+      approvedByCallId: "original-publication",
+      contentSource: publicationContentSource(),
+      proposal: original,
+      review: reviewed,
+      store: new Store(),
+    });
+    if (publication.kind !== "draft-pull-request" || publication.status !== "succeeded") {
+      throw new Error("Expected the controlled publication to succeed");
+    }
+    const current = {
+      ...initial,
+      draft: false,
+      headBranch: publication.branchName,
+      headSha: publication.branchSha,
+      headTree: publication.branchTree,
+      pullRequestId: publication.pullRequestId,
+      number: publication.pullRequestNumber,
+      verifiedBuilderOrigin: { ...origin, marker: publication.idempotencyKey },
+    };
+    const mock = adapter();
+    mock.setObserved(current);
+    const proposal = await sealExistingDraftUpdate({
+      adapter: mock.port,
+      installation: identity,
+      repository: selectedRepository,
+      review: reviewed,
+      pullRequestNumber: current.number,
+      priorPublication: publication,
+      selectedSourceRef: `refs/heads/${current.headBranch}`,
+      selectedCheckoutHeadSha: current.headSha,
+      selectedCheckoutHeadTree: current.headTree,
+    });
+    expect(proposal.returnToDraft).toBe(true);
+    const { returnToDraft: _flag, ...tampered } = proposal;
+    expect(_flag).toBe(true);
+    await expect(
+      updateExistingDraft({
+        adapter: mock.port,
+        proposal: tampered,
+        review: reviewed,
+        contentSource: publicationContentSource(),
+      }),
+    ).rejects.toThrow();
+    expect(mock.updates).toBe(0);
+    const result = await updateExistingDraft({
+      adapter: mock.port,
+      proposal,
+      review: reviewed,
+      contentSource: publicationContentSource(),
+    });
+    expect(result).toMatchObject({
+      draft: true,
+      number: current.number,
+      pullRequestId: current.pullRequestId,
+      headSha: "6".repeat(40),
+    });
+    expect(mock.updates).toBe(1);
+  });
+
+  it("does not extend adopted-draft authority to a Ready PR", async () => {
+    const mock = adapter();
+    mock.setObserved({ ...initial, draft: false, verifiedBuilderOrigin: origin });
+    await expect(
+      sealExistingDraftUpdate({
+        adapter: mock.port,
+        installation: identity,
+        repository: selectedRepository,
+        review: reviewed,
+        pullRequestNumber: initial.number,
+        adoptedDraft,
+        selectedSourceRef: `refs/heads/${initial.headBranch}`,
+        selectedCheckoutHeadSha: initial.headSha,
+        selectedCheckoutHeadTree: initial.headTree,
+      }),
+    ).rejects.toThrow("not an open draft");
+    expect(mock.updates).toBe(0);
+  });
 
   it("seals and updates only the selected open draft and reviewed bytes", async () => {
     const mock = adapter();

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { ownedReadyDraftPublicationMatches } from "./github-draft-update";
 import type { ExistingDraftObservation } from "./github-draft-update";
 import { safeSourcePath } from "./source-path";
 import {
@@ -244,6 +245,7 @@ export interface ExistingDraftReconciliationProposal {
   priorPublicationDigest: string;
   idempotencyKey: string;
   digest: string;
+  returnToDraft?: true;
 }
 
 /** Server-created authority for reading an owned branch ahead of GitHub's PR snapshot. */
@@ -322,7 +324,10 @@ export interface ExistingDraftReconciliationAdapter {
 const sameDraft = (
   proposal: ExistingDraftReconciliationProposal,
   current: ExistingDraftObservation,
+  beforeEffect = false,
 ): boolean =>
+  (proposal.returnToDraft !== true ||
+    current.verifiedBuilderOrigin?.marker === proposal.originMarker) &&
   current.repositoryId === proposal.repositoryId &&
   current.owner === proposal.owner &&
   current.name === proposal.name &&
@@ -332,7 +337,12 @@ const sameDraft = (
   current.baseRepositoryId === proposal.repositoryId &&
   current.headBranch === proposal.branchName &&
   current.baseBranch === proposal.baseBranch &&
-  current.draft &&
+  (current.draft ||
+    (beforeEffect &&
+      proposal.returnToDraft === true &&
+      current.headSha === proposal.expectedHeadSha &&
+      current.headTree === proposal.expectedHeadTree &&
+      current.verifiedBuilderOrigin?.marker === proposal.originMarker)) &&
   current.state === "open";
 
 const withInspectionRecovery = (
@@ -354,6 +364,7 @@ export const sealExistingDraftReconciliation = async (input: {
   pullRequestNumber: number;
   selectedSourceRef: string;
   priorPublicationDigest: string;
+  ownedPublication?: DraftPullRequestSuccessReceipt;
   originMarker: string;
   recovery?: OwnedDraftInspectionRecovery;
 }): Promise<ExistingDraftReconciliationProposal> => {
@@ -378,6 +389,10 @@ export const sealExistingDraftReconciliation = async (input: {
       input,
     ),
   );
+  const returnToDraft =
+    !observed.draft &&
+    input.ownedPublication?.digest === input.priorPublicationDigest &&
+    ownedReadyDraftPublicationMatches(input.ownedPublication, observed);
   if (input.selectedSourceRef !== `refs/heads/${observed.headBranch}`) {
     throw new Error(
       "Builder's selected source is not the current draft PR branch. Reopen that branch and review its changes.",
@@ -388,7 +403,7 @@ export const sealExistingDraftReconciliation = async (input: {
     observed.headRepositoryId !== input.repository.repositoryId ||
     observed.baseRepositoryId !== input.repository.repositoryId ||
     observed.baseBranch !== input.repository.defaultBranch ||
-    !observed.draft ||
+    (!observed.draft && !returnToDraft) ||
     observed.state !== "open"
   ) {
     throw new Error(
@@ -433,7 +448,7 @@ export const sealExistingDraftReconciliation = async (input: {
   ) {
     throw new Error("The owned publication scope does not match this exact draft PR.");
   }
-  const unsigned = {
+  const unsigned: Omit<ExistingDraftReconciliationProposal, "digest" | "idempotencyKey"> = {
     approvedPaths: input.review.approvedPaths,
     baseBranch: observed.baseBranch,
     baseChangesDigest: digest(input.review.baseChanges),
@@ -456,6 +471,9 @@ export const sealExistingDraftReconciliation = async (input: {
     reviewDigest: input.review.digest,
     version: 1 as const,
   };
+  if (returnToDraft) {
+    unsigned.returnToDraft = true;
+  }
   const idempotencyKey = digest(unsigned);
   return { ...unsigned, digest: digest({ ...unsigned, idempotencyKey }), idempotencyKey };
 };
@@ -574,7 +592,7 @@ export const inspectAppliedExistingDraftReconciliation = async (input: {
       input,
     ),
   );
-  if (!sameDraft(proposal, current)) {
+  if (!sameDraft(proposal, current, true)) {
     throw new Error(
       "The PR identity changed or is no longer an open draft. Reopen and review the current PR.",
     );

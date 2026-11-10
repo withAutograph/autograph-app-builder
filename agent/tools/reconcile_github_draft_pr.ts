@@ -43,7 +43,7 @@ const missingCompletion = () => ({
 export default defineTool({
   approval: always(),
   description:
-    "After separate exact proposal approval, update the same open draft PR with the reviewed merge commit, or verify that this exact approved merge already succeeded and finish its original release recording. Recovery reads no current candidate bytes and never writes Git. Optional recordCurrentEquivalentRelease associates this verified publication only with the exact equivalent current compiled capture, without modifying Git or selecting another release. Fresh publication still requires the exact validated checkout. This never force pushes or deploys.",
+    "After separate exact proposal approval, update the same owned open PR with the reviewed merge commit, or verify that this exact approved merge already succeeded and finish its original release recording. A server-sealed returnToDraft proposal explicitly returns the exact owned Ready PR to draft before publishing the correction; ordinary draft proposals cannot change Ready PRs. Corrected revisions need fresh Ready/merge approval. Recovery reads no current candidate bytes and never writes Git. Optional recordCurrentEquivalentRelease associates this verified publication only with the exact equivalent current compiled capture, without modifying Git or selecting another release. Fresh publication still requires the exact validated checkout. This never force pushes or deploys.",
   // oxlint-disable-next-line eslint/complexity -- Completion recovery and fresh publication have distinct approval, ownership and candidate preconditions.
   async execute(input, ctx) {
     ctx.abortSignal?.throwIfAborted();

@@ -748,6 +748,45 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     expect(readFileSync(path.join(root, "candidate.txt"), "utf-8")).toBe(privateBefore);
   });
 
+  it("privately prepares the current owned Ready PR without discarding accepted corrections", async () => {
+    const state = secondPublication();
+    mocks.owned.draft = { ...mocks.owned.draft, draft: false };
+    const before = readFileSync(path.join(root, "candidate.txt"), "utf-8");
+    await expect(
+      preparePublishedDraftReconciliation({ ctx, pullRequestNumber: 43, state }),
+    ).resolves.toMatchObject({ status: "ready_for_validation" });
+    expect(mocks.candidate.pullRequestNumber).toBe(43);
+    expect(readFileSync(path.join(root, "candidate.txt"), "utf-8")).toBe(before);
+  });
+
+  it.each(["cancel", "workspace", "candidate"])(
+    "retains current authority when owned Ready preparation changes (%s)",
+    async (change) => {
+      const state = reviewedNewBuild();
+      mocks.owned.draft = { ...mocks.owned.draft, draft: false };
+      const controller = new AbortController();
+      mocks.onOwnedRead = () => {
+        if (change === "cancel") {
+          controller.abort();
+        }
+        if (change === "workspace") {
+          mocks.workflow = { ...state, workspace: { ...state.workspace, workspaceId: "replaced" } };
+        }
+        if (change === "candidate") {
+          mocks.candidate = { ...mocks.candidate, root: "/workspace/replaced" };
+        }
+      };
+      await expect(
+        preparePublishedDraftReconciliation({
+          ctx: { ...ctx, abortSignal: controller.signal },
+          pullRequestNumber: 42,
+          state,
+        }),
+      ).rejects.toThrow();
+      expect(mocks.prepare).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(["pending", "rejected", "unknown", "moved-head"])(
     "does not use a recorded current %s result as published proof or fall back to the old PR",
     async (reason) => {

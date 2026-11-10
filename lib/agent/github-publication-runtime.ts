@@ -977,7 +977,7 @@ export function composeGitHubPublicationRuntime(input: {
         // approval. Legitimate later heads and base changes do not prevent a
         // fresh current-destination review with its own approval.
         const observed = await adapter.prDelivery.inspect(reviewedTarget);
-        if (observed.state === "open" && observed.draft) {
+        if (observed.state === "open") {
           throw new OwnedOpenDraftReviewRequiredError({
             appId: revision.appId,
             proposalDigest: canonical.digest,
@@ -1103,9 +1103,19 @@ export function composeGitHubPublicationRuntime(input: {
     async inspectExistingDraftSource(request) {
       const observed = await this.inspectOpenPullRequestSource(request);
       if (!observed.draft) {
-        throw new Error(
-          "The selected PR is not an open draft. Source inspection does not authorize updating a non-draft PR.",
-        );
+        const prior = await readOwnedDraftPublication({
+          draft: observed,
+          proposalDigest: request.recovery?.priorPublishedProposalDigest,
+          receipts,
+        });
+        if (
+          prior === undefined ||
+          observed.verifiedBuilderOrigin?.marker !== prior.idempotencyKey
+        ) {
+          throw new Error(
+            "The selected Ready PR is not this session's verified owned publication. Source inspection cannot authorize updating another Ready PR.",
+          );
+        }
       }
       return observed;
     },
@@ -1743,6 +1753,8 @@ export function composeGitHubPublicationRuntime(input: {
         installation,
         originMarker: observed.verifiedBuilderOrigin.marker,
         priorPublicationDigest: prior?.digest ?? adopted?.adoptionDigest ?? "",
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Only the actual canonical publication can authorize this optional owned-Ready recovery.
+        ...(prior === undefined ? {} : { ownedPublication: prior }),
         pullRequestNumber: request.pullRequestNumber,
         repository,
         review: request.review,

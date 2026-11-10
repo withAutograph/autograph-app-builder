@@ -6,6 +6,7 @@ import type { DraftUpdateReview } from "./published-draft-repair-review";
 import type { GitHubDraftAdoption } from "./postgres-github-draft-adoption-store";
 import {
   assertCanonicalGitHubUpdateReview,
+  assertCanonicalGitHubMutationReceipt,
   readExactGitHubPublicationContent,
 } from "./github-publication";
 import type {
@@ -67,6 +68,8 @@ export interface ExistingDraftUpdateProposal {
   approvedPaths: readonly string[];
   idempotencyKey: string;
   digest: string;
+  /** Server-observed owned Ready PR; the exact update approval also returns it to draft. */
+  returnToDraft?: true;
 }
 
 export interface ExistingDraftUpdateAdapter {
@@ -93,12 +96,44 @@ export interface ExistingDraftUpdateAdapter {
   ) => Promise<boolean>;
 }
 
-const sameDraft = (proposal: ExistingDraftUpdateProposal, observed: ExistingDraftObservation) =>
+export const ownedReadyDraftPublicationMatches = (
+  prior: DraftPullRequestSuccessReceipt | undefined,
+  observed: ExistingDraftObservation,
+): boolean => {
+  if (prior === undefined) {
+    return false;
+  }
+  assertCanonicalGitHubMutationReceipt(prior);
+  return [
+    prior.status === "succeeded",
+    prior.kind === "draft-pull-request",
+    prior.repositoryId === observed.repositoryId,
+    prior.pullRequestId === observed.pullRequestId,
+    prior.pullRequestNumber === observed.number,
+    prior.branchName === observed.headBranch,
+    prior.baseBranch === observed.baseBranch,
+    observed.verifiedBuilderOrigin?.marker === prior.idempotencyKey,
+  ].every(Boolean);
+};
+
+const sameDraft = (
+  proposal: ExistingDraftUpdateProposal,
+  observed: ExistingDraftObservation,
+  beforeEffect = false,
+) =>
   isDeepStrictEqual(
     {
       baseBranch: observed.baseBranch,
       baseRepositoryId: observed.baseRepositoryId,
-      draft: observed.draft,
+      draft:
+        observed.draft ||
+        [
+          beforeEffect,
+          proposal.returnToDraft === true,
+          observed.headSha === proposal.expectedHeadSha,
+          observed.headTree === proposal.expectedHeadTree,
+          observed.verifiedBuilderOrigin?.marker === proposal.originMarker,
+        ].every(Boolean),
       headBranch: observed.headBranch,
       headRepositoryId: observed.headRepositoryId,
       name: observed.name,
@@ -107,6 +142,10 @@ const sameDraft = (proposal: ExistingDraftUpdateProposal, observed: ExistingDraf
       pullRequestId: observed.pullRequestId,
       repositoryId: observed.repositoryId,
       state: observed.state,
+      originMarker:
+        proposal.returnToDraft === true
+          ? observed.verifiedBuilderOrigin?.marker
+          : proposal.originMarker,
     },
     {
       baseBranch: proposal.baseBranch,
@@ -120,6 +159,7 @@ const sameDraft = (proposal: ExistingDraftUpdateProposal, observed: ExistingDraf
       pullRequestId: proposal.pullRequestId,
       repositoryId: proposal.repositoryId,
       state: "open",
+      originMarker: proposal.originMarker,
     },
   );
 
@@ -153,6 +193,8 @@ export const sealExistingDraftUpdate = async (input: {
     owner: input.repository.owner,
     repositoryId: input.repository.repositoryId,
   });
+  const returnToDraft =
+    !observed.draft && ownedReadyDraftPublicationMatches(input.priorPublication, observed);
   if (input.selectedSourceRef !== `refs/heads/${observed.headBranch}`) {
     throw new Error(
       "The reviewed Builder source is not this draft PR branch. Continue automatically in this same session with prepare_github_draft_pr_reconciliation for this existing draft PR. Preserve the original checkout and app work; the normal reconciliation path verifies canonical publication ownership before preparing the current draft and base. Technical recovery needs no user Continue reply. Review and seal the resulting candidate through the normal workflow; the later GitHub update still requires exact publication approval.",
@@ -217,7 +259,7 @@ export const sealExistingDraftUpdate = async (input: {
       {
         baseBranch: observed.baseBranch,
         baseRepositoryId: observed.baseRepositoryId,
-        draft: observed.draft,
+        draft: observed.draft || returnToDraft,
         headRepositoryId: observed.headRepositoryId,
         name: observed.name,
         number: observed.number,
@@ -250,7 +292,7 @@ export const sealExistingDraftUpdate = async (input: {
   ) {
     throw new Error("The repair review is not bound to this published draft and its current head.");
   }
-  const unsigned = {
+  const unsigned: Omit<ExistingDraftUpdateProposal, "digest" | "idempotencyKey"> = {
     approvedPaths: input.review.approvedPaths,
     baseBranch: observed.baseBranch,
     branchName: observed.headBranch,
@@ -272,6 +314,9 @@ export const sealExistingDraftUpdate = async (input: {
     reviewDigest: input.review.digest,
     version: 1 as const,
   };
+  if (returnToDraft) {
+    unsigned.returnToDraft = true;
+  }
   const idempotencyKey = hash(unsigned);
   return { ...unsigned, digest: hash({ ...unsigned, idempotencyKey }), idempotencyKey };
 };
@@ -330,7 +375,7 @@ export const inspectAppliedExistingDraftUpdate = async (input: {
     name: proposal.name,
     number: proposal.pullRequestNumber,
   });
-  if (!sameDraft(proposal, observation)) {
+  if (!sameDraft(proposal, observation, true)) {
     throw new Error("The retained publication is no longer this same open draft.");
   }
   if (!isPublishedDraftRepairReview(review)) {
