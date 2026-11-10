@@ -3,10 +3,12 @@ import type { ToolContext } from "eve/tools";
 import { reconcileHostedTemplateFoundation } from "../repository/hosted-template-source-reconciliation";
 import { assertApprovedPrivateApplySession } from "./private-apply-authority";
 import { hostedTemplateFoundationRecoveryHistory } from "./hosted-template-foundation-recovery-state";
+import type { HostedTemplateFoundationRecoveryReceipt } from "./hosted-template-foundation-recovery-state";
 import { invalidateProductBehaviorEvidence } from "./product-behavior-state";
 import { APP_BUILDER_SOURCE_VERSION, sourceWorkflowState } from "./source-state";
 import { appBuilderWorkflowState, assertExactWorkflowState } from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
+import type { OwnedCompletedAppPublication } from "./github-publication-runtime";
 
 type AppliedWorkflow = Extract<
   AppBuilderWorkflowState,
@@ -70,11 +72,12 @@ const appliedAfterRecovery = (
   return next;
 };
 
-/** Called only after an actual local-task failure, never as a source-freshness prerequisite. */
+/** Recover an actual local failure or an explicitly requested same-app source refresh. Never an admission prerequisite. */
 export const recoverHostedTemplateFoundation = async (
   ctx: RecoveryContext,
   subject: { appId: string; root: string },
   reconcile: typeof reconcileHostedTemplateFoundation = reconcileHostedTemplateFoundation,
+  publication?: OwnedCompletedAppPublication,
 ): Promise<boolean> => {
   ctx.abortSignal?.throwIfAborted();
   const current = appBuilderWorkflowState.get();
@@ -134,6 +137,26 @@ export const recoverHostedTemplateFoundation = async (
   }
   assertCurrent();
   if (!result.changed) {
+    // Legacy completed transitions omitted publication lookup context. A fresh
+    // provider proof can fill that optional context without replaying source or
+    // reviving validation/review; all original transition fields stay intact.
+    if (publication !== undefined) {
+      hostedTemplateFoundationRecoveryHistory.update(() =>
+        history.map((entry) =>
+          // oxlint-disable-next-line sonarjs/expression-complexity -- Only the same completed owner/app/Build/source transition may gain optional ownership lookup context.
+          entry.publication === undefined &&
+          entry.sessionId === ctx.session.id &&
+          entry.appId === current.appSpec.appId &&
+          entry.appSpecDigest === current.appSpec.digest &&
+          entry.proposalDigest === current.proposal.digest &&
+          entry.applyDigest === current.applyReceipt.digest &&
+          isDeepStrictEqual(entry.sourceReceipt, current.sourceReceipt) &&
+          isDeepStrictEqual(entry.workspace, current.workspace)
+            ? { ...entry, publication }
+            : entry,
+        ),
+      );
+    }
     return false;
   }
   const sameTransition = [
@@ -148,7 +171,7 @@ export const recoverHostedTemplateFoundation = async (
     throw new Error("The recovered template foundation belongs to another app workspace.");
   }
   const next = appliedAfterRecovery(current, result);
-  const record = structuredClone({
+  const record: HostedTemplateFoundationRecoveryReceipt = structuredClone({
     version: 1 as const,
     appId: current.appSpec.appId,
     sessionId: ctx.session.id,
@@ -163,6 +186,9 @@ export const recoverHostedTemplateFoundation = async (
     provenance: result.provenance,
     recoveredByCallId: ctx.callId,
   });
+  if (publication !== undefined) {
+    record.publication = structuredClone(publication);
+  }
   assertCurrent();
   // No asynchronous boundary separates these related Eve projections. The
   // transport's durable completed receipt remains resumable until this point.

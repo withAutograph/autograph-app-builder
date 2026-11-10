@@ -102,6 +102,35 @@ directly; otherwise the service backfills from durable public events. Deleted
 and cross-tenant handles remain indistinguishable. When exact continuation is
 impossible, the user may restart from the latest recoverable product result.
 
+### Continuing a delivered app on current shared source
+
+An older saved app may need capabilities added to its repository after the
+original delivery. Builder can invoke `prepare_app_creation` with only
+`refreshSource: true`, then inspect the updated source before proposing the
+app's edits. Creators do not select a commit, reconnect a database, or use GitHub
+outside Builder. This is an optional private planning operation, never a
+freshness or release prerequisite.
+
+For a canonical Arrusted app, Builder derives the destination and installation
+from the saved session, revalidates connected read access and the tenant-owned
+publication, and observes its merge into the current default branch. These
+facts establish source ownership only; they do not select or activate any
+deployment. Builder fetches the observed source using its protected repository
+read credential and reuses the existing checkpointed three-way reconciliation.
+The accepted app, authored app files, original starter provenance, destination,
+database and access resources stay with the same session. Conflicts retain the
+original checkpoint instead of discarding work. An interrupted transition is
+reconciled through the same durable journal; cancellation and concurrent source
+or authority changes do not transfer permission.
+
+Changed source retires affected current validation, review and publication
+seals. The original Build and publication remain historical facts. Minimal
+publication context in the existing linear source-transition history can
+recover the original ownership lookup after every transition has been verified;
+it cannot revive a current review, candidate validation or approval. Repairs within the same accepted behavior retain the existing approved repair
+path. A different new proposal requires its own normal current Build approval;
+validation, review and publication approval bind the current changed code. An existing open draft keeps its separate current-candidate flow.
+
 ## Public tool contract
 
 The public endpoint remains `/mcp` and exposes exactly:
