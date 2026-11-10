@@ -1,74 +1,65 @@
 # Production handoff
 
 After technical app validation, Builder runs the selected repository's
-`mise run app:describe <app>` command. The structured descriptor supplies app
-routes, backend kind, checked source release, declared authorization roles,
-database environment name, schema receipt declaration, and repository validation
-capabilities. Builder does not depend on `.config/production-handoff.json`,
-guess a route from the app ID, or parse app implementation files for readiness.
+`mise run app:describe <app>` command. Its structured descriptor supplies app
+routes, backend kind, checked source release, declared roles, database environment
+name, schema receipt declaration, and repository validation capabilities. Builder
+does not require `.config/production-handoff.json`, guess routes from app IDs, or
+parse app implementation files to declare live readiness.
 
-The resulting `productionHandoff` is an operator review summary. A failed or
-unavailable descriptor remains a concrete blocker without invalidating the
-already recorded technical validation result. Static apps do not acquire a
-database release prerequisite.
+The resulting `productionHandoff` has `status: advisory`. It summarizes source
+facts and recorded observations; its checklist creates no delivery, testing,
+provider-inventory or approval prerequisite. A failed or unavailable descriptor
+command remains a concrete `blockers` entry without invalidating already recorded
+technical validation. Actual authorization, credential, command and provider
+failures remain failures in the operation that observed them.
 
 ## Evidence boundaries
 
-- A checked source release does not establish installation in a selected
-  database. Installed release evidence remains `unassessed` for data apps.
-- A declared schema receipt route and response contract do not establish
-  authenticated access or actual response behavior. Receipt evidence remains
-  `unassessed` until a runtime validation observes it.
-- Existing product action/readback observations are retained with their actual
-  results and `action-readback-only` coverage. They do not establish
-  authentication, revocation, tenant isolation, concurrent decisions,
-  idempotent submission, audit history, or restart durability.
-- No recorded product observation means behavior is `unassessed`. Passing
-  repository checks does not change that status.
+- A checked release does not establish installation in a live database. Data-app
+  installation remains `unassessed` unless a matching observed proof is present.
+  A private Preview proof retains its actual environment and scope.
+- A declared schema receipt does not establish authenticated HTTP behavior.
+- Source descriptions and private database checks do not observe credentials
+  available to native app processes. `nativeInstallerIsolation` is `unassessed`
+  for persistent apps, rather than a generic failure or an invented pass. Static
+  apps keep `not-applicable`. This unknown does not add a delivery gate. A
+  historical generic `blocked` projection from the same source-only checklist
+  is not an observed credential failure; use current protected operation results.
+- Actual product action/readback observations retain their results and
+  `action-readback-only` coverage. Unobserved authentication, revocation, tenant
+  isolation, concurrency, idempotency, audit and restart behavior stay explicit.
+- Neither green checks nor setup readiness establishes complete physical
+  credential isolation or unexercised product behavior. A confirmed installer
+  credential exposure is a real service issue, not an advisory success.
 
-The descriptor summarizes source facts. In the target delivery flow, the
-approved release operation prepares the intended live resources and reads
-back the actual installation and access bindings. Provider activation
-follows native Git delivery. Verify the authenticated app on its final
-domain. Hosted Preview and synthetic testing are optional. See the
-[public release contract](public-app-release.md).
+## Normal Production delivery
 
-## Onboarding requirements for each new authenticated app
+Use the saved app and repository through the existing protected Production setup.
+`plan-app-production` and `get-app-production` provide that operation's reviewed
+intent and current data/access status. Builder manages its approval, database,
+restricted runtime binding and creator onboarding; creators supply no connection
+strings, database IDs or external operator commands. Revisions retain the same
+saved destination and database. Frontend-only apps skip database allocation.
+See [existing-repository Production setup](repository-production-access.md).
 
-Carry these requirements in the operator checklist for every generated data
-app, using its repository descriptor and supported operator commands. Builder
-must not silently reproduce manual provider changes or claim they are automated.
+Production configuration and private installer connections belong to the protected
+operator. Only the app's restricted runtime URL and public Gateway boundary are
+published for its normal app binding. Current owner, tenant, approval, resource,
+role and provider checks remain authoritative. A source-only summary does not
+replace those checks or infer a refusal that they did not report.
 
-- Match the live Auth runtime binding to the reviewed migration database, role
-  and host. Preserve existing users and sessions. Database names are not proof
-  of ownership: do not migrate an empty similarly named database or fall back
-  to an unrelated application DATABASE_URL. In Arrusted, Production uses
-  PLATFORM_AUTH_DATABASE_URL and AUTH_PRODUCTION_DATABASE_IDENTITY.
-- Review the checked immutable release and target organization, prepare the
-  dedicated database and restricted runtime principal, and independently read
-  back installation and tenant activation. Do not install demo seeds or expose
-  cluster/installer credentials to app processes. Use a separately authorized
-  Auth operator principal that can read membership and write app assignments;
-  cluster authority does not imply Auth table privileges.
-- Verify the intended owner's real Better Auth session, organization app
-  enablement, explicit assignment and kernel membership. Check denied access
-  with an unauthorized identity. Verify grants and revocation as access
-  operations against the same live app. Use synthetic QA identities only in
-  explicitly scoped engineering or acceptance exercises.
-- Name the descriptor's runtime variable, selected provider project and target
-  environment in the approved binding action. Save the restricted runtime
-  secret before native Git delivery. Saving a variable does not change an
-  existing deployment, and rerunning CD does not activate it. Delivery remains
-  Git push → independent native deployment → provider-owned activation →
-  authenticated Gateway routing → read-only semantic CD proof.
-- Observe the declared mounted schema receipt with real authentication and
-  compare ready/app/tenant/release facts against the reviewed target. Exercise
-  the actual submission and destination render separately, with independent
-  readback and a fresh app process against the same database.
+Publication and reviewed merge retain their own approvals and required checks.
+Native deployment and activation remain provider-owned. Read actual delivery
+status and use the returned app URL. Report unfinished setup or real deployment
+errors through their supported recovery, preserving the original operation.
+Hosted Preview, synthetic runtimes, manual enrollment and a per-app restore
+qualification are not prerequisites for this flow. The application's accepted
+requirements determine its product tests; additional engineering acceptance
+observations remain distinct from release authority.
 
-Arrusted exposes plan/prepare/grant/revoke/export through `app:production`; use
-its reviewed plan digest and operator guide rather than direct handwritten SQL.
-The current public release implementation consumes a verified synthetic
-runtime receipt. Direct preparation of the live target remains implementation
-work. Keep the operator's authority checks and independent readback as the
-source of live readiness evidence.
+The historical Preview adapter retains its branch-scoped resource and credential
+checks. Its integration-specific `DATABASE_URL_UNPOOLED` concerns are not proof
+that normal Production setup exposes installer credentials. This handoff performs
+no provider inventory read or environment mutation and weakens no credential
+refusal. See the [public release contract](public-app-release.md).

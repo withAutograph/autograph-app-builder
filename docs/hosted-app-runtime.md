@@ -707,26 +707,30 @@ resources when that connection has been revoked.
 
 ## Evidence boundaries
 
-The validation handoff includes an operator checklist for access grants,
-configuration, migration, backup/recovery, native installer isolation and
-separate effect approvals. It derives app, routes, role declarations, runtime
-variable and selected release from `app:describe`; matching database proof is
-shown only as the observed Preview installation. That observation does not
-assess Production migration, grant access, prove backups or approve an effect.
-Database migration, backup/recovery and installer isolation are not applicable
-to a repository-described static app. Platform access and configuration still
-require operator evidence. A generated app explicitly retains the native
-installer-isolation blocker even after a successful private database check.
+The validation handoff is an advisory source summary for access, configuration,
+migration, recovery and approval context. It derives app routes, roles, runtime
+variable and selected release from `app:describe`. Matching private database
+proof retains its observed Preview installation scope; it does not establish
+Production migration, live permissions, backups, native credential availability
+or consent for an effect. Source-only native installer isolation is `unassessed`
+for persistent apps and `not-applicable` for static apps. It is not a generic
+installer-isolation failure or a new qualification gate.
 
-The current provider adapter binds restricted credentials at project and Preview
-branch scope. It preserves native integration-owned `DATABASE_URL_UNPOOLED` and
-does not configure service-specific environment filtering. Selecting an
-app-specific restricted database URL does not establish that a native Services
-app process cannot also read the installer credential. Native application
-process isolation remains a blocker until supported service-scoped bindings or
-an equivalent provider capability is configured and verified. Inspect the
-actual service's credential availability without exposing values; private
-Sandbox isolation cannot establish this native deployment fact.
+Normal existing-repository Production setup uses its own protected configuration
+and saved operation, publishes only the app's restricted runtime credential and
+public app boundary, and keeps maintenance/migrator/Auth operator connections
+private. Use that service's current setup and access results for operational
+facts. Preview, synthetic setup and repeated manual provider qualification are
+not normal delivery prerequisites; confirmed credential, authorization and
+provider failures still require repair. See
+[normal Production setup](repository-production-access.md).
+
+The historical Preview adapter binds at project and Preview branch scope and
+preserves its integration-owned `DATABASE_URL_UNPOOLED`. Vercel Services sharing
+project variables is a reason to preserve actual credential checks, not proof of
+installer exposure in another configured Production path. Private Sandbox proof
+also cannot establish native process isolation. The source handoff neither claims
+that physical fact nor performs another mandatory provider inventory read.
 
 Preview launch, local preparation and validation consumers preserve an approved
 hosted selection. They recheck membership, installation, native isolation and

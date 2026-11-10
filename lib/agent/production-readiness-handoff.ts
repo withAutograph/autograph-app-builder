@@ -111,11 +111,11 @@ const nativeInstallerIsolation = (backend: AppDescription["backend"] | undefined
   }
   return {
     reason:
-      "Native Services shares project environment variables. The current Neon integration can inject installer credentials into app processes; restricted runtime selection and private Sandbox verification do not prove their absence in native services.",
+      "A source description or private database check does not observe credentials available to native app processes. Normal protected Production setup binds the app's restricted runtime credential; this summary establishes neither an installer credential leak nor physical credential isolation.",
     requiredEvidence: [
-      "Configure a supported provider credential boundary and verify every app service lacks installer credentials, including native URLs, raw password variables and legacy connection variables.",
+      "Use actual protected setup results and concrete credential/provider observations for operational facts. Preserve any observed installer-credential exposure as a real failure; this unassessed source fact adds no delivery prerequisite.",
     ],
-    status: "blocked" as const,
+    status: "unassessed" as const,
   };
 };
 
@@ -136,19 +136,19 @@ const operatorChecklist = (
       requiredEvidence: [
         "Record the intended organization, its app assignment, active members and approved server-owned role grants.",
         "Verify authorized access, denied access and revocation using authenticated identities.",
-        "For approved fleet QA, reuse the synthetic identity with real authentication and independently verify this app's explicit organization enablement, declared role assignment and kernel membership; fleet scope is not a tenant bypass.",
+        "Use the saved protected Production setup and People status for actual creator and invitation access. Synthetic participants belong only to an explicitly requested test exercise.",
       ],
       status: "unassessed" as const,
     },
     approvals: {
       required: [
-        { effect: "hosted-preparation", status: "unassessed" as const },
-        { effect: "access-grants", status: "unassessed" as const },
-        { effect: "provider-activation", status: "unassessed" as const },
+        { effect: "production-setup", status: "unassessed" as const },
+        { effect: "github-publication", status: "unassessed" as const },
+        { effect: "reviewed-merge", status: "unassessed" as const },
         { effect: "recovery-or-cleanup", status: "unassessed" as const },
       ],
       requirement:
-        "Obtain separate operator approvals naming the target environment and resources before preparation, access changes, activation or destructive recovery. Preview installation evidence grants no Production authority.",
+        "The owning operations enforce their approvals: protected Production setup covers its reviewed data/access effects, publication and reviewed merge retain their approvals, and destructive recovery needs its applicable consent. Native deployment activation is provider-owned. This source summary does not determine that an approval is missing.",
       status: "unassessed" as const,
     },
     backupRecovery: {
@@ -156,7 +156,7 @@ const operatorChecklist = (
         ? []
         : [
             "Record the database owner, backup retention, recovery point and recovery time requirements.",
-            "Verify a restore and record rollback compatibility with the selected schema release before Production admission.",
+            "This descriptor contains no backup or restore observation. Follow the platform's recovery policy without adding a mandatory per-app restore qualification.",
           ],
       status: persistenceStatus,
     },
@@ -164,9 +164,9 @@ const operatorChecklist = (
       databaseEnvironment: generated?.runtime.databaseEnvironment ?? null,
       requiredEvidence: [
         "Verify the intended Production identity, authentication origin, Gateway routes and required runtime configuration without exposing secrets.",
-        "Read back the selected provider bindings and verify that application processes receive only authorized runtime credentials.",
+        "Read the existing protected Production setup for its actual restricted runtime binding and access results; preserve any concrete credential/provider refusal.",
         "Match the live Auth runtime binding and reviewed migration database, role and host; preserve existing users and sessions rather than selecting a similarly named empty database.",
-        "Save the descriptor-named restricted runtime secret to the approved project and environment before native Git delivery; an environment save or CD rerun does not update an existing deployment.",
+        "The protected setup operation owns the descriptor-named restricted runtime binding; creators do not supply database credentials. An environment save or CD rerun does not update an existing deployment.",
         "Observe native deployment, provider-owned activation and authenticated Gateway routing before read-only semantic CD proof; repository CD must not deploy, promote, alias or select deployments.",
       ],
       routes: description?.app.routes ?? [],
@@ -225,17 +225,16 @@ export const productionReadinessHandoff = async (input: {
       ...(backend?.kind === "static"
         ? []
         : [
-            "Verify the selected database's installed release and authenticated schema receipt.",
-            "Exercise tenant isolation and durable persistence in Preview.",
+            "Use the existing protected Production setup status for actual database installation, restricted runtime binding and app access; retain the same app, destination and database across revisions.",
           ]),
-      "Exercise authenticated product outcomes, denied access and revocation in Preview.",
-      "Review the operator checklist and obtain separate approvals for preparation, access grants, provider activation and recovery before semantic read-only Production proof.",
+      "Continue the normal reviewed publication, Ready, required checks and merge flow; native deployment and activation remain provider-owned.",
+      "Keep unobserved behavior explicit. Preview and synthetic exercises are optional; this source checklist adds no testing or approval gate. Actual command, credential, authorization and provider failures remain actionable blockers in their owning operation.",
     ],
     operatorChecklist: operatorChecklist(input.appId, description, evidence),
     roles: generatedBackend?.roles ?? [],
     route: routes[0] ?? null,
     routes,
     schemaReceiptPath: generatedBackend?.schemaReceipt?.path ?? null,
-    status: "operator-review-required" as const,
+    status: "advisory" as const,
   };
 };

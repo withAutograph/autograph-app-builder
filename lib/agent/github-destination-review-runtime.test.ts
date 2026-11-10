@@ -35,6 +35,7 @@ import type { SourceReceiptEvidence } from "../repository/source-receipt";
 import { LEGACY_SOURCE_RECEIPT_VERSION } from "../repository/source-receipt";
 import { SUPPORTED_TEMPLATE_ADAPTER } from "../repository/supported-template";
 import prepareDraftReview from "../../agent/tools/prepare_github_draft_review";
+import sealDraftProposal from "../../agent/tools/seal_github_draft_pr_proposal";
 import { createChangeSetAcceptanceTool } from "../../agent/tools/accept_change_set";
 import { draftReviewAfterTechnicalValidation } from "./draft-review-continuation";
 import type { AppBuilderWorkflowState } from "./workflow-state";
@@ -408,7 +409,211 @@ const ownedRevisionTool = async (published = true, marker = true) => {
   return { ...f, proposal, receipt, state, readTextFile, run, context, cancellation };
 };
 
+const markerOnlyRevision = async () => {
+  const f = await ownedRevisionTool();
+  const state = { ...f.state, phase: "validated" as const };
+  Reflect.deleteProperty(state, "reviewReceipt");
+  Reflect.deleteProperty(state, "githubDraftProposal");
+  Reflect.deleteProperty(state, "githubDestinationReview");
+  Reflect.set(state.proposal.target, "operation", "create-app");
+  toolPorts.state = state;
+  delete toolPorts.prior;
+  return { ...f, state };
+};
+
 describe("same-session post-merge destination review", () => {
+  it("reviews and accepts a repaired app using only its retained owned publication marker", async () => {
+    const f = await markerOnlyRevision();
+    await prepareDraftReview.execute({}, f.context);
+    const prepared = readToolState();
+    expect(prepared).toMatchObject({
+      phase: "validated",
+      sourceReceipt: f.state.sourceReceipt,
+      workspace: f.state.workspace,
+      applyReceipt: f.state.applyReceipt,
+      validationReceipt: f.state.validationReceipt,
+    });
+    expect(prepared).not.toHaveProperty("reviewReceipt");
+    expect(prepared).not.toHaveProperty("githubDraftProposal");
+    expect(prepared).not.toHaveProperty("publishedGitHubDraftProposalDigest");
+    expect(f.readTextFile).not.toHaveBeenCalled();
+    const accept = createChangeSetAcceptanceTool({
+      // oxlint-disable-next-line eslint/require-await -- The real acceptance tool reads controlled current source facts.
+      observeChangeSet: async () => {
+        if (toolPorts.changeSet === undefined || toolPorts.observed === undefined) {
+          throw new Error("Missing repaired app fixture");
+        }
+        return { changeSet: toolPorts.changeSet, observed: toolPorts.observed };
+      },
+      // oxlint-disable-next-line eslint/require-await -- No optional independent source assessment was requested.
+      reviewSource: async () => {
+        throw new Error("Unexpected independent source assessment");
+      },
+    });
+    await accept.execute({}, f.context);
+    const accepted = readToolState();
+    if (accepted?.phase !== "reviewed") {
+      throw new Error("Expected the repaired app's new review");
+    }
+    expect(accepted.reviewReceipt.digest).not.toBe(review.digest);
+    expect(accepted).not.toHaveProperty("githubDraftProposal");
+    await expect(
+      sealDraftProposal.execute(
+        {
+          expectedDestinationReviewDigest: destination.digest,
+          expectedReviewDigest: review.digest,
+          title: "Old approved revision",
+        },
+        f.context,
+      ),
+    ).rejects.toThrow("exact source or destination and review receipts");
+    expect(f.unexpected).not.toHaveBeenCalled();
+  });
+
+  it("reviews a retired owned PR without requiring its historical head to stay fixed", async () => {
+    const f = await markerOnlyRevision();
+    f.inspectPr.mockResolvedValue({
+      state: "merged",
+      draft: false,
+      checks: "passed",
+      headSha: "a".repeat(40),
+      baseBranch: f.receipt.baseBranch,
+      mergeCommitSha: "9".repeat(40),
+    });
+    await prepareDraftReview.execute({}, f.context);
+    expect(toolPorts.state?.githubDestinationReview?.repository).toEqual(repository);
+    expect(f.inspectDestinationFiles).toHaveBeenCalled();
+    expect(f.readTextFile).not.toHaveBeenCalled();
+    expect(f.unexpected).not.toHaveBeenCalled();
+  });
+
+  it("reviews a deleted originally published app file without repair history", async () => {
+    const f = await markerOnlyRevision();
+    const newPath = "apps/example/src/new.ts";
+    const currentChanges = [
+      { after: { digest: after, mode: "644" }, kind: "added" as const, path: newPath },
+    ];
+    const current = {
+      ...unsigned,
+      approvedPaths: [newPath],
+      changes: currentChanges,
+      changedContentDigest: hash(currentChanges),
+    };
+    toolPorts.changeSet = { ...current, digest: hash(current) };
+    toolPorts.observed = {
+      treeDigest: current.postTreeDigest,
+      files: [{ path: newPath, digest: after, mode: "644" }],
+    };
+    await prepareDraftReview.execute({}, f.context);
+    const binding = toolPorts.state?.githubDestinationReview;
+    if (binding === undefined) {
+      throw new Error("Missing repaired app review");
+    }
+    expect(deriveDestinationChanges(binding, toolPorts.observed)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path, kind: "deleted" }),
+        expect.objectContaining({ path: newPath, kind: "added" }),
+      ]),
+    );
+    expect(f.readTextFile).not.toHaveBeenCalled();
+    expect(f.unexpected).not.toHaveBeenCalled();
+  });
+
+  it.each(["closed", "merged-to-another-base"] as const)(
+    "retains first-app registration when its retired owned PR is %s",
+    async (kind) => {
+      const f = await markerOnlyRevision();
+      f.inspectPr.mockResolvedValue({
+        state: kind === "closed" ? "closed" : "merged",
+        draft: false,
+        checks: "failed",
+        headSha: "a".repeat(40),
+        baseBranch: kind === "closed" ? f.receipt.baseBranch : "retired-base",
+        mergeCommitSha: "9".repeat(40),
+      });
+      const original = [
+        { path: "package.json", sha256: before, mode: "100644", objectId: "8".repeat(40) },
+      ];
+      f.readTextFile.mockResolvedValue(JSON.stringify(original));
+      f.state.workspace.workspaceDigest = createHash("sha256")
+        .update(JSON.stringify(original))
+        .digest("hex");
+      const { observed } = toolPorts;
+      if (observed === undefined) {
+        throw new Error("Missing repaired app fixture");
+      }
+      // The canonical publication already covers every current app file. There
+      // is no newly observed app path to accidentally trigger registration recovery.
+      observed.files = [
+        { path, digest: after, mode: "644" },
+        { path: "package.json", digest: after, mode: "644" },
+      ];
+      f.inspectDestinationFiles.mockResolvedValue([
+        ...destination.preTree,
+        { path: "package.json", digest: before, mode: "644" },
+      ]);
+      await prepareDraftReview.execute({}, f.context);
+      expect(toolPorts.state?.githubDestinationReview?.candidatePaths).toEqual(
+        expect.arrayContaining([path, "package.json"]),
+      );
+      expect(toolPorts.state).not.toHaveProperty("publishedGitHubDraftProposalDigest");
+      expect(f.readTextFile).toHaveBeenCalled();
+      expect(f.unexpected).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "open",
+    "pending",
+    "provider-failure",
+    "missing-proposal",
+    "wrong-app",
+    "wrong-repository",
+    "wrong-installation",
+  ] as const)(
+    "preserves the marker-only repaired app when its prior publication is %s",
+    async (kind) => {
+      const f = await markerOnlyRevision();
+      if (kind === "open") {
+        f.inspectPr.mockResolvedValue({
+          state: "open",
+          draft: true,
+          checks: "pending",
+          headSha: f.receipt.branchSha,
+          baseBranch: f.receipt.baseBranch,
+        });
+      }
+      if (kind === "pending") {
+        f.readReceipt.mockResolvedValue(pendingReceipt(f.proposal));
+      }
+      if (kind === "provider-failure") {
+        f.inspectPr.mockRejectedValue(new Error("Unavailable provider"));
+      }
+      if (kind === "missing-proposal") {
+        // The repository store represents a missing owned proposal with undefined.
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- Exercise the actual missing-row contract.
+        f.readProposal.mockResolvedValue(undefined);
+      }
+      if (kind === "wrong-app") {
+        f.state.appSpec.appId = "another-app";
+      }
+      if (kind === "wrong-repository") {
+        f.inspectRepository.mockResolvedValue(
+          createRepositoryObservation({ ...repository, repositoryId: "200" }),
+        );
+      }
+      if (kind === "wrong-installation") {
+        f.inspectInstallation.mockResolvedValue(installation("resolve-existing-source", "11"));
+      }
+      await expect(prepareDraftReview.execute({}, f.context)).rejects.toThrow();
+      expect(toolPorts.state).toBe(f.state);
+      expect(toolPorts.state?.publishedGitHubDraftProposalDigest).toBe(f.proposal.digest);
+      expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+      expect(f.compareAndSet).not.toHaveBeenCalled();
+      expect(f.unexpected).not.toHaveBeenCalled();
+    },
+  );
+
   it("permits draft preparation and acceptance while product behavior remains unassessed", async () => {
     const f = await ownedRevisionTool();
     toolPorts.state = { ...f.state, phase: "validated" };
@@ -481,6 +686,7 @@ describe("same-session post-merge destination review", () => {
         { path: priorPaths[0], digest: after, mode: "644" },
         { path: priorPaths[1], digest: after, mode: "644" },
         { path: priorPaths[3], digest: before, mode: "644" },
+        { path: "apps/example/.next/cache/generated.js", digest: after, mode: "644" },
         { path: "apps/another-app/page.tsx", digest: after, mode: "644" },
         { path: "packages/platform/index.ts", digest: after, mode: "644" },
       ],
@@ -568,9 +774,11 @@ describe("same-session post-merge destination review", () => {
         mergeCommitSha: "9".repeat(40),
       });
       await prepareDraftReview.execute({}, f.context);
-      expect(f.inspectAppliedDraftReconciliation).toHaveBeenCalled();
       expect(f.inspectPr).toHaveBeenCalledWith(
-        expect.objectContaining({ headSha: reconciledHead }),
+        expect.objectContaining({
+          pullRequestNumber: f.receipt.pullRequestNumber,
+          repositoryId: f.receipt.repositoryId,
+        }),
       );
       expect(f.readTextFile).not.toHaveBeenCalled();
       expect(toolPorts.state).toMatchObject({
@@ -590,7 +798,7 @@ describe("same-session post-merge destination review", () => {
     },
   );
 
-  it("does not treat a private or unverified reconciliation as the merged revision", async () => {
+  it("does not transfer a private reconciliation's approval into a fresh retired-PR review", async () => {
     const f = await ownedRevisionTool();
     const { prior } = toolPorts;
     if (prior === undefined) {
@@ -614,11 +822,12 @@ describe("same-session post-merge destination review", () => {
       baseBranch: f.receipt.baseBranch,
       mergeCommitSha: "9".repeat(40),
     });
-    await expect(prepareDraftReview.execute({}, f.context)).rejects.toThrow(
-      "verified reviewed revision",
-    );
-    expect(toolPorts.state).toBe(f.state);
-    expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+    await prepareDraftReview.execute({}, f.context);
+    expect(toolPorts.state?.phase).toBe("validated");
+    expect(toolPorts.state).not.toHaveProperty("existingDraftUpdate");
+    expect(toolPorts.state).not.toHaveProperty("githubDraftProposal");
+    expect(toolPorts.state).not.toHaveProperty("reviewReceipt");
+    expect(f.inspectDestinationFiles).toHaveBeenCalled();
     expect(f.unexpected).not.toHaveBeenCalled();
   });
 
@@ -628,7 +837,11 @@ describe("same-session post-merge destination review", () => {
       const f = await ownedRevisionTool(true, marker);
       await prepareDraftReview.execute({}, f.context);
       expect(f.readTextFile).not.toHaveBeenCalled();
-      expect(f.inspectDestinationFiles).toHaveBeenCalledWith({ paths: [path], repository });
+      expect(f.inspectDestinationFiles).toHaveBeenCalledWith({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- The matcher verifies selected app paths while allowing harmless unchanged app files.
+        paths: expect.arrayContaining([path, "apps/example/package.json"]),
+        repository,
+      });
       expect(toolPorts.state).toMatchObject({
         phase: "validated",
         sourceReceipt: f.state.sourceReceipt,
@@ -699,8 +912,6 @@ describe("same-session post-merge destination review", () => {
 
   it.each([
     "open",
-    "closed",
-    "moved",
     "foreign-installation",
     "foreign-app",
     "foreign-repository",
@@ -709,23 +920,13 @@ describe("same-session post-merge destination review", () => {
   ])("does not authorize revision paths from %s publication", async (kind) => {
     const f = await ownedRevisionTool();
     Object.assign(f.state, { existingDraftUpdate: { proposal: { digest: "retained-update" } } });
-    if (kind === "open" || kind === "closed") {
+    if (kind === "open") {
       f.inspectPr.mockResolvedValue({
         state: kind,
         draft: false,
         checks: "passed",
         headSha: f.receipt.branchSha,
         baseBranch: f.receipt.baseBranch,
-      });
-    }
-    if (kind === "moved") {
-      f.inspectPr.mockResolvedValue({
-        state: "merged",
-        draft: false,
-        checks: "passed",
-        headSha: "a".repeat(40),
-        baseBranch: f.receipt.baseBranch,
-        mergeCommitSha: "9".repeat(40),
       });
     }
     if (kind === "foreign-installation") {
