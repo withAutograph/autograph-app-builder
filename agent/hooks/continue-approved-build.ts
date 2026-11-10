@@ -1,3 +1,7 @@
+import {
+  invalidateGitHubPrDeliveryCallsForTurn,
+  gitHubPrDeliveryAuthorityProjectionChanged,
+} from "../../lib/agent/github-pr-delivery-authority-state";
 import { currentLocalSourcePrerequisite } from "../../lib/agent/local-source-prerequisite-state";
 import { repositoryAccessReceiptState } from "../../lib/agent/repository-access-state";
 
@@ -72,7 +76,11 @@ const record = async (ctx: HookContext, forced?: "working" | "blocked") => {
       decision.reason = "build_no_progress";
     }
   }
-  if (decision.scope === undefined && decision.currentSpec === undefined) {
+  if (
+    decision.scope === undefined &&
+    decision.currentSpec === undefined &&
+    !gitHubPrDeliveryAuthorityProjectionChanged()
+  ) {
     return;
   }
   await recordApprovedBuildDecision(ctx, decision);
@@ -102,6 +110,10 @@ export default defineHook({
             approvedBuildReviewProgress.update(() => ({ buildProgress, stage: "assessed" }));
           }
         }
+      }
+      if (gitHubPrDeliveryAuthorityProjectionChanged()) {
+        await record(ctx, "working");
+        return;
       }
       if (
         event.data.result.kind === "tool-result" &&
@@ -137,7 +149,8 @@ export default defineHook({
     "step.failed"() {
       boundary.update((current) => ({ ...current, blocked: true }));
     },
-    async "turn.cancelled"(_event, ctx) {
+    async "turn.cancelled"(event, ctx) {
+      invalidateGitHubPrDeliveryCallsForTurn(event.data.turnId);
       await record(ctx, "blocked");
     },
     async "turn.completed"(_event, ctx) {

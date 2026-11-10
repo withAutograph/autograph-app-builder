@@ -1,3 +1,4 @@
+import { githubPrDeliveryAuthorityProjectionSchema } from "./github-pr-delivery-authority-contract";
 import {
   localSourcePrerequisiteObservationSchema,
   matchingLocalSourcePrerequisite,
@@ -25,6 +26,7 @@ export const approvedBuildScopeSchema = z.strictObject({
 });
 export const approvedBuildDecisionSchema = z.strictObject({
   adapterSessionId: z.string().min(1),
+  githubDelivery: githubPrDeliveryAuthorityProjectionSchema.optional(),
   currentSpec: z
     .strictObject({
       appId: z.string(),
