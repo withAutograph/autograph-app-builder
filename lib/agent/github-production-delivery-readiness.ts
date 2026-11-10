@@ -70,13 +70,17 @@ export const githubProductionSetupContinuation = (
 export const readGitHubProductionDeliveryReadiness = async (
   target: Target,
   ctx: WorkflowStepToolContext,
+  projection?: {
+    requirements: readonly ManagedProductionDeliveryRequirement[];
+    retain: (requirement: ManagedProductionDeliveryRequirement) => void;
+  },
 ): Promise<RepositoryProductionDeliveryStatus> => {
   const { repositoryProductionClientForContext } = await import("./repository-production-client");
   return await resolveGitHubProductionDeliveryReadiness({
     target,
     operatorConfigured: Boolean(process.env.REPOSITORY_PRODUCTION_OPERATOR_URL),
-    requirements: managedProductionDeliveryRequirements.get(),
-    retain: retainManagedProductionDeliveryRequirement,
+    requirements: projection?.requirements ?? managedProductionDeliveryRequirements.get(),
+    retain: projection?.retain ?? retainManagedProductionDeliveryRequirement,
     read: async () => {
       const client = await repositoryProductionClientForContext(ctx);
       return await client.deliveryStatus(target.appId, {

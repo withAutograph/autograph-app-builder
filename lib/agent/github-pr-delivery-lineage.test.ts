@@ -7,6 +7,7 @@ import type { DraftReconciliationCandidate } from "./draft-reconciliation-state"
 import type { GitHubPublicationRuntime } from "./github-publication-runtime";
 import type { GitHubPrDeliveryApproval } from "./github-pr-delivery-approval";
 import type { ExistingDraftReconciliationProposal } from "../repository/github-draft-reconciliation";
+import type { captureGitHubPrDeliveryAuthority } from "./github-pr-delivery-authority";
 import readDelivery from "../../agent/tools/read_github_pr_delivery";
 import { approveGitHubPrDelivery } from "./github-pr-delivery-step";
 import { freshFixture, workflowKey } from "../eve/test-support/draft-reviewed-recovery";
@@ -19,6 +20,7 @@ const mocks = vi.hoisted(() => ({
     vi.fn<NonNullable<GitHubPublicationRuntime["inspectPublishedReconciliationHead"]>>(),
   run: vi.fn<NonNullable<GitHubPublicationRuntime["runPublishedPullRequestEffect"]>>(),
   runtimeForSession: vi.fn(),
+  captureAuthority: vi.fn<typeof captureGitHubPrDeliveryAuthority>(),
 }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T): T => tool }));
 vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: mocks.getState } }));
@@ -33,16 +35,37 @@ afterEach(() => vi.unstubAllEnvs());
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: mocks.runtimeForSession,
 }));
+vi.mock("./github-pr-delivery-authority", () => ({
+  captureGitHubPrDeliveryAuthority: mocks.captureAuthority,
+}));
 
-const session = { id: "same-logical-session", auth: { current: { principalId: "creator" } } };
+const principal = {
+  attributes: {},
+  authenticator: "controlled-owner",
+  principalId: "creator",
+  principalType: "user",
+};
+const session = {
+  id: "same-logical-session",
+  auth: { current: principal, initiator: principal },
+  turn: { id: "same-parent-turn", sequence: 1 },
+};
 // SAFETY: The read tool only consumes authenticated session fields from this controlled context.
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Tool fixture omits unused execution ports.
 const context = { session } as ToolContext;
 // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
-const approve = (toolInput: GitHubPrDeliveryApproval) =>
-  // SAFETY: The approval callback consumes only this exact session and tool input.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Approval fixture omits unused execution ports.
-  approveGitHubPrDelivery({ session, toolInput } as ApprovalContext<GitHubPrDeliveryApproval>);
+const approve = (toolInput: GitHubPrDeliveryApproval, abortSignal = new AbortController().signal) =>
+  approveGitHubPrDelivery({
+    abortSignal,
+    approvedTools: new Set<string>(),
+    callId: "lineage-delivery-call",
+    getSandbox: () => {
+      throw new Error("Approval lineage must not open an app sandbox");
+    },
+    session,
+    toolInput,
+    toolName: "finish-github-pr-delivery",
+  } satisfies ApprovalContext<GitHubPrDeliveryApproval>);
 
 const recovered = async () => {
   const f = await freshFixture();
@@ -120,6 +143,7 @@ beforeEach(() => {
     inspectPublishedReconciliationHead: mocks.inspectReconciled,
     runPublishedPullRequestEffect: mocks.run,
   });
+  mocks.captureAuthority.mockResolvedValue();
 });
 
 it("reads the provider-proved published head after validation without changing the retained private candidate", async () => {
@@ -140,6 +164,28 @@ it("requests native approval for that exact published reconciliation after valid
   const f = await recovered();
   await expect(approve(f.approval)).resolves.toBe("user-approval");
   expect(mocks.inspectReconciled).toHaveBeenCalledWith(f.approval.proposalDigest, f.reconciliation);
+  expect(mocks.captureAuthority).toHaveBeenCalledWith(
+    f.approval,
+    expect.objectContaining({ session, callId: "lineage-delivery-call" }),
+  );
+  expect(mocks.run).not.toHaveBeenCalled();
+});
+
+it("does not offer native approval when canonical owner capture fails", async () => {
+  const f = await recovered();
+  const ownerChanged = new Error("Current delivery owner changed");
+  mocks.captureAuthority.mockRejectedValue(ownerChanged);
+  await expect(approve(f.approval)).rejects.toBe(ownerChanged);
+  expect(mocks.run).not.toHaveBeenCalled();
+});
+
+it("honors native cancellation before capturing approval scope", async () => {
+  const f = await recovered();
+  const controller = new AbortController();
+  const cancelled = new Error("Creator cancelled delivery");
+  controller.abort(cancelled);
+  await expect(approve(f.approval, controller.signal)).rejects.toBe(cancelled);
+  expect(mocks.captureAuthority).not.toHaveBeenCalled();
   expect(mocks.run).not.toHaveBeenCalled();
 });
 

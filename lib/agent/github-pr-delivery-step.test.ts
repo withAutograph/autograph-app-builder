@@ -12,6 +12,12 @@ const mocks = vi.hoisted(() => ({
   inspectReconciled: vi.fn(),
   run: vi.fn(),
   production: vi.fn(),
+  captureAuthority: vi.fn(),
+  readAuthority: vi.fn(),
+}));
+vi.mock("./github-pr-delivery-authority", () => ({
+  captureGitHubPrDeliveryAuthority: mocks.captureAuthority,
+  readGitHubPrDeliveryAuthority: mocks.readAuthority,
 }));
 vi.mock("./draft-reconciliation-state", () => ({
   draftReconciliationState: { get: mocks.getCandidate },
@@ -67,7 +73,7 @@ const observe = (changes: Partial<GitHubPrDeliveryObservation> = {}) => ({
 const approve = (toolInput: GitHubPrDeliveryApproval) =>
   // SAFETY: The approval callback reads only the supplied session.id and toolInput.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Narrow fixture context to fields used by the approval callback.
-  approveGitHubPrDelivery({ session, toolInput } as never);
+  approveGitHubPrDelivery({ session, toolInput, callId, abortSignal } as never);
 
 // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const step = (input: GitHubPrDeliveryApproval, cycle?: string) =>
@@ -80,6 +86,10 @@ const step = (input: GitHubPrDeliveryApproval, cycle?: string) =>
   );
 
 beforeEach(() => {
+  mocks.captureAuthority.mockReset();
+  mocks.captureAuthority.mockResolvedValue(null);
+  mocks.readAuthority.mockReset();
+  mocks.readAuthority.mockResolvedValue({ subject: { appId: "example-app" }, requirements: [] });
   mocks.inspect.mockReset();
   mocks.inspectReconciled.mockReset();
   mocks.getCandidate.mockReset();
