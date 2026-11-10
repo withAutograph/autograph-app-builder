@@ -324,6 +324,14 @@ const assertDraftDestinationRepository = (
   }
 };
 
+export interface OwnedAppRevisionLookup {
+  appId: string;
+  proposalDigest: string;
+  proposal?: DraftPullRequestProposal;
+  installationId?: string;
+  reconciliation?: ExistingDraftReconciliationProposal;
+}
+
 export interface GitHubPublicationRuntime {
   /** Classify retained lookup context without granting publication or merged authority. */
   inspectPriorAppPublication?: (
@@ -374,20 +382,18 @@ export interface GitHubPublicationRuntime {
   inspectDraftDestination?: (
     input: GitHubDraftDestination & {
       existingProposal?: DraftPullRequestProposal;
-      ownedAppRevision?: {
-        appId: string;
-        proposal: DraftPullRequestProposal;
-        installationId: string;
-        reconciliation?: ExistingDraftReconciliationProposal;
-      };
-      prepareCandidatePaths?: (ownedMergedPublication: boolean) => Promise<readonly string[]>;
+      ownedAppRevision?: OwnedAppRevisionLookup;
+      prepareCandidatePaths?: (
+        ownedMergedPublication: boolean,
+        publishedPaths: readonly string[],
+      ) => Promise<readonly string[]>;
       paths: readonly string[];
     },
   ) => Promise<{
     repository: GitHubRepositoryObservation;
     installation: GitHubInstallationIdentity;
     preTree: readonly OverlayFile[];
-    ownedMergedPublicationDigest?: string;
+    ownedCompletedPublicationDigest?: string;
   }>;
   readDraftDestinationFile?: (input: {
     binding: GitHubDestinationReviewBinding;
@@ -844,7 +850,7 @@ export function composeGitHubPublicationRuntime(input: {
             });
           }
           if (prior.status === "succeeded") {
-            if (request.ownedAppRevision?.proposal.digest !== request.existingProposal.digest) {
+            if (request.ownedAppRevision?.proposalDigest !== request.existingProposal.digest) {
               throw new Error(
                 `Use the existing draft update workflow for published pull request #${prior.pullRequestNumber}. Prepare reconciliation for that same draft PR.`,
               );
@@ -878,13 +884,16 @@ export function composeGitHubPublicationRuntime(input: {
           "The publication destination differs from the selected GitHub installation.",
         );
       }
-      let ownedMergedPublicationDigest: string | undefined;
+      let ownedCompletedPublicationDigest: string | undefined;
+      let ownedMergedPublication = false;
+      let publishedPaths: readonly string[] = [];
       const revision = request.ownedAppRevision;
       if (revision !== undefined) {
-        const canonical = await proposals.read(revision.proposal.digest);
+        const canonical = await proposals.read(revision.proposalDigest);
         if (
           canonical?.intendedOutcome !== DRAFT_PUBLICATION_OUTCOME ||
-          !isDeepStrictEqual(canonical, revision.proposal)
+          canonical.digest !== revision.proposalDigest ||
+          (revision.proposal !== undefined && !isDeepStrictEqual(canonical, revision.proposal))
         ) {
           throw new Error("The original app publication is unavailable in this tenant.");
         }
@@ -916,39 +925,48 @@ export function composeGitHubPublicationRuntime(input: {
         const sameRepository = (["repositoryId", "owner", "name"] as const).every(
           (key) => canonical[key] === repository[key],
         );
+        const sameInstallation =
+          revision.installationId === undefined ||
+          installation.installationId === revision.installationId;
         if (
           !sameRepository ||
-          installation.installationId !== revision.installationId ||
+          !sameInstallation ||
           !canonical.approvedPaths.some((path) => path.startsWith(`apps/${revision.appId}/`)) ||
           adapter.prDelivery === undefined
         ) {
           throw new Error("The previous publication belongs to another app or destination.");
         }
-        const reconciledHead =
-          revision.reconciliation === undefined
-            ? undefined
-            : ((await this.inspectPublishedReconciliationHead?.(
-                canonical.digest,
-                revision.reconciliation,
-              )) ?? undefined);
-        const target = { ...reviewedTarget, headSha: reconciledHead ?? receipt.branchSha };
-        const observed = await adapter.prDelivery.inspect(target);
-        if (
-          observed.state !== "merged" ||
-          observed.mergeCommitSha === undefined ||
-          observed.headSha !== target.headSha ||
-          observed.baseBranch !== target.baseBranch
-        ) {
+        if (revision.installationId === undefined) {
+          const publicationInstallation =
+            await adapter.inspectInstallation(draftPublicationOperation);
+          if (
+            publicationInstallation.installationId !== installation.installationId ||
+            publicationInstallation.digest !== canonical.installationIdentityDigest
+          ) {
+            throw new Error("The previous publication belongs to another GitHub installation.");
+          }
+        }
+        // This read retires an owned PR; it never writes that PR or reuses its
+        // approval. Legitimate later heads and base changes do not prevent a
+        // fresh current-destination review with its own approval.
+        const observed = await adapter.prDelivery.inspect(reviewedTarget);
+        if (observed.state !== "merged" && observed.state !== "closed") {
           throw new Error(
-            "The previous app publication has not merged its verified reviewed revision.",
+            "The previous app publication is still open. Use its existing draft update or reconciliation workflow.",
           );
         }
-        ownedMergedPublicationDigest = canonical.digest;
+        ownedCompletedPublicationDigest = canonical.digest;
+        // A merge into another branch does not establish the app's registration
+        // on today's destination. It may still prepare a fresh full-app review.
+        ownedMergedPublication =
+          observed.state === "merged" && observed.baseBranch === repository.defaultBranch;
+        publishedPaths = canonical.approvedPaths;
       }
       const paths =
-        (await request.prepareCandidatePaths?.(ownedMergedPublicationDigest !== undefined)) ??
+        (await request.prepareCandidatePaths?.(ownedMergedPublication, publishedPaths)) ??
         request.paths;
       if (
+        ownedMergedPublication &&
         revision !== undefined &&
         (paths.length === 0 || paths.some((path) => !path.startsWith(`apps/${revision.appId}/`)))
       ) {
@@ -959,7 +977,9 @@ export function composeGitHubPublicationRuntime(input: {
         preTree: await adapter.inspectDestinationFiles({ paths, repository }),
         repository,
         // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
-        ...(ownedMergedPublicationDigest === undefined ? {} : { ownedMergedPublicationDigest }),
+        ...(ownedCompletedPublicationDigest === undefined
+          ? {}
+          : { ownedCompletedPublicationDigest }),
       };
     },
     async readDraftDestinationFile(request) {

@@ -379,28 +379,32 @@ Restoration publishes missing metadata exclusively. If another preparation has
 already restored or refreshed it, recovery preserves that result and validates
 the winning manifest against the saved source binding instead of replacing it.
 
-After an owned app's PR merges, Builder can prepare its next PR in the same
-session and private workspace. Approved repair history supplies only the prior
-proposal lookup, bound to the same app, specification, original source and
-workspace. The tenant journal must independently contain that canonical
-successful publication, and GitHub must report its reviewed revision as merged
-in the same repository and installation. A moved head needs the existing
-provider-verified published reconciliation; a private candidate cannot prove it.
-A later reconciliation review may retain the original publication seal while
-carrying a newer review or draft-update binding. Builder resolves that original
-proposal and its last published reconciliation through the shared owned-candidate
-lineage, rather than requiring the original seal to describe the later review.
-An inherited draft-update binding permits this path only with the same retained
-owned publication and actual merged-head proof; open or uncertain PRs continue
-through their existing update or reconciliation workflow.
-This proof authorizes review of the current app-owned changes, without reading
-the original starter manifest or republishing the app's unchanged files.
-Its candidate paths also retain app-owned changes from earlier completed private
-iterations of the same session, app and source workspace. Thus a later repair
-cannot drop an unpublished configuration change, addition or deletion from a
-prior repair. The original whole-app creation and other apps or platform paths
-are excluded. Current destination preimages and the current private bytes decide
-the new diff; unchanged or reverted paths add no publication change.
+After an owned app's PR merges or closes, Builder can prepare its next PR in
+the same session and private workspace. A retained publication digest is enough
+to look up the canonical proposal and successful receipt in the current owner's
+tenant journal, including after ordinary repair and validation removed the old
+review and seal. Approved repair history remains an optional source of lookup
+context; it is not required to rebuild a reviewed workflow. Builder verifies the
+publication's app paths, repository and selected installation and reads the actual
+owned PR through GitHub. An open PR keeps its existing update or reconciliation
+workflow. Missing, pending, foreign or unavailable publication evidence never
+authorizes a replacement PR.
+
+A closed or merged PR authorizes only a new review against the current default
+branch. Its historic head and base can have changed without transferring any
+approval: this path never writes the retired PR. Active draft updates, Ready and
+merge retain their existing exact revision and approval checks. No Git ancestry
+or old branch snapshot is deployment authority.
+
+For a PR merged into the current default branch, candidate paths include the
+original publication's app paths, current app files and app-owned changes retained from completed private
+iterations. This preserves additions, deletions and earlier unpublished changes
+without republishing other apps, platform files or the original registration.
+The current destination preimages and private bytes decide the actual new diff;
+unchanged or reverted paths add no publication change. This app-only path does
+not need the original starter manifest. For a PR closed without merging, or
+merged into another branch, Builder uses normal full-app preparation, including registration changes that may not yet
+exist on the destination branch.
 
 A verified fresh publication records its canonical proposal as the saved app's
 current published subject after the same owner and exact workflow are rechecked.
@@ -417,8 +421,9 @@ publication and retains full-app completeness. An optional legacy publication
 marker neither proves a merge nor replaces the journal; a contradictory marker
 is never silently replaced. The new review reads current immutable destination
 preimages and invalidates the old acceptance, seal and active draft-update
-binding only after the owned merge is verified. Historical lineage remains
-intact. The creator must accept and approve the newly sealed publication through Builder. The original source,
+binding only after the owned PR is verified closed or merged. Historical lineage
+remains intact. The creator must accept and approve the newly sealed publication
+through Builder. The original source,
 private edits, workspace and app resources remain intact. A merged PR is used
 only as prior authoring provenance here; native deployment activation remains
 provider-owned.

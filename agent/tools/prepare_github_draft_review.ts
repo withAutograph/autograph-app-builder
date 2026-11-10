@@ -23,6 +23,7 @@ import {
   priorOwnedAppDraftPublication,
 } from "@/lib/agent/existing-app-repair-planning";
 import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
+import type { OwnedAppRevisionLookup } from "@/lib/agent/github-publication-runtime";
 
 export const initialDraftCandidatePaths = async (
   input: Parameters<typeof observeNormalizedChangeSet>[0] & {
@@ -31,14 +32,19 @@ export const initialDraftCandidatePaths = async (
   },
   readOriginal = readPreparedSandboxSourceManifest,
   ownedMergedAppRevision = false,
+  includeFreshRegistration = false,
 ) => {
   const { state, observed } = input;
+  const appFiles = reviewableChanges(
+    observed.files.map(({ path }) => ({ path, kind: "added" as const })),
+    state.appSpec.appId,
+    true,
+  );
   if (ownedMergedAppRevision) {
-    const candidatePaths = [...new Set(input.reviewedPaths)];
-    if (
-      candidatePaths.length === 0 ||
-      candidatePaths.some((path) => !path.startsWith(`apps/${state.appSpec.appId}/`))
-    ) {
+    const candidatePaths = [
+      ...new Set([...input.reviewedPaths, ...appFiles.map(({ path }) => path)]),
+    ].filter((path) => path.startsWith(`apps/${state.appSpec.appId}/`));
+    if (candidatePaths.length === 0) {
       throw new Error("An owned app revision must contain only that app's changed files.");
     }
     return { candidatePaths, retainedRegistration: new Map<string, string>() };
@@ -47,30 +53,26 @@ export const initialDraftCandidatePaths = async (
     state.githubDestinationReview?.candidatePaths ?? input.reviewedPaths,
   );
   const retainedRegistration = new Map<string, string>();
-  if (state.sourceReceipt.sourceKind === "fresh-template") {
-    const appFiles = reviewableChanges(
-      observed.files.map(({ path }) => ({ path, kind: "added" as const })),
-      state.appSpec.appId,
-      true,
-    );
-    // A later repair can reset the local before-tree to an already-scaffolded app.
-    if (appFiles.some(({ path }) => !candidatePaths.has(path))) {
-      const original = await readOriginal(input.sandbox, state.workspace);
-      const originalDigests = new Map(original.map(({ path, sha256 }) => [path, sha256]));
-      const registrationPaths = new Set([
-        "package.json",
-        "bun.lock",
-        state.applyReceipt.targetReceipt.topology.path,
-      ]);
-      for (const { path, digest } of observed.files) {
-        if (registrationPaths.has(path) && originalDigests.get(path) !== digest) {
-          retainedRegistration.set(path, originalDigests.get(path) ?? "");
-          candidatePaths.add(path);
-        }
-      }
-      for (const { path } of appFiles) {
+  // A later repair can reset the local before-tree to an already-scaffolded app.
+  if (
+    state.sourceReceipt.sourceKind === "fresh-template" &&
+    (includeFreshRegistration || appFiles.some(({ path }) => !candidatePaths.has(path)))
+  ) {
+    const original = await readOriginal(input.sandbox, state.workspace);
+    const originalDigests = new Map(original.map(({ path, sha256 }) => [path, sha256]));
+    const registrationPaths = new Set([
+      "package.json",
+      "bun.lock",
+      state.applyReceipt.targetReceipt.topology.path,
+    ]);
+    for (const { path, digest } of observed.files) {
+      if (registrationPaths.has(path) && originalDigests.get(path) !== digest) {
+        retainedRegistration.set(path, originalDigests.get(path) ?? "");
         candidatePaths.add(path);
       }
+    }
+    for (const { path } of appFiles) {
+      candidatePaths.add(path);
     }
   }
   return { candidatePaths: [...candidatePaths], retainedRegistration };
@@ -94,7 +96,7 @@ const assertRetainedRegistrationUnchanged = (
 
 export default defineTool({
   description:
-    "Prepare a new draft-PR review against the recorded repository's current default branch. After this same app's owned PR has merged, reuse its saved session and private workspace to review the app's new changes; Builder verifies the prior publication without replacing source or app resources. An open or uncertain prior publication still requires its existing update or reconciliation workflow. For a new app with no destination, follow the returned destination setup link for this same saved build. Supply destination only when the user explicitly chose an existing repository. Preserve the validated private app and original source provenance while invalidating the old review and seal. Use change_set_status with contentSide before or after to inspect destination content as needed. Then accept_change_set, seal the new proposal, and request separate publication approval. This never writes GitHub or updates an existing PR.",
+    "Prepare a new draft-PR review against the recorded repository's current default branch. After this same app's owned PR has merged or closed, reuse its saved session and private workspace to review the app's new changes; Builder reads the retained publication from its owned journal even after validation discarded the old review. An open or uncertain prior publication still requires its existing update or reconciliation workflow. For a new app with no destination, follow the returned destination setup link for this same saved build. Supply destination only when the user explicitly chose an existing repository. Preserve the validated private app and original source provenance while invalidating the old review and seal. Use change_set_status with contentSide before or after to inspect destination content as needed. Then accept_change_set, seal the new proposal, and request separate publication approval. This never writes GitHub or updates an existing PR.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "validated" && state.phase !== "reviewed") {
@@ -108,7 +110,8 @@ export default defineTool({
     const updatingExistingDraft =
       state.phase === "reviewed" && state.existingDraftUpdate !== undefined;
     if (
-      (state.publishedGitHubDraftProposalDigest !== undefined || updatingExistingDraft) &&
+      updatingExistingDraft &&
+      state.publishedGitHubDraftProposalDigest === undefined &&
       retainedPublication === undefined
     ) {
       throw new Error(
@@ -163,32 +166,48 @@ export default defineTool({
         : undefined;
     ctx.abortSignal?.throwIfAborted();
     assertExactWorkflowState(appBuilderWorkflowState.get(), state, "publication lookup");
-    if (updatingExistingDraft && prior === undefined) {
+    if (
+      updatingExistingDraft &&
+      prior === undefined &&
+      state.publishedGitHubDraftProposalDigest === undefined
+    ) {
       throw new Error(
         "Use the existing draft update or reconciliation workflow for an existing PR.",
       );
     }
+    const publishedProposalDigest =
+      prior?.proposal.digest ?? state.publishedGitHubDraftProposalDigest;
+    let ownedAppRevision: OwnedAppRevisionLookup | undefined;
+    if (publishedProposalDigest !== undefined) {
+      ownedAppRevision = { appId: state.appSpec.appId, proposalDigest: publishedProposalDigest };
+      if (prior !== undefined) {
+        ownedAppRevision.proposal = prior.proposal;
+        ownedAppRevision.installationId = prior.installationId;
+        if (prior.reconciliation !== undefined) {
+          ownedAppRevision.reconciliation = prior.reconciliation;
+        }
+      } else if (target.destination !== undefined) {
+        ownedAppRevision.installationId = target.destination.installationId;
+      }
+    }
     let selectedPaths =
-      prior === undefined ? await initialDraftCandidatePaths(pathInput) : undefined;
+      publishedProposalDigest === undefined
+        ? await initialDraftCandidatePaths(pathInput)
+        : undefined;
     const destination = await runtime.inspectDraftDestination({
       existingProposal:
         (state.phase === "reviewed" ? state.githubDraftProposal?.proposal : undefined) ??
         retainedPublication?.proposal ??
         priorResumedBuildDraftProposal(state, ctx.session.id),
       // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
-      ...(prior === undefined
+      ...(publishedProposalDigest === undefined
         ? {}
         : {
-            ownedAppRevision: {
-              appId: state.appSpec.appId,
-              proposal: prior.proposal,
-              installationId: prior.installationId,
-              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
-              ...(prior.reconciliation === undefined
-                ? {}
-                : { reconciliation: prior.reconciliation }),
-            },
-            prepareCandidatePaths: async (ownedMergedPublication: boolean) => {
+            ownedAppRevision,
+            prepareCandidatePaths: async (
+              ownedMergedPublication: boolean,
+              publishedPaths: readonly string[],
+            ) => {
               ctx.abortSignal?.throwIfAborted();
               assertExactWorkflowState(
                 appBuilderWorkflowState.get(),
@@ -198,10 +217,19 @@ export default defineTool({
               selectedPaths = await initialDraftCandidatePaths(
                 {
                   ...pathInput,
-                  reviewedPaths: [...pathInput.reviewedPaths, ...(prior.appChangedPaths ?? [])],
+                  reviewedPaths: [
+                    ...pathInput.reviewedPaths,
+                    ...(prior?.appChangedPaths ?? []),
+                    ...(ownedMergedPublication
+                      ? publishedPaths.filter((path) =>
+                          path.startsWith(`apps/${state.appSpec.appId}/`),
+                        )
+                      : []),
+                  ],
                 },
                 undefined,
                 ownedMergedPublication,
+                !ownedMergedPublication,
               );
               return selectedPaths.candidatePaths;
             },
@@ -220,7 +248,7 @@ export default defineTool({
     }
     if (
       state.publishedGitHubDraftProposalDigest !== undefined &&
-      destination.ownedMergedPublicationDigest !== state.publishedGitHubDraftProposalDigest
+      destination.ownedCompletedPublicationDigest !== state.publishedGitHubDraftProposalDigest
     ) {
       throw new Error("Recover the current publication before preparing another app revision.");
     }
@@ -244,7 +272,7 @@ export default defineTool({
       operation: "destination review preparation",
       transition: () => {
         const next = invalidateGitHubDestinationReview(state, binding);
-        if (destination.ownedMergedPublicationDigest !== undefined) {
+        if (destination.ownedCompletedPublicationDigest !== undefined) {
           Reflect.deleteProperty(next, "publishedGitHubDraftProposalDigest");
         }
         return next;
