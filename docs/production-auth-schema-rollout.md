@@ -65,6 +65,24 @@ failures. They never include exception text, SQL, credentials, URLs, caller
 attributes, request arguments or native inputs. Public errors remain generic;
 diagnostics neither authorize effects nor change retry or cleanup behavior.
 
+An authorized status read may diagnose a saved approval prefix only while the
+original operation is still planned, has no recorded approval/checkpoints, and
+its same-owner, same-adapter observation has a positive cursor but no captured
+requests. The protected service compares actual native requests with the frozen
+full plan and logs only input categories, schema-owned field/issue labels,
+opaque hashes, and per-effect equality/byte counts. It never logs input values,
+SQL, arbitrary property names, credentials or caller/resource identities. Each
+status read reports at most 32 matching requests and their first settlements,
+32 schema issues and 32 effect comparisons per request, with totals and omitted
+counts; unrelated input requests contribute only aggregate counts.
+The private history reader stops at that observation's exclusive cursor;
+`prefixComplete` describes that diagnostic range only. Stopping before the real
+native tail always retains `complete:false`, so a diagnostic prefix cannot prove
+approval. Partial reads and failures preserve normal status and all saved
+observation bytes; current owner/enrollment/journal checks still apply afterward.
+No cursor reset, approval capture, lease, credential read, worker, migration or
+provider effect occurs. A mismatch report is evidence for repair, not consent.
+
 The existing tenant-owned `builder_provisioning_journal` stores separate
 `production-auth-schema-rollout-v1` records. Each freezes the complete original
 schema proposal, catalog/source, worker, sandbox, connection **reference**,

@@ -8,6 +8,8 @@ import * as schema from "../db/schema";
 import { hostedRuntimePostgresOptions } from "../db/postgres-connection-policy";
 import { createSameOriginEveTransport } from "../eve/same-origin-http";
 import { readAuthSchemaRolloutApproval } from "../eve/private-auth-schema-rollout-approval";
+import { diagnoseAuthSchemaApprovalPrefix } from "../eve/auth-schema-approval-diagnostic";
+import type { MessageStreamEvent } from "eve/client";
 import { HostedOperatorError, operatorOwnerContextSchema } from "./hosted-operator-contract";
 import { createHostedOperatorConsentOwner } from "./hosted-operator-consent-owner";
 import { createBuilderApprovalStreamFetch } from "./hosted-operator-approval-observer";
@@ -96,6 +98,7 @@ export const createAuthSchemaRolloutNativeHandler =
     dependencies: {
       consent?: Parameters<typeof createHostedOperatorConsentOwner>[2];
       propose?: ReturnType<typeof createProductionAuthSchemaProposal>;
+      approvalFetch?: typeof fetch;
       openJournal?: (databaseUrl: string) => Promise<{
         store: AuthSchemaRolloutStore;
         close: () => Promise<void>;
@@ -225,6 +228,56 @@ export const createAuthSchemaRolloutNativeHandler =
           },
         );
       };
+      const approvalHistory = (assertCurrent: () => Promise<void>) => {
+        const carrier = request.headers.get("authorization");
+        if (carrier === null || !carrier.startsWith("Bearer ")) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const { origin } = new URL(settings.issuer);
+        const transport = createSameOriginEveTransport({
+          config: { baseUrl: origin },
+          // oxlint-disable-next-line typescript/promise-function-async -- Workload is already verified and request-bound.
+          workloadIdentity: { token: () => Promise.resolve(carrier.slice(7)) },
+          fetchImplementation: createBuilderApprovalStreamFetch({
+            origin,
+            adapterSessionId: owner.adapterSessionId,
+            signal: request.signal,
+            fetchImplementation: dependencies.approvalFetch ?? fetch,
+          }),
+          verifyReadAuthority: async (read) => {
+            if (
+              read.adapterSessionId !== owner.adapterSessionId ||
+              read.sessionId !== owner.sessionId ||
+              !isDeepStrictEqual(read.principal, owner.principal)
+            ) {
+              return false;
+            }
+            await assertCurrent();
+            return true;
+          },
+        });
+        const { observePrivateHistory } = transport;
+        if (observePrivateHistory === undefined) {
+          throw new HostedOperatorError("operator_unavailable");
+        }
+        return async (
+          startIndex: number,
+          onEvent: (event: MessageStreamEvent) => void,
+          endIndexExclusive?: number,
+        ) => {
+          const read: Parameters<typeof observePrivateHistory>[0] = {
+            principal: owner.principal,
+            adapterSessionId: owner.adapterSessionId,
+            sessionId: owner.sessionId,
+            startIndex,
+            onEvent,
+          };
+          if (endIndexExclusive !== undefined) {
+            read.endIndexExclusive = endIndexExclusive;
+          }
+          return await observePrivateHistory(read);
+        };
+      };
       const service = createAuthSchemaRollout({
         store,
         assertOwner,
@@ -251,51 +304,28 @@ export const createAuthSchemaRolloutNativeHandler =
           },
         }),
         approval: async (approval) => {
-          const carrier = request.headers.get("authorization");
-          if (carrier === null || !carrier.startsWith("Bearer ")) {
-            throw new HostedOperatorError("authorization_required");
-          }
-          const { origin } = new URL(settings.issuer);
-          const transport = createSameOriginEveTransport({
-            config: { baseUrl: origin },
-            // oxlint-disable-next-line typescript/promise-function-async -- Workload is already verified and request-bound.
-            workloadIdentity: { token: () => Promise.resolve(carrier.slice(7)) },
-            fetchImplementation: createBuilderApprovalStreamFetch({
-              origin,
-              adapterSessionId: owner.adapterSessionId,
-              signal: request.signal,
-              fetchImplementation: fetch,
-            }),
-            verifyReadAuthority: async (read) => {
-              if (
-                read.adapterSessionId !== owner.adapterSessionId ||
-                read.sessionId !== owner.sessionId ||
-                !isDeepStrictEqual(read.principal, owner.principal)
-              ) {
-                return false;
-              }
-              await approval.assertCurrent();
-              return true;
-            },
-          });
-          const { observePrivateHistory } = transport;
-          if (observePrivateHistory === undefined) {
-            throw new HostedOperatorError("operator_unavailable");
-          }
+          const readHistory = approvalHistory(approval.assertCurrent);
           return await readAuthSchemaRolloutApproval({
             plan: approval.plan,
             callId: approval.callId,
             owner,
             observation: { state: approval.observation, save: approval.save },
             assertOwner: approval.assertCurrent,
-            readHistory: async (startIndex, onEvent) =>
-              await observePrivateHistory({
-                principal: owner.principal,
-                adapterSessionId: owner.adapterSessionId,
-                sessionId: owner.sessionId,
-                startIndex,
-                onEvent,
-              }),
+            readHistory,
+          });
+        },
+        diagnoseApproval: async (row, assertCurrent) => {
+          const observation = row.record.approvalObservation;
+          if (observation === undefined) {
+            return;
+          }
+          const readHistory = approvalHistory(assertCurrent);
+          await diagnoseAuthSchemaApprovalPrefix({
+            plan: row.record.plan,
+            endIndexExclusive: observation.nextNativeIndex,
+            assertCurrent,
+            readHistory: async (endIndexExclusive, onEvent) =>
+              await readHistory(0, onEvent, endIndexExclusive),
           });
         },
         apply: async (row, assertCurrent, checkpoint, beforeWorkerDispatch) => {
