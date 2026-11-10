@@ -35,6 +35,8 @@ import type { SourceReceiptEvidence } from "../repository/source-receipt";
 import { LEGACY_SOURCE_RECEIPT_VERSION } from "../repository/source-receipt";
 import { SUPPORTED_TEMPLATE_ADAPTER } from "../repository/supported-template";
 import prepareDraftReview from "../../agent/tools/prepare_github_draft_review";
+import { createChangeSetAcceptanceTool } from "../../agent/tools/accept_change_set";
+import { draftReviewAfterTechnicalValidation } from "./draft-review-continuation";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import type { GitHubPublicationRuntime } from "./github-publication-runtime";
 import type { ExistingDraftReconciliationProposal } from "../repository/github-draft-reconciliation";
@@ -60,6 +62,8 @@ interface DestinationReviewToolPorts {
   };
 }
 const toolPorts = vi.hoisted((): DestinationReviewToolPorts => ({}));
+/** Read the fixture state anew after the real tool transitions it. */
+const readToolState = (): DestinationReviewToolPorts["state"] => toolPorts.state;
 // Only hosted/session/Sandbox ports are controlled; the tool, destination runtime,
 // canonical journals, path selection and review invalidation below remain real.
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./workflow-state dependency used by this test.
@@ -100,6 +104,8 @@ vi.mock("./github-publication-destination", () => ({
 vi.mock("./app-baseline-state", () => ({ appBaselineState: { get: vi.fn() } }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./draft-reconciliation-state dependency used by this test.
 vi.mock("./draft-reconciliation-state", () => ({ draftReconciliationState: { get: () => null } }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Product readback is deliberately unassessed in this destination-review fixture.
+vi.mock("./product-behavior-state", () => ({ currentProductBehaviorEvidence: () => [] }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../../agent/tools/change_set_status dependency used by this test.
 vi.mock("../../agent/tools/change_set_status", async (original) => ({
   ...(await original<typeof ChangeSetStatusModule>()),
@@ -403,6 +409,56 @@ const ownedRevisionTool = async (published = true, marker = true) => {
 };
 
 describe("same-session post-merge destination review", () => {
+  it("permits draft preparation and acceptance while product behavior remains unassessed", async () => {
+    const f = await ownedRevisionTool();
+    toolPorts.state = { ...f.state, phase: "validated" };
+    expect(draftReviewAfterTechnicalValidation(toolPorts.state)).toMatchObject({
+      nextCall: { tool: "prepare_github_draft_review", input: {} },
+    });
+    await prepareDraftReview.execute({}, f.context);
+    const prepared = toolPorts.state;
+    expect(prepared.phase).toBe("validated");
+    expect(prepared.githubDestinationReview?.repository.headSha).toBe(repository.headSha);
+    expect(prepared.validationReceipt.digest).toBe(f.state.validationReceipt.digest);
+    expect(prepared.applyReceipt).toBe(f.state.applyReceipt);
+    const accept = createChangeSetAcceptanceTool({
+      // oxlint-disable-next-line eslint/require-await -- The real tool consumes an asynchronous read port backed by controlled source facts.
+      observeChangeSet: async () => {
+        if (toolPorts.changeSet === undefined) {
+          throw new Error("Missing observed app fixture");
+        }
+        return {
+          changeSet: toolPorts.changeSet,
+          observed: { files: [], treeDigest: toolPorts.changeSet.postTreeDigest },
+        };
+      },
+      // oxlint-disable-next-line eslint/require-await -- The unused asynchronous assessment port fails if a paid review is unexpectedly requested.
+      reviewSource: async () => {
+        throw new Error("Independent source assessment was not requested");
+      },
+    });
+    const accepted = await accept.execute({}, f.context);
+    const acceptedState = readToolState();
+    if (acceptedState?.phase !== "reviewed") {
+      throw new Error("Expected the accepted review fixture");
+    }
+    expect(draftReviewAfterTechnicalValidation(acceptedState)).toMatchObject({
+      nextCall: {
+        tool: "seal_github_draft_pr_proposal",
+        input: {
+          expectedDestinationReviewDigest: acceptedState.githubDestinationReview?.digest,
+          expectedReviewDigest: acceptedState.reviewReceipt.digest,
+          title: "Update example",
+        },
+      },
+    });
+    expect(accepted).toMatchObject({
+      validationDigest: f.state.validationReceipt.digest,
+      productAcceptance: { productStatus: "unassessed" },
+    });
+    expect(f.unexpected).not.toHaveBeenCalled();
+  });
+
   it("reviews total unpublished app changes across config and Auth private iterations", async () => {
     const f = await ownedRevisionTool();
     const priorPaths = [
