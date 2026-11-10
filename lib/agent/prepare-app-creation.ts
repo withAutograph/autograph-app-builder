@@ -9,6 +9,7 @@ import { localSourceReconciliationForPlanning } from "./refresh-local-planning-s
 import { resolveLatestFrameworkVersions } from "../repository/framework-upgrade";
 import { refreshPlanningSource } from "./refresh-planning-source";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
+import { implementationRouteContext } from "./implementation-route-context";
 import type { ExistingAppChange } from "./existing-app-changes";
 import {
   resolveAcceptedAppSpecContent,
@@ -120,6 +121,7 @@ export const prepareAppCreation = async (
     return {
       appId: current.appSpec.appId,
       productAcceptance: productAcceptanceObligations(current.appSpec),
+      ...implementationRouteContext(current.proposal.target.plan),
       reused: true,
       ...privateComputeProjection(current.proposal.target.privateCompute),
     };
@@ -311,6 +313,7 @@ export const prepareAppCreation = async (
   return {
     appId: current.appSpec.appId,
     productAcceptance: productAcceptanceObligations(current.appSpec),
+    ...implementationRouteContext(proposal.target.plan),
     reused: false,
     ...privateComputeProjection(computeProfile),
   };

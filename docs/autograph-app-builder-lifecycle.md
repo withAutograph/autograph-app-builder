@@ -32,6 +32,14 @@ Builder incorporates feedback and infers safe defaults for behavior, roles,
 persistence, and failure handling. It prepares the implementation proposal as
 part of the same conversation. It asks only about material product decisions.
 
+The implementation handoffs from planning and automatic design acceptance include
+`implementationRouting.routes` copied verbatim from the saved proposal's
+`plan.topology.routes`, including when a plan is reused. Catalog ownership
+preserves those public paths; the app router must serve them, including navigation
+and redirect destinations. This is authoring context, not a selected launch path,
+prescribed source layout, new approval, or additional validation requirement. The
+projection preserves the accepted product, scope, artifacts, and saved plan.
+
 ### 5. Ask once to build
 
 Builder shows the initial design and proposed scope and asks **Build this app?**

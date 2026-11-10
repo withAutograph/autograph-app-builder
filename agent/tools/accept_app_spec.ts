@@ -28,6 +28,7 @@ import type { ExistingAppChange } from "@/lib/agent/existing-app-changes";
 
 import { prepareAppCreation } from "@/lib/agent/prepare-app-creation";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
+import { implementationRouteContext } from "@/lib/agent/implementation-route-context";
 import type { AcceptedAppSpec } from "@/lib/agent/workflow-state";
 import { inspectCanonicalAppSpec } from "@/lib/agent/accepted-app-spec-stream";
 import { isPrototypeArtifactV2 } from "@/lib/agent/prototype-artifacts";
@@ -54,6 +55,7 @@ const acceptanceResult = (appSpec: AcceptedAppSpec, reused: boolean) => {
   return {
     ...result,
     productAcceptance: productAcceptanceObligations(appSpec),
+    ...implementationRouteContext("proposal" in state ? state.proposal.target?.plan : undefined),
     reused,
   };
 };
