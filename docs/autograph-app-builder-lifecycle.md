@@ -79,6 +79,20 @@ candidate authorizes an update of different bytes. Current review and exact
 publication approval remain required. Builder owns this selection; creators do
 not choose source workspaces or repeat Build approval for it.
 
+Repairs to that isolated candidate can add app-owned text files through
+`edit_github_draft_pr_candidate` with `kind: "create"`, `path`, and `content`.
+Creation is limited to the selected app and requires an absent path; it cannot
+overwrite a file or write through a symlink. Builder preserves the same owned
+publication, source review and candidate across preparation, and checks current
+session state and cancellation before writing. A successful creation invalidates
+the candidate's previous validation, review and sealed update proposal while
+preserving its other files and publication history. A known refusal before the
+write retains those proofs. A completed write retires them even if cancellation
+then interrupts the response. An unresolved write outcome also retires old proof
+for that same candidate and is reported for reconciliation, without an automatic
+retry. Validate the complete updated candidate, review its base and prior-head
+diffs, and use the ordinary exact update approval before GitHub changes.
+
 When draft reconciliation selects an app-owned browser task, Builder runs it
 against the candidate's own prepared runtime or ordinary frontend server. The
 session's optional working preview cannot supply its launch authority or origin

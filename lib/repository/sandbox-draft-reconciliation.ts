@@ -33,6 +33,7 @@ const DIFF_COMMAND = "diff";
 const NAME_ONLY = "--name-only";
 const ZERO_TERMINATED = "-z";
 const UNMERGED_PATHS = [DIFF_COMMAND, NAME_ONLY, "--diff-filter=U", ZERO_TERMINATED];
+const emptyCommandDiagnostic = "The command returned no diagnostic output.";
 const INVALID_INPUT =
   "Builder cannot reconcile the draft: a repository, app, branch, or revision is invalid.";
 
@@ -79,7 +80,7 @@ const checked = async (sandbox: SandboxSession, operation: string, command: stri
   const result = await run(sandbox, operation, command);
   if (result.exitCode !== 0) {
     throw new Error(
-      `Builder could not ${operation} (exit ${result.exitCode}). Check the selected repository and GitHub access, then retry. Cause: ${redact(result.stderr || result.stdout) || "The command returned no diagnostic output."}`,
+      `Builder could not ${operation} (exit ${result.exitCode}). Check the selected repository and GitHub access, then retry. Cause: ${redact(result.stderr || result.stdout) || emptyCommandDiagnostic}`,
     );
   }
   return result.stdout.trim();
@@ -1591,6 +1592,191 @@ export const restoreDraftReconciliationCandidateFile = async (input: {
     ]),
   );
   return result;
+};
+
+const prepareCandidatePayloadProgram = String.raw`
+import os, sys
+root, name = sys.argv[1:]
+workspace = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+try:
+    try:
+        os.mkdir(".app-builder", mode=0o700, dir_fd=workspace)
+    except FileExistsError:
+        pass
+    private = os.open(".app-builder", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=workspace)
+    try:
+        os.mkdir(name, mode=0o700, dir_fd=private)
+    finally:
+        os.close(private)
+finally:
+    os.close(workspace)
+`;
+
+const createCandidateFileProgram = String.raw`
+import hashlib, json, os, stat, sys
+workspace, root, app, relative, payload, expected, operation = sys.argv[1:]
+parts = relative.split("/")
+if not relative.startswith("apps/" + app + "/") or any(part in ("", ".", "..") or "\\" in part for part in parts):
+    raise ValueError("Cannot create a file outside the selected app")
+def perform():
+    directories = []
+    source = None
+    linked = False
+    try:
+        workspace_directory = os.open(workspace, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        directories.append(workspace_directory)
+        source_parent = workspace_directory
+        payload_parts = payload.split("/")
+        for part in payload_parts[:-1]:
+            source_parent = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=source_parent)
+            directories.append(source_parent)
+        source = os.open(payload_parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=source_parent)
+        source_stat = os.fstat(source)
+        if not stat.S_ISREG(source_stat.st_mode):
+            raise ValueError("Candidate payload is not a regular file")
+        digest = hashlib.sha256()
+        while True:
+            block = os.read(source, 65536)
+            if not block:
+                break
+            digest.update(block)
+        if digest.hexdigest() != expected:
+            raise ValueError("Candidate payload changed before creation")
+        root_parts = os.path.relpath(root, workspace).split("/")
+        if any(part in ("", ".", "..") for part in root_parts):
+            raise ValueError("Candidate root is outside its private workspace")
+        parent = workspace_directory
+        for part in root_parts:
+            parent = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+            directories.append(parent)
+        try:
+            for part in parts[:-1]:
+                if operation == "create":
+                    try:
+                        os.mkdir(part, mode=0o755, dir_fd=parent)
+                    except FileExistsError:
+                        pass
+                parent = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+                directories.append(parent)
+            if operation == "create":
+                os.fchmod(source, 0o644)
+                # Complete bytes become visible atomically; every existing target is refused.
+                # Retained parent descriptors cannot follow a concurrently substituted symlink.
+                os.link(payload_parts[-1], parts[-1], src_dir_fd=source_parent, dst_dir_fd=parent, follow_symlinks=False)
+                linked = True
+            target = os.stat(parts[-1], dir_fd=parent, follow_symlinks=False)
+            return {"created": stat.S_ISREG(target.st_mode) and (target.st_dev, target.st_ino) == (source_stat.st_dev, source_stat.st_ino)}
+        except FileNotFoundError:
+            if operation != "observe":
+                raise
+            return {"created": False}
+    except (OSError, ValueError) as error:
+        if operation != "create" or linked:
+            raise
+        return {"created": False, "error": str(error)}
+    finally:
+        for directory in reversed(directories):
+            os.close(directory)
+        if source is not None:
+            os.close(source)
+print(json.dumps(perform()))
+`;
+
+/** A lost create response cannot leave the old candidate's validation authoritative. */
+export class DraftCandidateCreationUncertainError extends Error {
+  constructor(cause: unknown) {
+    super(
+      "Builder could not determine whether the private candidate file was created. Its saved validation and review must be retired. Inspect the current file before another edit; nothing was published.",
+      { cause },
+    );
+    this.name = "DraftCandidateCreationUncertainError";
+  }
+}
+
+/** Add a missing app-owned file without overwriting a concurrently created file or following links. */
+export const createDraftReconciliationCandidateFile = async (input: {
+  sandbox: SandboxSession;
+  prepared: PreparedDraftReconciliation;
+  path: string;
+  content: string;
+  abortSignal?: AbortSignal;
+  assertCurrent?: () => void;
+}): Promise<{ digest: string }> => {
+  const { prepared, sandbox, path, abortSignal } = input;
+  if (!appPath(prepared.appId, path)) {
+    throw new Error(`Builder cannot create ${path}: it is outside apps/${prepared.appId}/.`);
+  }
+  const assertCurrent = () => {
+    abortSignal?.throwIfAborted();
+    input.assertCurrent?.();
+  };
+  assertCurrent();
+  await assertDraftReconciliationCandidateAvailable(input);
+  assertCurrent();
+  const digest = createHash("sha256").update(input.content).digest("hex");
+  const payloadName = `draft-edit-${randomUUID()}`;
+  const payloadDirectory = `.app-builder/${payloadName}`;
+  const payload = `${payloadDirectory}/content`;
+  const command = (operation: "create" | "observe") =>
+    `python3 -c ${quote(createCandidateFileProgram)} ${[prepared.workspaceRoot, prepared.root, prepared.appId, path, payload, digest, operation].map(quote).join(" ")}`;
+  await checked(
+    sandbox,
+    "prepare the private draft editor payload",
+    `python3 -c ${quote(prepareCandidatePayloadProgram)} ${quote(prepared.workspaceRoot)} ${quote(payloadName)}`,
+  );
+  try {
+    assertCurrent();
+    await sandbox.writeTextFile({ abortSignal, content: input.content, path: payload });
+    assertCurrent();
+    let rejection: string | undefined;
+    try {
+      const result = await sandbox.run({
+        abortSignal,
+        command: command("create"),
+        workingDirectory: prepared.workspaceRoot,
+      });
+      if (result.exitCode !== 0) {
+        throw new Error(
+          `Builder could not create ${path} (exit ${result.exitCode}). Cause: ${redact(result.stderr || result.stdout) || emptyCommandDiagnostic}`,
+        );
+      }
+      const outcome = z
+        .strictObject({ created: z.boolean(), error: z.string().optional() })
+        .parse(JSON.parse(result.stdout));
+      rejection = outcome.error;
+      if (!outcome.created && rejection === undefined) {
+        throw new Error("The private candidate create command did not confirm its completed file.");
+      }
+    } catch (error) {
+      // Observe without the aborted signal: this cannot repeat the write or overwrite another file.
+      let observed: { created: boolean };
+      try {
+        const raw = await checked(
+          sandbox,
+          `observe the private candidate creation at ${path}`,
+          command("observe"),
+        );
+        observed = z.strictObject({ created: z.boolean() }).parse(JSON.parse(raw));
+      } catch (observationError) {
+        throw new DraftCandidateCreationUncertainError(
+          new AggregateError([error, observationError], "Private candidate creation is uncertain."),
+        );
+      }
+      if (!observed.created) {
+        throw new DraftCandidateCreationUncertainError(error);
+      }
+    }
+    if (rejection !== undefined) {
+      throw new Error(`Builder cannot create ${path}. Cause: ${redact(rejection)}`);
+    }
+    return { digest };
+  } finally {
+    try {
+      await sandbox.removePath({ force: true, path: payloadDirectory, recursive: true });
+    } catch {
+      // Private staging cleanup does not change the app edit's confirmed outcome.
+    }
+  }
 };
 
 /** Apply one exact text replacement against the observed candidate bytes. */

@@ -7,10 +7,13 @@ import { z } from "zod";
 
 import {
   draftReconciliationState,
+  samePersistedDraftCandidate,
   updateExactDraftReconciliation,
 } from "@/lib/agent/draft-reconciliation-state";
-import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { appBuilderWorkflowState, assertExactWorkflowState } from "@/lib/agent/workflow-state";
 import {
+  createDraftReconciliationCandidateFile,
+  DraftCandidateCreationUncertainError,
   readDraftReconciliationCandidateFilePage,
   replaceDraftReconciliationCandidateText,
   restoreDraftReconciliationCandidateFile,
@@ -29,11 +32,11 @@ interface CandidatePageMetadata {
 
 export default defineTool({
   description:
-    "Read a current app-owned text file in bounded UTF-8 pages in Builder's isolated draft merge candidate. A read may specify preservedWorkspaceIndex from the candidate's preservedWorkspaces to inspect a retained draft candidate; this never selects an arbitrary root and does not edit preserved work. Retained app-review content remains available through change_set_status with includeContent. Continue with nextCursor and the read source's whole-file digest as expectedDigest; an ordinary file change returns its fresh first page with sourceChanged. Read the current candidate separately before using its digest for an edit. Replace one unique exact passage using the current whole-file digest, or restore one app-owned file's exact bytes and mode from the retained draft head. Restore accepts only a path and preserves other repairs. This changes no GitHub branch. Revalidate and review both diffs after an edit.",
+    "Read a current app-owned text file in bounded UTF-8 pages in Builder's isolated draft merge candidate. A read may specify preservedWorkspaceIndex from the candidate's preservedWorkspaces to inspect a retained draft candidate; this never selects an arbitrary root and does not edit preserved work. Retained app-review content remains available through change_set_status with includeContent. Continue with nextCursor and the read source's whole-file digest as expectedDigest; an ordinary file change returns its fresh first page with sourceChanged. Read the current candidate separately before using its digest for an edit. Create a new app-owned text file with kind: create, path and content; creation requires an absent path and never overwrites existing files. Replace one unique exact passage using the current whole-file digest, or restore one app-owned file's exact bytes and mode from the retained draft head. Restore accepts only a path and preserves other repairs. This changes no GitHub branch. Revalidate the complete candidate, review both diffs, and obtain the exact update approval before publication.",
   async execute(input, ctx) {
     ctx.abortSignal?.throwIfAborted();
-    const candidate = draftReconciliationState.get();
-    const workflow = appBuilderWorkflowState.get();
+    const candidate = structuredClone(draftReconciliationState.get());
+    const workflow = structuredClone(appBuilderWorkflowState.get());
     const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
     if (
       candidate === null ||
@@ -45,6 +48,17 @@ export default defineTool({
         "The prepared draft candidate no longer matches the selected app and source review. Prepare reconciliation again before editing.",
       );
     }
+    const assertCurrentCreation = () => {
+      ctx.abortSignal?.throwIfAborted();
+      assertExactWorkflowState(
+        appBuilderWorkflowState.get(),
+        workflow,
+        "creating a draft candidate file",
+      );
+      if (!samePersistedDraftCandidate(draftReconciliationState.get(), candidate)) {
+        throw new Error("The draft candidate changed before its new file could be created.");
+      }
+    };
     const sandbox = await getSourceBoundSandbox(ctx);
     if (input.kind === "read") {
       const preserved =
@@ -85,35 +99,63 @@ export default defineTool({
         status: preserved === undefined ? ("current_file" as const) : ("preserved_file" as const),
       };
     }
-    const result =
-      input.kind === "restore"
-        ? await restoreDraftReconciliationCandidateFile({
-            path: input.path,
-            prepared: candidate,
-            sandbox,
-          })
-        : await replaceDraftReconciliationCandidateText({
-            expectedDigest: input.expectedDigest,
-            newText: input.newText,
-            oldText: input.oldText,
-            path: input.path,
-            prepared: candidate,
-            sandbox,
-          });
-    updateExactDraftReconciliation({
-      expected: candidate,
-      operation: `editing ${input.path}`,
-      transition: () => {
-        const next = { ...candidate };
-        delete next.proposal;
-        delete next.review;
-        delete next.repairReview;
-        delete next.reviewReadProgress;
-        delete next.validation;
-        delete next.validationRun;
-        return next;
-      },
-    });
+    const invalidateCandidateProof = () => {
+      updateExactDraftReconciliation({
+        expected: candidate,
+        operation: `editing ${input.path}`,
+        transition: () => {
+          const next = { ...candidate };
+          delete next.proposal;
+          delete next.review;
+          delete next.repairReview;
+          delete next.reviewReadProgress;
+          delete next.validation;
+          delete next.validationRun;
+          return next;
+        },
+      });
+    };
+    let result: { digest: string; mode?: "644" | "755" };
+    try {
+      if (input.kind === "create") {
+        result = await createDraftReconciliationCandidateFile({
+          abortSignal: ctx.abortSignal,
+          assertCurrent: assertCurrentCreation,
+          content: input.content,
+          path: input.path,
+          prepared: candidate,
+          sandbox,
+        });
+      } else if (input.kind === "restore") {
+        result = await restoreDraftReconciliationCandidateFile({
+          path: input.path,
+          prepared: candidate,
+          sandbox,
+        });
+      } else {
+        result = await replaceDraftReconciliationCandidateText({
+          expectedDigest: input.expectedDigest,
+          newText: input.newText,
+          oldText: input.oldText,
+          path: input.path,
+          prepared: candidate,
+          sandbox,
+        });
+      }
+    } catch (error) {
+      if (
+        input.kind === "create" &&
+        error instanceof DraftCandidateCreationUncertainError &&
+        samePersistedDraftCandidate(draftReconciliationState.get(), candidate)
+      ) {
+        invalidateCandidateProof();
+      }
+      throw error;
+    }
+    invalidateCandidateProof();
+    if (input.kind === "create") {
+      ctx.abortSignal?.throwIfAborted();
+    }
     return {
       ...result,
       next: "Read or continue editing this isolated candidate with edit_github_draft_pr_candidate, then validate the complete candidate with validate_github_draft_pr_reconciliation and review its base and prior-head diffs. inspect_repository reads the original creation workspace rather than these draft edits; the explicit draft validator reports this candidate's actual source.",
@@ -133,6 +175,11 @@ export default defineTool({
       preservedWorkspaceIndex: z.number().int().nonnegative().optional(),
     }),
     z.strictObject({ kind: z.literal("restore"), path: z.string().min(1) }),
+    z.strictObject({
+      content: z.string(),
+      kind: z.literal("create"),
+      path: z.string().min(1),
+    }),
     z.strictObject({
       expectedDigest: z.string().regex(/^[0-9a-f]{64}$/u),
       kind: z.literal("replace"),

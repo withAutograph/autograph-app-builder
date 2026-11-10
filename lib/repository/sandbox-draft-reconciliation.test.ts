@@ -9,6 +9,7 @@ import {
   readFileSync,
   readlinkSync,
   realpathSync,
+  renameSync,
   rmSync,
   rmdirSync,
   symlinkSync,
@@ -22,6 +23,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   inspectDraftReconciliation,
+  createDraftReconciliationCandidateFile,
+  DraftCandidateCreationUncertainError,
   nonAppIndexDigest,
   prepareDraftReconciliation,
   readDraftReconciliationCandidateFile,
@@ -136,8 +139,8 @@ const fixture = (platformConflict = false, dependencyWorkspace = false) => {
       return readFileSync(path.join(root, input.path), "utf-8");
     },
     // oxlint-disable-next-line eslint/require-await -- mock mirrors asynchronous SandboxSession API.
-    async removePath(input: { path: string }) {
-      rmSync(path.join(root, input.path), { force: true });
+    async removePath(input: { path: string; recursive?: boolean }) {
+      rmSync(path.join(root, input.path), { force: true, recursive: input.recursive });
     },
     // oxlint-disable-next-line eslint/require-await -- mock mirrors asynchronous SandboxSession API.
     async run(input: { command: string }) {
@@ -886,6 +889,279 @@ describe("isolated draft reconciliation", () => {
         sandbox,
       }),
     ).rejects.toThrow("outside apps/demo/");
+  });
+
+  it("creates a nested app file that executes and appears in both normal candidate review diffs", async () => {
+    const f = fixture();
+    const prepared = await prepareDraftReconciliation(candidateFixtureInput(f));
+    await writeDraftReconciliationResolution({
+      content: "main\ndraft\n",
+      path: "apps/demo/tests/journey.spec.ts",
+      prepared,
+      sandbox: f.sandbox,
+    });
+    const added = "apps/demo/src/data/save-record.cjs";
+    const content = "module.exports = value => ({ saved: value });\n";
+    await expect(
+      createDraftReconciliationCandidateFile({
+        content,
+        path: added,
+        prepared,
+        sandbox: f.sandbox,
+      }),
+    ).resolves.toEqual({ digest: digest(content) });
+    expect(
+      execFileSync(
+        process.execPath,
+        [
+          "-e",
+          `console.log(require(${JSON.stringify(path.join(prepared.root, added))})("synthetic").saved)`,
+        ],
+        {
+          encoding: "utf-8",
+        },
+      ).trim(),
+    ).toBe("synthetic");
+    const reviewed = await inspectDraftReconciliation({ prepared, sandbox: f.sandbox });
+    for (const changes of [reviewed.baseChanges, reviewed.headChanges]) {
+      expect(changes).toContainEqual({
+        after: { digest: digest(content), mode: "644" },
+        kind: "added",
+        path: added,
+      });
+    }
+    expect(git(prepared.root, "show", `${reviewed.resolvedTree}:${added}`)).toBe(content.trim());
+    expect(readFileSync(path.join(prepared.root, "docs/platform.md"), "utf-8")).toBe("main\n");
+  });
+
+  it.each(["regular", "dangling-symlink"])(
+    "does not replace an existing %s target while creating a candidate file",
+    async (kind) => {
+      const f = fixture();
+      const prepared = await prepareDraftReconciliation(candidateFixtureInput(f));
+      const relative = "apps/demo/existing.txt";
+      const target = path.join(prepared.root, relative);
+      if (kind === "regular") {
+        writeFileSync(target, "private bytes\n");
+      } else {
+        symlinkSync(path.join(f.root, "absent.txt"), target);
+      }
+      await expect(
+        createDraftReconciliationCandidateFile({
+          content: "replacement\n",
+          path: relative,
+          prepared,
+          sandbox: f.sandbox,
+        }),
+      ).rejects.not.toBeInstanceOf(DraftCandidateCreationUncertainError);
+      if (kind === "regular") {
+        expect(readFileSync(target, "utf-8")).toBe("private bytes\n");
+      } else {
+        expect(lstatSync(target).isSymbolicLink()).toBe(true);
+        expect(existsSync(path.join(f.root, "absent.txt"))).toBe(false);
+      }
+    },
+  );
+
+  it.each(["apps/other/new.ts", "docs/new.md", "apps/demo/../../outside.ts"])(
+    "rejects creation outside the current app at %s",
+    async (relative) => {
+      const f = fixture();
+      const prepared = await prepareDraftReconciliation(candidateFixtureInput(f));
+      await expect(
+        createDraftReconciliationCandidateFile({
+          content: "foreign bytes\n",
+          path: relative,
+          prepared,
+          sandbox: f.sandbox,
+        }),
+      ).rejects.toThrow("outside apps/demo/");
+    },
+  );
+
+  it("refuses a symlink parent as a known no-write outcome", async () => {
+    const f = fixture();
+    const prepared = await prepareDraftReconciliation(candidateFixtureInput(f));
+    const outside = path.join(f.root, "other-app");
+    mkdirSync(outside);
+    symlinkSync(outside, path.join(prepared.root, "apps/demo/linked"));
+    await expect(
+      createDraftReconciliationCandidateFile({
+        content: "must not escape\n",
+        path: "apps/demo/linked/escape.ts",
+        prepared,
+        sandbox: f.sandbox,
+      }),
+    ).rejects.not.toBeInstanceOf(DraftCandidateCreationUncertainError);
+    expect(existsSync(path.join(outside, "escape.ts"))).toBe(false);
+  });
+
+  it("does not follow a substituted candidate-root ancestor into another valid checkout", async () => {
+    const f = fixture();
+    const prepared = await prepareDraftReconciliation(candidateFixtureInput(f));
+    const outside = path.join(f.root, "foreign-candidates");
+    mkdirSync(outside);
+    const foreignRoot = path.join(outside, path.basename(prepared.root));
+    git(f.root, "clone", "--no-hardlinks", path.join(f.root, "repository"), foreignRoot);
+    const ancestor = path.dirname(prepared.root);
+    renameSync(ancestor, `${ancestor}-retained`);
+    symlinkSync(outside, ancestor);
+    await expect(
+      createDraftReconciliationCandidateFile({
+        content: "must not cross candidates\n",
+        path: "apps/demo/foreign.ts",
+        prepared,
+        sandbox: f.sandbox,
+      }),
+    ).rejects.not.toBeInstanceOf(DraftCandidateCreationUncertainError);
+    expect(existsSync(path.join(foreignRoot, "apps/demo/foreign.ts"))).toBe(false);
+  });
+
+  it("does not create a file when cancellation arrives after payload upload", async () => {
+    const f = fixture();
+    const prepared = await prepareDraftReconciliation(candidateFixtureInput(f));
+    const controller = new AbortController();
+    const upload = f.sandbox.writeTextFile.bind(f.sandbox);
+    const sandbox = {
+      ...f.sandbox,
+      async writeTextFile(input: Parameters<SandboxSession["writeTextFile"]>[0]) {
+        await upload(input);
+        controller.abort(new Error("Stopped"));
+      },
+    };
+    await expect(
+      createDraftReconciliationCandidateFile({
+        abortSignal: controller.signal,
+        content: "cancelled\n",
+        path: "apps/demo/new.ts",
+        prepared,
+        sandbox,
+      }),
+    ).rejects.toThrow("Stopped");
+    expect(existsSync(path.join(prepared.root, "apps/demo/new.ts"))).toBe(false);
+  });
+
+  it("does not follow a substituted private payload directory", async () => {
+    const f = fixture();
+    const prepared = await prepareDraftReconciliation(candidateFixtureInput(f));
+    const outside = path.join(f.root, "outside-payload");
+    mkdirSync(outside);
+    writeFileSync(path.join(outside, "content"), "payload\n", { mode: 0o600 });
+    const upload = f.sandbox.writeTextFile.bind(f.sandbox);
+    const sandbox = {
+      ...f.sandbox,
+      async writeTextFile(input: Parameters<SandboxSession["writeTextFile"]>[0]) {
+        await upload(input);
+        const directory = path.dirname(path.join(f.root, input.path));
+        rmSync(directory, { recursive: true });
+        symlinkSync(outside, directory);
+      },
+    };
+    await expect(
+      createDraftReconciliationCandidateFile({
+        content: "payload\n",
+        path: "apps/demo/from-payload.ts",
+        prepared,
+        sandbox,
+      }),
+    ).rejects.not.toBeInstanceOf(DraftCandidateCreationUncertainError);
+    expect(existsSync(path.join(prepared.root, "apps/demo/from-payload.ts"))).toBe(false);
+    // oxlint-disable-next-line eslint/no-bitwise -- Assert that refused source traversal cannot chmod the foreign payload.
+    expect(lstatSync(path.join(outside, "content")).mode & 0o777).toBe(0o600);
+  });
+
+  it.each(["response-lost", "cancelled"])(
+    "reconciles a complete created file after the final command is %s without repeating the write",
+    async (outcome) => {
+      const f = fixture();
+      const prepared = await prepareDraftReconciliation(candidateFixtureInput(f));
+      const controller = new AbortController();
+      const run = f.sandbox.run.bind(f.sandbox);
+      let creates = 0;
+      const sandbox = {
+        ...f.sandbox,
+        async run(input: Parameters<SandboxSession["run"]>[0]) {
+          const result = await run(input);
+          if (input.command.endsWith("'create'")) {
+            creates += 1;
+            if (outcome === "cancelled") {
+              controller.abort(new Error("Stopped after write"));
+            }
+            throw new Error("The command response was lost");
+          }
+          return result;
+        },
+      };
+      await expect(
+        createDraftReconciliationCandidateFile({
+          abortSignal: controller.signal,
+          content: "complete bytes\n",
+          path: "apps/demo/complete.ts",
+          prepared,
+          sandbox,
+        }),
+      ).resolves.toEqual({ digest: digest("complete bytes\n") });
+      expect(readFileSync(path.join(prepared.root, "apps/demo/complete.ts"), "utf-8")).toBe(
+        "complete bytes\n",
+      );
+      expect(creates).toBe(1);
+    },
+  );
+
+  it("reports an unresolved final create response without repeating the command", async () => {
+    const f = fixture();
+    const prepared = await prepareDraftReconciliation(candidateFixtureInput(f));
+    const run = f.sandbox.run.bind(f.sandbox);
+    const sandbox = {
+      ...f.sandbox,
+      async run(input: Parameters<SandboxSession["run"]>[0]) {
+        if (input.command.endsWith("'observe'")) {
+          throw new Error("Sandbox transport unavailable");
+        }
+        const result = await run(input);
+        if (input.command.endsWith("'create'")) {
+          throw new Error("The command response was lost");
+        }
+        return result;
+      },
+    };
+    await expect(
+      createDraftReconciliationCandidateFile({
+        content: "complete bytes\n",
+        path: "apps/demo/uncertain.ts",
+        prepared,
+        sandbox,
+      }),
+    ).rejects.toBeInstanceOf(DraftCandidateCreationUncertainError);
+    expect(readFileSync(path.join(prepared.root, "apps/demo/uncertain.ts"), "utf-8")).toBe(
+      "complete bytes\n",
+    );
+  });
+
+  it("retires certainty when a completed target disappears before lost-response observation", async () => {
+    const f = fixture();
+    const prepared = await prepareDraftReconciliation(candidateFixtureInput(f));
+    const target = path.join(prepared.root, "apps/demo/moved.ts");
+    const run = f.sandbox.run.bind(f.sandbox);
+    const sandbox = {
+      ...f.sandbox,
+      async run(input: Parameters<SandboxSession["run"]>[0]) {
+        const result = await run(input);
+        if (input.command.endsWith("'create'")) {
+          rmSync(target);
+          throw new Error("The command response was lost");
+        }
+        return result;
+      },
+    };
+    await expect(
+      createDraftReconciliationCandidateFile({
+        content: "complete bytes\n",
+        path: "apps/demo/moved.ts",
+        prepared,
+        sandbox,
+      }),
+    ).rejects.toBeInstanceOf(DraftCandidateCreationUncertainError);
   });
 
   it("does not replay reviewed files already published to the draft head", async () => {

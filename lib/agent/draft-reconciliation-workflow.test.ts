@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import editCandidate from "../../agent/tools/edit_github_draft_pr_candidate";
 import sealReconciliation from "../../agent/tools/seal_github_draft_pr_reconciliation";
+import { DraftCandidateCreationUncertainError } from "../repository/sandbox-draft-reconciliation";
+import type { assertExactWorkflowState } from "./workflow-state";
 import {
   draftReconciliationCompletions,
   retainDraftReconciliationCompletion,
@@ -15,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   candidate: null as Record<string, unknown> | null,
   states: new Map<string, unknown>(),
   inspect: vi.fn(),
+  create: vi.fn(),
   read: vi.fn(),
   replace: vi.fn(),
   restore: vi.fn(),
@@ -41,7 +44,10 @@ vi.mock("eve/context", () => ({
     },
   }),
 }));
-vi.mock("./workflow-state", () => ({
+vi.mock("./workflow-state", async () => ({
+  ...(await vi.importActual<{ assertExactWorkflowState: typeof assertExactWorkflowState }>(
+    "./workflow-state",
+  )),
   appBuilderWorkflowState: { get: () => mocks.workflow },
 }));
 vi.mock("./source-bound-sandbox", () => ({
@@ -49,7 +55,9 @@ vi.mock("./source-bound-sandbox", () => ({
     await ctx.getSandbox(),
 }));
 vi.mock("../repository/sandbox-draft-reconciliation", () => ({
+  DraftCandidateCreationUncertainError: class extends Error {},
   inspectDraftReconciliation: mocks.inspect,
+  createDraftReconciliationCandidateFile: mocks.create,
   readDraftReconciliationCandidateFilePage: mocks.read,
   replaceDraftReconciliationCandidateText: mocks.replace,
   restoreDraftReconciliationCandidateFile: mocks.restore,
@@ -98,6 +106,10 @@ describe("draft reconciliation publication review", () => {
     };
     mocks.inspect.mockResolvedValue({ resolvedTree: sha, unresolvedConflicts: [] });
     mocks.restore.mockResolvedValue({ digest, mode: "755" });
+    mocks.create.mockImplementation(async (input: { assertCurrent?: () => void }) => {
+      input.assertCurrent?.();
+      return await Promise.resolve({ digest });
+    });
     mocks.seal.mockResolvedValue({
       branchName: "app-builder/spend-review",
       digest: "c".repeat(64),
@@ -139,6 +151,184 @@ describe("draft reconciliation publication review", () => {
       editCandidate.execute({ kind: "read", path: "apps/demo/file.txt" }, context),
     ).resolves.toMatchObject({ cursor: 0, digest, nextCursor: 12 });
   });
+
+  it("creates a new app-owned file and invalidates only the current candidate proofs", async () => {
+    const input = {
+      content: "export const value = 1;\n",
+      kind: "create",
+      path: "apps/spend-review/src/data/new-record.ts",
+    } as const;
+    const publishedReconciliation = { digest: "published" };
+    mocks.candidate = {
+      ...mocks.candidate,
+      proposal: { digest: "proposal" },
+      publishedReconciliation,
+      repairReview: { digest: "repair-review" },
+      reviewReadProgress: { baseComplete: true, headComplete: true, reviewDigest: digest },
+      validationRun: { nextIndex: 1, resolvedTree: sha },
+    };
+    const { workflow } = mocks;
+    const createdFiles = new Map<string, string>();
+    mocks.create.mockImplementation(
+      async (creation: { assertCurrent?: () => void; content: string; path: string }) => {
+        creation.assertCurrent?.();
+        createdFiles.set(creation.path, creation.content);
+        return await Promise.resolve({ digest });
+      },
+    );
+    await expect(editCandidate.execute(input, context)).resolves.toMatchObject({
+      digest,
+      path: input.path,
+      status: "candidate_edited",
+    });
+    expect(createdFiles.get(input.path)).toBe(input.content);
+    for (const field of [
+      "proposal",
+      "review",
+      "repairReview",
+      "reviewReadProgress",
+      "validation",
+      "validationRun",
+    ]) {
+      expect(mocks.candidate).not.toHaveProperty(field);
+    }
+    expect(mocks.candidate).toMatchObject({ headSha: sha, publishedReconciliation });
+    expect(mocks.workflow).toBe(workflow);
+    expect(mocks.seal).not.toHaveBeenCalled();
+  });
+
+  it("retains current candidate proofs when creating an existing file is rejected", async () => {
+    const retained = mocks.candidate;
+    mocks.create.mockRejectedValue(new Error("The app file already exists"));
+    await expect(
+      editCandidate.execute(
+        { content: "new bytes", kind: "create", path: "apps/spend-review/existing.ts" },
+        context,
+      ),
+    ).rejects.toThrow("already exists");
+    expect(mocks.candidate).toBe(retained);
+  });
+
+  it("retires proof after a completed creation before surfacing cancellation", async () => {
+    const controller = new AbortController();
+    mocks.create.mockImplementation(async (input: { assertCurrent?: () => void }) => {
+      input.assertCurrent?.();
+      controller.abort();
+      return await Promise.resolve({ digest });
+    });
+    await expect(
+      editCandidate.execute(
+        { content: "new bytes", kind: "create", path: "apps/spend-review/new.ts" },
+        {
+          abortSignal: controller.signal,
+          getSandbox: async () => await Promise.resolve({}),
+        } as never,
+      ),
+    ).rejects.toThrow();
+    expect(mocks.candidate).not.toHaveProperty("validation");
+    expect(mocks.candidate).not.toHaveProperty("review");
+  });
+
+  it.each([false, true])(
+    "does not reuse uncertain creation proof or change a successor candidate (replaced: %s)",
+    async (replaced) => {
+      let successor: Record<string, unknown> | null = null;
+      const uncertain = new DraftCandidateCreationUncertainError("Creation needs reconciliation");
+      mocks.create.mockImplementation(async () => {
+        if (replaced) {
+          successor = { ...mocks.candidate, root: "/workspace/successor-candidate" };
+          mocks.candidate = successor;
+        }
+        await Promise.resolve();
+        throw uncertain;
+      });
+      await expect(
+        editCandidate.execute(
+          { content: "new bytes", kind: "create", path: "apps/spend-review/new.ts" },
+          context,
+        ),
+      ).rejects.toBe(uncertain);
+      if (replaced) {
+        expect(mocks.candidate).toBe(successor);
+        expect(mocks.candidate).toHaveProperty("review");
+        expect(mocks.candidate).toHaveProperty("validation");
+      } else {
+        expect(mocks.candidate).not.toHaveProperty("review");
+        expect(mocks.candidate).not.toHaveProperty("validation");
+      }
+    },
+  );
+
+  it.each(
+    ["sandbox", "before-write"].flatMap((boundary) =>
+      ["source", "review", "candidate", "cancelled"].map((change) => ({ boundary, change })),
+    ),
+  )(
+    "rejects a $change change during $boundary acquisition before any file write",
+    async ({ boundary, change }) => {
+      const controller = new AbortController();
+      let wrote = false;
+      const changeCurrent = () => {
+        if (change === "source") {
+          mocks.workflow = { ...mocks.workflow, githubSource: { digest: "new-source" } };
+        } else if (change === "review") {
+          mocks.workflow = { ...mocks.workflow, reviewReceipt: { digest: "new-review" } };
+        } else if (change === "candidate") {
+          mocks.candidate = { ...mocks.candidate, root: "/workspace/new-candidate" };
+        } else {
+          controller.abort();
+        }
+      };
+      mocks.create.mockImplementation(async (input: { assertCurrent?: () => void }) => {
+        await Promise.resolve();
+        if (boundary === "before-write") {
+          changeCurrent();
+        }
+        input.assertCurrent?.();
+        wrote = true;
+        return { digest };
+      });
+      const creationContext = {
+        abortSignal: controller.signal,
+        callId: "create",
+        getSandbox: async () => {
+          await Promise.resolve();
+          if (boundary === "sandbox") {
+            changeCurrent();
+          }
+          return {};
+        },
+        session: { auth: {} },
+      } as never;
+      await expect(
+        editCandidate.execute(
+          { content: "new bytes", kind: "create", path: "apps/spend-review/new.ts" },
+          creationContext,
+        ),
+      ).rejects.toThrow();
+      expect(wrote).toBe(false);
+      expect(mocks.candidate).toMatchObject({
+        review: { digest },
+        validation: { resolvedTree: sha },
+      });
+    },
+  );
+
+  it.each(["githubSource", "reviewReceipt"])(
+    "rejects creation with a changed initial %s binding",
+    async (field) => {
+      const retained = mocks.candidate;
+      mocks.workflow = { ...mocks.workflow, [field]: { digest: "changed" } };
+      await expect(
+        editCandidate.execute(
+          { content: "new bytes", kind: "create", path: "apps/spend-review/new.ts" },
+          context,
+        ),
+      ).rejects.toThrow("no longer matches the selected app and source review");
+      expect(mocks.create).not.toHaveBeenCalled();
+      expect(mocks.candidate).toBe(retained);
+    },
+  );
 
   it("restores from the retained candidate and invalidates saved validation and publication review", async () => {
     const publishedReconciliation = { digest: "published" };
