@@ -783,6 +783,7 @@ const runIncrementalValidation = async (
       };
     } else if (step.kind === "browser") {
       const browser = await runAppBrowserTests({
+        target: "candidate-local",
         appId: candidate.appId,
         execution: {
           appId: candidate.appId,

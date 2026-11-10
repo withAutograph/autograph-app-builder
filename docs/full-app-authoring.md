@@ -240,3 +240,9 @@ The actual command failure remains failed and affected runtime behavior remains
 unassessed. Use the normal delivery and applicable source-validation flow;
 optional local Preview does not add a release qualification gate, and selected
 required checks still must pass.
+
+A reconciled draft candidate runs selected browser tests with its own prepared
+runtime and local Auth origin, or its ordinary frontend server. Do not borrow
+launch authority from the original app's working preview. Keep protected-runtime
+refusals, actor and tenant isolation, recording protections, cancellation and
+actual test failures intact.

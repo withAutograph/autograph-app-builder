@@ -45,22 +45,34 @@ const identity = (value: NonNullable<ReturnType<typeof workingPreviewState.get>>
   ]);
 
 // oxlint-disable-next-line eslint/complexity -- Keep explicit prior-preview selection separate from existing hosted and local paths.
-export const runAppBrowserTests = async (input: {
-  appId: string;
-  root: string;
-  sandbox: Pick<SandboxSession, "run"> & Partial<Pick<SandboxSession, "writeTextFile">>;
-  signal?: AbortSignal;
-  execution?: PreparedRuntimeExecutionContext;
-  selection?: BrowserTestSelection;
-  runtime?: PreparedRuntimeExecution | null;
-  priorArtifact?: Awaited<ReturnType<typeof priorValidatedPrivateArtifact>>;
-  continuation?: {
-    commandId?: string;
-    commandCheckpoint: (commandId: string) => Promise<void>;
-    allowDispatch: boolean;
-  };
-}) => {
-  const { execution, priorArtifact, ...runInput } = input;
+export const runAppBrowserTests = async (
+  input: {
+    appId: string;
+    root: string;
+    sandbox: Pick<SandboxSession, "run"> & Partial<Pick<SandboxSession, "writeTextFile">>;
+    signal?: AbortSignal;
+    selection?: BrowserTestSelection;
+    runtime?: PreparedRuntimeExecution | null;
+    continuation?: {
+      commandId?: string;
+      commandCheckpoint: (commandId: string) => Promise<void>;
+      allowDispatch: boolean;
+    };
+  } & (
+    | {
+        /** Internal owned draft-candidate selection; never a public tool argument. */
+        target: "candidate-local";
+        execution: PreparedRuntimeExecutionContext;
+        priorArtifact?: never;
+      }
+    | {
+        target?: never;
+        execution?: PreparedRuntimeExecutionContext;
+        priorArtifact?: Awaited<ReturnType<typeof priorValidatedPrivateArtifact>>;
+      }
+  ),
+) => {
+  const { execution, priorArtifact, target, ...runInput } = input;
   let runtime: PreparedRuntimeExecution | null;
   try {
     runtime = null;
@@ -97,8 +109,26 @@ export const runAppBrowserTests = async (input: {
   if (runtime || !execution) {
     return await run();
   }
-  const preview = workingPreviewState.get();
+  const runLocal = async () => {
+    let origin;
+    try {
+      origin = await readOptionalLocalBrowserAuthOrigin(input);
+    } catch {
+      input.signal?.throwIfAborted();
+      throw new PrivatePreviewBrowserPrerequisiteError();
+    }
+    if (origin !== null && origin !== "http://localhost:3000") {
+      throw new PrivatePreviewBrowserPrerequisiteError();
+    }
+    return await run();
+  };
   try {
+    if (target === "candidate-local") {
+      // Its own local preparation and selected task validate the draft candidate;
+      // the session's optional working preview belongs to a different checkout.
+      return await runLocal();
+    }
+    const preview = workingPreviewState.get();
     if (
       priorArtifact !== undefined &&
       (preview?.priorValidatedArtifact?.applyDigest !== priorArtifact.revision ||
@@ -107,17 +137,7 @@ export const runAppBrowserTests = async (input: {
       throw new PrivatePreviewBrowserPrerequisiteError();
     }
     if (!preview) {
-      let origin;
-      try {
-        origin = await readOptionalLocalBrowserAuthOrigin(input);
-      } catch {
-        input.signal?.throwIfAborted();
-        throw new PrivatePreviewBrowserPrerequisiteError();
-      }
-      if (origin !== null && origin !== "http://localhost:3000") {
-        throw new PrivatePreviewBrowserPrerequisiteError();
-      }
-      return await run();
+      return await runLocal();
     }
     const frozenIdentity = identity(preview);
     const assertCurrent = () => {
