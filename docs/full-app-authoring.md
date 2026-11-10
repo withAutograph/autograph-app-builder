@@ -226,14 +226,17 @@ Application roles in accepted product prose must be implemented in the app's
 CUE `authorization.roles` and matching model/operation/field/row grants. The
 compiler's checked `extras.authorization_policy` supplies canonical role IDs
 to `app:describe` and authenticated runtime preparation. Builder does not infer
-those grants from Markdown or inject default runtime roles. A missing compiled
-policy is an app authoring repair: update the same app through ordinary Builder
-implementation controls, regenerate its checked release and retry validation.
+those grants from Markdown or inject default runtime roles. When accepted
+requirements name roles missing from the compiled policy, update the same app
+through ordinary Builder implementation controls and regenerate its checked
+release.
 
-Application roles in accepted product prose must be implemented in the app's
-CUE `authorization.roles` and matching model/operation/field/row grants. The
-compiler's checked `extras.authorization_policy` supplies canonical role IDs
-to `app:describe` and authenticated runtime preparation. Builder does not infer
-those grants from Markdown or inject default runtime roles. A missing compiled
-policy is an app authoring repair: update the same app through ordinary Builder
-implementation controls, regenerate its checked release and retry validation.
+Authentication does not require business roles. An accepted app with no business
+roles retains its empty role list and accepted authentication/access design. If
+repository-owned local runtime setup rejects that list, Builder reports and
+repairs a platform/local setup issue without asking the creator for schema roles,
+adding a default role, injecting `APP_RUNTIME_ROLES`, or weakening access checks.
+The actual command failure remains failed and affected runtime behavior remains
+unassessed. Use the normal delivery and applicable source-validation flow;
+optional local Preview does not add a release qualification gate, and selected
+required checks still must pass.

@@ -154,21 +154,18 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    runtime consumers; product labels are not PostgreSQL identifiers. Inspect
    `app:describe` after compiling: its checked release must expose the intended
    roles. AppSpec prose, a role literal in application code, or a fixture actor
-   does not declare a schema grant. If authenticated local setup reports no
-   schema roles, repair that app's schema/policy through ordinary implementation
-   repairs and retry validation. Never invent a default role or manually inject
-   `APP_RUNTIME_ROLES` to bypass missing app authorization.
-   When accepted access requirements name application roles, declare the CUE
-   `authorization.roles` and matching model/operation/field/row `grants` in the
-   app schema. Follow the selected repository's generated-data-operations
-   contract. Use the compiler's canonical role IDs throughout app policy and
-   runtime consumers; product labels are not PostgreSQL identifiers. Inspect
-   `app:describe` after compiling: its checked release must expose the intended
-   roles. AppSpec prose, a role literal in application code, or a fixture actor
-   does not declare a schema grant. If authenticated local setup reports no
-   schema roles, repair that app's schema/policy through ordinary implementation
-   repairs and retry validation. Never invent a default role or manually inject
-   `APP_RUNTIME_ROLES` to bypass missing app authorization.
+   does not declare a schema grant. Repair missing compiled roles and grants
+   through ordinary app implementation only when the accepted requirements
+   actually name those roles, then regenerate the checked release.
+   An authenticated app may intentionally have no business roles. Preserve its
+   accepted authentication and access design, including an empty role list.
+   If local setup rejects that list, treat it as a platform/local runtime setup
+   issue for Builder to repair; do not ask the creator to define schema roles,
+   add a default role, manually inject `APP_RUNTIME_ROLES`, or weaken access
+   checks. Keep the command failed and affected behavior unassessed. Continue
+   the existing normal delivery and source-validation flow without making
+   optional local Preview an additional release gate or bypassing selected
+   required checks.
    Preserve `catalog:` and `workspace:*` references. The generator profile owns
    the standard scaffold toolset, not every app-specific dependency. Additional
    dependencies need the appropriate reviewed app manifest/lockfile changes,
