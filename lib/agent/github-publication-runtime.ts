@@ -332,6 +332,25 @@ export interface OwnedAppRevisionLookup {
   reconciliation?: ExistingDraftReconciliationProposal;
 }
 
+interface OwnedOpenDraftReviewSubject {
+  appId: string;
+  proposalDigest: string;
+  repositoryId: string;
+  installationId: string;
+  pullRequestNumber: number;
+}
+
+/** A verified existing draft requires its update route, never a replacement PR review. */
+export class OwnedOpenDraftReviewRequiredError extends Error {
+  readonly subject: OwnedOpenDraftReviewSubject;
+
+  constructor(subject: OwnedOpenDraftReviewSubject) {
+    super("This app already has an owned open draft. Continue its current app review and update.");
+    this.name = "OwnedOpenDraftReviewRequiredError";
+    this.subject = subject;
+  }
+}
+
 export interface GitHubPublicationRuntime {
   /** Classify retained lookup context without granting publication or merged authority. */
   inspectPriorAppPublication?: (
@@ -950,6 +969,15 @@ export function composeGitHubPublicationRuntime(input: {
         // approval. Legitimate later heads and base changes do not prevent a
         // fresh current-destination review with its own approval.
         const observed = await adapter.prDelivery.inspect(reviewedTarget);
+        if (observed.state === "open" && observed.draft) {
+          throw new OwnedOpenDraftReviewRequiredError({
+            appId: revision.appId,
+            proposalDigest: canonical.digest,
+            repositoryId: canonical.repositoryId,
+            installationId: installation.installationId,
+            pullRequestNumber: receipt.pullRequestNumber,
+          });
+        }
         if (observed.state !== "merged" && observed.state !== "closed") {
           throw new Error(
             "The previous app publication is still open. Use its existing draft update or reconciliation workflow.",
