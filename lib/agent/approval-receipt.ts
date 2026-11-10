@@ -52,6 +52,7 @@ export const approvalReceiptSchema = z
     repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u),
     repositoryId: z.string().regex(/^\d+$/u),
     subjectDigest: digest,
+    returnToDraft: z.literal(true).optional(),
   })
   .superRefine((receipt, context) => {
     let expectedOutcome = CREATE_DRAFT_PR_OUTCOME;
@@ -69,12 +70,19 @@ export const approvalReceiptSchema = z
         path: ["outcome"],
       });
     }
+    if (receipt.returnToDraft === true && receipt.phase !== "draft_update") {
+      context.addIssue({
+        code: "custom",
+        message: "Only an owned PR update can return it to draft.",
+        path: ["returnToDraft"],
+      });
+    }
   });
 
 export type ApprovalReceipt = z.infer<typeof approvalReceiptSchema>;
 export type ApprovalTarget = Pick<
   ApprovalReceipt,
-  "repositoryId" | "repository" | "baseRef" | "baseSha"
+  "repositoryId" | "repository" | "baseRef" | "baseSha" | "returnToDraft"
 >;
 
 // oxlint-disable-next-line eslint/func-style, anti-slop/no-unknown-parameters -- Preserve function declaration hoisting and initialization timing. Preserve the existing unknown input contract.
@@ -84,12 +92,16 @@ export function parseApprovalReceipt(value: unknown): ApprovalReceipt {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function approvalTarget(receipt: ApprovalReceipt): ApprovalTarget {
-  return {
+  const target: ApprovalTarget = {
     baseRef: receipt.baseRef,
     baseSha: receipt.baseSha,
     repository: receipt.repository,
     repositoryId: receipt.repositoryId,
   };
+  if (receipt.returnToDraft === true) {
+    target.returnToDraft = true;
+  }
+  return target;
 }
 
 type GitHubApprovalSource = Pick<
@@ -135,15 +147,21 @@ export const approvalReceiptForDraftProposal = (
 
 type DraftHeadApprovalSubject = Pick<
   ExistingDraftUpdateProposal,
-  "branchName" | "expectedHeadSha" | "name" | "owner" | "repositoryId"
+  "branchName" | "expectedHeadSha" | "name" | "owner" | "repositoryId" | "returnToDraft"
 >;
 
-const approvalTargetFromDraftHead = (proposal: DraftHeadApprovalSubject): ApprovalTarget => ({
-  baseRef: `refs/heads/${proposal.branchName}`,
-  baseSha: proposal.expectedHeadSha,
-  repository: `${proposal.owner}/${proposal.name}`,
-  repositoryId: proposal.repositoryId,
-});
+const approvalTargetFromDraftHead = (proposal: DraftHeadApprovalSubject): ApprovalTarget => {
+  const target: ApprovalTarget = {
+    baseRef: `refs/heads/${proposal.branchName}`,
+    baseSha: proposal.expectedHeadSha,
+    repository: `${proposal.owner}/${proposal.name}`,
+    repositoryId: proposal.repositoryId,
+  };
+  if (proposal.returnToDraft === true) {
+    target.returnToDraft = true;
+  }
+  return target;
+};
 
 export const approvalTargetFromExistingDraftUpdate: (
   proposal: DraftHeadApprovalSubject,
@@ -152,7 +170,7 @@ export const approvalTargetFromExistingDraftUpdate: (
 export const approvalTargetFromExistingDraftReconciliation: (
   proposal: Pick<
     ExistingDraftReconciliationProposal,
-    "branchName" | "expectedHeadSha" | "name" | "owner" | "repositoryId"
+    "branchName" | "expectedHeadSha" | "name" | "owner" | "repositoryId" | "returnToDraft"
   >,
 ) => ApprovalTarget = approvalTargetFromDraftHead;
 
@@ -203,6 +221,9 @@ export function assertApprovalReceipt(input: {
   const mismatches = fields
     .filter(([, actualValue, expectedValue]) => actualValue !== expectedValue)
     .map(([field]) => field);
+  if (actual.returnToDraft !== input.target.returnToDraft) {
+    mismatches.push("draft transition");
+  }
   if (mismatches.length > 0) {
     const recovery =
       input.phase === "draft_update"
@@ -239,6 +260,9 @@ function publicReceiptDescription(receipt: unknown, toolName?: string): string |
     return `Publish the reviewed changes to a draft pull request in ${parsed.data.repository} on ${baseBranch}. It will remain a draft; this will not merge or deploy it.`;
   }
   if (toolName === "update_github_draft_pr" || toolName === "reconcile_github_draft_pr") {
+    if (parsed.data.returnToDraft === true) {
+      return `Return the existing Ready pull request in ${parsed.data.repository} to draft and publish the reviewed corrections to it. It will remain a draft; this will not merge or deploy it.`;
+    }
     return `Update the reviewed changes in the existing draft pull request in ${parsed.data.repository}. It will remain a draft; this will not merge or deploy it.`;
   }
   return undefined;

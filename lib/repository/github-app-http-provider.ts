@@ -1152,6 +1152,107 @@ export const createGitHubAppHttpProvider = (input: {
     return observed;
   };
 
+  /** The approved correction includes returning only this same owned Ready head to draft. */
+  const returnOwnedReadyToDraft = async (
+    proposal: ExistingDraftUpdateProposal | ExistingDraftReconciliationProposal,
+    current: ExistingDraftObservation,
+    accessToken: string,
+  ): Promise<ExistingDraftObservation> => {
+    if (proposal.returnToDraft !== true) {
+      return current;
+    }
+    if (current.verifiedBuilderOrigin?.marker !== proposal.originMarker) {
+      throw new Error(pullRequestChangedCode);
+    }
+    if (current.draft) {
+      return current;
+    }
+    const inspection = {
+      repositoryId: proposal.repositoryId,
+      owner: proposal.owner,
+      name: proposal.name,
+      number: proposal.pullRequestNumber,
+    };
+    const matches = (observed: ExistingDraftObservation) =>
+      [
+        observed.state === "open",
+        observed.repositoryId === proposal.repositoryId,
+        observed.owner === proposal.owner,
+        observed.name === proposal.name,
+        observed.number === proposal.pullRequestNumber,
+        observed.pullRequestId === proposal.pullRequestId,
+        observed.headRepositoryId === proposal.repositoryId,
+        observed.baseRepositoryId === proposal.repositoryId,
+        observed.headBranch === proposal.branchName,
+        observed.baseBranch === proposal.baseBranch,
+        observed.headSha === proposal.expectedHeadSha,
+        observed.headTree === proposal.expectedHeadTree,
+        observed.verifiedBuilderOrigin?.marker === proposal.originMarker,
+      ].every(Boolean);
+    const fresh = await inspectExistingDraft(inspection);
+    if (!matches(fresh)) {
+      throw new Error(pullRequestChangedCode);
+    }
+    if (fresh.draft) {
+      return fresh;
+    }
+    // REST's numeric id is not GitHub's GraphQL node ID. Bind the latter to the same live PR.
+    const pull = await github({
+      authorization: accessToken,
+      expected: [200],
+      path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/pulls/${proposal.pullRequestNumber}`,
+    });
+    const head = property(pull.body, "head");
+    const base = property(pull.body, "base");
+    const pullMatches = [
+      decimalProperty(pull.body, "id") === proposal.pullRequestId,
+      Number(decimalProperty(pull.body, "number")) === proposal.pullRequestNumber,
+      stringProperty(pull.body, "state") === "open",
+      decimalProperty(property(head, "repo"), "id") === proposal.repositoryId,
+      decimalProperty(property(base, "repo"), "id") === proposal.repositoryId,
+      stringProperty(head, "ref") === proposal.branchName,
+      stringProperty(base, "ref") === proposal.baseBranch,
+      stringProperty(head, "sha") === proposal.expectedHeadSha,
+    ].every(Boolean);
+    if (!pullMatches) {
+      throw new Error(pullRequestChangedCode);
+    }
+    const nodeId = stringProperty(pull.body, "node_id");
+    let failure: Error | undefined;
+    try {
+      const result = await github({
+        authorization: accessToken,
+        expected: [200],
+        method: "POST",
+        path: "/graphql",
+        body: {
+          query: `mutation ReturnOwnedPullRequestToDraft($id: ID!) { convertPullRequestToDraft(input: {pullRequestId: $id}) { pullRequest { id isDraft } } }`,
+          variables: { id: nodeId },
+        },
+      });
+      const changed = z
+        .object({
+          data: z.object({
+            convertPullRequestToDraft: z.object({
+              pullRequest: z.object({ id: z.string(), isDraft: z.literal(true) }),
+            }),
+          }),
+        })
+        .parse(result.body);
+      if (changed.data.convertPullRequestToDraft.pullRequest.id !== nodeId) {
+        throw new Error(pullRequestChangedCode);
+      }
+    } catch (error) {
+      failure = error instanceof Error ? error : new Error(invalidResponseMessage);
+    }
+    // Read-back, including after a lost response, is authority; never replay an uncertain conversion blindly.
+    const observed = await inspectExistingDraft(inspection);
+    if (matches(observed) && observed.draft) {
+      return observed;
+    }
+    throw failure ?? new Error(pullRequestChangedCode);
+  };
+
   const inspectHistoricalAppSource = async (sourceRequest: {
     repositoryId: string;
     owner: string;
@@ -2006,12 +2107,14 @@ export const createGitHubAppHttpProvider = (input: {
       if (recovery !== undefined) {
         inspection.recovery = recovery;
       }
-      const current = await inspectExistingDraft(inspection);
+      let current = await inspectExistingDraft(inspection);
       if (
-        current.pullRequestId !== proposal.pullRequestId ||
-        !current.draft ||
-        current.state !== "open" ||
-        current.repositoryId !== proposal.repositoryId
+        [
+          current.pullRequestId !== proposal.pullRequestId,
+          !current.draft && proposal.returnToDraft !== true,
+          current.state !== "open",
+          current.repositoryId !== proposal.repositoryId,
+        ].some(Boolean)
       ) {
         return { code: pullRequestChangedCode, status: "rejected" };
       }
@@ -2066,6 +2169,7 @@ export const createGitHubAppHttpProvider = (input: {
           return { code: reviewedPathChangedCode, path: change.path, status: "rejected" };
         }
       }
+      current = await returnOwnedReadyToDraft(proposal, current, accessToken);
       const tree = await createTree({
         accessToken,
         baseTree: base.headTree,
@@ -2164,17 +2268,19 @@ export const createGitHubAppHttpProvider = (input: {
       } catch {
         return { code: invalidPublicationMaterialCode, status: "rejected" };
       }
-      const current = await inspectExistingDraft({
+      let current = await inspectExistingDraft({
         name: proposal.name,
         number: proposal.pullRequestNumber,
         owner: proposal.owner,
         repositoryId: proposal.repositoryId,
       });
       if (
-        current.pullRequestId !== proposal.pullRequestId ||
-        !current.draft ||
-        current.state !== "open" ||
-        current.headRepositoryId !== proposal.repositoryId
+        [
+          current.pullRequestId !== proposal.pullRequestId,
+          !current.draft && proposal.returnToDraft !== true,
+          current.state !== "open",
+          current.headRepositoryId !== proposal.repositoryId,
+        ].some(Boolean)
       ) {
         return { code: pullRequestChangedCode, status: "rejected" };
       }
@@ -2212,6 +2318,7 @@ export const createGitHubAppHttpProvider = (input: {
           return { code: reviewedPathChangedCode, path: change.path, status: "rejected" };
         }
       }
+      current = await returnOwnedReadyToDraft(proposal, current, accessToken);
       const files = content.changes.flatMap((change) =>
         change.kind === "deleted"
           ? []

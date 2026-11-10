@@ -167,6 +167,52 @@ describe("approval receipt", () => {
     ).toBeUndefined();
   });
 
+  it("discloses the exact Ready-to-draft correction and refuses an approval that hides it", () => {
+    const proposal = {
+      branchName: "app-builder/review-owned",
+      expectedHeadSha: "c".repeat(40),
+      name: "arrusted-development",
+      owner: "withAutograph",
+      repositoryId: receipt.repositoryId,
+      digest: receipt.subjectDigest,
+      returnToDraft: true as const,
+    };
+    const generated = approvalReceiptForExistingDraftUpdate(proposal);
+    expect(generated.returnToDraft).toBe(true);
+    expect(
+      publicApprovalDescription({ approvalReceipt: generated }, "update_github_draft_pr"),
+    ).toContain("Ready pull request");
+    expect(
+      publicApprovalDescription({ approvalReceipt: generated }, "reconcile_github_draft_pr"),
+    ).toContain("publish the reviewed corrections");
+    const hidden = { ...generated };
+    delete hidden.returnToDraft;
+    expect(() =>
+      assertApprovalReceipt({
+        actual: hidden,
+        phase: "draft_update",
+        subjectDigest: proposal.digest,
+        target: approvalTargetFromExistingDraftUpdate(proposal),
+      }),
+    ).toThrow("draft transition");
+    expect(() =>
+      assertApprovalReceipt({
+        actual: generated,
+        phase: "draft_update",
+        subjectDigest: proposal.digest,
+        target: {
+          baseRef: generated.baseRef,
+          baseSha: generated.baseSha,
+          repository: generated.repository,
+          repositoryId: generated.repositoryId,
+        },
+      }),
+    ).toThrow("draft transition");
+    expect(approvalReceiptSchema.safeParse({ ...receipt, returnToDraft: true }).success).toBe(
+      false,
+    );
+  });
+
   it("rejects extra keys, mismatched outcomes, targets, and subjects", () => {
     expect(() => approvalReceiptSchema.parse({ ...receipt, content: "private" })).toThrow();
     expect(() =>

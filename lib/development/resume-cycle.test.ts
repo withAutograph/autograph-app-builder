@@ -73,6 +73,16 @@ const fixture = async () => {
 };
 it("resumes one stopped local cycle with current code and unchanged saved state, under the caller’s state-root lock", async () => {
   const f = await fixture();
+  // Control the stopped precondition while testing saved state: a parallel fixture
+  // can claim a released port. The running-instance test below retains real TCP.
+  const stoppedConnection = vi
+    .spyOn(Socket.prototype, "connect")
+    .mockImplementation(function connectStoppedFixture(this: Socket) {
+      queueMicrotask(() => {
+        this.destroy(Object.assign(new Error("Stopped fixture"), { code: "ECONNREFUSED" }));
+      });
+      return this;
+    });
   try {
     const closed = once(f.server, "close");
     f.server.close();
@@ -96,6 +106,7 @@ it("resumes one stopped local cycle with current code and unchanged saved state,
       ),
     ).toBe(' {"session":"original","state":"waiting"}\n');
   } finally {
+    stoppedConnection.mockRestore();
     await rm(f.root, { force: true, recursive: true });
   }
 });

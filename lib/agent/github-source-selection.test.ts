@@ -27,12 +27,11 @@ const openPullRequest: ExistingDraftObservation = {
   state: "open",
 };
 
-// oxlint-disable-next-line eslint/require-await -- Any unexpected provider operation fails this test.
-const unexpected = async (): Promise<never> => {
-  throw new Error("Source inspection attempted another provider operation");
-};
-
 const sourceRuntime = (pullRequest = openPullRequest) => {
+  // oxlint-disable-next-line eslint/require-await -- Any unexpected provider operation fails this test.
+  const unexpected = vi.fn(async (): Promise<never> => {
+    throw new Error("Source inspection attempted another provider operation");
+  });
   // oxlint-disable-next-line eslint/require-await -- Provider read test double.
   const inspectExistingDraft = vi.fn(async () => pullRequest);
   // oxlint-disable-next-line eslint/require-await -- Provider read test double.
@@ -66,16 +65,15 @@ const sourceRuntime = (pullRequest = openPullRequest) => {
     proposals: { read: vi.fn(), save: vi.fn() },
     receipts: { compareAndSet: vi.fn(), read: vi.fn() },
   });
-  return { inspectExistingDraft, inspectRepository, runtime };
+  return { inspectExistingDraft, inspectRepository, runtime, unexpected };
 };
 
 describe("read-only initial GitHub source selection", () => {
-  it("selects a non-draft open PR while keeping draft-update inspection restricted", async () => {
-    const { runtime, inspectExistingDraft } = sourceRuntime();
+  it("selects an open Ready PR as source but refuses unowned repair inspection", async () => {
+    const { runtime, inspectExistingDraft, unexpected } = sourceRuntime();
     expect(await runtime.inspectOpenPullRequestSource(selection)).toEqual(openPullRequest);
-    await expect(runtime.inspectExistingDraftSource(selection)).rejects.toThrow(
-      "not an open draft",
-    );
+    await expect(runtime.inspectExistingDraftSource(selection)).rejects.toThrow();
+    expect(unexpected).not.toHaveBeenCalled();
     expect(inspectExistingDraft).toHaveBeenCalledWith({
       name: selection.name,
       number: selection.pullRequestNumber,

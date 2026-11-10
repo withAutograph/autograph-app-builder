@@ -20,7 +20,7 @@ import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-s
 export default defineTool({
   approval: always(),
   description:
-    "After separate approval, update the existing open draft PR branch with only the current reviewed app-owned diff. Reject a moved PR branch, changed reviewed files, different repository, or a PR that is no longer an open draft.",
+    "After separate approval, update the existing owned open PR branch with only the current reviewed app-owned diff. When the server-sealed proposal includes returnToDraft, this same approval explicitly returns that exact owned Ready PR to draft before publishing the correction. A normal draft proposal cannot change a Ready PR. Reject a moved PR branch, changed reviewed files, different repository, or a closed PR. Corrected revisions still require fresh Ready/merge approval.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (

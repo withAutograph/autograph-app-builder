@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import type { DraftReviewedWorkflow } from "./draft-reviewed-lineage";
 import type { DraftReconciliationCandidate } from "./draft-reconciliation-state";
 import { assertOwnedPublicationReconciliationScope } from "../repository/github-draft-reconciliation";
@@ -84,7 +85,7 @@ export const assertPublishedDraftRepairSource = (receipt: PublishedDraftRepairSo
     receipt.kind === publishedDraftRepairKind,
     receipt.version === 1,
     claimed === digest(unsigned),
-    draft.draft,
+    z.boolean().safeParse(draft.draft).success,
     draft.state === "open",
     draft.repositoryId === source.repository.repositoryId,
     draft.headRepositoryId === draft.repositoryId,

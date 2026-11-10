@@ -77,6 +77,8 @@ vi.mock("../repository/target-planning", () => ({
   }),
 }));
 const sha256 = (content: string) => createHash("sha256").update(content).digest("hex");
+const declaredRoutes = ["/workspace-notes/:path*", "/workspace-notes", "/reports/:id"];
+const routePlan = () => ({ topology: { routes: [...declaredRoutes] } });
 const profile = () =>
   privateComputeProfileSchema.parse({
     checkPolicy: {
@@ -129,7 +131,12 @@ const fixture = (phase: "planned" | "identity_resolved", compute = profile()) =>
     preparedByCallId: "prepared",
     // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
     ...(phase === "planned"
-      ? { proposal: { digest: "frozen-proposal", target: { privateCompute: compute } } }
+      ? {
+          proposal: {
+            digest: "frozen-proposal",
+            target: { privateCompute: compute, plan: routePlan() },
+          },
+        }
       : {}),
   }) as unknown as AppBuilderWorkflowState;
 // SAFETY: Planning I/O is mocked above; only the call and session identifiers are consumed by this producer test.
@@ -145,7 +152,7 @@ beforeEach(() => {
   ports.profile.mockResolvedValue(profile());
   ports.execute.mockResolvedValue({
     contractDigest: "contract",
-    proposal: { privateCompute: profile() },
+    proposal: { privateCompute: profile(), plan: routePlan() },
   });
 });
 
@@ -202,6 +209,38 @@ describe("normal private compute recipe projection", () => {
     expect(() => privateComputeProjection(selected)).toThrow("installed reviewed recipe");
     expect(JSON.stringify(selected)).toBe(before);
   });
+});
+
+describe("implementation routing handoff", () => {
+  it.each(["planned", "identity_resolved"] as const)(
+    "returns the saved public routes from %s planning without changing the app scope",
+    async (phase) => {
+      await run(async () => {
+        const current = fixture(phase);
+        appBuilderWorkflowState.update(() => current);
+        const result = await prepareAppCreation({}, context);
+        expect(result.implementationRouting?.routes).toEqual(declaredRoutes);
+        if (!("appSpec" in current)) {
+          throw new Error("Expected the accepted app scope.");
+        }
+        expect(result.appId).toBe(current.appSpec.appId);
+        expect(result.productAcceptance.appSpecDigest).toBe(current.appSpec.digest);
+        const after = appBuilderWorkflowState.get();
+        if (!("proposal" in after)) {
+          throw new Error("Expected the saved implementation plan.");
+        }
+        expect(after.proposal.target.plan.topology.routes).toEqual(declaredRoutes);
+        expect(after.appSpec).toBe(current.appSpec);
+        expect(after.artifacts).toBe(current.artifacts);
+        expect(after.workspace).toBe(current.workspace);
+        expect(after.sourceReceipt).toBe(current.sourceReceipt);
+        if (phase === "planned") {
+          expect(after).toBe(current);
+          expect(ports.execute).not.toHaveBeenCalled();
+        }
+      });
+    },
+  );
 });
 
 const appliedRepairFixture = () => {

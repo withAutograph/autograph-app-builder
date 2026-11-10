@@ -189,6 +189,89 @@ const recordedSource = (draft: ExistingDraftObservation) => ({
 });
 
 describe("same-session owned draft repair", () => {
+  it("prepares and seals a Ready PR only from its canonical owned publication", async () => {
+    const { draft, runtime, receipt, repository } = ownedDraftFixture({
+      idempotencyKey: "d".repeat(64),
+    });
+    draft.draft = false;
+    const source = await runtime.inspectExistingDraftReconciliationSource({
+      repositoryId: draft.repositoryId,
+      owner: draft.owner,
+      name: draft.name,
+      pullRequestNumber: draft.number,
+      // oxlint-disable-next-line eslint/require-await -- Controlled asynchronous repository read port.
+      readPublishedSource: async () => recordedSource(draft),
+    });
+    expect(source.draft.draft).toBe(false);
+    const change = {
+      after: { digest: "a".repeat(64), mode: "644" },
+      kind: "added" as const,
+      path: "apps/demo/page.tsx",
+    };
+    const review = createReconciliationReviewReceipt({
+      version: 1,
+      appId: "demo",
+      baseChanges: [change],
+      headChanges: [change],
+      baseSha: repository.headSha,
+      baseTree: repository.headTree,
+      headSha: draft.headSha,
+      headTree: draft.headTree,
+      resolvedTree: "5".repeat(40),
+    });
+    const proposal = await runtime.sealExistingDraftReconciliation({
+      githubSource: {
+        version: GITHUB_PUBLICATION_VERSION,
+        digest: "f".repeat(64),
+        installationIdentityDigest: repository.installationIdentityDigest,
+        repository,
+        resolvedByCallId: "source",
+        resolvedRef: "refs/heads/main",
+        resolvedSha: repository.headSha,
+        resolvedTree: repository.headTree,
+      },
+      priorPublishedProposalDigest: receipt.proposalDigest,
+      pullRequestNumber: draft.number,
+      review,
+      selectedCheckoutHeadSha: draft.headSha,
+      selectedCheckoutHeadTree: draft.headTree,
+    });
+    expect(proposal.returnToDraft).toBe(true);
+    expect(proposal.expectedHeadSha).toBe(draft.headSha);
+    expect(proposal.pullRequestId).toBe(draft.pullRequestId);
+  });
+
+  it.each(["missing", "foreign-repository", "foreign-pr", "foreign-marker", "closed"])(
+    "refuses privately adopting an unowned Ready PR (%s)",
+    async (reason) => {
+      const f = ownedDraftFixture({ idempotencyKey: "d".repeat(64) });
+      f.draft.draft = false;
+      if (reason === "missing") {
+        f.findDraftByPullRequest.mockImplementation(missingPublicationReceipt);
+      }
+      if (reason === "foreign-repository") {
+        f.draft.repositoryId = "999";
+      }
+      if (reason === "foreign-pr") {
+        f.draft.pullRequestId = "999";
+      }
+      if (reason === "foreign-marker") {
+        delete f.draft.verifiedBuilderOrigin;
+      }
+      if (reason === "closed") {
+        f.draft.state = "closed";
+      }
+      await expect(
+        f.runtime.inspectExistingDraftSource({
+          repositoryId: "100",
+          owner: f.draft.owner,
+          name: f.draft.name,
+          pullRequestNumber: f.draft.number,
+        }),
+      ).rejects.toThrow();
+    },
+  );
+
   it("recovers the exact owned historical published head without retained reconciliation slots", async () => {
     const { draft, runtime } = ownedDraftFixture();
     // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.

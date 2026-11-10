@@ -56,6 +56,8 @@ const accepted = {
   content: legacyContent,
   digest: artifact.digest,
 };
+const declaredRoutes = ["/inventory-workspace/:path*", "/inventory-workspace", "/reports/:id"];
+const plannedTarget = () => ({ plan: { topology: { routes: [...declaredRoutes] } } });
 const unexpectedContextOperation = () => {
   throw new Error("Unexpected tool context operation");
 };
@@ -90,7 +92,7 @@ const seed = (phase: AppBuilderWorkflowState["phase"], prepared = true) => {
   if (prepared) {
     Object.assign(fixture, {
       applyReceipt: { digest: "apply" },
-      proposal: { digest: "prepared-creation" },
+      proposal: { digest: "prepared-creation", target: plannedTarget() },
       reviewReceipt: { digest: "review" },
       validationAttempt: { digest: "validation-attempt" },
       validationReceipt: { digest: "validation" },
@@ -246,6 +248,7 @@ describe("accepted AppSpec resume", () => {
         appSpecDigest: accepted.digest,
         walkthrough: "User accepted this AppSpec.",
       },
+      implementationRouting: { routes: declaredRoutes },
       reused: true,
     });
     expect(responsePrompt.parse(result).productAcceptance.implementationPrompt).toContain(
@@ -269,6 +272,46 @@ describe("accepted AppSpec resume", () => {
       expect(mocks.prepare).toHaveBeenCalledOnce();
     },
   );
+
+  it("includes automatically planned routes in a new design handoff and retains them on resume", async () => {
+    const before = seed("prepared", false);
+    Reflect.deleteProperty(before, "appSpec");
+    mocks.prepare.mockImplementationOnce(() => {
+      const current = appBuilderWorkflowState.get();
+      // SAFETY: The fixture supplies the saved plan consumed by the handoff; planning execution remains the isolated port above.
+      appBuilderWorkflowState.update(
+        () =>
+          ({
+            ...current,
+            phase: "planned",
+            proposal: { digest: "prepared-creation", target: plannedTarget() },
+          }) as AppBuilderWorkflowState,
+      );
+    });
+    const first = await acceptAppSpec.execute({ appId: artifact.appId }, context);
+    expect(first).toMatchObject({
+      appId: artifact.appId,
+      implementationRouting: { routes: declaredRoutes },
+      reused: false,
+    });
+    const planned = appBuilderWorkflowState.get();
+    if (!("proposal" in planned) || !("artifacts" in before)) {
+      throw new Error("Expected the accepted design and saved plan.");
+    }
+    expect(planned.artifacts).toBe(before.artifacts);
+    expect(planned.workspace).toBe(before.workspace);
+    expect(planned.sourceReceipt).toBe(before.sourceReceipt);
+    expect(planned.appSpec.appId).toBe(artifact.appId);
+    expect(planned.appSpec.artifactRevision).toBe(artifact.revision);
+    expect(planned.proposal.target.plan.topology.routes).toEqual(declaredRoutes);
+    expect(await acceptAppSpec.execute({ appId: artifact.appId }, context)).toMatchObject({
+      implementationRouting: { routes: declaredRoutes },
+      reused: true,
+    });
+    expect(appBuilderWorkflowState.get()).toBe(planned);
+    expect(mocks.prepare).toHaveBeenCalledOnce();
+    expect(getSandbox).not.toHaveBeenCalled();
+  });
 
   it("plans an explicit framework upgrade for an unchanged already accepted product spec", async () => {
     const before = seed("planned");
