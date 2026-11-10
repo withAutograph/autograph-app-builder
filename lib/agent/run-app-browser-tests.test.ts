@@ -3,6 +3,7 @@ import type { SandboxSession } from "eve/sandbox";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import { prepareAppLocalPreview } from "../../agent/tools/prepare-app-local-preview";
 import { localRuntimeEnvironmentPath } from "../repository/runtime-environment";
@@ -240,6 +241,81 @@ describe("private app browser tests", () => {
       }
     },
   );
+
+  it("keeps candidate-local browser selection out of public tool input", () => {
+    const schema = browserTool.inputSchema;
+    if (!(schema instanceof z.ZodType)) {
+      throw new Error("The browser tool fixture requires its actual Zod input schema");
+    }
+    expect(schema.safeParse({ target: "candidate-local" }).success).toBe(false);
+  });
+
+  it("preserves cancellation during the candidate-owned origin read before browser dispatch", async () => {
+    const controller = new AbortController();
+    const cancelled = new Error("candidate browser cancelled by owner");
+    vi.spyOn(preparedRuntime, "resolvePreparedRuntimeExecution").mockResolvedValue(null);
+    const run = vi.fn<SandboxSession["run"]>().mockImplementation(async () => {
+      controller.abort(cancelled);
+      return { exitCode: 0, stderr: "", stdout: JSON.stringify("http://localhost:3000") };
+    });
+    await expect(
+      runAppBrowserTests({
+        target: "candidate-local",
+        appId: "spend-review",
+        root: "/workspace/candidate",
+        signal: controller.signal,
+        sandbox: { run },
+        execution: {
+          appId: "spend-review",
+          root: "/workspace/candidate",
+          sandboxId: "owned",
+          sessionId: "owner-session",
+          sessionAuth: {},
+          state: { phase: "validated" },
+        },
+      }),
+    ).rejects.toBe(cancelled);
+    expect(
+      run.mock.calls.some(([options]) => options.command === appBrowserTestCommand("spend-review")),
+    ).toBe(false);
+  });
+
+  it("still refuses ordinary browser verification against an expired private preview", async () => {
+    vi.spyOn(preparedRuntime, "resolvePreparedRuntimeExecution").mockResolvedValue(null);
+    vi.spyOn(workingPreviewState, "get").mockReturnValue({
+      sandboxId: "owned",
+      providerSessionId: "provider",
+      commandId: "original",
+      receipt: {
+        appId: "spend-review",
+        expiresAt: new Date(0).toISOString(),
+        verifiedAt: new Date(0).toISOString(),
+        url: "https://original.vercel.run/__autograph_preview_launch?token=private-canary",
+        status: "ready",
+      },
+    });
+    const run = vi.fn<SandboxSession["run"]>();
+    const result = await runAppBrowserTests({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run },
+      execution: {
+        appId: "spend-review",
+        root: "/workspace/repository",
+        sandboxId: "owned",
+        sessionId: "owner-session",
+        sessionAuth: {},
+        state: { phase: "validated" },
+      },
+    });
+    expect(result).toMatchObject({
+      exitCode: null,
+      status: "failed",
+      reason: "private-preview-refresh-required",
+    });
+    expect(run).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("private-canary");
+  });
 
   it("requires an exact prior-artifact preview before any browser command", async () => {
     const preview = vi.spyOn(workingPreviewState, "get").mockReturnValue({

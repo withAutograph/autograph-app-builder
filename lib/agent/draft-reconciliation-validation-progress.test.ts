@@ -1,5 +1,6 @@
 import type { runAppBrowserTests as runAppBrowserTestsPort } from "../../agent/tools/run-app-browser-tests";
 import type { SandboxSession } from "eve/sandbox";
+import path from "node:path";
 import type { resolvePreparedRuntimeExecution } from "./prepared-runtime-execution";
 /* oxlint-disable anti-slop/no-module-mocking, anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns, typescript/no-unsafe-type-assertion, eslint/require-await -- Isolated Eve state and sandbox stubs exercise the real validation tool. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +14,8 @@ import type { retireUnusedDraftWorktrees } from "../repository/retire-unused-dra
 
 import validateReconciliation from "../../agent/tools/validate_github_draft_pr_reconciliation";
 import getValidationLog, { validationLogInputSchema } from "../../agent/tools/get_validation_log";
+import { workingPreviewState } from "./working-preview-state";
+import { localRuntimeEnvironmentPath } from "../repository/runtime-environment";
 import formatCandidate from "../../agent/tools/format_github_draft_pr_candidate";
 import editCandidate from "../../agent/tools/edit_github_draft_pr_candidate";
 
@@ -1318,6 +1321,81 @@ describe("draft reconciliation command progress", () => {
       ],
     });
   });
+  it.each([
+    { origin: "http://localhost:3000", readExit: 0, browserExit: 0, dispatch: true },
+    { origin: null, readExit: 0, browserExit: 0, dispatch: true },
+    { origin: "http://localhost:3000", readExit: 0, browserExit: 1, dispatch: true },
+    { origin: "https://original-private.vercel.run", readExit: 0, browserExit: 0, dispatch: false },
+    { origin: null, readExit: 1, browserExit: 0, dispatch: false },
+  ])(
+    "runs candidate browser validation independently of an original preview ($origin, $readExit, $browserExit)",
+    async ({ origin, readExit, browserExit, dispatch }) => {
+      const actual = await vi.importActual<{ runAppBrowserTests: typeof runAppBrowserTestsPort }>(
+        "../../agent/tools/run-app-browser-tests",
+      );
+      const originalPreview = {
+        sandboxId: "owned-provider-sandbox",
+        providerSessionId: "original-provider",
+        commandId: "original-private-preview",
+        receipt: {
+          appId: "spend-review",
+          expiresAt: new Date(0).toISOString(),
+          verifiedAt: new Date(0).toISOString(),
+          url: "https://original-private.vercel.run/__autograph_preview_launch?token=private-canary",
+          status: "ready" as const,
+        },
+      };
+      const preview = vi.spyOn(workingPreviewState, "get").mockReturnValue(originalPreview);
+      mocks.browser.mockImplementationOnce(actual.runAppBrowserTests);
+      mocks.resolveRuntime.mockResolvedValue(null);
+      mocks.declaresLocal = origin !== null;
+      const command = "mise run --no-deps app:runtime run spend-review test-e2e";
+      const environmentFile = localRuntimeEnvironmentPath("/workspace/candidate", "spend-review");
+      mocks.run.mockImplementation(async (options: Parameters<SandboxSession["run"]>[0]) => {
+        if (options.command === command) {
+          return {
+            exitCode: browserExit,
+            stderr: "",
+            stdout:
+              browserExit === 0 ? "Selected candidate behavior passed" : "App assertion failed",
+          };
+        }
+        if (options.command.includes(environmentFile)) {
+          return { exitCode: readExit, stderr: "", stdout: JSON.stringify(origin) };
+        }
+        return { exitCode: 0, stderr: "", stdout: "" };
+      });
+      try {
+        const result = await validateReconciliation.execute(
+          { additionalCheckTasks: [], incremental: false, runBrowserTests: true },
+          context,
+        );
+        expect(result).toMatchObject({
+          status: dispatch && browserExit === 0 ? "validated" : "needs_repair",
+        });
+        const executions = mocks.run.mock.calls.map(
+          ([options]) => options as Parameters<SandboxSession["run"]>[0],
+        );
+        const commands = executions.filter((options) => options.command === command);
+        expect(commands).toHaveLength(dispatch ? 1 : 0);
+        expect(executions.some((options) => options.command.includes(environmentFile))).toBe(true);
+        if (dispatch) {
+          expect(commands[0]).toMatchObject({
+            workingDirectory: "/workspace/candidate",
+            env: { APP_RUNTIME_STATE_DIR: path.posix.dirname(environmentFile) },
+          });
+          expect(commands[0]?.env).not.toHaveProperty("APP_TEST_PREVIEW_AUTHORITY_FILE");
+          expect(commands[0]?.env).not.toHaveProperty("APP_TEST_BASE_URL");
+        }
+        expect(JSON.stringify(result)).not.toContain("private-canary");
+        expect(workingPreviewState.get()).toBe(originalPreview);
+      } finally {
+        preview.mockRestore();
+        mocks.browser.mockReset();
+        mocks.resolveRuntime.mockReset();
+      }
+    },
+  );
   it.each([false, true])(
     "supplies fresh owner-bound browser context for candidate validation, incremental=%s",
     async (isIncremental) => {
