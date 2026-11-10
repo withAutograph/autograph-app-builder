@@ -13,6 +13,7 @@ import type {
 import type { retireUnusedDraftWorktrees } from "../repository/retire-unused-draft-worktrees";
 
 import validateReconciliation from "../../agent/tools/validate_github_draft_pr_reconciliation";
+import validateAppCreation from "../../agent/tools/validate_app_creation";
 import getValidationLog, { validationLogInputSchema } from "../../agent/tools/get_validation_log";
 import { workingPreviewState } from "./working-preview-state";
 import { localRuntimeEnvironmentPath } from "../repository/runtime-environment";
@@ -1282,6 +1283,180 @@ describe("draft reconciliation command progress", () => {
     expect(recovered.stdout).toBe(stdout);
     expect(recovered.stderr).toContain("catalog mismatch: missing café workspace entry");
     expect(recovered.stderr).not.toContain("catalog-secret");
+  });
+
+  it.each([false, undefined])(
+    "normal app validation honors browser selection %s after the same candidate's optional browser failure",
+    async (selected) => {
+      const browserCommand = "mise run --no-deps app:runtime run spend-review test-e2e";
+      mocks.logStore.mockResolvedValue(candidateLogStore());
+      mocks.browser.mockResolvedValue({
+        command: browserCommand,
+        status: "failed",
+        exitCode: 1,
+        stdout: "Saved optional browser output",
+        stderr: "BrowserNavigationFailed",
+      });
+      await expect(
+        validateReconciliation.execute(
+          {
+            additionalCheckTasks: [],
+            incremental: false,
+            runBrowserTests: true,
+          },
+          context,
+        ),
+      ).resolves.toMatchObject({ status: "needs_repair", command: browserCommand, exitCode: 1 });
+      const originalWorkflow = mocks.workflow;
+      if (mocks.candidate === null) {
+        throw new Error("Candidate fixture unavailable");
+      }
+      Object.assign(mocks.candidate, {
+        proposal: { digest: "previous-seal" },
+        review: { digest: "previous-candidate-review" },
+      });
+      const input: Parameters<typeof validateAppCreation.execute>[0] = { implementationFiles: [] };
+      if (selected !== undefined) {
+        input.runBrowserTests = selected;
+      }
+      const result = await validateAppCreation.execute(input, context);
+      expect(result).toMatchObject({ status: "validated" });
+      expect(mocks.browser).toHaveBeenCalledOnce();
+      expect(mocks.workflow).toBe(originalWorkflow);
+      expect(mocks.candidate).not.toHaveProperty("proposal");
+      expect(mocks.candidate).not.toHaveProperty("review");
+      expect(mocks.candidate?.validation).toHaveProperty(
+        "commands",
+        expect.arrayContaining([
+          { command: checkCommand, exitCode: 0 },
+          { command: testCommand, exitCode: 0 },
+        ]),
+      );
+      expect(mocks.candidate?.validation).toHaveProperty(
+        "commands",
+        expect.not.arrayContaining([expect.objectContaining({ command: browserCommand })]),
+      );
+      expect(mocks.attempts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ command: browserCommand, exitCode: 1, completion: "complete" }),
+        ]),
+      );
+    },
+  );
+
+  it("adds an explicitly selected browser task to the same pending required-check pass", async () => {
+    for (const command of [installCommand, schemaCommand, checkCommand, testCommand]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Advance the actual durable validation pass before selecting the optional task.
+      await candidateValidationCall(command);
+    }
+    const browserCommand = "mise run --no-deps app:runtime run spend-review test-e2e";
+    mocks.browser.mockResolvedValue({
+      command: browserCommand,
+      exitCode: 1,
+      status: "failed",
+      stdout: "",
+      stderr: "Browser assertion failed",
+    });
+    await expect(
+      validateReconciliation.execute(
+        {
+          additionalCheckTasks: [],
+          incremental: false,
+          runBrowserTests: true,
+        },
+        context,
+      ),
+    ).resolves.toMatchObject({ status: "needs_repair", command: browserCommand, exitCode: 1 });
+    expect(mocks.browser).toHaveBeenCalledOnce();
+    expect(mocks.candidate).not.toHaveProperty("validation");
+    expect(mocks.attempts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ command: browserCommand, exitCode: 1 })]),
+    );
+  });
+
+  it.each(["schema", "build", "unit"] as const)(
+    "keeps required %s command failure blocking when browser testing is disabled",
+    async (failed) => {
+      const command = { schema: schemaCommand, build: checkCommand, unit: testCommand }[failed];
+      if (failed === "schema") {
+        mocks.compile.mockResolvedValue({
+          command,
+          exitCode: 1,
+          status: "failed",
+          stdout: "",
+          stderr: "Required schema failure",
+        });
+      } else {
+        mocks.check.mockImplementation(
+          async (input: { command: string }) =>
+            await Promise.resolve({
+              exitCode: input.command === command ? 1 : 0,
+              stdout: "",
+              stderr: "Required check result",
+            }),
+        );
+      }
+      await expect(
+        validateAppCreation.execute({ implementationFiles: [], runBrowserTests: false }, context),
+      ).resolves.toMatchObject({ status: "needs_repair", command, exitCode: 1 });
+      expect(mocks.browser).not.toHaveBeenCalled();
+      expect(mocks.candidate).not.toHaveProperty("validation");
+      expect(mocks.publish).not.toHaveBeenCalled();
+    },
+  );
+
+  it("retains a selected additional repository check when browser testing is disabled", async () => {
+    mocks.spawn.mockResolvedValue({
+      stdout: encode("Required selected check output"),
+      stderr: encode("Required selected check failure"),
+      wait: async () => await Promise.resolve({ exitCode: 2 }),
+      kill: async () => {},
+    });
+    const command = "mise run --no-deps --skip-tools check:browser-contract";
+    await expect(
+      validateReconciliation.execute(
+        {
+          additionalCheckTasks: ["check:browser-contract"],
+          incremental: false,
+          runBrowserTests: false,
+        },
+        context,
+      ),
+    ).resolves.toMatchObject({ status: "needs_repair", command, exitCode: 2 });
+    expect(mocks.browser).not.toHaveBeenCalled();
+    expect(mocks.candidate).not.toHaveProperty("validation");
+    expect(mocks.attempts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ category: "additional-check", command, exitCode: 2 }),
+      ]),
+    );
+  });
+
+  it("does not change the pending browser plan when its ordinary validation continuation is cancelled", async () => {
+    mocks.browser.mockResolvedValue({
+      command: "mise run --no-deps app:runtime run spend-review test-e2e",
+      exitCode: 1,
+      status: "failed",
+      stdout: "",
+      stderr: "Original browser failure",
+    });
+    await validateReconciliation.execute(
+      { additionalCheckTasks: [], incremental: false, runBrowserTests: true },
+      context,
+    );
+    const retained = mocks.candidate;
+    const cancellation = new AbortController();
+    cancellation.abort();
+    await expect(
+      validateAppCreation.execute({ implementationFiles: [], runBrowserTests: false }, {
+        abortSignal: cancellation.signal,
+        callId: "cancelled-validation",
+        session: { auth: { owned: "auth" }, id: "adapter" },
+      } as never),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(mocks.candidate).toBe(retained);
+    expect(mocks.browser).toHaveBeenCalledOnce();
+    expect(mocks.publish).not.toHaveBeenCalled();
   });
 
   it("retains local, browser and additional repository task behavior", async () => {

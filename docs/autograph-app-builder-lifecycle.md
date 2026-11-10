@@ -55,6 +55,15 @@ Ordinary build validation skips authenticated browser preparation and browser
 tasks. Builder can opt into a declared app browser task with `runBrowserTests`
 when that task serves the app’s testing needs.
 
+The current `runBrowserTests` selection also applies when resuming an owned
+draft candidate. False or omitted selection removes only the pending,
+tool-owned browser step for that same app; completed required checks remain
+valid for unchanged candidate bytes. An explicit selection can add the browser
+step before capture. A selected browser failure remains failed in its separate
+command history and logs. Later opting out does not record a browser pass or
+reuse a sealed candidate approval; the remaining required checks and release
+capture must succeed before the current candidate becomes reviewable.
+
 When draft reconciliation selects an app-owned browser task, Builder runs it
 against the candidate's own prepared runtime or ordinary frontend server. The
 session's optional working preview cannot supply its launch authority or origin

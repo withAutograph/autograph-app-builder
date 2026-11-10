@@ -489,11 +489,15 @@ const testShardForStep = (step: ValidationStep, appId: string): string | undefin
   return normalized.command === planned?.command ? shard : undefined;
 };
 
-/** Only pending test commands follow the current declaration; completed evidence stays intact. */
+const isOptionalBrowserStep = (step: ValidationStep, appId: string) =>
+  step.kind === "browser" && step.command === appBrowserTestCommand(appId);
+
+/** Pending test commands follow current selection; completed evidence stays intact. */
 const currentValidationSteps = (
   run: NonNullable<DraftReconciliationCandidate["validationRun"]>,
   appId: string,
   testShards: readonly string[],
+  runBrowserTests: boolean,
 ): ValidationStep[] => {
   const completed = run.steps.slice(0, run.nextIndex);
   const completedShards = new Set(completed.map((step) => testShardForStep(step, appId)));
@@ -504,6 +508,9 @@ const currentValidationSteps = (
     .map(({ command }) => ({ command, kind: "check" }));
   let inserted = false;
   const pending = run.steps.slice(run.nextIndex).flatMap((step) => {
+    if (!runBrowserTests && isOptionalBrowserStep(step, appId)) {
+      return [];
+    }
     const isTest = testShardForStep(step, appId) !== undefined;
     const insert =
       !inserted && (isTest || ["browser", "additional", "capture"].includes(step.kind));
@@ -513,7 +520,20 @@ const currentValidationSteps = (
     const current = currentValidationStep(step, appId, run.schemaTaskCompleted, testShards);
     return [...(insert ? tests : []), ...(isTest ? [] : [current])];
   });
-  return [...completed, ...pending, ...(inserted ? [] : tests)];
+  const selected = [...pending, ...(inserted ? [] : tests)];
+  if (
+    runBrowserTests &&
+    ![...completed, ...selected].some((step) => isOptionalBrowserStep(step, appId))
+  ) {
+    const before = selected.findIndex(
+      (step) => step.kind === "additional" || step.kind === "capture",
+    );
+    selected.splice(before === -1 ? selected.length : before, 0, {
+      kind: "browser",
+      command: appBrowserTestCommand(appId),
+    });
+  }
+  return [...completed, ...selected];
 };
 
 /** Eve publishes progress at tool boundaries, so each incremental call runs one command. */
@@ -599,10 +619,33 @@ const runIncrementalValidation = async (
     };
   }
   const nextIndexToRun = run.nextIndex;
+  const browserWasPending = run.steps
+    .slice(run.nextIndex)
+    .some((step) => isOptionalBrowserStep(step, candidate.appId));
   run = {
     ...run,
-    steps: currentValidationSteps(run, candidate.appId, testShards),
+    steps: currentValidationSteps(run, candidate.appId, testShards, input.runBrowserTests),
   };
+  const browserSelectionChanged =
+    browserWasPending !==
+    run.steps.slice(run.nextIndex).some((step) => isOptionalBrowserStep(step, candidate.appId));
+  if (browserSelectionChanged) {
+    ctx.abortSignal?.throwIfAborted();
+    const refreshedRun = run;
+    updateExactDraftReconciliation({
+      expected: candidate,
+      operation: "updating the selected optional browser task",
+      transition: () => {
+        const next = { ...candidate, validationRun: refreshedRun };
+        delete next.validation;
+        delete next.proposal;
+        delete next.review;
+        delete next.repairReview;
+        delete next.reviewReadProgress;
+        return next;
+      },
+    });
+  }
   if (!run.steps.some((entry) => entry.kind === "capture")) {
     run = { ...run, steps: [...run.steps, { kind: "capture", command: captureCommand }] };
   }
@@ -782,21 +825,31 @@ const runIncrementalValidation = async (
         status: local.status === "prepared" ? "passed" : "failed",
       };
     } else if (step.kind === "browser") {
-      const browser = await runAppBrowserTests({
-        target: "candidate-local",
-        appId: candidate.appId,
-        execution: {
-          appId: candidate.appId,
-          root: candidate.root,
-          sandboxId: getBuilderSandboxId(sandbox),
-          sessionAuth: ctx.session.auth,
-          sessionId: ctx.session.id,
-          signal: ctx.abortSignal,
-          state: appBuilderWorkflowState.get(),
-        },
-        root: candidate.root,
-        sandbox,
-        signal: ctx.abortSignal,
+      const browser = await runCandidateCommandWithLogs({
+        category: "test",
+        command: step.command,
+        candidate,
+        callId: ctx.callId,
+        resolvedTree: before.resolvedTree,
+        sessionAuth: ctx.session.auth,
+        sessionId: ctx.session.id,
+        run: async () =>
+          await runAppBrowserTests({
+            target: "candidate-local",
+            appId: candidate.appId,
+            execution: {
+              appId: candidate.appId,
+              root: candidate.root,
+              sandboxId: getBuilderSandboxId(sandbox),
+              sessionAuth: ctx.session.auth,
+              sessionId: ctx.session.id,
+              signal: ctx.abortSignal,
+              state: appBuilderWorkflowState.get(),
+            },
+            root: candidate.root,
+            sandbox,
+            signal: ctx.abortSignal,
+          }),
       });
       result = {
         command: browser.command,
