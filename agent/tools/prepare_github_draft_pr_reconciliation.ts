@@ -80,20 +80,42 @@ const currentReviewRefresh = (input: {
   ) {
     throw input.error;
   }
-  if (input.workflow.phase !== "reviewed" && input.workflow.phase !== "validated") {
+  const { workflow } = input;
+  const creationNeedsValidation =
+    workflow.phase === "applied" ||
+    workflow.phase === "validation_pending" ||
+    workflow.phase === "validation_failed";
+  const canRefreshReview = workflow.phase === "reviewed" || workflow.phase === "validated";
+  if (!creationNeedsValidation && !canRefreshReview) {
     throw input.error;
   }
   const publication =
     input.error instanceof OwnedDraftReviewRefreshRequiredError
       ? input.error.publicationProposalDigest
-      : input.workflow.publishedGitHubDraftProposalDigest;
+      : workflow.publishedGitHubDraftProposalDigest;
   if (
-    input.workflow.publishedGitHubDraftProposalDigest !== undefined &&
-    publication !== input.workflow.publishedGitHubDraftProposalDigest
+    workflow.publishedGitHubDraftProposalDigest !== undefined &&
+    publication !== workflow.publishedGitHubDraftProposalDigest
   ) {
     throw input.error;
   }
-  const refreshed = invalidateGitHubDestinationReview(input.workflow);
+  if (creationNeedsValidation) {
+    return {
+      status: "review_refresh_required" as const,
+      nextCall: {
+        tool: "validate_app_creation" as const,
+        input: { implementationFiles: [], validationTarget: "creation-workspace" as const },
+      },
+      afterValidation: { tool: "prepare_github_draft_review" as const, input: {} },
+      afterReview: {
+        tool: "prepare_github_draft_pr_reconciliation" as const,
+        input: { pullRequestNumber: input.pullRequestNumber },
+      },
+      recovery:
+        "The current creation files need their own repository validation before a fresh app review. Follow nextCall to check that actual checkout, then continue its normal current-app review and this same draft. The isolated candidate and its separate validation remain preserved; no new Build is needed and the eventual update still requires exact approval.",
+    };
+  }
+  const refreshed = invalidateGitHubDestinationReview(workflow);
   if (publication !== undefined) {
     refreshed.publishedGitHubDraftProposalDigest = publication;
   }
