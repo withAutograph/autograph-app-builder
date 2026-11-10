@@ -12,6 +12,8 @@ import type { PrivateHistoryObservation } from "./same-origin-http";
 import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contract";
 import {
   authSchemaRolloutApprovalSchema,
+  authSchemaRolloutApprovalReference,
+  authSchemaRolloutApplyInputSchema,
   authSchemaRolloutDigest,
 } from "../provisioning/production-auth-schema-rollout-contract";
 import type { AuthSchemaRolloutApproval } from "../provisioning/production-auth-schema-rollout-contract";
@@ -23,6 +25,7 @@ export const createPrivateAuthSchemaRolloutApprovalCapture = (input: {
   state?: PrivateOperatorApprovalCapture;
 }) => {
   const expected = authSchemaRolloutApprovalSchema.parse(input.plan);
+  const expectedReference = authSchemaRolloutApprovalReference(expected);
   const captureInput: Parameters<typeof createPrivateOperatorApprovalCapture>[0] = {
     request: {
       action: "auth-schema-rollout",
@@ -45,8 +48,14 @@ export const createPrivateAuthSchemaRolloutApprovalCapture = (input: {
             request.kind === "tool-approval" &&
             request.action.toolName === "apply-production-auth-schema-rollout"
           ) {
-            const parsed = authSchemaRolloutApprovalSchema.safeParse(request.action.input);
-            if (parsed.success && isDeepStrictEqual(parsed.data, expected)) {
+            const parsed = authSchemaRolloutApplyInputSchema.safeParse(request.action.input);
+            if (
+              parsed.success &&
+              isDeepStrictEqual(
+                parsed.data,
+                parsed.data.version === 1 ? expected : expectedReference,
+              )
+            ) {
               capture.acceptRequest(request.requestId, request.action.callId);
             }
           }

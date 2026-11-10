@@ -1,3 +1,4 @@
+import { authSchemaRolloutApprovalReference } from "../provisioning/production-auth-schema-rollout-contract";
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 
@@ -1188,6 +1189,52 @@ describe("installed Eve 0.68 projection", () => {
       plan.planDigest,
       "apply-production-auth-schema-rollout",
       "Approve internal schema rollout call",
+    ]) {
+      expect(visible).not.toContain(privateValue);
+    }
+  });
+
+  it("projects the compact shared sign-in approval with its enrolled label and full saved-plan digest", async () => {
+    const { plan } = await rolloutFixture().service.plan(rolloutOwner, rolloutProfile.id);
+    const reference = authSchemaRolloutApprovalReference(plan);
+    const events = projectInstalledEveEvent(
+      installedEvent({
+        type: "input.requested",
+        data: {
+          requests: [
+            {
+              kind: "tool-approval",
+              requestId: "auth-reference-approval",
+              prompt: "Private maintenance action",
+              action: {
+                kind: "tool-call",
+                toolName: "apply-production-auth-schema-rollout",
+                input: reference,
+              },
+            },
+          ],
+        },
+      }),
+      5,
+    ).map(toPublicEvent);
+    const required = events.find((event) => event?.type === "input_required");
+    expect(required).toMatchObject({
+      request: {
+        kind: "approval",
+        title: "Approve this one-time shared sign-in service update?",
+      },
+    });
+    const displayed = z.object({ request: z.object({ description: z.string() }) }).parse(required);
+    expect(displayed.request.description).toContain(plan.resourceLabel);
+    expect(displayed.request.description).toContain(reference.approvalDigest);
+    const visible = JSON.stringify(events);
+    for (const privateValue of [
+      plan.resource.hostname,
+      plan.resource.resourceId,
+      plan.resource.neon.projectId,
+      plan.resource.neon.branchId,
+      "apply-production-auth-schema-rollout",
+      "Private maintenance action",
     ]) {
       expect(visible).not.toContain(privateValue);
     }

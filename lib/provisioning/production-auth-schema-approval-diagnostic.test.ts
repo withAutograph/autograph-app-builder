@@ -14,7 +14,10 @@ import {
 } from "./production-auth-schema-rollout.test-fixture";
 import { createAuthSchemaRolloutNativeHandler } from "./production-auth-schema-rollout-native";
 import { createAuthSchemaRollout } from "./production-auth-schema-rollout";
-import { authSchemaRolloutDigest } from "./production-auth-schema-rollout-contract";
+import {
+  authSchemaRolloutDigest,
+  authSchemaRolloutApprovalReference,
+} from "./production-auth-schema-rollout-contract";
 import type { AuthSchemaRolloutApproval } from "./production-auth-schema-rollout-contract";
 import { projectAuthSchemaApprovalInput } from "../eve/auth-schema-approval-diagnostic";
 
@@ -332,6 +335,38 @@ describe("read-only Auth approval mismatch diagnostics", () => {
       projectAuthSchemaApprovalInput(Object.defineProperty({}, "effects", { get: getter }), f.plan),
     ).toMatchObject({ jsonAvailable: false, schemaValid: false });
     expect(getter).not.toHaveBeenCalled();
+  });
+
+  it("diagnoses strict v2 references separately from full SQL plans", async () => {
+    const f = await setup();
+    const reference = authSchemaRolloutApprovalReference(f.plan);
+    expect(projectAuthSchemaApprovalInput(reference, f.plan)).toMatchObject({
+      comparisonKind: "reference",
+      schemaValid: true,
+      referenceEqual: true,
+      expectedPlanSha256: reference.approvalDigest,
+      fieldsEqual: { approvalDigest: true, resourceLabel: true },
+    });
+    expect(
+      projectAuthSchemaApprovalInput({ ...reference, approvalDigest: "0".repeat(64) }, f.plan),
+    ).toMatchObject({
+      comparisonKind: "reference",
+      schemaValid: true,
+      referenceEqual: false,
+      fieldsEqual: { approvalDigest: false },
+    });
+    const drift = projectAuthSchemaApprovalInput(
+      { ...reference, approvalDigest: "0".repeat(64), [secret]: secret },
+      f.plan,
+    );
+    expect(drift).toMatchObject({
+      comparisonKind: "reference",
+      schemaValid: false,
+      unknownTopKeyCount: 1,
+      referenceEqual: false,
+      fieldsEqual: { approvalDigest: false },
+    });
+    expect(JSON.stringify(drift)).not.toContain(secret);
   });
 
   it("caps schema issues and effect comparisons without exposing malformed values", async () => {

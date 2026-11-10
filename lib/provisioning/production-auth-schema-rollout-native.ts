@@ -46,11 +46,17 @@ const ownerFields = {
 export const authSchemaRolloutRequestSchema = z.discriminatedUnion("action", [
   z.strictObject({ ...ownerFields, action: z.literal("plan"), profileId: z.string().min(1) }),
   z.strictObject({ ...ownerFields, action: z.literal("status"), operationRef: z.uuid() }),
+  z.strictObject({ ...ownerFields, action: z.literal("review"), operationRef: z.uuid() }),
   z.strictObject({
     ...ownerFields,
     action: z.literal("execute"),
     operationRef: z.uuid(),
     planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+    // Legacy full-plan approvals omit this field; v2 references carry the entire frozen plan's hash.
+    approvalDigest: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/u)
+      .optional(),
     approvedByCallId: z.string().min(1),
   }),
 ]);
@@ -350,12 +356,15 @@ export const createAuthSchemaRolloutNativeHandler =
         result = await service.plan(owner, input.profileId);
       } else if (input.action === "status") {
         result = await service.status(owner, input.operationRef);
+      } else if (input.action === "review") {
+        result = await service.review(owner, input.operationRef);
       } else {
         result = await service.execute(
           owner,
           input.operationRef,
           input.planDigest,
           input.approvedByCallId,
+          input.approvalDigest,
         );
       }
       return Response.json(result, { headers: { "cache-control": "no-store" } });
