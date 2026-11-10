@@ -348,6 +348,20 @@ access setup. Code publication, Ready, and merge remain tied to the reviewed
 revision through the existing delivery flow. Setup status does not claim that
 the native deployment is active or that app behavior has been tested.
 
+The normal planning result supplies a server-derived version-two
+`approvalReference` and `nextCall`. The model passes that compact input unchanged;
+it does not copy the database release checksum, captured artifact reference or
+resource configuration into preparation. The reference binds the app, repository,
+operation, setup-effect digest and displayed access/account selection. The
+protected service resolves the current owner-scoped captured release and app
+description again, compares the reference, and observes the exact native request
+and creator settlement before retaining approval or running setup. Changed
+schema, repository, organization or access effects need a current approval;
+source-only revisions retain the same effects and storage. No additional plan
+store or provider operation is introduced. Legacy full-plan preparation and the
+protected `plan`/status response shapes remain supported without treating an
+invalid full plan as a reference. The reference is review input, never consent.
+
 For a managed existing-repository destination, publish the reviewed draft first,
 then finish required normal data/access/runtime binding setup before the approved
 merge triggers native Production delivery. Vercel project environment writes do

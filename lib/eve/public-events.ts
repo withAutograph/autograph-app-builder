@@ -26,6 +26,8 @@ import type {
 import type { MessageStreamEvent } from "eve/client";
 import { z } from "zod";
 import { publicApprovalDescription } from "../agent/approval-receipt";
+import { repositoryProductionPrepareInputSchema } from "../provisioning/repository-production-approval";
+import { describeAppAccessIntent } from "../agent/app-access-intent";
 import { continuityStatusSchema } from "../provisioning/hosted-operator-continuity-contract";
 import {
   githubRepositoryAccessSchema,
@@ -1321,23 +1323,24 @@ const inputRequest = (request: {
       : request.prompt;
   let description: string | undefined;
   if (request.kind === toolApprovalKind && toolName === prepareAppProductionTool) {
-    const setup = z
-      .object({
-        scope: z.object({ appId: z.string(), repositoryFullName: z.string() }),
-        intent: z.object({
-          creatorRoles: z.array(z.string()),
-          creatorEmail: z.email().optional(),
-          storage: z.object({ kind: z.enum(["none", "postgres"]) }),
-        }),
-      })
-      .safeParse(request.action?.input);
+    const setup = repositoryProductionPrepareInputSchema.safeParse(request.action?.input);
     if (setup.success) {
-      const { scope, intent } = setup.data;
+      const plan = setup.data;
+      const appId = "version" in plan ? plan.appId : plan.scope.appId;
+      const review =
+        "version" in plan
+          ? plan.review
+          : {
+              repositoryFullName: plan.scope.repositoryFullName,
+              storageKind: plan.intent.storage.kind,
+              creatorEmail: plan.intent.creatorEmail,
+              access: plan.intent.access,
+            };
       const account =
-        intent.creatorEmail === undefined
+        review.creatorEmail === undefined
           ? "Connect your app account once to receive access."
-          : `Use ${intent.creatorEmail} for your app account and verify it through secure sign-in.`;
-      description = `Set up ${scope.appId} in ${scope.repositoryFullName}. ${intent.storage.kind === "postgres" ? "Builder prepares the app’s database and keeps it for future updates. " : "This app does not need a database. "}${account} Other people get access only when invited.`;
+          : `Use ${review.creatorEmail} for your app account and verify it through secure sign-in.`;
+      description = `Set up ${appId} in ${review.repositoryFullName}. ${review.storageKind === "postgres" ? "Builder prepares the app’s database and keeps it for future updates. " : "This app does not need a database. "}${account} ${describeAppAccessIntent(appId, review.access)}`;
     }
   } else if (request.kind === toolApprovalKind && toolName === "apply_app_creation") {
     // Use the standard card copy when the optional summary does not fit the card.

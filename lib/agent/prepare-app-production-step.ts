@@ -1,9 +1,9 @@
 import type { WorkflowStepToolContext } from "eve/tools";
-import type { RepositoryProductionApprovalInput } from "../provisioning/repository-production-approval";
+import type { RepositoryProductionPrepareInput } from "../provisioning/repository-production-approval";
 
 // eslint-disable-next-line eslint/func-style -- Workflow SDK requires a hoisted top-level step.
 export async function prepareAppProductionStep(
-  input: RepositoryProductionApprovalInput,
+  input: RepositoryProductionPrepareInput,
   ctx: WorkflowStepToolContext,
 ) {
   "use step";

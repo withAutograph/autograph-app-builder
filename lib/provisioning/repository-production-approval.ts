@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { resolveAppAccessIntent } from "../agent/app-access-intent";
+import { isDeepStrictEqual } from "node:util";
+import { appAccessIntentSchema, resolveAppAccessIntent } from "../agent/app-access-intent";
 import {
   repositoryProductionDigest,
   repositoryProductionIntentSchema,
@@ -64,6 +65,68 @@ export const repositoryProductionApprovalInputSchema = z
 export type RepositoryProductionApprovalInput = z.infer<
   typeof repositoryProductionApprovalInputSchema
 >;
+
+/** A server-derived setup reference keeps database release details out of model input. */
+export const repositoryProductionApprovalReferenceSchema = z.strictObject({
+  version: z.literal(2),
+  appId: repositoryProductionScopeSchema.shape.appId,
+  repositoryId: repositoryProductionScopeSchema.shape.repositoryId,
+  operationRef: z.uuid(),
+  planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  review: z.strictObject({
+    repositoryFullName: repositoryProductionScopeSchema.shape.repositoryFullName,
+    storageKind: z.enum(["none", "postgres"]),
+    creatorRoles: z.array(z.string().min(1)),
+    creatorEmail: z.email().optional(),
+    access: appAccessIntentSchema,
+  }),
+});
+export type RepositoryProductionApprovalReference = z.infer<
+  typeof repositoryProductionApprovalReferenceSchema
+>;
+
+export const repositoryProductionPrepareInputSchema = z.union([
+  repositoryProductionApprovalReferenceSchema,
+  repositoryProductionApprovalInputSchema,
+]);
+export type RepositoryProductionPrepareInput = z.infer<
+  typeof repositoryProductionPrepareInputSchema
+>;
+
+export const repositoryProductionApprovalReference = (
+  input: RepositoryProductionApprovalInput,
+): RepositoryProductionApprovalReference => {
+  const plan = repositoryProductionApprovalInputSchema.parse(input);
+  const review: RepositoryProductionApprovalReference["review"] = {
+    repositoryFullName: plan.scope.repositoryFullName,
+    storageKind: plan.intent.storage.kind,
+    creatorRoles: [...new Set(plan.intent.creatorRoles)].toSorted(),
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- A new review has no inherited access selection.
+    access: resolveAppAccessIntent(plan.intent.access, undefined) ?? { mode: "private" },
+  };
+  if (plan.intent.creatorEmail !== undefined) {
+    review.creatorEmail = plan.intent.creatorEmail;
+  }
+  return {
+    version: 2,
+    appId: plan.scope.appId,
+    repositoryId: plan.scope.repositoryId,
+    operationRef: plan.operationRef,
+    planDigest: plan.planDigest,
+    review,
+  };
+};
+
+/** Compare against the freshly resolved owner-scoped plan before observing approval or writes. */
+export const assertRepositoryProductionApprovalReference = (
+  plan: RepositoryProductionApprovalInput,
+  reference: RepositoryProductionApprovalReference,
+) => {
+  if (!isDeepStrictEqual(reference, repositoryProductionApprovalReference(plan))) {
+    throw new Error("repository_production_approval_required");
+  }
+};
+
 export const repositoryProductionApprovalInput = (
   scope: RepositoryProductionScope,
   intent: RepositoryProductionIntent,

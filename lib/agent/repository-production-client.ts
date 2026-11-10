@@ -1,11 +1,20 @@
 import { z } from "zod";
+import { isDeepStrictEqual } from "node:util";
 import type { WorkflowStepToolContext } from "eve/tools";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
 import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import { resolveHostedOperatorOwnerContext } from "../provisioning/hosted-operator-owner-context";
-import { repositoryProductionApprovalInputSchema } from "../provisioning/repository-production-approval";
-import type { RepositoryProductionApprovalInput } from "../provisioning/repository-production-approval";
+import {
+  repositoryProductionApprovalInputSchema,
+  repositoryProductionApprovalReference,
+  repositoryProductionPrepareInputSchema,
+} from "../provisioning/repository-production-approval";
+import type {
+  RepositoryProductionApprovalReference,
+  RepositoryProductionPrepareInput,
+} from "../provisioning/repository-production-approval";
+import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contract";
 import { appAccessSnapshotSchema } from "../app-access/contracts";
 import { describeAppAccessIntent } from "./app-access-intent";
 import { repositoryProductionDeliveryStatusSchema } from "../provisioning/repository-production-delivery";
@@ -26,6 +35,13 @@ const setupSchema = z.object({
 });
 // oxlint-disable-next-line sonarjs/max-union-size -- These are the four closed app setup/read actions on the existing protected service.
 type RepositoryProductionAction = "plan" | "prepare" | "setup-status" | "delivery-status";
+interface RepositoryProductionRequestExtras {
+  approvedByCallId?: string;
+  creatorEmail?: string;
+  repositoryId?: string;
+  repositoryFullName?: string;
+  approvalReference?: RepositoryProductionApprovalReference;
+}
 
 /** A failed read is not evidence that preparation ran or changed a resource. */
 export const repositoryProductionResponseError = async (
@@ -53,12 +69,7 @@ export const repositoryProductionResponseError = async (
   );
 };
 
-/** Workload-authenticated calls retain the canonical Builder owner and session. */
-export const repositoryProductionClientForContext = async (ctx: WorkflowStepToolContext) => {
-  const value = process.env.REPOSITORY_PRODUCTION_OPERATOR_URL;
-  if (value === undefined || value === "") {
-    throw new Error("protected_operator_required");
-  }
+const repositoryProductionEndpoint = (value: string) => {
   // react-doctor-disable-next-line react-doctor/no-unguarded-throwing-parse-call -- Invalid operator configuration must fail before any protected request.
   const endpoint = new URL(value);
   const validOrigin = [
@@ -72,35 +83,32 @@ export const repositoryProductionClientForContext = async (ctx: WorkflowStepTool
   if (!validOrigin) {
     throw new Error("protected_operator_required");
   }
-  const execution = hostedOperatorCallbackExecution(ctx.session);
-  const { authority, principal } = exactForwardedSessionAuthority(ctx.session.auth, {
-    realmContinuation: { adapterSessionId: execution.ownerAnchorRunId ?? ctx.session.id },
-  });
-  const ownerContext = await resolveHostedOperatorOwnerContext({
-    adapterSessionId: ctx.session.id,
-    authority,
-    principal,
-    sessionAuth: ctx.session.auth,
-    environment: process.env,
-    execution,
-  });
+  return endpoint;
+};
+
+/** The native service remains authoritative for current owner, captured release and approval. */
+export const createRepositoryProductionClient = (input: {
+  endpoint: string;
+  ownerContext: OperatorOwnerContext;
+  callId: string;
+  signal: AbortSignal;
+  workloadToken: () => Promise<string>;
+  fetch: typeof fetch;
+}) => {
+  const endpoint = repositoryProductionEndpoint(input.endpoint);
+  const { ownerContext } = input;
   const send = async <T>(
     appId: string,
     action: RepositoryProductionAction,
     schema: z.ZodType<T>,
-    extra: {
-      approvedByCallId?: string;
-      creatorEmail?: string;
-      repositoryId?: string;
-      repositoryFullName?: string;
-    } = {},
+    extra: RepositoryProductionRequestExtras = {},
   ) => {
-    ctx.abortSignal.throwIfAborted();
-    const workload = await createVercelWorkloadIdentity().token();
-    const response = await fetch(new URL("/v1/repository-production", endpoint), {
+    input.signal.throwIfAborted();
+    const workload = await input.workloadToken();
+    const response = await input.fetch(new URL("/v1/repository-production", endpoint), {
       method: "POST",
       redirect: "error",
-      signal: ctx.abortSignal,
+      signal: input.signal,
       headers: {
         authorization: `Bearer ${workload}`,
         "content-type": "application/json",
@@ -115,7 +123,7 @@ export const repositoryProductionClientForContext = async (ctx: WorkflowStepTool
         ...extra,
       }),
     });
-    ctx.abortSignal.throwIfAborted();
+    input.signal.throwIfAborted();
     if (!response.ok) {
       throw await repositoryProductionResponseError(response, action);
     }
@@ -131,7 +139,8 @@ export const repositoryProductionClientForContext = async (ctx: WorkflowStepTool
       );
       if (
         result.plan.scope.appId !== appId ||
-        result.plan.intent.sessionId !== ownerContext.sessionId
+        result.plan.intent.sessionId !== ownerContext.sessionId ||
+        !isDeepStrictEqual(result.plan.scope.authority, ownerContext.authority)
       ) {
         throw new Error("app_setup_scope_mismatch");
       }
@@ -141,39 +150,56 @@ export const repositoryProductionClientForContext = async (ctx: WorkflowStepTool
         repositoryFullName: result.plan.scope.repositoryFullName,
         operationRef: result.plan.operationRef,
       });
+      const approvalReference = repositoryProductionApprovalReference(result.plan);
       return {
         ...result,
+        approvalReference,
+        nextCall: { tool: "prepare-app-production" as const, input: approvalReference },
         accessSummary: describeAppAccessIntent(result.plan.scope.appId, result.plan.intent.access),
       };
     },
-    prepare: async (input: RepositoryProductionApprovalInput) => {
-      const plan = repositoryProductionApprovalInputSchema.parse(input);
-      if (plan.intent.sessionId !== ownerContext.sessionId) {
+    prepare: async (value: RepositoryProductionPrepareInput) => {
+      const plan = repositoryProductionPrepareInputSchema.parse(value);
+      if (
+        "scope" in plan &&
+        (plan.intent.sessionId !== ownerContext.sessionId ||
+          !isDeepStrictEqual(plan.scope.authority, ownerContext.authority))
+      ) {
         throw new Error("app_setup_scope_mismatch");
       }
+      const { appId, repositoryId, repositoryFullName, creatorEmail } =
+        "version" in plan
+          ? {
+              appId: plan.appId,
+              repositoryId: plan.repositoryId,
+              repositoryFullName: plan.review.repositoryFullName,
+              creatorEmail: plan.review.creatorEmail,
+            }
+          : { ...plan.scope, creatorEmail: plan.intent.creatorEmail };
+      const extra: RepositoryProductionRequestExtras = { approvedByCallId: input.callId };
+      if (creatorEmail !== undefined) {
+        extra.creatorEmail = creatorEmail;
+      }
+      if ("version" in plan) {
+        extra.approvalReference = plan;
+      }
       const result = await send(
-        plan.scope.appId,
+        appId,
         "prepare",
         appAccessSnapshotSchema.extend({ version: z.literal(1), setup: setupSchema }),
-        {
-          approvedByCallId: ctx.callId,
-          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
-          ...(plan.intent.creatorEmail === undefined
-            ? {}
-            : { creatorEmail: plan.intent.creatorEmail }),
-        },
+        extra,
       );
       if (
-        result.appId !== plan.scope.appId ||
+        result.appId !== appId ||
         result.sessionId !== ownerContext.sessionId ||
         result.setup.operationRef !== plan.operationRef
       ) {
         throw new Error("app_setup_scope_mismatch");
       }
       retainManagedProductionDeliveryRequirement({
-        appId: plan.scope.appId,
-        repositoryId: plan.scope.repositoryId,
-        repositoryFullName: plan.scope.repositoryFullName,
+        appId,
+        repositoryId,
+        repositoryFullName,
         operationRef: result.setup.operationRef,
       });
       return result;
@@ -197,4 +223,33 @@ export const repositoryProductionClientForContext = async (ctx: WorkflowStepTool
       return result;
     },
   };
+};
+
+/** Workload-authenticated calls retain the canonical Builder owner and session. */
+export const repositoryProductionClientForContext = async (ctx: WorkflowStepToolContext) => {
+  const value = process.env.REPOSITORY_PRODUCTION_OPERATOR_URL;
+  if (value === undefined || value === "") {
+    throw new Error("protected_operator_required");
+  }
+  const endpoint = repositoryProductionEndpoint(value);
+  const execution = hostedOperatorCallbackExecution(ctx.session);
+  const { authority, principal } = exactForwardedSessionAuthority(ctx.session.auth, {
+    realmContinuation: { adapterSessionId: execution.ownerAnchorRunId ?? ctx.session.id },
+  });
+  const ownerContext = await resolveHostedOperatorOwnerContext({
+    adapterSessionId: ctx.session.id,
+    authority,
+    principal,
+    sessionAuth: ctx.session.auth,
+    environment: process.env,
+    execution,
+  });
+  return createRepositoryProductionClient({
+    endpoint: endpoint.href,
+    ownerContext,
+    callId: ctx.callId,
+    signal: ctx.abortSignal,
+    workloadToken: async () => await createVercelWorkloadIdentity().token(),
+    fetch,
+  });
 };
