@@ -59,6 +59,41 @@ including after Server Actions and redirects. Do not cache session or tenant
 state to suppress an error, disable Cache Components as a default workaround,
 or move authorization into the browser.
 
+Keep protected reads and saves on the prepared repository's verified request
+boundary. Preserve its generated data foundation when available. When changing
+Next configuration, retain the foundation's generated runtime-file tracing for
+CUE and the selected checked release, or equivalent packaging of those runtime
+files. Arrusted exposes
+`createProtectedNextProxy` from
+`@autograph/platform-microfrontends/next-request-ingress` and
+`createVerifiedNextReadDataContext` / `createVerifiedNextActionDataContext` from
+`@autograph/platform-microfrontends/verified-data-context`. These carry the
+verified actor, organization, app, current access fence and mutation body binding
+into the restricted database context. Supply the validated server-normalized
+`normalizedPayload` for actions and retain the transaction/cleanup lifecycle.
+For an accepted app without business roles, select `role: null` and retain its
+empty role list; its signed app admission still requires a current positive fence.
+Use the accepted schema role for named-role apps. Keep private database and Auth
+credentials inside their existing server/operator boundaries.
+
+Make the declared public entry path and navigation/redirect destinations resolve
+to the implemented app page. For example, `app/<app-id>/page.tsx` serves
+`/<app-id>`; equivalent configured routing is valid. Catalog registration selects
+the owning app, while that app's router resolves the page. For private local
+preview, use the actual returned preview URL with its entry path/base. Keep that
+private origin distinct from the final Gateway URL when reporting delivery.
+
+Make Save perform the form submission: the shared Arrusted `Button` defaults to
+`type="button"`, so a form Save uses `type="submit"` or an equivalent explicit
+submission handler. Keep creation and editing identities separate. A new-record
+form drops the prior edit ID/version and initializes a fresh draft from accepted
+defaults. For a blank New workflow, both edit-to-New and repeated New reset the
+fields; saving creates a separate record and preserves the selected saved record.
+Editing retains that record's identity/version, and Cancel discards
+the draft without a write. Controlled state, keyed forms and equivalent
+implementations are valid. These examples guide behavior and request authority;
+they add no source-layout, style, test or delivery admission gate.
+
 Verify the initial request and client navigation render the actual heading and
 form beyond the fallback, then exercise the mutation and its redirect destination
 with independent persisted readback. Inspect runtime diagnostics as well as
