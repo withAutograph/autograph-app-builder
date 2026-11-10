@@ -240,3 +240,11 @@ The actual command failure remains failed and affected runtime behavior remains
 unassessed. Use the normal delivery and applicable source-validation flow;
 optional local Preview does not add a release qualification gate, and selected
 required checks still must pass.
+
+Builder owns recovery when a saved fresh-template checkout retains shared
+tooling that has since been repaired. After the actual local setup failure,
+reconcile the canonical foundation through the supported owner-bound workflow
+and retry once if it changed, preserving the same app, authored source, data and
+Build consent. Do not make the creator update repository files or perform setup
+outside Builder. New validation and review describe the changed foundation;
+existing publication approvals retain their original exact-effect scope.

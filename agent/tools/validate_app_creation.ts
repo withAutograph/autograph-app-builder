@@ -1,4 +1,7 @@
 /* oxlint-disable github/filenames-match-regex, unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
+import { recoverHostedTemplateFoundation } from "@/lib/agent/hosted-template-foundation-recovery";
+import { resolveHostedTemplateFoundationBinding } from "@/lib/agent/hosted-template-foundation-binding";
+import { HostedTemplateFoundationUnavailableError } from "@/lib/repository/hosted-template-source-reconciliation";
 import { assertApprovedPrivateApplySession } from "@/lib/agent/private-apply-authority";
 import {
   ReviewedCheckRecipeRequiredError,
@@ -154,6 +157,7 @@ const prepareBackendValidationRuntime = async (
 
 export interface AppValidationRuntime {
   prepareSchemaInput?: typeof prepareCompiledSchemaPredecessorsForValidationForSession;
+  recoverSource?: typeof recoverHostedTemplateFoundation;
   captureRelease: typeof captureValidatedRelease;
   describeApp: typeof describeValidationApp;
   executeValidation: typeof executeProposalBoundValidation;
@@ -202,7 +206,7 @@ export const createAppValidationTool = (
       "With no implementation files and a current owned draft, validate that actual isolated candidate through the normal draft-validation service without changing creation-workspace review state. Use repairOnly with implementationFiles to update the already approved app in its private checkout without running checks or requesting another Build. Open the updated app with start_app_preview. Otherwise validate the applied creation workspace at applyReceipt.applyRoot. Use validate_github_draft_pr_reconciliation for explicit candidate validation controls; creation-workspace results do not validate separate draft bytes. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. Set runBrowserTests only when authenticated browser testing is wanted for this app. Report those results separately; a runtime block preserves the technical receipt. Independent paid source assessment can be requested at accept_change_set after implementation and technical checks are ready. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
     // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Keep the workflow phase, cancellation and original failure receipt branches explicit.
     async execute(input, ctx) {
-      const current = appBuilderWorkflowState.get();
+      const selectedState = appBuilderWorkflowState.get();
       if (input.repairOnly === true && input.implementationFiles.length === 0) {
         throw new Error("Supply the app files to repair before opening a working preview.");
       }
@@ -210,8 +214,8 @@ export const createAppValidationTool = (
       if (
         input.implementationFiles.length === 0 &&
         candidate !== null &&
-        resolveDraftReviewedWorkflow(current, candidate) !== undefined &&
-        currentDraftCandidateSource(current, candidate) !== undefined
+        resolveDraftReviewedWorkflow(selectedState, candidate) !== undefined &&
+        currentDraftCandidateSource(selectedState, candidate) !== undefined
       ) {
         return await validateDraftReconciliation(
           {
@@ -223,12 +227,21 @@ export const createAppValidationTool = (
         );
       }
       const hasStartedValidation =
-        current.phase === "applied" ||
-        current.phase === "validation_pending" ||
-        current.phase === "validation_failed";
-      if (!hasStartedValidation && current.phase !== "validated" && current.phase !== "reviewed") {
+        selectedState.phase === "applied" ||
+        selectedState.phase === "validation_pending" ||
+        selectedState.phase === "validation_failed";
+      if (
+        !hasStartedValidation &&
+        selectedState.phase !== "validated" &&
+        selectedState.phase !== "reviewed"
+      ) {
         throw new Error("Apply the requested changes before running the repository checks.");
       }
+      let current: Extract<
+        ReturnType<typeof appBuilderWorkflowState.get>,
+        // oxlint-disable-next-line sonarjs/max-union-size -- Retain each supported applied validation phase.
+        { phase: "applied" | "validation_pending" | "validation_failed" | "validated" | "reviewed" }
+      > = selectedState;
       if (input.repairOnly === true) {
         assertApprovedPrivateApplySession({
           appId: current.appSpec.appId,
@@ -347,6 +360,7 @@ export const createAppValidationTool = (
       }
       let logStore: Awaited<ReturnType<typeof validationLogStoreForSession>> | undefined;
       if (current.phase === "validation_failed") {
+        const { validationFailure } = current;
         let expected = appBuilderWorkflowState.get();
         const assertCurrent = () => {
           assertExactWorkflowState(
@@ -399,7 +413,7 @@ export const createAppValidationTool = (
             return {
               ...base,
               phase: "validation_failed",
-              validationFailure: current.validationFailure,
+              validationFailure,
             };
           });
           ctx.abortSignal?.throwIfAborted();
@@ -416,26 +430,31 @@ export const createAppValidationTool = (
       // local data task first so its server inherits the setup log file rather
       // than Turbo's captured test pipe, which would keep Turbo waiting after
       // the tests themselves have finished.
-      const schemaInput = await prepareSchemaValidationInput({
-        fixture,
-        parameters: {
-          adapterSessionId: ctx.session.id,
-          callbackExecution: hostedOperatorCallbackExecution(ctx.session),
-          appId: current.appSpec.appId,
-          callId: ctx.callId,
-          root: current.applyReceipt.applyRoot,
-          sandbox,
-          sessionAuth: ctx.session.auth,
-          signal: ctx.abortSignal,
-        },
-        port: executionPorts.prepareSchemaInput,
-      });
+      const prepareSchemaInput = async () =>
+        await prepareSchemaValidationInput({
+          fixture,
+          parameters: {
+            adapterSessionId: ctx.session.id,
+            callbackExecution: hostedOperatorCallbackExecution(ctx.session),
+            appId: current.appSpec.appId,
+            callId: ctx.callId,
+            root: current.applyReceipt.applyRoot,
+            sandbox,
+            sessionAuth: ctx.session.auth,
+            signal: ctx.abortSignal,
+          },
+          port: executionPorts.prepareSchemaInput,
+        });
+      let schemaInput = await prepareSchemaInput();
       if (!schemaInput.ok) {
         appBuilderWorkflowState.update(() => ({ ...base, phase: "applied" }));
         return schemaInput.result;
       }
       if (!fixture) {
         validationPhase(ctx.callId, "preparing_declared_local_data");
+        let recoveryAuthorityFailure: { error: unknown } | undefined;
+        let recovered = false;
+        let localPreparationState = appBuilderWorkflowState.get();
         try {
           // Repository-owned local setup keeps local services off the test runner's pipe.
           // No protected reference is resolved here; local technical data is not hosted evidence.
@@ -444,16 +463,73 @@ export const createAppValidationTool = (
             root: current.applyReceipt.applyRoot,
             sandbox,
             signal: ctx.abortSignal,
+            recover: async () => {
+              try {
+                const changed = await (
+                  executionPorts.recoverSource ?? recoverHostedTemplateFoundation
+                )(ctx, {
+                  appId: current.appSpec.appId,
+                  root: current.applyReceipt.applyRoot,
+                });
+                if (changed) {
+                  const refreshed = appBuilderWorkflowState.get();
+                  if (refreshed.phase !== "applied") {
+                    throw new Error("The recovered app is no longer applied.");
+                  }
+                  const sameApp = [
+                    refreshed.appSpec.digest === current.appSpec.digest,
+                    refreshed.proposal.digest === current.proposal.digest,
+                    refreshed.applyReceipt.digest === current.applyReceipt.digest,
+                    refreshed.workspace.workspaceId === current.workspace.workspaceId,
+                  ].every(Boolean);
+                  if (!sameApp) {
+                    throw new Error(
+                      "The selected approved app changed during local source recovery.",
+                    );
+                  }
+                  current = refreshed;
+                  base = {
+                    ...base,
+                    sourceReceipt: refreshed.sourceReceipt,
+                    workspace: refreshed.workspace,
+                  };
+                  recovered = true;
+                  localPreparationState = refreshed;
+                }
+                return changed;
+              } catch (error) {
+                if (!(error instanceof HostedTemplateFoundationUnavailableError)) {
+                  recoveryAuthorityFailure = { error };
+                }
+                throw error;
+              }
+            },
           });
         } catch (error) {
           ctx.abortSignal?.throwIfAborted();
-          appBuilderWorkflowState.update(() => ({ ...base, phase: "applied" }));
+          if (recoveryAuthorityFailure !== undefined) {
+            throw recoveryAuthorityFailure.error;
+          }
+          appBuilderWorkflowState.update((latest) => {
+            assertExactWorkflowState(
+              latest,
+              localPreparationState,
+              "retain the failed local data setup",
+            );
+            return { ...base, phase: "applied" };
+          });
           return {
             problem:
               error instanceof Error ? error.message : "Authenticated runtime preparation failed.",
             reason: "authenticated-runtime-preparation",
             status: "needs_repair" as const,
           };
+        }
+        if (recovered) {
+          schemaInput = await prepareSchemaInput();
+          if (!schemaInput.ok) {
+            return schemaInput.result;
+          }
         }
         validationPhase(ctx.callId, "declared_local_data_ready");
       }
@@ -464,7 +540,12 @@ export const createAppValidationTool = (
         workspacePath: current.applyReceipt.targetReceipt.workspacePath,
         signal: ctx.abortSignal,
       });
-      const attempt = createTargetValidationAttempt(current.applyReceipt, ctx.callId, testShards);
+      const attempt = createTargetValidationAttempt(
+        current.applyReceipt,
+        ctx.callId,
+        testShards,
+        resolveHostedTemplateFoundationBinding(current, ctx.session.id)?.executionFoundation,
+      );
       appBuilderWorkflowState.update(() => ({
         ...base,
         phase: "validation_pending",

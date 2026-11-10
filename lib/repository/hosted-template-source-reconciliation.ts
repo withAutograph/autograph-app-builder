@@ -1,10 +1,13 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac, createPrivateKey, timingSafeEqual } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 import { createGitHubTokenOctokit } from "../github/octokit";
 import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
-import { deploymentArrustedTemplateReader } from "./arrusted-template-reader";
+import {
+  deploymentArrustedTemplateReader,
+  readDeploymentArrustedTemplateReaderConfig,
+} from "./arrusted-template-reader";
 import type { ArrustedTemplateReader } from "./arrusted-template-reader";
 import { planningSourceReconciliationProgram } from "./planning-source-reconciliation";
 import { preparedSourceManifestRecoveryProgram } from "./prepared-source-manifest-recovery";
@@ -57,6 +60,7 @@ export interface HostedTemplateFoundationInput {
   signal?: AbortSignal;
   reader?: ArrustedTemplateReader;
   readCanonicalHead?: (token: string) => Promise<{ sourceSha: string; sourceTree: string }>;
+  provenance?: HostedTemplateFoundationProvenance;
 }
 
 const scopeSchema = z.strictObject({
@@ -65,19 +69,71 @@ const scopeSchema = z.strictObject({
   sourceReceiptDigest: digest,
   workspace: workspaceSchema,
 });
-const journalSchema = z.strictObject({
+const frozenTransitionSchema = z.strictObject({
   version: z.literal(1),
   scope: scopeSchema,
   callId: z.string().min(1),
-  state: z.enum(["planned", "completed"]),
   result: resultSchema,
 });
+const journalSchema = frozenTransitionSchema.extend({
+  state: z.enum(["planned", "completed"]),
+  authentication: digest,
+});
+export interface HostedTemplateFoundationProvenance {
+  sign: (payload: z.infer<typeof frozenTransitionSchema>) => string;
+  verify: (payload: z.infer<typeof frozenTransitionSchema>, signature: string) => boolean;
+}
+/** The existing reader credential stays server-side; only a purpose-separated seal enters the Sandbox. */
+export const createHostedTemplateFoundationProvenance = (
+  readerKey: string | Buffer,
+): HostedTemplateFoundationProvenance => {
+  const key = createHmac("sha256", readerKey)
+    .update("autograph/hosted-template-foundation/provenance-key/v1")
+    .digest();
+  const sign = (payload: z.infer<typeof frozenTransitionSchema>) =>
+    createHmac("sha256", key)
+      .update("autograph/hosted-template-foundation/transition/v1\n")
+      .update(JSON.stringify(frozenTransitionSchema.parse(payload)))
+      .digest("hex");
+  return {
+    sign,
+    verify: (payload, signature) => {
+      if (!digest.safeParse(signature).success) {
+        return false;
+      }
+      return timingSafeEqual(Buffer.from(signature, "hex"), Buffer.from(sign(payload), "hex"));
+    },
+  };
+};
+const frozenPayload = (journal: z.infer<typeof frozenTransitionSchema>) =>
+  frozenTransitionSchema.parse({
+    version: journal.version,
+    scope: journal.scope,
+    callId: journal.callId,
+    result: journal.result,
+  });
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
-const unavailable = () =>
-  new Error(
-    "The owned template foundation recovery is unavailable. Existing app source and runtime data are preserved.",
-  );
+export class HostedTemplateFoundationUnavailableError extends Error {
+  constructor() {
+    super(
+      "The owned template foundation recovery is unavailable. Existing app source and runtime data are preserved.",
+    );
+    this.name = "HostedTemplateFoundationUnavailableError";
+  }
+}
+const unavailable = () => new HostedTemplateFoundationUnavailableError();
+const deploymentProvenance = () => {
+  try {
+    const { privateKey } = readDeploymentArrustedTemplateReaderConfig(process.env);
+    const canonicalKey = createPrivateKey(privateKey).export({ type: "pkcs8", format: "der" });
+    return createHostedTemplateFoundationProvenance(canonicalKey);
+  } catch {
+    throw unavailable();
+  }
+};
+const scopeChanged = () =>
+  new Error("The owned template foundation scope or baseline integrity changed.");
 
 /** Fixed read-only repository route; neither the creator nor candidate chooses its foundation. */
 export const readCanonicalTemplateFoundation = async (
@@ -100,6 +156,8 @@ export const readCanonicalTemplateFoundation = async (
 
 /** Private filesystem transition; the existing Git engine owns checkpointing and three-way preservation. */
 export const hostedTemplateFoundationProgram = String.raw`
+class FoundationIntegrityError extends Error {}
+try {
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync, execFileSync } = require("node:child_process");
@@ -113,13 +171,14 @@ const safeDirectory = directory => {
   if (parent !== directory) safeDirectory(parent);
   if (!fs.existsSync(directory)) fs.mkdirSync(directory, { mode:448 });
   const stat = fs.lstatSync(directory);
-  if (!stat.isDirectory() || stat.isSymbolicLink()) throw Error("Foundation metadata directory is unavailable.");
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new FoundationIntegrityError("Foundation metadata directory is unavailable.");
 };
 const regular = file => {
   const stat = fs.lstatSync(file);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw Error("Foundation metadata file is unavailable.");
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new FoundationIntegrityError("Foundation metadata file is unavailable.");
 };
 const read = file => { regular(file); return fs.readFileSync(file, "utf8"); };
+const readJson = file => { try { return JSON.parse(read(file)); } catch(error) { if(error instanceof SyntaxError) throw new FoundationIntegrityError("Foundation metadata is invalid."); throw error; } };
 const write = (file, bytes) => {
   const temporary = file + ".pending";
   if (fs.existsSync(temporary)) { regular(temporary); fs.unlinkSync(temporary); }
@@ -127,23 +186,26 @@ const write = (file, bytes) => {
   if (fs.existsSync(file)) regular(file);
   fs.renameSync(temporary, file);
 };
-const git = arguments_ => execFileSync("git", ["--no-replace-objects", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "credential.helper=", "-c", "protocol.allow=never", "-C", input.root, ...arguments_], { encoding:"utf8", env:{...environment,GIT_NO_LAZY_FETCH:"1",GIT_TERMINAL_PROMPT:"0",GIT_CONFIG_NOSYSTEM:"1",GIT_CONFIG_GLOBAL:"/dev/null"},stdio:["ignore","pipe","pipe"] }).trim();
-const child = (program, request, env=environment) => {
+const gitBinary = fs.existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
+const git = arguments_ => execFileSync(gitBinary, ["--no-replace-objects", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "credential.helper=", "-c", "protocol.allow=never", "-C", input.root, ...arguments_], { encoding:"utf8", env:{...environment,GIT_NO_LAZY_FETCH:"1",GIT_TERMINAL_PROMPT:"0",GIT_CONFIG_NOSYSTEM:"1",GIT_CONFIG_GLOBAL:"/dev/null"},stdio:["ignore","pipe","pipe"] }).trim();
+const child = (program, request, env=environment, proof=false) => {
   const result = spawnSync(process.execPath, ["-e", program, JSON.stringify(request)], {cwd:input.root,env,encoding:"utf8",maxBuffer:Infinity,stdio:["ignore","pipe","pipe"]});
-  if (result.error || result.status !== 0) throw Error("Foundation transition did not complete; its retained checkpoint can resume.");
+  if (result.error || result.status !== 0) throw proof ? new FoundationIntegrityError("Foundation proof did not complete.") : Error("Foundation transition did not complete; its retained checkpoint can resume.");
   return result.stdout;
 };
-if (fs.realpathSync(input.root) !== input.root) throw Error("Foundation workspace is unavailable.");
+if (fs.realpathSync(input.root) !== input.root) throw new FoundationIntegrityError("Foundation workspace is unavailable.");
 safeDirectory(input.metadataRoot);
 safeDirectory(input.transitionRoot);
 const journalPath = path.join(input.transitionRoot,"transition.json");
-let journal = fs.existsSync(journalPath) ? JSON.parse(read(journalPath)) : input.journal;
-if (!isDeepStrictEqual(journal.scope,input.journal.scope) || !isDeepStrictEqual(journal.result,input.journal.result)) throw Error("Foundation transition belongs to another source.");
+let journal = fs.existsSync(journalPath) ? readJson(journalPath) : input.journal;
+const {state:journalState,...journalFrozen} = journal;
+const {state:expectedState,...expectedFrozen} = input.journal;
+if (!["planned","completed"].includes(journalState) || !isDeepStrictEqual(journalFrozen,expectedFrozen)) throw new FoundationIntegrityError("Foundation transition belongs to another source.");
 const next = journal.result;
-if (git(["rev-parse",input.journal.scope.workspace.sourceSha+"^{tree}"]) !== input.journal.scope.workspace.sourceTree) throw Error("Original foundation objects are unavailable.");
+if (git(["rev-parse",input.journal.scope.workspace.sourceSha+"^{tree}"]) !== input.journal.scope.workspace.sourceTree) throw new FoundationIntegrityError("Original foundation objects are unavailable.");
 const recordPath = path.join(input.metadataRoot,"prepared-workspace.json");
-const observed = JSON.parse(read(recordPath));
-if (!isDeepStrictEqual(observed,input.journal.scope.workspace) && !isDeepStrictEqual(observed,next.workspace)) throw Error("Foundation workspace ownership changed.");
+const observed = readJson(recordPath);
+if (!isDeepStrictEqual(observed,input.journal.scope.workspace) && !isDeepStrictEqual(observed,next.workspace)) throw new FoundationIntegrityError("Foundation workspace ownership changed.");
 if (!fs.existsSync(journalPath)) write(journalPath,JSON.stringify(journal)+"\n");
 if (journal.state !== "completed") {
   const result = JSON.parse(child(input.reconciliationProgram,{
@@ -151,12 +213,12 @@ if (journal.state !== "completed") {
     targetSha:next.provenance.sourceSha,branchRef:"refs/heads/main",repository:input.repository,fetchRemote:input.fetchRemote,
     checkpointRef:next.provenance.checkpointRef,
   },{...environment,APP_BUILDER_SOURCE_READ_TOKEN:token}));
-  if (result.sourceSha !== next.workspace.sourceSha || result.sourceTree !== next.workspace.sourceTree) throw Error("Fetched foundation identity changed.");
+  if (result.sourceSha !== next.workspace.sourceSha || result.sourceTree !== next.workspace.sourceTree) throw new FoundationIntegrityError("Fetched foundation identity changed.");
   const staged = path.join(input.transitionRoot,"baseline");
   safeDirectory(staged);
   const stagedManifest = path.join(staged,"source-files.json");
-  const manifestDigest = fs.existsSync(stagedManifest) ? sha256(JSON.stringify(JSON.parse(read(stagedManifest)))) : undefined;
-  child(input.manifestProgram,{...next.workspace,manifestDirectory:staged,manifestDigest});
+  const manifestDigest = fs.existsSync(stagedManifest) ? sha256(JSON.stringify(readJson(stagedManifest))) : undefined;
+  child(input.manifestProgram,{...next.workspace,manifestDirectory:staged,manifestDigest},environment,true);
   const previous = path.join(input.transitionRoot,"previous");
   safeDirectory(previous);
   const metadata = {
@@ -179,10 +241,14 @@ if (journal.state !== "completed") {
   journal = {...journal,state:"completed"};
   write(journalPath,JSON.stringify(journal)+"\n");
 }
-if (git(["rev-parse","HEAD"]) !== next.workspace.sourceSha || git(["rev-parse","HEAD^{tree}"]) !== next.workspace.sourceTree || !isDeepStrictEqual(JSON.parse(read(recordPath)),next.workspace)) throw Error("Completed foundation changed.");
-const manifest = JSON.parse(read(path.join(input.metadataRoot,"source-files.json")));
-child(input.manifestProgram,{...next.workspace,manifestDigest:sha256(JSON.stringify(manifest))});
+if (git(["rev-parse","HEAD"]) !== next.workspace.sourceSha || git(["rev-parse","HEAD^{tree}"]) !== next.workspace.sourceTree || !isDeepStrictEqual(readJson(recordPath),next.workspace)) throw new FoundationIntegrityError("Completed foundation changed.");
+const manifest = readJson(path.join(input.metadataRoot,"source-files.json"));
+child(input.manifestProgram,{...next.workspace,manifestDigest:sha256(JSON.stringify(manifest))},environment,true);
 process.stdout.write(JSON.stringify(next));
+} catch(error) {
+  process.stdout.write(JSON.stringify({failure:error instanceof FoundationIntegrityError ? "integrity" : "unavailable"}));
+  process.exitCode=1;
+}
 `;
 
 /** Runs only after an actual local command failure; no branch-freshness admission policy. */
@@ -208,7 +274,7 @@ export const reconcileHostedTemplateFoundation = async (
       receipt.sourceTree !== workspace.sourceTree,
     ].some(Boolean)
   ) {
-    throw unavailable();
+    throw scopeChanged();
   }
   const scope = scopeSchema.parse({
     appId: input.appId,
@@ -218,15 +284,34 @@ export const reconcileHostedTemplateFoundation = async (
   });
   const transitionId = hash(JSON.stringify(scope));
   const relativeRoot = `.app-builder/hosted-template-foundations/${transitionId}`;
-  const stored = await input.sandbox.readTextFile({ path: `${relativeRoot}/transition.json` });
+  let stored: string | null;
+  try {
+    stored = await input.sandbox.readTextFile({ path: `${relativeRoot}/transition.json` });
+  } catch {
+    await assertCurrent();
+    throw unavailable();
+  }
   await assertCurrent();
+  const acquire = async () => {
+    try {
+      return await (input.reader ?? deploymentArrustedTemplateReader()).acquire();
+    } catch {
+      await assertCurrent();
+      throw unavailable();
+    }
+  };
   let journal: z.infer<typeof journalSchema>;
   let token: string | undefined;
   if (stored === null) {
-    const reader = input.reader ?? deploymentArrustedTemplateReader();
-    ({ token } = await reader.acquire());
+    ({ token } = await acquire());
     await assertCurrent();
-    const head = await (input.readCanonicalHead ?? readCanonicalTemplateFoundation)(token);
+    let head: { sourceSha: string; sourceTree: string };
+    try {
+      head = await (input.readCanonicalHead ?? readCanonicalTemplateFoundation)(token);
+    } catch {
+      await assertCurrent();
+      throw unavailable();
+    }
     await assertCurrent();
     sha.parse(head.sourceSha);
     sha.parse(head.sourceTree);
@@ -257,11 +342,10 @@ export const reconcileHostedTemplateFoundation = async (
       eligibilityDigest: sourceReceipt.eligibilityDigest,
       workspaceDigest: identity,
     };
-    journal = {
-      version: 1,
+    const frozen = {
+      version: 1 as const,
       scope,
       callId: input.callId,
-      state: "planned",
       result: {
         changed: true,
         sourceReceipt,
@@ -276,14 +360,34 @@ export const reconcileHostedTemplateFoundation = async (
         },
       },
     };
+    const provenance = input.provenance ?? deploymentProvenance();
+    journal = {
+      ...frozen,
+      state: "planned",
+      authentication: provenance.sign(frozenPayload(frozen)),
+    };
   } else {
-    journal = journalSchema.parse(JSON.parse(stored));
-    if (!isDeepStrictEqual(journal.scope, scope)) {
-      throw unavailable();
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(stored);
+    } catch {
+      throw scopeChanged();
+    }
+    const parsed = journalSchema.safeParse(decoded);
+    if (!parsed.success) {
+      throw scopeChanged();
+    }
+    journal = parsed.data;
+    const provenance = input.provenance ?? deploymentProvenance();
+    if (
+      !isDeepStrictEqual(journal.scope, scope) ||
+      !provenance.verify(frozenPayload(journal), journal.authentication)
+    ) {
+      throw scopeChanged();
     }
   }
   if (journal.state !== "completed" && token === undefined) {
-    ({ token } = await (input.reader ?? deploymentArrustedTemplateReader()).acquire());
+    ({ token } = await acquire());
     await assertCurrent();
   }
   const request = {
@@ -310,11 +414,25 @@ export const reconcileHostedTemplateFoundation = async (
   }
   await assertCurrent();
   if (result.exitCode !== 0) {
+    let failure: unknown;
+    try {
+      failure = JSON.parse(result.stdout);
+    } catch {
+      /* An unavailable command need not return a result. */
+    }
+    if (z.object({ failure: z.literal("integrity") }).safeParse(failure).success) {
+      throw scopeChanged();
+    }
     throw unavailable();
   }
-  const completed = resultSchema.parse(JSON.parse(result.stdout));
+  let completed: HostedTemplateFoundationResult;
+  try {
+    completed = resultSchema.parse(JSON.parse(result.stdout));
+  } catch {
+    throw scopeChanged();
+  }
   if (!isDeepStrictEqual(completed, journal.result)) {
-    throw unavailable();
+    throw scopeChanged();
   }
   return completed;
 };

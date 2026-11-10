@@ -7,7 +7,9 @@ import type { SandboxSession } from "eve/sandbox";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
+  createHostedTemplateFoundationProvenance,
   hostedTemplateFoundationProgram,
+  HostedTemplateFoundationUnavailableError,
   readCanonicalTemplateFoundation,
   reconcileHostedTemplateFoundation,
 } from "./hosted-template-source-reconciliation";
@@ -48,6 +50,22 @@ const source = <P extends string>(sourceSha: string, sourceTree: string, sourceP
   };
 };
 
+interface FixtureApplications {
+  platform: { path: string };
+  anchor: { path: string };
+  "synthetic-notes"?: { path: string };
+}
+const catalog = (platformPath: string, includeApp = false) => {
+  const applications: FixtureApplications = {
+    platform: { path: platformPath },
+    anchor: { path: "/anchor" },
+  };
+  if (includeApp) {
+    applications["synthetic-notes"] = { path: "/notes" };
+  }
+  return `${JSON.stringify({ applications }, null, 2)}\n`;
+};
+
 const fixture = () => {
   const temporary = realpathSync(mkdtempSync(path.join(tmpdir(), "hosted-foundation-")));
   const root = path.join(temporary, "repository");
@@ -80,7 +98,7 @@ const fixture = () => {
   write(".gitignore", ".data/\n");
   write("package.json", '{"name":"fixture","workspaces":[]}\n');
   write("bun.lock", "workspace: []\n");
-  write("microfrontends.json", '{"applications":{}}\n');
+  write("microfrontends.json", catalog("/platform"));
   const task = ".config/mise/scripts/repository/app-runtime.cjs";
   write(
     task,
@@ -93,6 +111,7 @@ const fixture = () => {
     task,
     'const roles=JSON.parse(process.argv[2]); process.stdout.write(JSON.stringify({roles,environment:"local"}));\n',
   );
+  write("microfrontends.json", catalog("/current-platform"));
   git("add", ".");
   git("commit", "--quiet", "-m", "allow roleless local runtime");
   const next = source(git("rev-parse", "HEAD"), git("rev-parse", "HEAD^{tree}"), root);
@@ -104,7 +123,7 @@ const fixture = () => {
   write(`.config/app-specs/${app}.cue`, 'app: "synthetic-notes"\n');
   write("package.json", '{"name":"fixture","workspaces":["apps/synthetic-notes"]}\n');
   write("bun.lock", "workspace: [synthetic-notes]\n");
-  write("microfrontends.json", '{"applications":{"synthetic-notes":{"path":"/notes"}}}\n');
+  write("microfrontends.json", catalog("/platform", true));
   write(
     ".data/postgres/synthetic-record.json",
     '{"saved":"same record","resource":"same database"}\n',
@@ -162,7 +181,6 @@ const fixture = () => {
     `.config/app-specs/${app}.cue`,
     "package.json",
     "bun.lock",
-    "microfrontends.json",
     ".data/postgres/synthetic-record.json",
   ];
   const bytes = () => preserved.map((name) => readFileSync(path.join(root, name), "utf-8"));
@@ -196,6 +214,14 @@ describe("retained hosted fresh-template foundation", () => {
       expect(f.localTask().status).toBe(0);
       expect(JSON.parse(f.localTask().stdout)).toEqual({ roles: [], environment: "local" });
       expect(f.bytes()).toEqual(original);
+      expect(
+        JSON.parse(readFileSync(path.join(f.root, "microfrontends.json"), "utf-8")),
+      ).toMatchObject({
+        applications: {
+          platform: { path: "/current-platform" },
+          "synthetic-notes": { path: "/notes" },
+        },
+      });
       expect(f.git("show", `${f.checkpointRef}:apps/synthetic-notes/schema/app.cue`)).toBe(
         "authorization: {roles: []}",
       );
@@ -289,7 +315,9 @@ describe("retained hosted fresh-template foundation", () => {
       }
       first.sha256 = "a".repeat(64);
       writeFileSync(file, JSON.stringify(files));
-      expect(f.run().status).not.toBe(0);
+      const rejected = f.run();
+      expect(rejected.status).not.toBe(0);
+      expect(JSON.parse(rejected.stdout)).toEqual({ failure: "integrity" });
     } finally {
       f.dispose();
     }
@@ -300,7 +328,7 @@ describe("hosted foundation owner boundary", () => {
   const input = () => {
     const current = source("a".repeat(40), "b".repeat(40), "/workspace/repository");
     const run = vi.fn();
-    const readTextFile = vi.fn(async () => await Promise.resolve(null));
+    const readTextFile = vi.fn(async (): Promise<string | null> => await Promise.resolve(null));
     const sandbox = {
       id: "owned-sandbox",
       run,
@@ -332,10 +360,122 @@ describe("hosted foundation owner boundary", () => {
       sandbox,
       reader,
       readCanonicalHead,
+      provenance: createHostedTemplateFoundationProvenance("test-owned-server-key-never-sandbox"),
       assertCurrent: vi.fn(),
       run,
     };
   };
+  it("rejects a forged frozen target before repository access or transition", async () => {
+    const f = input();
+    const retained = fixture();
+    try {
+      retained.write("noncanonical.txt", "not canonical main\n");
+      retained.git("add", ".");
+      retained.git("commit", "--quiet", "-m", "noncanonical retained object");
+      const foreign = source(
+        retained.git("rev-parse", "HEAD"),
+        retained.git("rev-parse", "HEAD^{tree}"),
+        "/workspace/repository",
+      );
+      const forged = {
+        version: 1,
+        state: "completed",
+        authentication: "0".repeat(64),
+        callId: "forged-recovery",
+        scope: {
+          appId: f.appId,
+          sessionId: f.sessionId,
+          sourceReceiptDigest: f.sourceReceipt.digest,
+          workspace: f.workspace,
+        },
+        result: {
+          changed: true,
+          ...foreign,
+          provenance: {
+            previousSourceReceiptDigest: f.sourceReceipt.digest,
+            previousWorkspaceDigest: f.workspace.workspaceDigest,
+            previousSourceSha: f.workspace.sourceSha,
+            sourceSha: foreign.workspace.sourceSha,
+            sourceTree: foreign.workspace.sourceTree,
+            sourceSnapshotTree: foreign.workspace.sourceTree,
+          },
+        },
+      };
+      f.sandbox.readTextFile.mockResolvedValueOnce(JSON.stringify(forged));
+      f.run.mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: JSON.stringify(forged.result),
+        stderr: "",
+      });
+      await expect(reconcileHostedTemplateFoundation(f)).rejects.toThrow();
+      expect(f.reader.acquire).not.toHaveBeenCalled();
+      expect(f.readCanonicalHead).not.toHaveBeenCalled();
+      expect(f.run).not.toHaveBeenCalled();
+    } finally {
+      retained.dispose();
+    }
+  });
+  it("resumes the signed frozen target after canonical main moves without fetching another target", async () => {
+    const f = input();
+    const next = source("c".repeat(40), "d".repeat(40), "/workspace/repository");
+    const frozen = {
+      version: 1 as const,
+      scope: {
+        appId: f.appId,
+        sessionId: f.sessionId,
+        sourceReceiptDigest: f.sourceReceipt.digest,
+        workspace: f.workspace,
+      },
+      callId: "original-recovery",
+      result: {
+        changed: true,
+        ...next,
+        provenance: {
+          previousSourceReceiptDigest: f.sourceReceipt.digest,
+          previousWorkspaceDigest: f.workspace.workspaceDigest,
+          previousSourceSha: f.workspace.sourceSha,
+          sourceSha: next.workspace.sourceSha,
+          sourceTree: next.workspace.sourceTree,
+          sourceSnapshotTree: next.workspace.sourceTree,
+        },
+      },
+    };
+    const journal = { ...frozen, state: "completed", authentication: f.provenance.sign(frozen) };
+    f.sandbox.readTextFile.mockResolvedValue(JSON.stringify(journal));
+    f.run.mockResolvedValue({ exitCode: 0, stdout: JSON.stringify(frozen.result), stderr: "" });
+    f.readCanonicalHead.mockResolvedValue({
+      sourceSha: "e".repeat(40),
+      sourceTree: "f".repeat(40),
+    });
+    expect(await reconcileHostedTemplateFoundation(f)).toEqual(frozen.result);
+    expect(f.reader.acquire).not.toHaveBeenCalled();
+    expect(f.readCanonicalHead).not.toHaveBeenCalled();
+    expect(f.run).toHaveBeenCalledTimes(1);
+    const altered = {
+      ...journal,
+      result: {
+        ...frozen.result,
+        ...source("e".repeat(40), "f".repeat(40), "/workspace/repository"),
+      },
+    };
+    f.sandbox.readTextFile.mockResolvedValue(JSON.stringify(altered));
+    await expect(reconcileHostedTemplateFoundation(f)).rejects.toThrow();
+    expect(f.run).toHaveBeenCalledTimes(1);
+  });
+  it("keeps the signing key out of source transition requests", async () => {
+    const f = input();
+    const key = "server-only-signing-key-canary";
+    f.provenance = createHostedTemplateFoundationProvenance(key);
+    f.readCanonicalHead.mockResolvedValue({
+      sourceSha: "c".repeat(40),
+      sourceTree: "d".repeat(40),
+    });
+    f.run.mockRejectedValueOnce(new Error("unavailable"));
+    await expect(reconcileHostedTemplateFoundation(f)).rejects.toBeInstanceOf(
+      HostedTemplateFoundationUnavailableError,
+    );
+    expect(JSON.stringify(f.run.mock.calls)).not.toContain(key);
+  });
   it("does not write or retry when the canonical foundation is unchanged", async () => {
     const f = input();
     const result = await reconcileHostedTemplateFoundation(f);
@@ -387,10 +527,19 @@ describe("hosted foundation owner boundary", () => {
       sourceTree: "d".repeat(40),
     });
     f.run.mockRejectedValueOnce(new Error("private-source-token-canary"));
-    await expect(reconcileHostedTemplateFoundation(f)).rejects.not.toThrow(
-      "private-source-token-canary",
-    );
+    const rejected = reconcileHostedTemplateFoundation(f);
+    await expect(rejected).rejects.not.toThrow("private-source-token-canary");
+    await expect(rejected).rejects.toBeInstanceOf(HostedTemplateFoundationUnavailableError);
     expect(f.workspace.sourceSha).toBe("a".repeat(40));
+  });
+  it("closes metadata-reader outages without exposing provider detail or losing the saved scope", async () => {
+    const f = input();
+    f.sandbox.readTextFile.mockRejectedValueOnce(new Error("private-reader-error-canary"));
+    const rejected = reconcileHostedTemplateFoundation(f);
+    await expect(rejected).rejects.toBeInstanceOf(HostedTemplateFoundationUnavailableError);
+    await expect(rejected).rejects.not.toThrow("private-reader-error-canary");
+    expect(f.reader.acquire).not.toHaveBeenCalled();
+    expect(f.run).not.toHaveBeenCalled();
   });
   it("reads only canonical main and keeps provider error bodies private", async () => {
     const urls: string[] = [];

@@ -71,6 +71,22 @@ The original app edits, session, destination and resources remain retained. Buil
 performs that continuation and reruns the affected app-owned behavior checks; an
 outside evaluator neither drives internal stages nor hot-patches shared source.
 
+Before the first draft, a saved fresh-template app can also need a shared
+repository repair. After an actual failed local setup command, Builder may
+reconcile its owned checkout with the current canonical foundation and retry
+that command once when the foundation changed. The transition checkpoints the
+original bytes and preserves the same app, authored changes, runtime data and
+accepted Build authority. It records the new source facts and recomputes the
+validation and review evidence affected by them. This is failure recovery, not
+a requirement to refresh every app or a minimum-version admission check. An
+unchanged foundation or another failed command remains a failure. The selected
+canonical transition is frozen before mutation and authenticated server-side
+using the existing repository-reader credential; editable Sandbox metadata
+cannot choose another source or obtain that credential. Interrupted transitions
+reuse that selection. A changed signing credential cannot silently authorize an
+old or substituted transition; Builder retains the app and reports recovery as
+unavailable instead.
+
 Browser and continuity check progress reflects the returned check outcome,
 not merely completion of the tool call. A failed, cancelled, missing or
 unassessed check outcome is never a pass. Successful technical validation

@@ -9,6 +9,7 @@ import {
   invalidateProductBehaviorPreview,
   currentProductBehaviorGeneration,
 } from "@/lib/agent/product-behavior-state";
+import { recoverHostedTemplateFoundation } from "@/lib/agent/hosted-template-foundation-recovery";
 import { defineTool } from "eve/tools";
 import type { ToolContext } from "eve/tools";
 import { z } from "zod";
@@ -43,6 +44,17 @@ import {
 import { assertHostedSandboxCommandAuthority } from "@/lib/sandbox/deployment-execution-lease";
 import { getVercelPreviewProvider } from "@/lib/sandbox/vercel-preview-provider";
 import { startWorkingPreview } from "@/lib/sandbox/working-preview-runtime";
+
+const recordPreviewDependencyAttempt = (attempt: DependencyAttemptResult) => {
+  appBuilderWorkflowState.update((state) =>
+    state.phase === "empty"
+      ? state
+      : {
+          ...state,
+          checkoutDependencyAttempts: [...(state.checkoutDependencyAttempts ?? []), attempt],
+        },
+  );
+};
 
 const validationAttemptDigest = (
   state: ReturnType<typeof appBuilderWorkflowState.get>,
@@ -139,7 +151,7 @@ export const createStartAppPreview = ({
     description:
       "Open the selected existing app or applied new app and return a working browser URL. An approved protected runtime publishes its verified native Gateway app route; other apps start a private Sandbox preview. For a prepared existing GitHub checkout, supply appId from the repository's apps directory; this only previews current files and does not grant build or publication approval. Discover the development script and package manager from the checkout's package.json, then use workingDirectory relative to the repository root. Configure it to listen on the supplied port. Use artifact=prior-validated to preview the exact last validated local artifact while a newer plan remains unapplied. A reachable page is not proof of backend product behavior.",
     async execute(input, ctx) {
-      const current = appBuilderWorkflowState.get();
+      let current = appBuilderWorkflowState.get();
       const native =
         input.artifact === undefined
           ? await resolveNativePreview(input, ctx, current, nativePreview)
@@ -164,13 +176,13 @@ export const createStartAppPreview = ({
         prior === undefined
           ? undefined
           : { applyDigest: prior.revision, validationDigest: prior.validationDigest };
-      const selected = prior ?? (await runnableSelectedApp({ appId: input.appId, state: current }));
+      let selected = prior ?? (await runnableSelectedApp({ appId: input.appId, state: current }));
       const cwd = resolvePreviewWorkingDirectory(selected.root, input.workingDirectory);
-      const launch = resolvePreviewPackageManager(
+      let launch = resolvePreviewPackageManager(
         input.command,
         await sandbox.readTextFile({ path: `${selected.root}/package.json` }),
       );
-      const evidenceGeneration = currentProductBehaviorGeneration();
+      let evidenceGeneration = currentProductBehaviorGeneration();
       await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
       prior?.assertCurrent();
       const provider = await getVercelPreviewProvider(
@@ -191,22 +203,24 @@ export const createStartAppPreview = ({
             })
           : null;
       const previous = workingPreviewState.get();
-      const validationDigest = prior?.validationDigest ?? validationAttemptDigest(current);
-      const requestDigest = createHash("sha256")
-        .update(
-          JSON.stringify({
-            appId: selected.appId,
-            command: launch.command,
-            cwd,
-            evidenceGeneration,
-            landingPath: input.landingPath,
-            port: input.port,
-            revision: selected.revision,
-            runtimeStateDirectory: runtime?.stateDirectory,
-            validationDigest,
-          }),
-        )
-        .digest("hex");
+      let validationDigest = prior?.validationDigest ?? validationAttemptDigest(current);
+      const previewRequestDigest = () =>
+        createHash("sha256")
+          .update(
+            JSON.stringify({
+              appId: selected.appId,
+              command: launch.command,
+              cwd,
+              evidenceGeneration,
+              landingPath: input.landingPath,
+              port: input.port,
+              revision: selected.revision,
+              runtimeStateDirectory: runtime?.stateDirectory,
+              validationDigest,
+            }),
+          )
+          .digest("hex");
+      let requestDigest = previewRequestDigest();
       const samePriorArtifact =
         previous?.priorValidatedArtifact?.applyDigest === artifact?.applyDigest &&
         previous?.priorValidatedArtifact?.validationDigest === artifact?.validationDigest;
@@ -244,25 +258,13 @@ export const createStartAppPreview = ({
         sandbox,
         signal: ctx.abortSignal,
       };
-      const dependencies =
+      let dependencies =
         prior === undefined
           ? await ensureCheckoutDependencies({
               ...dependencyInput,
               checkoutIdentity: selected.revision,
               logStore: dependencyLogStore(ctx),
-              onAttempt: (attempt: DependencyAttemptResult) => {
-                appBuilderWorkflowState.update((state) =>
-                  state.phase === "empty"
-                    ? state
-                    : {
-                        ...state,
-                        checkoutDependencyAttempts: [
-                          ...(state.checkoutDependencyAttempts ?? []),
-                          attempt,
-                        ],
-                      },
-                );
-              },
+              onAttempt: recordPreviewDependencyAttempt,
               reconcileWorkspace: true,
               sessionId: ctx.session.id,
             })
@@ -278,6 +280,54 @@ export const createStartAppPreview = ({
           root: selected.root,
           sandbox,
           signal: ctx.abortSignal,
+          recover:
+            prior === undefined
+              ? async () => {
+                  const changed = await recoverHostedTemplateFoundation(ctx, {
+                    appId,
+                    root: selected.root,
+                  });
+                  if (changed) {
+                    const refreshed = appBuilderWorkflowState.get();
+                    if (
+                      refreshed.phase !== "applied" ||
+                      current.phase === "empty" ||
+                      !("applyReceipt" in current)
+                    ) {
+                      throw new Error("The selected app is no longer applied.");
+                    }
+                    const sameApp = [
+                      refreshed.appSpec.digest === current.appSpec.digest,
+                      refreshed.applyReceipt.digest === current.applyReceipt.digest,
+                      refreshed.workspace.workspaceId === current.workspace.workspaceId,
+                    ].every(Boolean);
+                    if (!sameApp) {
+                      throw new Error(
+                        "The selected approved app changed during local source recovery.",
+                      );
+                    }
+                    current = refreshed;
+                    selected = await runnableSelectedApp({ appId, state: current });
+                    launch = resolvePreviewPackageManager(
+                      input.command,
+                      await sandbox.readTextFile({ path: `${selected.root}/package.json` }),
+                    );
+                    evidenceGeneration = currentProductBehaviorGeneration();
+                    validationDigest = validationAttemptDigest(current);
+                    dependencies = await ensureCheckoutDependencies({
+                      ...dependencyInput,
+                      root: selected.root,
+                      checkoutIdentity: selected.revision,
+                      logStore: dependencyLogStore(ctx),
+                      reconcileWorkspace: true,
+                      sessionId: ctx.session.id,
+                      onAttempt: recordPreviewDependencyAttempt,
+                    });
+                    requestDigest = previewRequestDigest();
+                  }
+                  return changed;
+                }
+              : undefined,
         });
         if (setup.status === "failed") {
           throw new Error(

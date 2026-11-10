@@ -15,6 +15,7 @@ import { targetExecutionBinding, targetProposalSchema } from "../repository/targ
 import { configuredToolchainImage, requiredToolVersions } from "../sandbox/toolchain";
 import { isHostedVercelSandboxBackend, sandboxBackendPlan } from "../sandbox/backend";
 import { assertExactDependencyPreparationReceipt, sha256 } from "./workflow-state";
+import { resolveHostedTemplateFoundationBinding } from "./hosted-template-foundation-binding";
 
 export type ProposalWorkflowState = Extract<
   AppBuilderWorkflowState,
@@ -58,7 +59,10 @@ export function plannedProposalForExecution(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function assertProposalExecutionBindings(state: ProposalWorkflowState): void {
+export function assertProposalExecutionBindings(
+  state: ProposalWorkflowState,
+  sessionId?: string,
+): void {
   assertExactDependencyPreparationReceipt(state.dependencyReceipt);
   const target = targetProposalSchema.safeParse(state.proposal.target);
   const bindingError = "The planned proposal no longer matches its durable execution bindings.";
@@ -68,17 +72,23 @@ export function assertProposalExecutionBindings(state: ProposalWorkflowState): v
   if (target.data.blockers.length !== 0) {
     throw new Error("The planned proposal still contains blockers and cannot be applied.");
   }
+  const recovered =
+    sessionId !== undefined && "applyReceipt" in state
+      ? resolveHostedTemplateFoundationBinding(state, sessionId)
+      : undefined;
+  const approvedWorkspace = recovered?.approvedWorkspace ?? state.workspace;
+  const approvedSource = recovered?.approvedSourceReceipt ?? state.sourceReceipt;
   const expected = {
     appSpecDigest: state.appSpec.digest,
     appSpecPath: state.appSpec.artifactPath,
     artifactRevision: state.appSpec.artifactRevision,
     dependencyCacheDigest: state.dependencyReceipt.dependencyCacheDigest,
-    eligibilityDigest: state.workspace.eligibilityDigest,
+    eligibilityDigest: approvedWorkspace.eligibilityDigest,
     imageDigest: state.dependencyReceipt.imageDigest,
-    sourceReceiptDigest: state.sourceReceipt.digest,
-    sourceSha: state.workspace.sourceSha,
-    sourceTree: state.workspace.sourceTree,
-    workspaceDigest: state.workspace.workspaceDigest,
+    sourceReceiptDigest: approvedSource.digest,
+    sourceSha: approvedWorkspace.sourceSha,
+    sourceTree: approvedWorkspace.sourceTree,
+    workspaceDigest: approvedWorkspace.workspaceDigest,
   };
   const actual = {
     appSpecDigest: state.proposal.appSpecDigest,
@@ -160,10 +170,11 @@ export async function inspectTargetExecutionReadiness(input: {
   sandbox: SandboxSession;
   expectedProposalDigest: string;
   environment?: Readonly<Record<string, string | undefined>>;
+  sessionId?: string;
 }) {
   const environment = input.environment ?? process.env;
   const proposal = plannedProposalForExecution(input.state, input.expectedProposalDigest);
-  assertProposalExecutionBindings(input.state);
+  assertProposalExecutionBindings(input.state, input.sessionId);
   const workspaceInput: Parameters<typeof inspectSourceBoundSandboxWorkspace>[0] = {
     expectedWorkspace: input.state.workspace,
     receipt: input.state.sourceReceipt,
