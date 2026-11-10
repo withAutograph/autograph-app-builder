@@ -332,6 +332,12 @@ export interface OwnedAppRevisionLookup {
   reconciliation?: ExistingDraftReconciliationProposal;
 }
 
+/** Retained publication context is ownership lookup only, never a current review or approval. */
+export interface OwnedCompletedAppPublication {
+  proposal: DraftPullRequestProposal;
+  installationId: string;
+}
+
 interface OwnedOpenDraftReviewSubject {
   appId: string;
   proposalDigest: string;
@@ -413,6 +419,7 @@ export interface GitHubPublicationRuntime {
     installation: GitHubInstallationIdentity;
     preTree: readonly OverlayFile[];
     ownedCompletedPublicationDigest?: string;
+    ownedCompletedPublication?: OwnedCompletedAppPublication;
   }>;
   readDraftDestinationFile?: (input: {
     binding: GitHubDestinationReviewBinding;
@@ -904,6 +911,7 @@ export function composeGitHubPublicationRuntime(input: {
         );
       }
       let ownedCompletedPublicationDigest: string | undefined;
+      let ownedCompletedPublication: OwnedCompletedAppPublication | undefined;
       let ownedMergedPublication = false;
       let publishedPaths: readonly string[] = [];
       const revision = request.ownedAppRevision;
@@ -988,6 +996,12 @@ export function composeGitHubPublicationRuntime(input: {
         // on today's destination. It may still prepare a fresh full-app review.
         ownedMergedPublication =
           observed.state === "merged" && observed.baseBranch === repository.defaultBranch;
+        if (ownedMergedPublication) {
+          ownedCompletedPublication = {
+            proposal: canonical,
+            installationId: installation.installationId,
+          };
+        }
         publishedPaths = canonical.approvedPaths;
       }
       const paths =
@@ -1004,6 +1018,8 @@ export function composeGitHubPublicationRuntime(input: {
         installation,
         preTree: await adapter.inspectDestinationFiles({ paths, repository }),
         repository,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve the existing optional internal result shape; no canonical binding/digest is changed.
+        ...(ownedCompletedPublication === undefined ? {} : { ownedCompletedPublication }),
         // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
         ...(ownedCompletedPublicationDigest === undefined
           ? {}

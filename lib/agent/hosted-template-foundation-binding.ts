@@ -5,6 +5,7 @@ import type { ValidationExecutionFoundation } from "../repository/target-validat
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import { assertApprovedPrivateApplySession } from "./private-apply-authority";
 import { hostedTemplateFoundationRecoveryHistory } from "./hosted-template-foundation-recovery-state";
+import type { OwnedCompletedAppPublication } from "./github-publication-runtime";
 
 type AppliedBinding = Pick<
   Extract<AppBuilderWorkflowState, { phase: "applied" }>,
@@ -23,7 +24,7 @@ const unavailable = () =>
   new Error("The completed source recovery does not match this retained approved app.");
 
 /** Bridge an original private Build to its completed, same-owned-app source transitions only. */
-export const resolveHostedTemplateFoundationBinding = (
+const resolveFoundationChain = (
   state: AppliedBinding,
   sessionId: string,
 ): HostedTemplateFoundationBinding | undefined => {
@@ -35,13 +36,6 @@ export const resolveHostedTemplateFoundationBinding = (
     return undefined;
   }
   const { appSpec, proposal, applyReceipt, workspace } = state;
-  assertApprovedPrivateApplySession({
-    appId: appSpec.appId,
-    appSpecDigest: appSpec.digest,
-    proposalDigest: proposal.digest,
-    sessionId,
-    workspaceId: workspace.workspaceId,
-  });
   const history = hostedTemplateFoundationRecoveryHistory
     .get()
     .filter((entry) =>
@@ -130,4 +124,50 @@ export const resolveHostedTemplateFoundationBinding = (
       workspaceDigest: currentWorkspace.workspaceDigest,
     },
   };
+};
+
+/** Execution may borrow the old Build only while that exact grant remains current. */
+export const resolveHostedTemplateFoundationBinding = (
+  state: AppliedBinding,
+  sessionId: string,
+): HostedTemplateFoundationBinding | undefined => {
+  if (
+    state.sourceReceipt.sourceKind === freshTemplate &&
+    state.githubSource === undefined &&
+    state.applyReceipt.sourceReceiptDigest !== state.sourceReceipt.digest
+  ) {
+    assertApprovedPrivateApplySession({
+      appId: state.appSpec.appId,
+      appSpecDigest: state.appSpec.digest,
+      proposalDigest: state.proposal.digest,
+      sessionId,
+      workspaceId: state.workspace.workspaceId,
+    });
+  }
+  return resolveFoundationChain(state, sessionId);
+};
+
+/** Read historical ownership after proving every source transition; never restore a current review. */
+export const priorHostedTemplatePublication = (
+  state: AppliedBinding,
+  sessionId: string,
+): OwnedCompletedAppPublication | undefined => {
+  const publication = hostedTemplateFoundationRecoveryHistory.get().findLast(
+    (entry) =>
+      // oxlint-disable-next-line sonarjs/expression-complexity -- All immutable owner/app/Build/source lookup scope fields must match.
+      entry.sessionId === sessionId &&
+      entry.appId === state.appSpec.appId &&
+      entry.appSpecDigest === state.appSpec.digest &&
+      entry.proposalDigest === state.proposal.digest &&
+      entry.applyDigest === state.applyReceipt.digest &&
+      entry.workspaceId === state.workspace.workspaceId &&
+      entry.publication !== undefined &&
+      entry.publication.proposal.approvedPaths.some((path) =>
+        path.startsWith(`apps/${state.appSpec.appId}/`),
+      ),
+  )?.publication;
+  if (publication === undefined || resolveFoundationChain(state, sessionId) === undefined) {
+    return undefined;
+  }
+  return publication;
 };

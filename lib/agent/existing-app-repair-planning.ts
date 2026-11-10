@@ -25,7 +25,12 @@ import type { DraftReconciliationCandidate } from "./draft-reconciliation-state"
 import { resolveDraftReviewedWorkflow } from "./draft-reviewed-lineage";
 import { resolveGitHubPrDeliverySubject } from "./github-pr-delivery-subject";
 import { currentDraftCandidateSource } from "./published-draft-repair";
-import { resolveHostedTemplateFoundationBinding } from "./hosted-template-foundation-binding";
+import {
+  resolveHostedTemplateFoundationBinding,
+  priorHostedTemplatePublication,
+} from "./hosted-template-foundation-binding";
+import type { OwnedCompletedAppPublication } from "./github-publication-runtime";
+import type { ExistingDraftReconciliationProposal } from "../repository/github-draft-reconciliation";
 
 const iterationOperation = "iterate-existing-app";
 
@@ -259,7 +264,13 @@ export const priorOwnedAppDraftPublication = (
   state: Extract<AppBuilderWorkflowState, { phase: "validated" | "reviewed" }>,
   sessionId: string,
   candidate: DraftReconciliationCandidate | null = null,
-) => {
+):
+  | (OwnedCompletedAppPublication & {
+      reviewed?: Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
+      reconciliation?: ExistingDraftReconciliationProposal;
+      appChangedPaths?: readonly string[];
+    })
+  | undefined => {
   if (
     state.sourceReceipt.sourceKind !== "fresh-template" ||
     !("operation" in state.proposal.target) ||
@@ -285,6 +296,15 @@ export const priorOwnedAppDraftPublication = (
   ].toSorted();
   // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Each retained record must pass independent publication lineage checks before exposing lookup context.
   for (const { approvedBase: base } of history.toReversed()) {
+    const priorFoundationPublication = priorHostedTemplatePublication(base, sessionId);
+    if (
+      priorFoundationPublication !== undefined &&
+      (state.publishedGitHubDraftProposalDigest === undefined ||
+        state.publishedGitHubDraftProposalDigest === priorFoundationPublication.proposal.digest)
+    ) {
+      // oxlint-disable-next-line typescript/consistent-return -- Historical ownership lookup is optional; it never returns current review authority.
+      return { ...priorFoundationPublication, appChangedPaths };
+    }
     const reviewed = resolveDraftReviewedWorkflow(base, candidate);
     const delivery = resolveGitHubPrDeliverySubject(base, candidate);
     if (reviewed === undefined || delivery === undefined) {
