@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { HostedOperatorError } from "./hosted-operator-contract";
+import { AppAccessError } from "../app-access/errors";
 import {
   observeRepositoryProductionConnectionTiming,
   observeRepositoryProductionPhase,
@@ -12,6 +13,23 @@ import {
 afterEach(() => vi.restoreAllMocks());
 
 describe("private Production failure diagnostics", () => {
+  it("projects only an allowlisted app access code without its private exception details", () => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const failure = new AppAccessError("app_access_unknown");
+    failure.message = "private email@example.test https://private.example?credential=value";
+    reportRepositoryProductionFailure("access_operator_read", "binding_unavailable", failure);
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({
+      appAccessCode: "app_access_unknown",
+    });
+    expect(log.mock.calls.flat().join("")).not.toContain("private");
+    log.mockClear();
+    reportRepositoryProductionFailure("access_operator_read", "binding_unavailable", {
+      code: "private-provider-code",
+    });
+    expect(log.mock.calls.flat().join("")).not.toContain("appAccessCode");
+    expect(log.mock.calls.flat().join("")).not.toContain("private");
+  });
+
   it("retains only fixed labels, an allowlisted SQLSTATE and numeric HTTP status", () => {
     const log = vi.spyOn(console, "warn").mockImplementation(() => {});
     const secret = "postgresql://private-user:private-password@private-host/database";

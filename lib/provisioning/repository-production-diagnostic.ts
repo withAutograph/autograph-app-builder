@@ -33,12 +33,20 @@ const failureSchema = z.strictObject({
     "access_request",
     "access_owner_resolve",
     "access_operator_read",
+    "access_operator_command",
     "access_owner_recheck",
     "access_operator_http",
     "access_operator_transport",
+    "access_operator_token",
+    "access_operator_projection",
     "access_scope_resolve",
     "access_people",
     "access_projection",
+    "access_command_authorize",
+    "access_command_lease",
+    "access_command_journal",
+    "access_command_execute",
+    "access_command_reconcile",
   ]),
   code: z.enum([
     "setup_unavailable",
@@ -50,6 +58,16 @@ const failureSchema = z.strictObject({
     "credentials_unavailable",
   ]),
   operatorCode: operatorPublicResultSchema.shape.code,
+  appAccessCode: z
+    .enum([
+      "authentication_required",
+      "app_access_denied",
+      "app_access_unavailable",
+      "app_access_unknown",
+      "request_invalid",
+      "request_id_conflict",
+    ])
+    .optional(),
   errorKind: z
     .enum([
       "Error",
@@ -187,6 +205,9 @@ export const reportRepositoryProductionFailure = (
     const fixedReason = message.success ? reasonByMessage.get(message.data) : undefined;
     const reason = ownData(error, "name") === "ZodError" ? "schema_invalid" : fixedReason;
     const operatorCode = failureSchema.shape.operatorCode.safeParse(ownData(error, "code"));
+    const appAccessCode = failureSchema.shape.appAccessCode
+      .unwrap()
+      .safeParse(ownData(error, "code"));
     const statuses = [ownData(error, "statusCode"), ownData(error, "status")];
     const httpStatus = statuses
       .map((value) => failureSchema.shape.httpStatus.unwrap().safeParse(value))
@@ -203,6 +224,8 @@ export const reportRepositoryProductionFailure = (
           ...(reason === undefined ? {} : { reason }),
           // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(operatorCode.success ? { operatorCode: operatorCode.data } : {}),
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Omit an absent closed app-access code like the existing diagnostic fields.
+          ...(appAccessCode.success ? { appAccessCode: appAccessCode.data } : {}),
           // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
           ...(httpStatus?.success ? { httpStatus: httpStatus.data } : {}),
           // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.

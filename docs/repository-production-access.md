@@ -97,11 +97,16 @@ Production transport failures also retain the existing launcher's last closed
 stage, such as worker pin verification, protocol handling or cleanup. This is
 stage metadata after the original cleanup, not proof that a provider effect
 occurred; the original rejection, authority and cancellation remain unchanged.
-People status failures record only closed web owner/read/recheck, protected
-scope/People/projection stages and numeric failed operator HTTP status. Exact
-source-unavailable and capture-unavailable exceptions have distinct closed
-reasons. These diagnostics preserve the sanitized response and never include
-request identities, emails, provider bodies, URLs, credentials or raw errors.
+People read and mutation failures record only closed web owner/read/recheck,
+operator token/transport/projection, protected scope/People, command authority,
+lease, journal, reconciliation and execution stages, plus numeric failed
+operator HTTP status. Exact source-unavailable and capture-unavailable exceptions have distinct closed
+reasons. Known app-access error codes are a separate allowlisted field alongside
+existing operator codes, SQLSTATEs and built-in error kinds. These diagnostics
+preserve the sanitized response and never include request identities, emails,
+provider bodies, URLs, credentials or raw errors.
+They observe failures without retrying, allocating an operation or changing the
+saved command identity; absent logs do not prove that an invitation was unsent.
 Storage setup emits the resource worker's canonical bootstrap envelope before
 hashing its authority context, including the canonical resource field order.
 The first fence request must bind the same context digest for both execution and

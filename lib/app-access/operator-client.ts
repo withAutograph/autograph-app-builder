@@ -3,7 +3,10 @@ import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contr
 import { appAccessSnapshotSchema } from "./contracts";
 import type { AppAccessCommand, AppAccessSnapshot } from "./contracts";
 import { AppAccessError } from "./errors";
-import { reportRepositoryProductionFailure } from "../provisioning/repository-production-diagnostic";
+import {
+  observeRepositoryProductionPhase,
+  reportRepositoryProductionFailure,
+} from "../provisioning/repository-production-diagnostic";
 
 export interface AppAccessOwner {
   appId: string;
@@ -39,7 +42,11 @@ export const createAppAccessOperatorClient = (input: {
     cursor?: string,
   ): Promise<AppAccessSnapshot> => {
     // Token acquisition is before dispatch: its failure is a known no-op.
-    const token = await input.token();
+    const token = await observeRepositoryProductionPhase(
+      "access_operator_token",
+      "workload_unavailable",
+      async () => await input.token(),
+    );
     const requestBody = () => {
       const body: AppAccessOwner & {
         version: number;
@@ -73,23 +80,15 @@ export const createAppAccessOperatorClient = (input: {
         cache: "no-store",
       });
     } catch (error) {
-      if (command === undefined) {
-        reportRepositoryProductionFailure(
-          "access_operator_transport",
-          "provider_unavailable",
-          error,
-        );
-      }
+      reportRepositoryProductionFailure("access_operator_transport", "provider_unavailable", error);
       throw new AppAccessError(
         command === undefined ? "app_access_unavailable" : "app_access_unknown",
       );
     }
     if (!response.ok) {
-      if (command === undefined) {
-        reportRepositoryProductionFailure("access_operator_http", "provider_unavailable", {
-          status: response.status,
-        });
-      }
+      reportRepositoryProductionFailure("access_operator_http", "provider_unavailable", {
+        status: response.status,
+      });
       if (response.status === 401 || response.status === 403) {
         throw new AppAccessError("app_access_denied");
       }
@@ -110,7 +109,8 @@ export const createAppAccessOperatorClient = (input: {
         throw new Error("App access response has a different owner scope.");
       }
       return snapshot;
-    } catch {
+    } catch (error) {
+      reportRepositoryProductionFailure("access_operator_projection", "binding_unavailable", error);
       throw new AppAccessError(
         command === undefined ? "app_access_unavailable" : "app_access_unknown",
       );
