@@ -79,7 +79,15 @@ The combined Builder head also contains sanitized hosted start diagnostics. Serv
 
 Combined CI at `1136731` passed the Auth, Eve, provider proof, navigation, product-quality and package lanes, but repository CI exposed a Preview lease timer versus wall-clock cleanup boundary. The repair honors the separate lease-expiry signal and has a deterministic regression; all 22 Preview runtime tests, types and scoped lint pass. The final combined head requires fresh exact-head CI.
 
-## Hosted path blockers
+## Historical Preview path blockers
+
+These observations describe the older native Preview adapter at this report's
+recorded checkpoint. They do not report the current protected normal Production
+setup's status or impose its branch-specific prerequisites on ordinary delivery.
+Use the same saved Production operation and its actual data/access status; see
+[Production setup](repository-production-access.md). A confirmed credential or
+provider failure remains actionable, while an unobserved source-only installer
+boundary is advisory `unassessed`.
 
 See [Hosted app runtime](hosted-app-runtime.md) for source-backed provider constraints and recovery options. The native Neon/Vercel connection has no wired owner-scoped restricted credential issuer. Native database variables are deployment-managed, and shared Services project environment access does not establish installer credential isolation from application processes. The adapter fails explicitly when the required branch authority is absent. Changing the connection model requires a reviewed provider contract and separate approval; no provider migration or activation was performed.
 

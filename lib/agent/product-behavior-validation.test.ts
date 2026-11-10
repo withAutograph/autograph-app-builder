@@ -12,6 +12,7 @@ import {
 import { requestPrivateApplyApproval, recordApprovedPrivateApply } from "./private-apply-authority";
 import { ValidationLogWriter } from "../repository/validation-log";
 import type { ValidationLogReference } from "../repository/validation-log";
+import type { AppDescription } from "../repository/app-description";
 import { validationLogStoreForSession } from "./validation-log-store-for-session";
 import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
 import path from "node:path";
@@ -146,6 +147,27 @@ const workflow = (phase: "validated" | "reviewed") => ({
   workspace: {},
 });
 const implementationFiles = [{ content: "updated", path: "apps/app/page.tsx" }];
+const persistentDescription: AppDescription = {
+  version: 1,
+  app: { id: "app", routes: ["/app"], workspacePath: "apps/app" },
+  backend: {
+    kind: "generated-postgres",
+    authorization: "declared-policy",
+    roles: ["member"],
+    release: {
+      id: "controlled-release-v1",
+      artifactHash: `sha256:${"a".repeat(64)}`,
+      directory: "apps/app/schema/release/controlled-release-v1",
+    },
+    runtime: { databaseEnvironment: "APP_DATABASE_URL" },
+    schemaReceipt: null,
+  },
+  validation: {
+    browser: { task: "mise //apps/app:test-e2e" },
+    check: { task: "mise run app:check app" },
+    test: { task: "mise run app:test app", shards: 1 },
+  },
+};
 
 describe("behavior evidence invalidation during validation repair", () => {
   beforeEach(() => {
@@ -563,6 +585,68 @@ describe("behavior evidence invalidation during validation repair", () => {
       }),
     );
   });
+
+  it.each(["private-proof", "credential-refusal"])(
+    "keeps the source handoff advisory with %s while retaining actual runtime results",
+    async (runtimeResult) => {
+      mocks.state.current = { ...workflow("validated"), phase: "applied" };
+      mocks.describe.mockResolvedValue(persistentDescription);
+      const failure = "The protected runtime refused an installer credential";
+      if (runtimeResult === "credential-refusal") {
+        mocks.runtime.mockRejectedValue(new Error(failure));
+      } else {
+        mocks.runtime.mockResolvedValue({
+          installationProof: {
+            actors: 1,
+            appId: "app",
+            artifactHash: "a".repeat(64),
+            authenticatedBehavior: "unassessed",
+            branch: "test-preview",
+            environment: "preview",
+            observation: "database-verification",
+            observedAt: "2026-11-10T00:00:00.000Z",
+            releaseId: "controlled-release-v1",
+            tenants: 1,
+          },
+        });
+      }
+      const sandbox = { id: "validation-sandbox", run: vi.fn() };
+      const context = {
+        callId: "validate_advisory_handoff",
+        getSandbox: async () => await Promise.resolve(sandbox),
+        session: { auth: { owned: "auth" }, id: "adapter" },
+      };
+      const result = await validateAppCreation.execute(
+        { implementationFiles: [], runBrowserTests: true },
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- This controlled context supplies the fields consumed by validation, with real handoff code and async ports.
+        context as never,
+      );
+      expect(result).toMatchObject({
+        status: "validated",
+        technicalStatus: "passed",
+        productionHandoff: {
+          status: "advisory",
+          blockers: [],
+          operatorChecklist: { nativeInstallerIsolation: { status: "unassessed" } },
+        },
+      });
+      if (runtimeResult === "credential-refusal") {
+        expect(result).toMatchObject({
+          backendValidation: {
+            status: "blocked",
+            reason: "authenticated-runtime-preparation",
+            problem: failure,
+          },
+        });
+        expect(mocks.browser).not.toHaveBeenCalled();
+      } else {
+        expect(result).toMatchObject({
+          backendValidation: { status: "passed" },
+          productionHandoff: { evidence: { installedRelease: { status: "passed" } } },
+        });
+      }
+    },
+  );
   it("leaves a declared browser task unassessed during ordinary build validation", async () => {
     mocks.state.current = { ...workflow("validated"), phase: "applied" };
     mocks.describe.mockResolvedValue({

@@ -53,7 +53,7 @@ describe("productionReadinessHandoff", () => {
       roles: ["requester", "reviewer"],
       route: `/${app}`,
       schemaReceiptPath: "/spend-review/api/schema",
-      status: "operator-review-required",
+      status: "advisory",
     });
   });
 
@@ -93,11 +93,11 @@ describe("productionReadinessHandoff", () => {
       status: "unassessed",
     });
     expect(result.operatorChecklist.backupRecovery.status).toBe("unassessed");
-    expect(result.operatorChecklist.nativeInstallerIsolation.status).toBe("blocked");
+    expect(result.operatorChecklist.nativeInstallerIsolation.status).toBe("unassessed");
     expect(result.operatorChecklist.approvals.required).toEqual([
-      { effect: "hosted-preparation", status: "unassessed" },
-      { effect: "access-grants", status: "unassessed" },
-      { effect: "provider-activation", status: "unassessed" },
+      { effect: "production-setup", status: "unassessed" },
+      { effect: "github-publication", status: "unassessed" },
+      { effect: "reviewed-merge", status: "unassessed" },
       { effect: "recovery-or-cleanup", status: "unassessed" },
     ]);
   });
@@ -142,6 +142,8 @@ describe("productionReadinessHandoff", () => {
         repositoryRoot: root,
         source: source(),
       });
+      expect(result.status).toBe("advisory");
+      expect(result.blockers).toEqual([]);
       expect(result.evidence.installedRelease.status).toBe(value.expected);
       expect(result.evidence.authenticatedSchemaReceipt.status).toBe("unassessed");
       expect(result.evidence.behavior.coverage).toBe("unassessed");
@@ -152,7 +154,7 @@ describe("productionReadinessHandoff", () => {
       expect(result.operatorChecklist.accessGrants.status).toBe("unassessed");
       expect(result.operatorChecklist.configuration.status).toBe("unassessed");
       expect(result.operatorChecklist.backupRecovery.status).toBe("unassessed");
-      expect(result.operatorChecklist.nativeInstallerIsolation.status).toBe("blocked");
+      expect(result.operatorChecklist.nativeInstallerIsolation.status).toBe("unassessed");
       expect(result.operatorChecklist.approvals.status).toBe("unassessed");
     },
   );
