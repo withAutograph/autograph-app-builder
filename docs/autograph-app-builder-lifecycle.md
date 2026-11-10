@@ -64,6 +64,21 @@ command history and logs. Later opting out does not record a browser pass or
 reuse a sealed candidate approval; the remaining required checks and release
 capture must succeed before the current candidate becomes reviewable.
 
+With no implementation files, ordinary validation selects the current owned
+draft candidate when one is available. Its successful result continues to that
+candidate's review, which reobserves the checked tree before recording the
+current diff. It does not validate or review different files in the original
+creation checkout. If owned-publication inspection finds that the creation
+review is stale while that checkout lacks completed validation, Builder returns
+an internal `validationTarget: "creation-workspace"` continuation. That selection
+runs the existing repository checks against the actual creation checkout,
+without selecting the draft candidate again. Passing those checks permits a
+fresh current-app review and continuation of the same owned draft. The two
+validation receipts remain separate; neither a retained old review nor a passed
+candidate authorizes an update of different bytes. Current review and exact
+publication approval remain required. Builder owns this selection; creators do
+not choose source workspaces or repeat Build approval for it.
+
 When draft reconciliation selects an app-owned browser task, Builder runs it
 against the candidate's own prepared runtime or ordinary frontend server. The
 session's optional working preview cannot supply its launch authority or origin
