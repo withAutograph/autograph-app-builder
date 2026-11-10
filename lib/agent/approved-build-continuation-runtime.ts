@@ -1,3 +1,7 @@
+import {
+  currentGitHubPrDeliveryAuthorityProjection,
+  markGitHubPrDeliveryAuthorityProjected,
+} from "./github-pr-delivery-authority-state";
 import { currentLocalSourcePrerequisite } from "./local-source-prerequisite-state";
 import { repositoryAccessReceiptState } from "./repository-access-state";
 
@@ -106,14 +110,17 @@ export const recordApprovedBuildDecision = async (
   ctx: Pick<HookContext, "session">,
   decision: ApprovedBuildDecision,
 ): Promise<void> => {
-  const parsed = approvedBuildDecisionSchema.parse(decision);
+  const projection = currentGitHubPrDeliveryAuthorityProjection();
+  const parsed = approvedBuildDecisionSchema.parse({ ...decision, githubDelivery: projection });
   if (hasTestCapability("simulated-target")) {
     diagnosticBuildDecisionState.update(() => parsed);
+    markGitHubPrDeliveryAuthorityProjected(projection);
     return;
   }
   if ((await readLocalOperatorArtifactAuthority()) !== undefined) {
     const { recordLocalBuildDecision } = await import("./local-build-continuation");
     await recordLocalBuildDecision(ctx, parsed);
+    markGitHubPrDeliveryAuthorityProjected(projection);
     return;
   }
   const { owner, principal, store } = await continuationOwnerStore(ctx);
@@ -123,6 +130,7 @@ export const recordApprovedBuildDecision = async (
     principal,
     store,
   });
+  markGitHubPrDeliveryAuthorityProjected(projection);
 };
 /** A marker is internal only after its private canonical reservation accepts this exact delivered event. */
 const verifyInternalBuildMessage = async (

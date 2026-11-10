@@ -645,8 +645,23 @@ disable Ready and merge with `APP_BUILDER_GITHUB_PR_DELIVERY_ENABLED=0`. This is
 approval to mark the PR ready and merge the reviewed revision when required
 checks pass. Eve binds the approval to the current session's tool call. Builder
 checks that session's reviewed proposal before requesting approval and rechecks
-the authorized repository and revision in the delivery step. The GitHub
-App installation needs Actions read, Pull requests write for Ready, and
+the authorized repository and revision in the delivery step.
+
+The ordinary parent records a small server-owned delivery projection at the
+approval boundary and when its reviewed publication changes. It retains the
+app/AppSpec, review, publication/reconciliation and installation identities,
+known managed Production requirements, and the exact invocation's input digest,
+owner, generation and Stop revision. These are scope facts, not a separate human
+approval. Durable child workflow steps re-read the current canonical owner and
+projection instead of reading child-local Builder state. A changed publication,
+owner or cancelled execution cannot reuse the old call. The native cancellation
+hook retires that turn's calls durably, including local Stop/resume; an unrelated
+failed or blocked step does not retire approval. Missing previously
+managed setup remains blocked by the existing Production check. One approved
+workflow covers Ready, waiting for Check and merge, including a PR already Ready.
+Old finished calls are not migrated or resurrected by this recovery.
+
+The GitHub App installation needs Actions read, Pull requests write for Ready, and
 Contents write for both Ready and merge. The provider requests a repository-scoped token
 attenuated for each operation. GitHub applies its own review and merge policy.
 
