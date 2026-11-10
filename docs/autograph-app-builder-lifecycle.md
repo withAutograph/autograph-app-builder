@@ -55,6 +55,17 @@ Ordinary build validation skips authenticated browser preparation and browser
 tasks. Builder can opt into a declared app browser task with `runBrowserTests`
 when that task serves the app’s testing needs.
 
+When draft reconciliation selects an app-owned browser task, Builder runs it
+against the candidate's own prepared runtime or ordinary frontend server. The
+session's optional working preview cannot supply its launch authority or origin
+to that candidate. Protected runtime resolution and refusal remain authoritative
+before dispatch; local candidates require their own readable localhost Auth
+origin, while frontend candidates may have no local Auth binding. Selected test
+failures and cancellations remain failures. Ordinary and prior-artifact private
+previews retain their owner, app, source, lifetime, origin and recording
+protections. This internal target creates no creator input or prepared-Preview
+requirement.
+
 For requested GitHub delivery, passing repository build and declared app tests
 produce a technically validated, reviewable candidate. The tool keeps that
 technical result successful when an optional private browser check fails or is
