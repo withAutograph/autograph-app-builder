@@ -401,7 +401,8 @@ export const createRepositoryProductionNativeHandler =
           publicOrigin: profile.publicOrigin,
           environment: "production",
         });
-        const savedAccess = (await store.read(scope))?.record.intent.access;
+        const existing = await store.read(scope);
+        const savedAccess = existing?.record.intent.access;
         const intent: RepositoryProductionIntent = {
           ...resolveRepositoryProductionSignupIntent(spec, description, savedAccess),
           sessionId: owner.sessionId,
@@ -419,7 +420,6 @@ export const createRepositoryProductionNativeHandler =
                   databaseEnvironment: description.backend.runtime.databaseEnvironment,
                 },
         };
-        const existing = await store.read(scope);
         if (existing?.record.intent.creatorEmail !== undefined) {
           intent.creatorEmail = existing.record.intent.creatorEmail;
         }
@@ -1142,6 +1142,14 @@ export const createRepositoryProductionNativeHandler =
           repositories: configuration.repositories,
           readSession: async (owner) => {
             await readSession(owner);
+          },
+          readActiveRevision: async (owner) => {
+            const session = await readObservationSession(owner);
+            return {
+              adapterSessionId: session.adapterSessionId,
+              adapterGeneration: session.adapterGeneration,
+              cancellationRevision: session.cancellationRevision ?? 0,
+            };
           },
           resolveCurrent: resolve,
           store,

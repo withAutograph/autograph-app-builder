@@ -25,6 +25,11 @@ import type {
 interface DeliveryStatusDependencies {
   repositories: readonly ManagementProfile[];
   readSession: (owner: RepositoryProductionRequestOwner) => Promise<void>;
+  readActiveRevision: (owner: RepositoryProductionRequestOwner) => Promise<{
+    adapterSessionId: string;
+    adapterGeneration: number;
+    cancellationRevision: number;
+  }>;
   resolveCurrent: (owner: RepositoryProductionRequestOwner) => Promise<{
     scope: RepositoryProductionScope;
     intent: RepositoryProductionIntent;
@@ -62,7 +67,6 @@ export const createRepositoryProductionDeliveryStatus =
       throw new HostedOperatorError("authorization_required");
     }
     const [profile] = matches;
-    const current = await deps.resolveCurrent(owner);
     const scope: RepositoryProductionScope = {
       authority: owner.ownerContext.authority,
       appId: owner.appId,
@@ -73,12 +77,19 @@ export const createRepositoryProductionDeliveryStatus =
       publicOrigin: profile.publicOrigin,
       environment: "production",
     };
+    const saved = await deps.store.read(scope);
+    const revisionOwner =
+      saved !== undefined && saved.record.intent.sessionId !== owner.sessionId
+        ? await deps.readActiveRevision(owner)
+        : undefined;
+    const current = await deps.resolveCurrent(owner);
     if (!isDeepStrictEqual(current.scope, scope) || current.intent.sessionId !== owner.sessionId) {
       throw new HostedOperatorError("authorization_required");
     }
     const row = await deps.store.read(scope);
-    if (row !== undefined && row.record.intent.sessionId !== owner.sessionId) {
+    if (revisionOwner !== undefined) {
       const reuse =
+        row !== undefined &&
         reviewedHeadSha === current.intent.sourceSha &&
         canReuseCompletedRepositoryProductionSetup({
           owner,
@@ -90,7 +101,9 @@ export const createRepositoryProductionDeliveryStatus =
       if (!reuse) {
         throw new HostedOperatorError("authorization_required");
       }
-      await deps.readSession(owner);
+      if (!isDeepStrictEqual(await deps.readActiveRevision(owner), revisionOwner)) {
+        throw new HostedOperatorError("authorization_required");
+      }
       return repositoryProductionDeliveryStatusSchema.parse({
         ...result,
         applicable: true,

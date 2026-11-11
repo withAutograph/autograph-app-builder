@@ -103,6 +103,11 @@ const fixture = (currentOwner = owner) => {
         throw new HostedOperatorError("authorization_required");
       }
     }),
+    readActiveRevision: vi.fn(async () => ({
+      adapterSessionId: currentOwner.ownerContext.adapterSessionId,
+      adapterGeneration: currentOwner.ownerContext.adapterGeneration,
+      cancellationRevision: 0,
+    })),
     resolveCurrent: vi.fn(async () => structuredClone(current)),
     store: { read: vi.fn(async () => structuredClone(saved.row)) },
     isRuntimeBindingReady: vi.fn(() => true),
@@ -144,7 +149,36 @@ describe("read-only managed Production delivery status", () => {
       operationRef: before?.operationRef,
     });
     expect(f.saved.row).toEqual(before);
-    expect(f.deps.readSession).toHaveBeenCalledTimes(2);
+    expect(f.deps.readActiveRevision).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects reuse if the active revision stops or resumes while its setup is read", async () => {
+    const f = revision();
+    f.deps.readActiveRevision
+      .mockResolvedValueOnce({
+        adapterSessionId: f.currentOwner.ownerContext.adapterSessionId,
+        adapterGeneration: f.currentOwner.ownerContext.adapterGeneration,
+        cancellationRevision: 0,
+      })
+      .mockResolvedValueOnce({
+        adapterSessionId: f.currentOwner.ownerContext.adapterSessionId,
+        adapterGeneration: f.currentOwner.ownerContext.adapterGeneration,
+        cancellationRevision: 1,
+      });
+    await expect(f.read(f.currentOwner, f.target)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+  });
+
+  it("checks the latest saved effects after reading the published capture", async () => {
+    const f = revision();
+    f.deps.resolveCurrent.mockImplementationOnce(async () => {
+      f.record.effects["install-schema"] = { state: "pending", attemptId: "attempt" };
+      return f.current;
+    });
+    await expect(f.read(f.currentOwner, f.target)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
   });
 
   it("requires the exact published GitHub head before a revision can reuse setup", async () => {
