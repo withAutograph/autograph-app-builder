@@ -36,6 +36,21 @@ export interface OwnedPublicationReconciliationScope {
   automaticMergeNonAppDigest: string;
 }
 
+/** A first draft may carry repository registration alongside one new app. */
+export const isFirstAppPublicationPathScope = (
+  paths: readonly string[],
+  appId: string,
+): boolean => {
+  const appRoot = `apps/${appId}/`;
+  const registration = new Set(["bun.lock", "microfrontends.json", "package.json"]);
+  return [
+    /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId),
+    paths.includes(`${appRoot}package.json`),
+    paths.includes("microfrontends.json"),
+    paths.every((path) => path.startsWith(appRoot) || registration.has(path)),
+  ].every(Boolean);
+};
+
 export const assertOwnedPublicationReconciliationOrigin = (
   scope: Pick<OwnedPublicationReconciliationScope, "proposal" | "publication">,
 ): void => {

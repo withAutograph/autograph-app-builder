@@ -141,7 +141,9 @@ export default defineTool({
       appSpecDigest: completion.appReview.appSpecDigest,
       root: completion.root,
       pullRequestNumber: proposal.pullRequestNumber,
-      priorPublishedProposalDigest: completion.publishedOrigin?.publicationProposalDigest,
+      priorPublishedProposalDigest:
+        completion.publishedOrigin?.publicationProposalDigest ??
+        completion.publicationScope?.proposal.digest,
     });
     const inspected = await runtime.inspectAppliedExistingDraftReconciliation({
       proposal,

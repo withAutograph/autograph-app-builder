@@ -64,7 +64,12 @@ const commit = (root: string, message: string) => {
 };
 
 const fixture = (
-  options: { compositionChanged?: boolean; realBun?: boolean; literalAddition?: boolean } = {},
+  options: {
+    compositionChanged?: boolean;
+    realBun?: boolean;
+    literalAddition?: boolean;
+    firstPublication?: boolean;
+  } = {},
 ) => {
   const workspace = mkdtempSync(path.join(tmpdir(), "builder-owned-composition-"));
   temporary.push(workspace);
@@ -146,16 +151,47 @@ export const planMicrofrontendRegistration=(bytes,input)=>{
     `apps/${appId}/package.json`,
     text({
       name: `@autograph/${appId}`,
-      dependencies: { existing: "catalog:", needed: "catalog:" },
+      dependencies:
+        options.firstPublication === true
+          ? { existing: "catalog:" }
+          : { existing: "catalog:", needed: "catalog:" },
     }),
   );
   write(checkout, `apps/${appId}/app/page.tsx`, "export default 'accepted app implementation';\n");
   if (options.literalAddition === true) {
     write(checkout, ":(glob)docs/**", "an unwanted literal-path publication addition\n");
   }
-  // Intentionally different from the accepted app: content equality is not ownership proof.
-  write(checkout, "app/page.tsx", "export default 'unintended root application';\n");
-  if (options.compositionChanged !== false) {
+  if (options.firstPublication === true) {
+    write(
+      checkout,
+      "microfrontends.json",
+      text({
+        ...baseRoutes,
+        applications: {
+          ...baseRoutes.applications,
+          [appId]: {
+            packageName: `@autograph/${appId}`,
+            routes: [`/${appId}`, `/${appId}/:path*`],
+          },
+        },
+      }),
+    );
+    write(
+      checkout,
+      "bun.lock",
+      text({
+        workspaces: {
+          "apps/existing": { name: "@fixture/existing" },
+          [`apps/${appId}`]: { name: `@autograph/${appId}` },
+        },
+        retained: "base-lock",
+      }),
+    );
+  } else {
+    // Intentionally different from the accepted app: content equality is not ownership proof.
+    write(checkout, "app/page.tsx", "export default 'unintended root application';\n");
+  }
+  if (options.firstPublication !== true && options.compositionChanged !== false) {
     write(
       checkout,
       "package.json",
@@ -184,7 +220,9 @@ export const planMicrofrontendRegistration=(bytes,input)=>{
   }
   const originalHead = commit(
     checkout,
-    "Builder published its reviewed app and accidental root additions",
+    options.firstPublication === true
+      ? "Builder published its reviewed app and registration"
+      : "Builder published its reviewed app and accidental root additions",
   );
   git(checkout, "push", "origin", headBranch);
   const approvedPaths = git(
@@ -248,39 +286,49 @@ export const planMicrofrontendRegistration=(bytes,input)=>{
   const owned = { proposal, publication: { ...receipt, digest: digest(JSON.stringify(receipt)) } };
   assertOwnedPublicationReconciliationOrigin(owned);
   git(checkout, "switch", "main");
-  const currentPackage = {
-    ...basePackage,
-    catalog: { ...basePackage.catalog, newOtherApp: "workspace:*" },
-    retainedNewBaseField: true,
-  };
-  const currentRoutes = {
-    ...baseRoutes,
-    applications: {
-      ...baseRoutes.applications,
-      newer: { packageName: "@fixture/newer", routes: ["/newer"], custom: "new-base" },
-    },
-  };
-  write(checkout, "package.json", text(currentPackage));
-  write(checkout, "microfrontends.json", text(currentRoutes));
-  write(checkout, "apps/newer/package.json", text({ name: "@fixture/newer" }));
-  write(checkout, "apps/newer/app/page.tsx", "export default 'new base app';\n");
-  write(checkout, "packages/existing/package.json", text({ name: "existing", version: "2.0.0" }));
-  if (options.realBun === true) {
-    runBun(checkout);
+  const currentPackage =
+    options.firstPublication === true
+      ? basePackage
+      : {
+          ...basePackage,
+          catalog: { ...basePackage.catalog, newOtherApp: "workspace:*" },
+          retainedNewBaseField: true,
+        };
+  const currentRoutes =
+    options.firstPublication === true
+      ? baseRoutes
+      : {
+          ...baseRoutes,
+          applications: {
+            ...baseRoutes.applications,
+            newer: { packageName: "@fixture/newer", routes: ["/newer"], custom: "new-base" },
+          },
+        };
+  if (options.firstPublication === true) {
+    write(checkout, "docs/shared.md", "newer shared documentation on main\n");
   } else {
-    write(
-      checkout,
-      "bun.lock",
-      text({
-        workspaces: {
-          "apps/existing": { name: "@fixture/existing" },
-          "apps/newer": { name: "@fixture/newer" },
-        },
-        retained: "current-base-lock",
-      }),
-    );
+    write(checkout, "package.json", text(currentPackage));
+    write(checkout, "microfrontends.json", text(currentRoutes));
+    write(checkout, "apps/newer/package.json", text({ name: "@fixture/newer" }));
+    write(checkout, "apps/newer/app/page.tsx", "export default 'new base app';\n");
+    write(checkout, "packages/existing/package.json", text({ name: "existing", version: "2.0.0" }));
+    if (options.realBun === true) {
+      runBun(checkout);
+    } else {
+      write(
+        checkout,
+        "bun.lock",
+        text({
+          workspaces: {
+            "apps/existing": { name: "@fixture/existing" },
+            "apps/newer": { name: "@fixture/newer" },
+          },
+          retained: "current-base-lock",
+        }),
+      );
+    }
   }
-  const currentBase = commit(checkout, "another app and shared metadata advanced on main");
+  const currentBase = commit(checkout, "unrelated source advanced on main");
   git(checkout, "push", "origin", "main");
   const currentLock = readFileSync(path.join(checkout, "bun.lock"), "utf-8");
   git(checkout, "switch", headBranch);
@@ -593,6 +641,65 @@ describe("owned original publication composition repair", () => {
       ),
     ).toBe(true);
     expect(git(f.checkout, "rev-parse", `refs/heads/${f.headBranch}`)).toBe(f.originalHead);
+  });
+
+  it("retains approved first registration while correcting a draft in the existing repository", async () => {
+    const f = fixture({ firstPublication: true });
+    const input = {
+      sandbox: f.session,
+      workspaceRoot: f.workspace,
+      repository: repo,
+      appId,
+      headBranch: f.headBranch,
+      headSha: f.originalHead,
+      baseBranch: "main",
+      baseSha: f.currentBase,
+    };
+    expect(git(f.checkout, "ls-tree", f.originalBase, "--", `apps/${appId}`)).toBe("");
+    const unscoped = await prepareDraftReconciliation(input);
+    const appPage = `apps/${appId}/app/page.tsx`;
+    const correction = "export default 'corrected app implementation';\n";
+    write(unscoped.root, appPage, correction);
+    await expect(
+      inspectDraftReconciliation({ sandbox: f.session, prepared: unscoped }),
+    ).rejects.toThrow("differs from main at bun.lock");
+
+    const prepared = await prepareDraftReconciliation({
+      ...input,
+      ownedPublication: f.owned,
+      previousCandidate: unscoped,
+      replayPreviousCandidate: true,
+    });
+    expect(prepared.root).not.toBe(unscoped.root);
+    expect(prepared.conflicts).toEqual([]);
+    expect(readFileSync(path.join(prepared.root, appPage), "utf-8")).toBe(correction);
+
+    const review = await inspectDraftReconciliation({ sandbox: f.session, prepared });
+    expect(review.baseChanges.map(({ path: file }) => file).toSorted()).toEqual(
+      f.owned.proposal.approvedPaths,
+    );
+    expect(review.headChanges.map(({ path: file }) => file).toSorted()).toEqual([
+      appPage,
+      "docs/shared.md",
+    ]);
+    for (const registrationPath of ["bun.lock", "microfrontends.json"]) {
+      expect(git(prepared.root, "rev-parse", `:${registrationPath}`)).toBe(
+        git(f.checkout, "rev-parse", `${f.originalHead}:${registrationPath}`),
+      );
+    }
+    expect(f.lockSeeds).toEqual([]);
+
+    write(prepared.root, "bun.lock", "unreviewed replacement lockfile\n");
+    await expect(inspectDraftReconciliation({ sandbox: f.session, prepared })).rejects.toThrow(
+      "cannot accept reconciliation edit bun.lock",
+    );
+    git(prepared.root, "restore", "--worktree", "--", "bun.lock");
+
+    write(prepared.root, "docs/shared.md", "unreviewed shared edit\n");
+    git(prepared.root, "add", "--", "docs/shared.md");
+    await expect(inspectDraftReconciliation({ sandbox: f.session, prepared })).rejects.toThrow(
+      "Non-app content changed after Git prepared this owned draft merge",
+    );
   });
 
   it.skipIf(availableBun === undefined)(

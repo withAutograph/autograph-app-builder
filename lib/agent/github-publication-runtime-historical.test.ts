@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  createDraftPullRequestProposal,
   createGitHubInstallationIdentity,
   createRepositoryObservation,
   GITHUB_PUBLICATION_VERSION,
@@ -15,6 +16,8 @@ import type {
 } from "../repository/github-publication";
 import type { ExistingDraftObservation } from "../repository/github-draft-update";
 import { createReconciliationReviewReceipt } from "../repository/github-draft-reconciliation";
+import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
+import { createReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
 import { composeGitHubPublicationRuntime } from "./github-publication-runtime";
 
 const sourceRequest = {
@@ -161,6 +164,7 @@ const ownedDraftFixture = (
   const findDraftByPullRequest = vi
     .fn<NonNullable<GitHubPublicationReceiptStore["findDraftByPullRequest"]>>()
     .mockResolvedValue(receipt);
+  const readProposal = vi.fn<GitHubPublicationProposalStore["read"]>();
   const runtime = composeGitHubPublicationRuntime({
     adapter: {
       ...adapterWithoutHistoricalLookup(),
@@ -173,11 +177,207 @@ const ownedDraftFixture = (
       ...adapterOverrides,
     },
     enabled: true,
-    proposals: { read: vi.fn(), save: vi.fn() },
+    proposals: { read: readProposal, save: vi.fn() },
     receipts: { compareAndSet: vi.fn(), findDraftByPullRequest, read },
   });
-  return { draft, findDraftByPullRequest, read, receipt, repository, runtime };
+  return {
+    draft,
+    findDraftByPullRequest,
+    installation,
+    read,
+    readProposal,
+    receipt,
+    repository,
+    runtime,
+  };
 };
+
+const firstAppManifest = "apps/demo/package.json";
+const hash = (serialized: string) => createHash("sha256").update(serialized).digest("hex");
+
+const firstAppPublicationFixture = (extraPaths: readonly string[] = []) => {
+  const inspectDestinationFiles = vi
+    .fn<NonNullable<GitHubPublicationAdapter["inspectDestinationFiles"]>>()
+    .mockResolvedValue([]);
+  const f = ownedDraftFixture({}, { inspectDestinationFiles });
+  const { digest: _liveDigest, version: _liveVersion, ...liveBase } = f.repository;
+  void _liveDigest;
+  void _liveVersion;
+  const originalBase = createRepositoryObservation({
+    ...liveBase,
+    headSha: "8".repeat(40),
+    headTree: "9".repeat(40),
+  });
+  const approvedPaths = [
+    firstAppManifest,
+    "bun.lock",
+    "microfrontends.json",
+    ...extraPaths,
+  ].toSorted();
+  const changes = approvedPaths.map((path) => {
+    const after = { mode: "644", digest: hash(path) };
+    return path.startsWith("apps/")
+      ? { path, kind: "added" as const, after }
+      : {
+          path,
+          kind: "modified" as const,
+          before: { mode: "644", digest: hash(`base-${path}`) },
+          after,
+        };
+  });
+  const bindingDigest = hash("controlled-proof");
+  const unsigned = {
+    version: 2 as const,
+    validationDigest: bindingDigest,
+    applyDigest: bindingDigest,
+    proposalDigest: bindingDigest,
+    contractDigest: bindingDigest,
+    repositoryContractDigest: bindingDigest,
+    sourceSha: originalBase.headSha,
+    sourceTree: originalBase.headTree,
+    sourceReceiptDigest: bindingDigest,
+    eligibilityDigest: bindingDigest,
+    workspaceDigest: bindingDigest,
+    appSpecDigest: bindingDigest,
+    appSpecPath: "apps/demo/.config/app-spec.md",
+    artifactRevision: bindingDigest,
+    dependencyReceiptDigest: bindingDigest,
+    identityDigest: bindingDigest,
+    imageDigest: `sha256:${bindingDigest}`,
+    dependencyCacheDigest: bindingDigest,
+    dependencyCacheContentDigest: bindingDigest,
+    targetReceipt: {
+      version: 1 as const,
+      topology: { path: "microfrontends.json", oldDigest: bindingDigest, newDigest: bindingDigest },
+    },
+    preTreeDigest: bindingDigest,
+    postTreeDigest: bindingDigest,
+    changedContentDigest: bindingDigest,
+    changes,
+    approvedPaths,
+  };
+  const review = createReviewedChangeSetReceipt(
+    { ...unsigned, digest: hash(JSON.stringify(unsigned)) },
+    "original-draft-review",
+  );
+  const proposal = createDraftPullRequestProposal({
+    installation: f.installation,
+    repository: originalBase,
+    review,
+    changedPathsSinceBase: [],
+    title: "Publish new app",
+  });
+  f.draft.headBranch = proposal.branchName;
+  f.draft.verifiedBuilderOrigin = {
+    appId: "123",
+    authorId: "900",
+    marker: proposal.idempotencyKey,
+  };
+  const { digest: _receiptDigest, ...receipt } = f.receipt;
+  void _receiptDigest;
+  const unsignedPublication = {
+    ...receipt,
+    proposalDigest: proposal.digest,
+    idempotencyKey: proposal.idempotencyKey,
+    branchName: proposal.branchName,
+    branchSha: f.draft.headSha,
+    branchTree: f.draft.headTree,
+    changeSetDigest: proposal.changeSetDigest,
+    changedContentDigest: proposal.changedContentDigest,
+    normalizedChangedPaths: proposal.approvedPaths,
+  };
+  const publication = { ...unsignedPublication, digest: hash(JSON.stringify(unsignedPublication)) };
+  f.read.mockResolvedValue(publication);
+  f.findDraftByPullRequest.mockResolvedValue(publication);
+  f.readProposal.mockResolvedValue(proposal);
+  return {
+    ...f,
+    originalBase,
+    inspectDestinationFiles,
+    proposal,
+    publication,
+    request: {
+      firstPublicationAppId: "demo",
+      priorPublishedProposalDigest: proposal.digest,
+      name: f.draft.name,
+      owner: f.draft.owner,
+      pullRequestNumber: f.draft.number,
+      repositoryId: f.draft.repositoryId,
+    },
+  };
+};
+
+describe("owned first app registration on an acquired repository", () => {
+  it("binds the exact original draft and original base absence before carrying its root lock", async () => {
+    const f = firstAppPublicationFixture();
+    const result = await f.runtime.inspectExistingDraftReconciliationSource(f.request);
+    expect(result.ownedPublication).toEqual({ proposal: f.proposal, publication: f.publication });
+    expect(f.readProposal).toHaveBeenCalledExactlyOnceWith(f.proposal.digest);
+    expect(f.inspectDestinationFiles).toHaveBeenCalledExactlyOnceWith({
+      paths: [firstAppManifest],
+      repository: f.originalBase,
+    });
+    expect(result.base.headSha).toBe(f.repository.headSha);
+  });
+
+  it.each(["headSha", "headTree", "origin"] as const)(
+    "keeps ordinary source inspection without authorizing inherited root content after %s moves",
+    async (field) => {
+      const f = firstAppPublicationFixture();
+      if (field === "origin") {
+        f.draft.verifiedBuilderOrigin = { appId: "123", authorId: "900", marker: "f".repeat(64) };
+      } else {
+        f.draft[field] = "f".repeat(40);
+      }
+      const result = await f.runtime.inspectExistingDraftReconciliationSource(f.request);
+      expect(result.ownedPublication).toBeUndefined();
+      expect(f.readProposal).not.toHaveBeenCalled();
+      expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+    },
+  );
+
+  it("requires explicit same-app saved publication context and refuses other root paths", async () => {
+    const f = firstAppPublicationFixture(["docs/unrelated.md"]);
+    const unrelated = await f.runtime.inspectExistingDraftReconciliationSource(f.request);
+    expect(unrelated.ownedPublication).toBeUndefined();
+    expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+
+    const owned = firstAppPublicationFixture();
+    const { priorPublishedProposalDigest: _saved, ...withoutSaved } = owned.request;
+    void _saved;
+    const missingSaved = await owned.runtime.inspectExistingDraftReconciliationSource(withoutSaved);
+    expect(missingSaved.ownedPublication).toBeUndefined();
+    expect(owned.readProposal).not.toHaveBeenCalled();
+    const sibling = await owned.runtime.inspectExistingDraftReconciliationSource({
+      ...owned.request,
+      firstPublicationAppId: "sibling",
+    });
+    expect(sibling.ownedPublication).toBeUndefined();
+    expect(owned.inspectDestinationFiles).not.toHaveBeenCalled();
+  });
+
+  it("rejects a canonical receipt whose paths differ from the approved proposal", async () => {
+    const f = firstAppPublicationFixture();
+    const { digest: _digest, ...receipt } = f.publication;
+    void _digest;
+    const changed = {
+      ...receipt,
+      normalizedChangedPaths: [firstAppManifest, "microfrontends.json"],
+    };
+    f.read.mockResolvedValue({ ...changed, digest: hash(JSON.stringify(changed)) });
+    await expect(f.runtime.inspectExistingDraftReconciliationSource(f.request)).rejects.toThrow();
+    expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+  });
+
+  it("does not expand an existing app whose manifest was already present in the sealed base", async () => {
+    const f = firstAppPublicationFixture();
+    f.inspectDestinationFiles.mockResolvedValue([
+      { path: firstAppManifest, mode: "644", digest: hash(firstAppManifest) },
+    ]);
+    const result = await f.runtime.inspectExistingDraftReconciliationSource(f.request);
+    expect(result.ownedPublication).toBeUndefined();
+  });
+});
 
 const recordedSource = (draft: ExistingDraftObservation) => ({
   repositoryId: draft.repositoryId,

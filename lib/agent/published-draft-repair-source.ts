@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { DraftReviewedWorkflow } from "./draft-reviewed-lineage";
 import type { DraftReconciliationCandidate } from "./draft-reconciliation-state";
-import { assertOwnedPublicationReconciliationScope } from "../repository/github-draft-reconciliation";
+import {
+  assertOwnedPublicationReconciliationScope,
+  isFirstAppPublicationPathScope,
+} from "../repository/github-draft-reconciliation";
 import { assertExactImmutableGitHubSourceReceipt } from "../repository/github-publication";
 import type { ImmutableGitHubSourceReceipt } from "../repository/github-publication";
 import type { ExistingDraftObservation } from "../repository/github-draft-update";
@@ -116,6 +119,35 @@ export const createPublishedDraftRepairSource = (
   return receipt;
 };
 
+const existingSourceCandidate = (
+  state: DraftReviewedWorkflow,
+  candidate: DraftReconciliationCandidate,
+): ImmutableGitHubSourceReceipt | undefined => {
+  const { githubSource } = state;
+  const scope = candidate.publicationScope;
+  if (githubSource?.digest !== candidate.githubSourceDigest) {
+    return undefined;
+  }
+  if (scope === undefined) {
+    return githubSource;
+  }
+  assertOwnedPublicationReconciliationScope(scope);
+  const prior =
+    state.publishedGitHubDraftProposalDigest ?? state.githubDraftProposal?.proposal.digest;
+  const matches = [
+    state.sourceReceipt.sourceKind === "existing-repository",
+    githubSource.repository.repositoryId === candidate.repositoryId,
+    scope.proposal.repositoryId === candidate.repositoryId,
+    scope.publication.pullRequestNumber === candidate.pullRequestNumber,
+    scope.publication.branchSha === candidate.headSha,
+    scope.publication.branchTree === candidate.headTree,
+    state.appSpec.appId === candidate.appId,
+    prior === undefined || prior === scope.proposal.digest,
+    isFirstAppPublicationPathScope(scope.proposal.approvedPaths, candidate.appId),
+  ].every(Boolean);
+  return matches ? githubSource : undefined;
+};
+
 /** Verify candidate authority against a reviewed workflow without resolving state. */
 export const reviewedDraftCandidateSource = (
   state: DraftReviewedWorkflow,
@@ -127,10 +159,7 @@ export const reviewedDraftCandidateSource = (
   const repair =
     candidate.kind === publishedDraftRepairKind ? candidate.repair : candidate.publishedOrigin;
   if (repair === undefined) {
-    return candidate.publicationScope === undefined &&
-      state.githubSource?.digest === candidate.githubSourceDigest
-      ? state.githubSource
-      : undefined;
+    return existingSourceCandidate(state, candidate);
   }
   assertPublishedDraftRepairSource(repair);
   if (candidate.kind !== publishedDraftRepairKind) {

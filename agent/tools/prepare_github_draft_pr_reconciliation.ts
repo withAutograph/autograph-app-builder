@@ -424,6 +424,7 @@ export default defineTool({
       const lineage = reconciliationLineageRequest(state, original, ctx.session.id);
       const source = await runtime.inspectExistingDraftReconciliationSource({
         ...lineage,
+        firstPublicationAppId: state.appSpec.appId,
         recovery: draftInspectionRecoveryForSession({
           ctx,
           appId: state.appSpec.appId,
@@ -510,6 +511,9 @@ export default defineTool({
       };
       if (unpublished !== undefined) {
         request.unpublished = unpublished;
+      }
+      if (source.ownedPublication !== undefined) {
+        request.ownedPublication = source.ownedPublication;
       }
       Object.assign(
         request,
