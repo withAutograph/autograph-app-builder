@@ -48,11 +48,14 @@ app-owned files and reuse the same component-backed preview flow.
    The selected adapter's builder-owned identity operation remains authoritative
    for target planning; never construct or guess a repository script path.
 
-3. Select the source before any hosted sandbox inspection or preview. Call
-   `source_status` with `sourceKind: "fresh-template"` for a new app's canonical starter, or
-   `resolve_github_source` for an existing GitHub app. Then prepare a writable
-   builder workspace automatically. Use source discovery and repository commands as context, not
-   as approval gates. Do not require separate inspection or source-acquisition
+3. Select the source before any hosted sandbox inspection or preview. For a new
+   app, call `source_status` with `sourceKind: "fresh-template"` to acquire the
+   canonical starter. A repository named for the new app is its delivery
+   destination. Carry it into `prepare_github_draft_review`. Use
+   `resolve_github_source` when the brief asks to revise an app already in
+   GitHub. Then prepare a writable Builder workspace automatically. Source
+   discovery and repository commands provide context for the build. Do not
+   require separate inspection or source-acquisition
    questions, and do not ask the user for internal paths or setup details. Use
    the runtime's local or hosted source directly without asking for internal
    paths. Inspect useful files and components opportunistically. Do not request
@@ -83,7 +86,7 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    receipt details in supporting context when useful. Retained later release archives are not initial implementation input;
    do not inspect them to copy a later revision. A baseline is provenance only,
    and grants no publication, deployment, or readiness authority.
-   For a hosted existing repository named as `owner/name`, use only
+   For an existing app in a hosted repository named as `owner/name`, use only
    `resolve_github_source` with `selectedInstallationId: null`; it owns the
    current access readback, source inspection, and isolated preparation without
    a preceding access tool. When
@@ -337,7 +340,13 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    review and use its ordinary GitHub connection flow if access is missing.
    Show the resolved repository during review.
    Before initial draft publication, run `prepare_github_draft_review` to bind the
-   actual destination snapshot. Inspect its before/after content as needed with
+   actual destination snapshot. If a saved new app acquired the delivery
+   repository as its source, use the same preparation in the saved session.
+   Builder verifies the app was absent from the exact acquired source and is
+   still absent from the current destination. It includes the complete app and
+   the repository-produced registration in that first review. Keep the saved
+   app, source and destination together through review and approval.
+   Inspect its before/after content as needed with
    `change_set_status`, `view: "next-page"`, and the selected `contentSide`.
    Each call uses the current session's saved cursor; `view: "read-progress"`
    reports optional inspection progress and continuation calls. Complete-side

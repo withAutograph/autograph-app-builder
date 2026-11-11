@@ -111,14 +111,19 @@ export const reviewedOverlayTreeDigest = (
   appId: string,
   existingApp: boolean,
   frameworkUpgrade = false,
+  registrationPaths: readonly string[] = [],
 ): string => {
   if (!existingApp) {
     return snapshot.treeDigest;
   }
+  const sharedPaths = new Set(registrationPaths);
+  if (frameworkUpgrade) {
+    for (const path of frameworkSharedPaths) {
+      sharedPaths.add(path);
+    }
+  }
   const files = snapshot.files.filter(
-    ({ path }) =>
-      path.startsWith(`apps/${appId}/`) ||
-      (frameworkUpgrade && frameworkSharedPaths.some((shared) => path === shared)),
+    ({ path }) => path.startsWith(`apps/${appId}/`) || sharedPaths.has(path),
   );
   return createHash("sha256")
     .update(JSON.stringify(canonicalOverlayFiles(files)))

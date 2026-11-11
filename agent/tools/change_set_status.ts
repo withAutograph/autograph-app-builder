@@ -22,6 +22,7 @@ import { hasTestCapability } from "@/lib/testing/test-capability";
 import {
   assertGitHubDestinationReviewBinding,
   deriveDestinationChanges,
+  firstAppRegistrationPaths,
 } from "@/lib/repository/github-destination-review";
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import { readChangeSetReviewPage } from "@/lib/agent/change-set-review-pages";
@@ -159,8 +160,15 @@ export const reviewableChanges = <T extends ChangePath>(
   appId: string,
   existingApp: boolean,
   frameworkUpgrade = false,
-) =>
-  changes.filter(({ path }) => {
+  registrationPaths: readonly string[] = [],
+): T[] => {
+  const sharedPaths = new Set(registrationPaths);
+  if (frameworkUpgrade) {
+    for (const path of frameworkSharedPaths) {
+      sharedPaths.add(path);
+    }
+  }
+  return changes.filter(({ path }) => {
     if (
       /(?:^|\/)(?:\.git|\.scratch|\.next|\.turbo|\.vite|node_modules|dist|coverage|storybook-static|target)(?:\/|$)/u.test(
         path,
@@ -169,12 +177,9 @@ export const reviewableChanges = <T extends ChangePath>(
     ) {
       return false;
     }
-    return (
-      !existingApp ||
-      path.startsWith(`apps/${appId}/`) ||
-      (frameworkUpgrade && frameworkSharedPaths.some((shared) => path === shared))
-    );
+    return !existingApp || path.startsWith(`apps/${appId}/`) || sharedPaths.has(path);
   });
+};
 
 export const baselineReviewableChanges = <T extends ChangePath>(
   changes: readonly T[],
@@ -442,15 +447,20 @@ export const observeNormalizedChangeSet = async (input: {
     : await inspectApplyOverlay(input.sandbox, input.state.applyReceipt.applyRoot);
   const baseline = appBaselineState.get();
   const destination = input.state.githubDestinationReview;
+  const registrationPaths = firstAppRegistrationPaths(destination, input.state.appSpec.appId);
+  const frameworkUpgrade =
+    registrationPaths.length === 0 && input.state.proposal.target.frameworkUpgrade !== undefined;
+  const postTreeDigest = reviewedOverlayTreeDigest(
+    observed,
+    input.state.appSpec.appId,
+    isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
+    frameworkUpgrade,
+    registrationPaths,
+  );
   if (destination !== undefined && input.destinationReview !== "observe-current-edits") {
     assertGitHubDestinationReviewBinding(destination, {
       applyDigest: input.state.applyReceipt.digest,
-      postTreeDigest: reviewedOverlayTreeDigest(
-        observed,
-        input.state.appSpec.appId,
-        isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
-        input.state.proposal.target.frameworkUpgrade !== undefined,
-      ),
+      postTreeDigest,
       validationDigest: input.state.validationReceipt.digest,
     });
   }
@@ -480,15 +490,19 @@ export const observeNormalizedChangeSet = async (input: {
           completeChanges,
           input.state.appSpec.appId,
           isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
-          input.state.proposal.target.frameworkUpgrade !== undefined,
+          frameworkUpgrade,
+          registrationPaths,
         )
       : baselineReviewableChanges(
           completeChanges,
           input.state.appSpec.appId,
           includeBaselinePlanningSpecs,
-          input.state.proposal.target.frameworkUpgrade !== undefined,
+          frameworkUpgrade,
         );
   const applyReceipt = { ...input.state.applyReceipt };
+  if (registrationPaths.length > 0) {
+    applyReceipt.frameworkUpgrade = destination?.firstAppRegistration?.frameworkUpgrade;
+  }
   if (selectedBaseline !== undefined || destination !== undefined) {
     applyReceipt.preTree = preTree;
     applyReceipt.preTreeDigest = createHash("sha256")
@@ -501,12 +515,7 @@ export const observeNormalizedChangeSet = async (input: {
       changedContentDigest: createHash("sha256").update(JSON.stringify(changes)).digest("hex"),
       changes,
       postTree: observed.files,
-      postTreeDigest: reviewedOverlayTreeDigest(
-        observed,
-        input.state.appSpec.appId,
-        isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
-        input.state.proposal.target.frameworkUpgrade !== undefined,
-      ),
+      postTreeDigest,
     },
     input.state.validationReceipt,
     input.state.proposal.contractDigest,
@@ -649,6 +658,17 @@ const exportAppliedTextFiles = async (input: {
     );
   const before = input.contentSide === "before";
   const destination = input.state.githubDestinationReview;
+  const { appId } = input.state.appSpec;
+  const sharedPaths = new Set([
+    ...firstAppRegistrationPaths(destination, appId),
+    `.config/app-specs/${appId}.cue`,
+    `.config/app-specs/${appId}.md`,
+  ]);
+  if (input.state.proposal.target.frameworkUpgrade !== undefined) {
+    for (const path of frameworkSharedPaths) {
+      sharedPaths.add(path);
+    }
+  }
   if (before && destination === undefined) {
     throw new Error("Prepare the GitHub destination review before exporting its before content.");
   }
@@ -674,15 +694,7 @@ const exportAppliedTextFiles = async (input: {
     {
       cursor: input.cursor,
       envelope: input.envelope,
-      extraPaths: changes
-        .filter(
-          ({ path }) =>
-            path === `.config/app-specs/${input.state.appSpec.appId}.cue` ||
-            path === `.config/app-specs/${input.state.appSpec.appId}.md` ||
-            (input.state.proposal.target.frameworkUpgrade !== undefined &&
-              frameworkSharedPaths.some((shared) => path === shared)),
-        )
-        .map(({ path }) => path),
+      extraPaths: [...sharedPaths],
     },
   );
   return {

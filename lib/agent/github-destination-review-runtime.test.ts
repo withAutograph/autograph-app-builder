@@ -31,6 +31,7 @@ import type {
 import type { GitHubPublicationProposal } from "../repository/postgres-github-publication-store";
 import { createReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
 import type { NormalizedChangeSet } from "../repository/reviewed-change-set";
+import type * as FirstAppCompositionModule from "../repository/first-app-publication-composition";
 import type { SourceReceiptEvidence } from "../repository/source-receipt";
 import { LEGACY_SOURCE_RECEIPT_VERSION } from "../repository/source-receipt";
 import { SUPPORTED_TEMPLATE_ADAPTER } from "../repository/supported-template";
@@ -63,6 +64,13 @@ interface DestinationReviewToolPorts {
   };
 }
 const toolPorts = vi.hoisted((): DestinationReviewToolPorts => ({}));
+const firstAppComposition = vi.hoisted(() => ({
+  acquiredSourceLacksApp: vi.fn<typeof FirstAppCompositionModule.acquiredSourceLacksApp>(),
+  planFirstAppPublicationComposition:
+    vi.fn<typeof FirstAppCompositionModule.planFirstAppPublicationComposition>(),
+}));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Control repository execution while using the real preparation tool, snapshot reader and publication runtime.
+vi.mock("../repository/first-app-publication-composition", () => firstAppComposition);
 /** Read the fixture state anew after the real tool transitions it. */
 const readToolState = (): DestinationReviewToolPorts["state"] => toolPorts.state;
 // Only hosted/session/Sandbox ports are controlled; the tool, destination runtime,
@@ -420,6 +428,111 @@ const markerOnlyRevision = async () => {
   delete toolPorts.prior;
   return { ...f, state };
 };
+
+describe("saved first publication destination review", () => {
+  it("prepares the same app and repository-generated registration before any GitHub write", async () => {
+    const f = await ownedRevisionTool(false, false);
+    const root = "/workspace/saved-app";
+    const frameworkUpgrade = {
+      next: "16.3.4",
+      react: "19.3.0",
+      reactDom: "19.3.0",
+      typesReact: "19.3.1",
+      typesReactDom: "19.3.0",
+    };
+    toolPorts.state = {
+      ...f.state,
+      phase: "validated",
+      sourceReceipt: { ...f.state.sourceReceipt, sourceKind: "existing-repository" },
+      githubSource: source,
+      applyReceipt: { ...f.state.applyReceipt, applyRoot: root, frameworkUpgrade },
+    };
+    delete toolPorts.prior;
+    const manifest = "apps/example/package.json";
+    const appFiles = [
+      { path, digest: after, mode: "644" },
+      { path: manifest, digest: before, mode: "644" },
+    ];
+    toolPorts.observed = {
+      files: [...appFiles, { path: "apps/unrelated/package.json", digest: before, mode: "644" }],
+      treeDigest: normalized.postTreeDigest,
+    };
+    f.inspectDestinationFiles.mockResolvedValue([
+      { path: "bun.lock", digest: before, mode: "644" },
+      { path: "microfrontends.json", digest: before, mode: "644" },
+      { path: "package.json", digest: before, mode: "644" },
+    ]);
+    const registration = (
+      [
+        { path: "bun.lock", content: "generated lock", mode: "644" },
+        { path: "microfrontends.json", content: "generated routes", mode: "644" },
+      ] as const
+    ).map((file) => ({ ...file, digest: createHash("sha256").update(file.content).digest("hex") }));
+    firstAppComposition.acquiredSourceLacksApp.mockResolvedValueOnce(true);
+    firstAppComposition.planFirstAppPublicationComposition.mockResolvedValueOnce(registration);
+    const written = new Map<string, string>();
+    const writeTextFile = vi.fn(
+      async ({ content, path: filePath }: { content: string; path: string }) => {
+        written.set(filePath.replace(/^saved-app\//u, ""), content);
+        await Promise.resolve();
+      },
+    );
+    const run = vi.fn(async () => {
+      const snapshot = [
+        ...appFiles,
+        ...[...written].map(([filePath, content]) => ({
+          path: filePath,
+          digest: createHash("sha256").update(content).digest("hex"),
+          mode: "644",
+        })),
+      ];
+      return await Promise.resolve({
+        exitCode: 0,
+        stderr: "",
+        stdout: snapshot.map((file) => `${file.mode}\t${file.digest}\t${file.path}`).join("\n"),
+      });
+    });
+    // SAFETY: The composition ports are mocked, and the real tool only writes and reads back the overlay through these Sandbox methods.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- This partial Sandbox fixture implements the only methods this path consumes.
+    const context = {
+      ...f.context,
+      getSandbox: async () =>
+        await Promise.resolve({ id: f.state.workspace.workspaceId, run, writeTextFile }),
+    } as unknown as typeof f.context;
+
+    await expect(prepareDraftReview.execute({}, context)).resolves.toMatchObject({
+      candidatePathCount: 4,
+      originalSourceSha: source.resolvedSha,
+      status: "destination-review-required",
+    });
+    expect(firstAppComposition.acquiredSourceLacksApp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        acquired: { sha: source.resolvedSha, tree: source.resolvedTree },
+        appId: "example",
+      }),
+    );
+    expect(firstAppComposition.planFirstAppPublicationComposition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appId: "example",
+        applyRoot: root,
+        destination: repository,
+        frameworkUpgrade,
+      }),
+    );
+    expect(readToolState()?.githubDestinationReview).toMatchObject({
+      candidatePaths: [manifest, path, "bun.lock", "microfrontends.json"].toSorted(),
+      firstAppRegistration: {
+        appId: "example",
+        frameworkUpgrade,
+        paths: ["bun.lock", "microfrontends.json"],
+      },
+      repository,
+    });
+    expect(written).toEqual(new Map(registration.map((file) => [file.path, file.content])));
+    expect(f.compareAndSet).not.toHaveBeenCalled();
+    expect(f.unexpected).not.toHaveBeenCalled();
+  });
+});
 
 describe("same-session post-merge destination review", () => {
   it.each([

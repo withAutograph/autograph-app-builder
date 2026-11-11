@@ -14,11 +14,21 @@ import {
 } from "@/lib/agent/workflow-state";
 import type { OverlayFile } from "@/lib/repository/target-apply";
 import { createGitHubDestinationReviewBinding } from "@/lib/repository/github-destination-review";
+import type { FirstAppRegistration } from "@/lib/repository/github-destination-review";
+import {
+  acquiredSourceLacksApp,
+  planFirstAppPublicationComposition,
+} from "@/lib/repository/first-app-publication-composition";
+import { inspectApplyOverlay, reviewedOverlayTreeDigest } from "@/lib/repository/target-apply";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { checkedNativeToolResult } from "@/lib/eve/payload-envelope";
 import { resolvePublicationTargetForTool } from "@/lib/agent/github-publication-destination";
+import { repositoryAccessRuntimeForSession } from "@/lib/agent/deployment-repository-access-runtime";
+import { prepareWithVerifiedGitHubFetchRecovery } from "@/lib/agent/verified-github-fetch-recovery";
+import { setBuilderSandboxNetworkPolicy } from "@/lib/sandbox/builder-sandbox";
 import {
+  firstPublicationFrameworkVersions,
   priorResumedBuildDraftProposal,
   priorOwnedAppDraftPublication,
 } from "@/lib/agent/existing-app-repair-planning";
@@ -28,6 +38,8 @@ import type {
   GitHubPublicationRuntime,
   OwnedAppRevisionLookup,
 } from "@/lib/agent/github-publication-runtime";
+
+const firstPublicationPaths = ["package.json", "microfrontends.json", "bun.lock"];
 
 export const initialDraftCandidatePaths = async (
   input: Parameters<typeof observeNormalizedChangeSet>[0] & {
@@ -100,7 +112,7 @@ const assertRetainedRegistrationUnchanged = (
 
 export default defineTool({
   description:
-    "Prepare a new draft-PR review against the recorded repository's current default branch. After this same app's owned PR has merged or closed, reuse its saved session and private workspace to review the app's new changes; Builder reads the retained publication from its owned journal even after validation discarded the old review. For its verified open draft, follow the returned nextCall: accept the current app delta, then prepare reconciliation for that same server-observed PR without a recovery flag. That app review does not require another initial destination review. Uncertain prior publication still requires its existing recovery. For a new app with no destination, follow the returned destination setup link for this same saved build. Supply destination only when the user explicitly chose an existing repository. Preserve the validated private app and original source provenance while invalidating the old review and seal. Use change_set_status with contentSide before or after to inspect destination content as needed. Then accept_change_set, seal the new proposal, and request separate publication approval. This never writes GitHub or updates an existing PR.",
+    "Prepare a new draft-PR review against the recorded repository's current default branch. After this same app's owned PR has merged or closed, reuse its saved session and private workspace to review the app's new changes; Builder reads the retained publication from its owned journal even after validation discarded the old review. For its verified open draft, follow the returned nextCall: accept the current app delta, then prepare reconciliation for that same server-observed PR without a recovery flag. That app review does not require another initial destination review. Uncertain prior publication still requires its existing recovery. For a new app with no destination, follow the returned destination setup link for this same saved build. Supply destination only when the user explicitly chose an existing repository. If the new app was built in an acquired checkout of that repository, this tool verifies the app is absent from the acquired source and destination, then prepares only its app files and repository-generated registration. Preserve the validated private app and original source provenance while invalidating the old review and seal. Use change_set_status with contentSide before or after to inspect destination content as needed. Then accept_change_set, seal the new proposal, and request separate publication approval. This never writes GitHub or updates an existing PR.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "validated" && state.phase !== "reviewed") {
@@ -178,8 +190,24 @@ export default defineTool({
       sandbox,
       state,
       destinationReview:
-        publishedProposalDigest === undefined ? undefined : "observe-current-edits",
+        state.githubDestinationReview === undefined ? undefined : "observe-current-edits",
     });
+    const { appId } = state.appSpec;
+    const { githubSource } = state;
+    const baseline = appBaselineState.get();
+    const mayBeFirstPublication = [
+      publishedProposalDigest === undefined,
+      state.sourceReceipt.sourceKind === "existing-repository",
+      baseline === undefined,
+      observed.files.some(({ path }) => path === `apps/${appId}/package.json`),
+    ].every(Boolean);
+    const acquired =
+      mayBeFirstPublication && githubSource !== undefined
+        ? { sha: githubSource.resolvedSha, tree: githubSource.resolvedTree }
+        : undefined;
+    const firstPublication =
+      acquired !== undefined &&
+      (await acquiredSourceLacksApp({ acquired, appId, sandbox, signal: ctx.abortSignal }));
     const pathInput = {
       sandbox,
       state,
@@ -203,6 +231,19 @@ export default defineTool({
       publishedProposalDigest === undefined
         ? await initialDraftCandidatePaths(pathInput)
         : undefined;
+    if (firstPublication) {
+      selectedPaths = {
+        candidatePaths: [
+          ...reviewableChanges(
+            observed.files.map(({ path }) => ({ kind: "added" as const, path })),
+            appId,
+            true,
+          ).map(({ path }) => path),
+          ...firstPublicationPaths,
+        ],
+        retainedRegistration: new Map(),
+      };
+    }
     let destination: Awaited<
       ReturnType<NonNullable<GitHubPublicationRuntime["inspectDraftDestination"]>>
     >;
@@ -329,21 +370,98 @@ export default defineTool({
     ) {
       throw new Error("Recover the current publication before preparing another app revision.");
     }
-    const { candidatePaths, retainedRegistration } = selectedPaths;
-    assertExistingAppReviewScope(
-      { approvedPaths: candidatePaths, sourceSha: changeSet.sourceSha },
-      state.appSpec.appId,
-      state.sourceReceipt.sourceKind,
-      appBaselineState.get()?.receipt,
-    );
+    let { candidatePaths } = selectedPaths;
+    const { retainedRegistration } = selectedPaths;
     assertRetainedRegistrationUnchanged(retainedRegistration, destination.preTree, observed.files);
-    const binding = createGitHubDestinationReviewBinding({
+    let { postTreeDigest } = changeSet;
+    let firstAppRegistration: FirstAppRegistration | undefined;
+    if (firstPublication && acquired !== undefined) {
+      const frameworkUpgrade = firstPublicationFrameworkVersions(state, ctx.session.id);
+      const files = await planFirstAppPublicationComposition({
+        acquired,
+        appId,
+        applyRoot: state.applyReceipt.applyRoot,
+        destination: destination.repository,
+        frameworkUpgrade,
+        sandbox,
+        signal: ctx.abortSignal,
+        withDestinationFetch: async (fetch) => {
+          const access = await repositoryAccessRuntimeForSession(ctx.session.auth);
+          await prepareWithVerifiedGitHubFetchRecovery({
+            acquireCredential: async () =>
+              await access.acquireExistingSourceCredential({
+                installationId: destination.installation.installationId,
+                repository: destination.repository,
+                sessionId: ctx.session.id,
+              }),
+            prepare: fetch,
+            sandbox: {
+              setNetworkPolicy: async (policy) => {
+                await setBuilderSandboxNetworkPolicy(sandbox, policy);
+              },
+            },
+          });
+        },
+      });
+      ctx.abortSignal?.throwIfAborted();
+      assertExactWorkflowState(appBuilderWorkflowState.get(), state, "first app registration");
+      const root = state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
+      const paths = files.map(({ path }) => path);
+      const registeredPaths = new Set<string>(paths);
+      candidatePaths = candidatePaths.filter(
+        (path) => path.startsWith(`apps/${appId}/`) || registeredPaths.has(path),
+      );
+      firstAppRegistration = { appId, paths };
+      if (frameworkUpgrade !== undefined) {
+        firstAppRegistration.frameworkUpgrade = frameworkUpgrade;
+      }
+      for (const file of files) {
+        ctx.abortSignal?.throwIfAborted();
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Finish one private registration write before checking cancellation and starting the next.
+        await sandbox.writeTextFile({ content: file.content, path: `${root}/${file.path}` });
+      }
+      const staged = await inspectApplyOverlay(sandbox, state.applyReceipt.applyRoot);
+      if (
+        reviewedOverlayTreeDigest(staged, appId, true) !==
+          reviewedOverlayTreeDigest(observed, appId, true) ||
+        files.some(
+          ({ path, digest, mode }) =>
+            !staged.files.some(
+              (file) => file.path === path && file.digest === digest && file.mode === mode,
+            ),
+        )
+      ) {
+        throw new Error(
+          "The app or generated registration changed during first publication review.",
+        );
+      }
+      postTreeDigest = reviewedOverlayTreeDigest(staged, appId, true, false, paths);
+    }
+    assertExistingAppReviewScope(
+      {
+        approvedPaths: candidatePaths,
+        frameworkUpgrade:
+          firstAppRegistration === undefined ? changeSet.frameworkUpgrade : undefined,
+        sourceSha: changeSet.sourceSha,
+      },
+      appId,
+      state.sourceReceipt.sourceKind,
+      baseline?.receipt,
+      firstAppRegistration?.paths,
+    );
+    const draftReview: Parameters<typeof createGitHubDestinationReviewBinding>[0] = {
       ...destination,
       applyDigest: state.applyReceipt.digest,
       candidatePaths,
-      postTreeDigest: changeSet.postTreeDigest,
+      postTreeDigest,
       validationDigest: state.validationReceipt.digest,
-    });
+    };
+    if (firstAppRegistration !== undefined) {
+      const approvedPaths = new Set(candidatePaths);
+      draftReview.firstAppRegistration = firstAppRegistration;
+      draftReview.preTree = destination.preTree.filter(({ path }) => approvedPaths.has(path));
+    }
+    const binding = createGitHubDestinationReviewBinding(draftReview);
     updateExactWorkflow({
       expected: state,
       operation: "destination review preparation",

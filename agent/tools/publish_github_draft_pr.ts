@@ -19,6 +19,7 @@ import {
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { recordPublishedAppSourceForSession } from "@/lib/agent/published-app-source";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
+import { firstAppRegistrationPaths } from "@/lib/repository/github-destination-review";
 
 export default defineTool({
   approval: always(),
@@ -65,6 +66,7 @@ export default defineTool({
       state.appSpec.appId,
       state.sourceReceipt.sourceKind,
       appBaselineState.get()?.receipt,
+      firstAppRegistrationPaths(state.githubDestinationReview, state.appSpec.appId),
     );
     const sandbox = await ctx.getSandbox();
     const contentSource = publicationContentSourceForReviewedWorkflow({

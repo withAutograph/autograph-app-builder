@@ -11,6 +11,7 @@ import {
 } from "../repository/target-apply";
 import { readPreparedSandboxSourceManifest } from "../repository/supported-template";
 import { hasTestCapability } from "../testing/test-capability";
+import { firstAppRegistrationPaths } from "../repository/github-destination-review";
 import { ReviewedPublicationSourceChangedError } from "../repository/reviewed-publication-source-changed";
 
 type ReviewedWorkflow = Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
@@ -39,12 +40,18 @@ export function publicationContentSourceForReviewedWorkflow(input: {
             input.state.appSpec.appId,
           )
         : await inspectApplyOverlay(input.sandbox, input.state.applyReceipt.applyRoot);
+      const registrationPaths = firstAppRegistrationPaths(
+        input.state.githubDestinationReview,
+        input.state.appSpec.appId,
+      );
       if (
         reviewedOverlayTreeDigest(
           observed,
           input.state.appSpec.appId,
           input.state.sourceReceipt.sourceKind === "existing-repository",
-          input.state.proposal.target.frameworkUpgrade !== undefined,
+          registrationPaths.length === 0 &&
+            input.state.proposal.target.frameworkUpgrade !== undefined,
+          registrationPaths,
         ) !== input.state.reviewReceipt.postTreeDigest
       ) {
         throw new ReviewedPublicationSourceChangedError({
