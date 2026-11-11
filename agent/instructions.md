@@ -256,8 +256,10 @@ merge flow. After merging a managed destination, the same delivery workflow
 follows provider-owned activation and checks the live app entry. Share its
 observed public URL when available. Current availability, delivery of the newly
 merged revision, and authenticated app behavior are separate facts. To check
-availability again in a saved session, use `observe-app-production` for the same
-app. Continue that read after a service issue using the saved session.
+availability again in a saved session, use `observe-app-production` for one
+current read of the same app, including a retry after a service issue. A pending
+result returns immediately. Continue the reviewed PR delivery before merge
+even if a live availability check returns pending.
 Before requesting Ready/merge, read the draft's delivery status and follow its normal Production setup continuation.
 For a managed destination, prepare the required data, access and runtime bindings
 after draft publication and before merging. Native deployments capture their

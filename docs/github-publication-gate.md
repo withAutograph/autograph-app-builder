@@ -731,8 +731,10 @@ availability with a read of the same owned app and destination. The merge
 approval ends at merge. Provider activation proceeds independently, and a
 currently available app can be opened while delivery of the latest update
 remains unconfirmed. A saved session can check its app again through
-`observe-app-production` using current owner access. Old finished calls are not
-migrated or resurrected by this recovery.
+`observe-app-production` using current owner access. That standalone check
+returns the current result, including pending, after one observation. Pending
+availability leaves the normal draft and Ready/merge flow available. Old finished
+calls are not migrated or resurrected by this recovery.
 
 An owned open PR that has already become Ready can be corrected through the same
 private preparation, validation, review and approved update flow. Builder proves

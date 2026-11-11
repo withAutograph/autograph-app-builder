@@ -222,30 +222,35 @@ it("continues an actual merged workflow through protected native reads without m
   expect(mocks.sleep).toHaveBeenCalledOnce();
 });
 
-it("observes an already available saved app without an old Build, Ready call or extra wait", async () => {
-  mocks.readAuthority.mockRejectedValue(new Error("No old Ready or Build state"));
-  const requests: unknown[] = [];
-  mocks.clientForContext.mockResolvedValue(
-    createRepositoryProductionClient({
-      endpoint: "https://operator.example.com",
-      ownerContext,
-      callId: "saved-app-read",
-      signal: new AbortController().signal,
-      workloadToken: async () => await Promise.resolve("controlled-workload"),
-      fetch: async (_url, init) => {
-        const request: unknown = JSON.parse(z.string().parse(init?.body));
-        requests.push(request);
-        return await Promise.resolve(Response.json(observed("available")));
-      },
-    }),
-  );
-  const result = await observeProduction.execute({ appId }, context());
-  expect(result).toEqual(observed("available"));
-  expect(requests).toHaveLength(1);
-  expect(mocks.continueDelivery).not.toHaveBeenCalled();
-  expect(mocks.readAuthority).not.toHaveBeenCalled();
-  expect(mocks.sleep).not.toHaveBeenCalled();
-});
+it.each(["pending", "available"] as const)(
+  "returns %s availability for a saved app without waiting for a merge",
+  async (status) => {
+    mocks.readAuthority.mockRejectedValue(new Error("No old Ready or Build state"));
+    const requests: unknown[] = [];
+    mocks.clientForContext.mockResolvedValue(
+      createRepositoryProductionClient({
+        endpoint: "https://operator.example.com",
+        ownerContext,
+        callId: "saved-app-read",
+        signal: new AbortController().signal,
+        workloadToken: async () => await Promise.resolve("controlled-workload"),
+        fetch: async (_url, init) => {
+          const request: unknown = JSON.parse(z.string().parse(init?.body));
+          requests.push(request);
+          return await Promise.resolve(
+            Response.json(observed(requests.length === 1 ? status : "available")),
+          );
+        },
+      }),
+    );
+    const result = await observeProduction.execute({ appId }, context());
+    expect(result).toEqual(observed(status));
+    expect(requests).toHaveLength(1);
+    expect(mocks.continueDelivery).not.toHaveBeenCalled();
+    expect(mocks.readAuthority).not.toHaveBeenCalled();
+    expect(mocks.sleep).not.toHaveBeenCalled();
+  },
+);
 
 it.each(["repositoryId", "repositoryFullName"] as const)(
   "does not present another %s as the approved merged delivery",

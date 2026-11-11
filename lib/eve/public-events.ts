@@ -1521,19 +1521,22 @@ const nativeProductionEvents = (
       ? { success: true as const, data: output.data.nativeProduction }
       : nativeObservationSchema.safeParse(result.output);
   const observed = completed && result.isError !== true && parsed.success ? parsed.data : undefined;
-  const state: ProgressState = observed?.status === "available" ? "completed" : "failed";
+  const state: ProgressState =
+    observed?.status === "available" || observed?.status === "pending" ? "completed" : "failed";
   const progress: InternalEveEvent = {
     index,
     label: nativeProductionLabel,
     state,
     type: "progress",
   };
-  if (observed === undefined || observed.status === "pending") {
+  if (observed === undefined) {
     return [progress];
   }
 
   let text: string;
-  if (observed.status === "monitoring-stopped") {
+  if (observed.status === "pending") {
+    text = "The app’s live availability is still pending.";
+  } else if (observed.status === "monitoring-stopped") {
     text = "Builder stopped checking the live app. Continue this session to check again.";
   } else {
     const link =
