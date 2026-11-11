@@ -11,6 +11,7 @@ import { firstAppRegistrationPaths } from "@/lib/repository/github-destination-r
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 import { exactNormalizedChangeSet } from "./change_set_status";
 import { publicationDestinationFromReview } from "@/lib/agent/github-publication-destination";
+import { currentDirectProductionGrant } from "@/lib/agent/direct-production-state";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 
@@ -98,7 +99,19 @@ export default defineTool({
         };
       },
     });
-    return { ...proposal, approvalReceipt: approvalReceiptForDraftProposal(proposal) };
+    const approvalReceipt = approvalReceiptForDraftProposal(proposal);
+    const release = currentDirectProductionGrant(ctx, { appId: state.appSpec.appId });
+    const reviewedProposal = { ...proposal, approvalReceipt };
+    if (release === undefined) {
+      return reviewedProposal;
+    }
+    return {
+      ...reviewedProposal,
+      nextCall: {
+        tool: "publish_github_draft_pr" as const,
+        input: { approvalReceipt, expectedProposalDigest: proposal.digest },
+      },
+    };
   },
   inputSchema: z
     .strictObject({

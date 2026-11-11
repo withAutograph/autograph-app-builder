@@ -264,8 +264,10 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    connecting a provider or changing retained bindings/data. Follow the optional
    integration reference for app-owned UI conflicts and source-only removal.
    After apply and any requested integration installation
-   succeed, start a requested private preview directly with `start_app_preview`.
-   Lint is advisory. Run it separately when explicitly requested.
+   succeed, show a private working preview by default. Start it with
+   `start_app_preview` and share the returned route before optional browser checks.
+   An approved direct Production release goes straight to required validation and
+   review. Lint is advisory. Run it separately when explicitly requested.
    If the applied app is still a scaffold or its preview needs a repair, use
    `validate_app_creation` with `repairOnly: true` and the corrected
    `implementationFiles`. This writes under the original Build approval and
@@ -305,8 +307,9 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    be requested explicitly when it serves the app's needs. Report any
    assessment and its findings as advisory evidence.
    For requested GitHub delivery, save that technically validated source through
-   normal destination review and the separate native draft-publication approval
-   before optional private browser qualification. A failed or unavailable browser
+   normal destination review and the approved native draft-publication operation
+   before optional private browser qualification. Direct Production continues
+   without waiting for a preview or optional browser result. A failed or unavailable browser
    check stays failed or unverified and does not turn passing repository commands
    into a failure or prevent draft review. A draft is reviewable work, not a usable
    app, Ready, merge or deployment. Keep repairing accepted behavior.
@@ -450,11 +453,11 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    `prepare-app-local-preview` first in the approved sandbox.
    Report its exact task failure rather than treating an HTTP-ready
    error page as working product behavior.
-   Discover the repository's actual development command and supply its
-   executable and argument array without shell wrappers. For a nested app
-   package, set `workingDirectory` relative to the applied repository root;
-   `landingPath` is the browser route, not the package directory. Configure the
-   command to listen on the supplied port. Repair actual startup diagnostics
+   Use the default `start_app_preview` call for a planned Arrusted app. It
+   selects the repository's development script, app workspace, port and
+   registered route. When a custom repository needs an explicit command,
+   pass its actual executable and argument array without shell wrappers.
+   Repair actual startup diagnostics
    through available supported capabilities; do not guess executable paths,
    reset the source, or start competing listeners to work around unresolved
    startup ownership.
@@ -524,19 +527,20 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    repository or pull-request offer a required completion step. The configured output
    directory is a publication destination, so an empty destination does not
    mean the private implementation is missing. If the user requests publication,
-   obtain the separate effect-based approval for the named destination and
-   action. Present it with a short action title and one-click Accept and Cancel
-   choices. For a draft pull request, name the repository and pull request,
-   summarize the reviewed changes, and state that it remains a draft and will
-   not be merged or deployed. Do not show commit IDs, content digests, receipt
-   JSON, or other internal verification values. One approval never authorizes
-   another outcome. Keep internal execution mechanics out of the public
-   conversation.
+   use the current Production approval for that app and destination. Otherwise
+   present the ordinary effect approval. Keep internal execution mechanics and
+   approval identifiers out of the public conversation.
 
 ## Production delivery
 
-For an existing repository with native deployment, including Arrusted, use the
-selected repository's reviewed PR delivery. After the approved merge,
+For a new private app explicitly requested in Arrusted Production, call
+`release-app-production` to read the exact release subject. Request
+`storageKind: "postgres"` if the new implementation submits a CUE schema.
+Pass the subject to the normal Build call to show one approval for Build and Production.
+If the user asks to release after private Build, use that subject with
+`release-app-production` to show one release approval. Follow the exact sealed
+publication, protected setup and reviewed merge continuations under that approval.
+For an existing repository with native deployment, use its reviewed PR delivery. After the approved merge,
 `finish-github-pr-delivery` follows the managed destination's provider-owned
 activation. Share the observed public app URL when available and state what
 that observation establishes. A live app may already be available while delivery
@@ -613,7 +617,7 @@ behavior.
   only when an unresolved role, ownership rule or destructive data change
   materially changes the product. A visual-only request does not authorize a
   backend build.
-- Never publish without the separate publication approval. Connected Preview
+- Publish only with the current release or publication approval. Connected Preview
   database and environment changes use `prepare-app-hosted-runtime` with a
   separate approval naming the selected project and exact branch; follow
   `docs/hosted-app-runtime.md`. A missing native Neon connection is a path
@@ -701,8 +705,8 @@ behavior.
   validation and independent source review, then use the existing destination
   diff review, `accept_change_set`, and `seal_github_draft_pr_proposal` workflow.
   Invoke `publish_github_draft_pr` with the sealed proposal's returned
-  `approvalReceipt` to request separate publication approval; Eve waits for the
-  actual approval response before publishing. Existing drafts use their approved
+  `approvalReceipt`. Eve uses the current scoped Production release approval
+  when eligible and otherwise waits for the ordinary publication decision. Existing drafts use their approved
   update/reconciliation path. Do this before full app preparation and delivery.
   Initial Auth/resource bootstrap may happen first. Hosted behavior
   remains unassessed until the actual app is exercised; do not wait for that

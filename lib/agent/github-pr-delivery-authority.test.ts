@@ -38,6 +38,7 @@ import { APP_BUILDER_WORKFLOW_VERSION, appBuilderWorkflowState } from "./workflo
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import { managedProductionDeliveryRequirements } from "./production-delivery-requirement";
 import { resolveGitHubProductionDeliveryReadiness } from "./github-production-delivery-readiness";
+import { createDirectProductionGrant } from "./direct-production-authorization";
 
 const sessionId = "owned-parent-session";
 const appId = "control-notes";
@@ -126,7 +127,11 @@ const replaceCurrentProposal = () => {
   }));
 };
 
-const capturedParent = (input = approval, managedSetup = false) =>
+const capturedParent = (
+  input = approval,
+  managedSetup = false,
+  directProduction?: ReturnType<typeof createDirectProductionGrant>,
+) =>
   contextStorage.run(new ContextContainer(), () => {
     installReviewedParent(input, managedSetup);
     const ctx = context();
@@ -136,12 +141,24 @@ const capturedParent = (input = approval, managedSetup = false) =>
       adapterGeneration: 1,
       cancellationRevision: 0,
     };
-    captureGitHubPrDeliveryCallScope(input, ctx.callId, owner, ctx.session.turn);
+    captureGitHubPrDeliveryCallScope(
+      input,
+      ctx.callId,
+      owner,
+      ctx.session.turn,
+      directProduction?.digest,
+    );
     const snapshot: GitHubPrDeliveryOwnerSnapshot = {
       owner,
       decision: {
         adapterSessionId: sessionId,
-        currentSpec: { appId, appSpecDigest, sessionId, workspaceId: "owned-sandbox" },
+        currentSpec: {
+          appId,
+          appSpecDigest,
+          proposalDigest: "9".repeat(64),
+          sessionId,
+          workspaceId: "owned-sandbox",
+        },
         decision: "settled",
         githubDelivery: currentGitHubPrDeliveryAuthorityProjection(),
         turnId: ctx.session.turn.id,
@@ -150,6 +167,9 @@ const capturedParent = (input = approval, managedSetup = false) =>
         workflowPhase: "reviewed",
       },
     };
+    if (directProduction !== undefined) {
+      snapshot.decision.directProduction = directProduction;
+    }
     return { ctx, snapshot: structuredClone(snapshot) };
   });
 
@@ -233,6 +253,50 @@ const delivery = (snapshot: GitHubPrDeliveryOwnerSnapshot, alreadyReady = false)
 };
 
 describe("GitHub delivery authority across workflow child contexts", () => {
+  it("rechecks the retained Production grant before a delegated delivery workflow wakes", async () => {
+    const input = { ...approval, owner: "withAutograph", name: "arrusted-development" };
+    const original = createDirectProductionGrant({
+      callId: "original-approved-build",
+      toolName: "apply_app_creation",
+      subject: {
+        version: 1,
+        appId,
+        appSpecDigest,
+        proposalDigest: "9".repeat(64),
+        sessionId,
+        buildWorkspaceId: "owned-sandbox",
+        authority: {
+          issuer: "https://builder.example/api/auth",
+          audience: "https://builder.example/mcp",
+          workspaceId: "tenant-workspace",
+          ownerUserId: "owner",
+        },
+        repositoryId: input.repositoryId,
+        repositoryFullName: "withAutograph/arrusted-development",
+        installationId: "10",
+        baseBranch: input.baseBranch,
+        storageKind: "postgres",
+      },
+    });
+    const { ctx, snapshot } = capturedParent(input, false, original);
+    const readOwner = async () => await Promise.resolve(snapshot);
+    await expect(readGitHubPrDeliveryAuthority(input, ctx, readOwner)).resolves.toMatchObject({
+      subject: { appId },
+    });
+    snapshot.decision.directProduction = createDirectProductionGrant({
+      callId: "another-approval",
+      toolName: original.toolName,
+      subject: original.subject,
+    });
+    await expect(readGitHubPrDeliveryAuthority(input, ctx, readOwner)).rejects.toMatchObject({
+      reason: "captured-call-mismatch",
+    });
+    delete snapshot.decision.directProduction;
+    await expect(readGitHubPrDeliveryAuthority(input, ctx, readOwner)).rejects.toMatchObject({
+      reason: "captured-call-mismatch",
+    });
+  });
+
   it.each(["missing", "stale-adapter"] as const)(
     "captures a first Ready call from the actual approved Build with a %s prior projection",
     async (prior) => {

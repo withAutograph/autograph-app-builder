@@ -12,7 +12,7 @@ export default defineWorkflowTool({
   approval: approveGitHubPrDelivery,
   availableInSubagents: false,
   description:
-    "After normal managed Production data/access/runtime setup and explicit PR approval, mark the reviewed pull request ready and merge that exact revision once required checks pass. Pass the approval returned by read_github_pr_delivery. Before merge, Builder independently checks required setup for this exact app and repository; follow production-setup-required through its existing normal setup tools. After merge, continue read-only observation of the owned native app entry. This never repeats Ready or merge for deployment progress. Existing app availability can complete immediately while requestedRevision remains unassessed. Native activation and authenticated behavior have separate results.",
+    "After managed Production setup, mark the reviewed pull request ready and merge that exact revision once required checks pass. A matching Production release approval covers these effects. Otherwise ask for the ordinary approval. Pass the approval returned by read_github_pr_delivery. Before merge, Builder independently checks required setup for this exact app and repository; follow production-setup-required through its existing normal setup tools. After merge, continue read-only observation of the owned native app entry. This never repeats Ready or merge for deployment progress. Existing app availability can complete immediately while requestedRevision remains unassessed. Native activation and authenticated behavior have separate results.",
   inputSchema: githubPrDeliveryApprovalSchema,
   async *execute(input, ctx) {
     "use workflow";

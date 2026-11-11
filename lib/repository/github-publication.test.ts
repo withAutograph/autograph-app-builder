@@ -1135,6 +1135,36 @@ describe("closed GitHub publication contract", () => {
     assertCanonicalGitHubMutationReceipt(result);
   });
 
+  it("rechecks release authority before a provider write and retains the same draft intent on resume", async () => {
+    const adapter = new Adapter();
+    const store = new Store();
+    const proposal = draftProposal(adapter);
+    let stopped = true;
+    const input = {
+      adapter,
+      approvedByCallId: "approved-production-call",
+      assertEffectCurrent: () => {
+        if (stopped) {
+          throw new Error("The release stopped before publication.");
+        }
+      },
+      contentSource: publicationContentSource(),
+      proposal,
+      review: review(),
+      store,
+    };
+
+    await expect(publishApprovedDraftPullRequest(input)).rejects.toThrow("release stopped");
+    expect(adapter.draftCalls).toBe(0);
+    expect(await store.read(proposal.digest)).toMatchObject({ status: "pending" });
+
+    stopped = false;
+    const published = await publishApprovedDraftPullRequest(input);
+    await expect(publishApprovedDraftPullRequest(input)).resolves.toEqual(published);
+    expect(adapter.draftCalls).toBe(1);
+    expect(published).toMatchObject({ status: "succeeded", proposalDigest: proposal.digest });
+  });
+
   it("publishes over unrelated upstream commits while preserving sealed proposal approval", async () => {
     const adapter = new Adapter();
     const proposal = draftProposal(adapter);

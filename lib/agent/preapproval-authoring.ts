@@ -62,7 +62,7 @@ const marker =
   /\n\[autograph-preapproval-authoring:(?<operationId>[a-z0-9_:-]+):(?<nonce>[a-f0-9]{64})\]$/u;
 export const readInternalAuthoringMarker = (message: string) => marker.exec(message)?.groups;
 export const internalAuthoringMessage = (operationId: string, nonce: string) =>
-  "Continue drafting the accepted app's complete implementation and tests through supported planning tools. Inspect the actual current draft when needed. Do not stop at an inspection summary or list of app-owned work. When correcting a declined current draft, freeze a successor proposal; do not retry the unchanged declined Build. Obtain the normal fresh Build approval before any implementation write. This is drafting continuation only: it grants no Build, publication, provider or release approval and changes no product requirements." +
+  "Continue drafting the accepted app's complete implementation and tests through supported planning tools. Inspect the actual current draft when needed. Do not stop at an inspection summary or list of app-owned work. When correcting a declined current draft, freeze a successor proposal; do not retry the unchanged declined Build. Present the structured Build approval through the build tool before any implementation write. For an explicit direct Production request on an eligible private Arrusted app, include the current Production subject on that Build card. This is drafting continuation only: it grants no Build, publication, provider or release approval and changes no product requirements." +
   `\n[autograph-preapproval-authoring:${operationId}:${nonce}]`;
 
 const authoringPhases = new Set([

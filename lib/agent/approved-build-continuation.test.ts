@@ -15,6 +15,8 @@ import {
   decideApprovedBuildContinuation,
 } from "./approved-build-continuation";
 import { appBuilderWorkflowState } from "./workflow-state";
+import { createDirectProductionGrant } from "./direct-production-authorization";
+import type { DirectProductionGrant } from "./direct-production-authorization";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import type { HookContext } from "eve/hooks";
 import hook from "../../agent/hooks/continue-approved-build";
@@ -66,7 +68,12 @@ const failed = {
 } as unknown as Extract<AppBuilderWorkflowState, { phase: "validation_failed" }>;
 const decide = (
   state: AppBuilderWorkflowState = failed,
-  changes: { blocked?: boolean; pendingInput?: boolean } = {},
+  changes: {
+    blocked?: boolean;
+    pendingInput?: boolean;
+    directProduction?: DirectProductionGrant;
+    releaseFinished?: boolean;
+  } = {},
 ) =>
   decideApprovedBuildContinuation({
     adapterSessionId: scope.sessionId,
@@ -79,6 +86,8 @@ const decide = (
       }
     },
     blocked: changes.blocked ?? false,
+    directProduction: changes.directProduction,
+    releaseFinished: changes.releaseFinished,
     pendingInput: changes.pendingInput ?? false,
     state,
     turnId: "actual-stopped-turn-14",
@@ -121,6 +130,42 @@ describe("approved apply and review continuation", () => {
       // SAFETY: Settled private review needs only the retained approved scope.
       const reviewed = { ...failed, phase: "reviewed" } as unknown as AppBuilderWorkflowState;
       expect(decide(reviewed).decision).toBe("settled");
+    });
+  });
+
+  it("keeps an explicitly approved release runnable after review until the release finishes", () => {
+    contextStorage.run(new ContextContainer(), () => {
+      approveBuild();
+      // SAFETY: The classifier only reads the accepted scope and phase after review.
+      const reviewed = { ...failed, phase: "reviewed" } as unknown as AppBuilderWorkflowState;
+      const directProduction = createDirectProductionGrant({
+        callId: "approved-build",
+        toolName: "apply_app_creation",
+        subject: {
+          version: 1,
+          appId: scope.appId,
+          appSpecDigest: scope.appSpecDigest,
+          proposalDigest: scope.proposalDigest,
+          sessionId: scope.sessionId,
+          buildWorkspaceId: scope.workspaceId,
+          authority: {
+            issuer: "https://builder.example/api/auth",
+            audience: "https://builder.example/mcp",
+            ownerUserId: "owner",
+            workspaceId: "workspace",
+          },
+          repositoryId: "21",
+          repositoryFullName: "withAutograph/arrusted-development",
+          installationId: "31",
+          baseBranch: "main",
+          storageKind: "postgres",
+        },
+      });
+      expect(decide(reviewed).decision).toBe("settled");
+      expect(decide(reviewed, { directProduction }).decision).toBe("runnable");
+      expect(decide(reviewed, { directProduction, releaseFinished: true }).decision).toBe(
+        "settled",
+      );
     });
   });
 

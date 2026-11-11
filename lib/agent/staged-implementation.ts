@@ -3,7 +3,7 @@ import type { ImplementationFile } from "./apply-implementation-files";
 
 interface StagedImplementation {
   appSpecDigest: string;
-  files: ImplementationFile[];
+  files: readonly ImplementationFile[];
   proposalDigest: string;
 }
 
@@ -12,8 +12,10 @@ const stagedImplementation = defineState<StagedImplementation | null>(
   () => null,
 );
 
-/** Retain approved submissions across repair attempts without writing the source workspace. */
-export const stageImplementationFiles = (input: StagedImplementation): ImplementationFile[] => {
+/** Read the exact proposed submission without staging unapproved files. */
+export const previewStagedImplementationFiles = (
+  input: StagedImplementation,
+): ImplementationFile[] => {
   const previous = stagedImplementation.get();
   const files = new Map<string, ImplementationFile>();
   if (
@@ -27,7 +29,26 @@ export const stageImplementationFiles = (input: StagedImplementation): Implement
   for (const file of input.files) {
     files.set(file.path, { ...file });
   }
-  const merged = [...files.values()];
+  return [...files.values()];
+};
+
+/** Retain approved submissions across repair attempts without writing the source workspace. */
+export const stageImplementationFiles = (input: StagedImplementation): ImplementationFile[] => {
+  const merged = previewStagedImplementationFiles(input);
   stagedImplementation.update(() => ({ ...input, files: merged }));
   return merged;
+};
+
+/** The creation executor applies this exact scaffold input before running the repository task. */
+export const newAppImplementationSchemaKind = (
+  appId: string,
+  sourceKind: "kernel" | "none",
+  files: readonly ImplementationFile[],
+) => {
+  const cuePath = `.config/app-specs/${appId}.cue`;
+  const cue = files.find((file) => file.path === cuePath);
+  if (cue === undefined) {
+    return sourceKind;
+  }
+  return cue.operation === "delete" ? "none" : "kernel";
 };

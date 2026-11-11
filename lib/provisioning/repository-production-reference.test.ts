@@ -249,6 +249,22 @@ const fixture = (intent = initialIntent) => {
 const inContext = <T>(run: () => T) => contextStorage.run(new ContextContainer(), run);
 
 describe("server-owned Production setup handoff", () => {
+  it("forwards the original release approval call without a creator override", async () => {
+    await inContext(async () => {
+      const h = fixture({ ...initialIntent, access: { mode: "private" } });
+      const { approvalReference } = await h.client.plan(scope.appId);
+      await expect(h.client.prepare(approvalReference, "original-release-call")).rejects.toThrow();
+      const prepared = h.requests.find((request) => request.action === "prepare");
+      expect(prepared).toMatchObject({
+        action: "prepare",
+        approvalReference,
+        approvedByCallId: "original-release-call",
+      });
+      expect(prepared).not.toHaveProperty("creatorEmail");
+      expect(h.effects).toEqual([]);
+    });
+  });
+
   it("projects an ordinary compact-reference approval without exposing private setup metadata", () => {
     const h = fixture();
     expect(h.effects).toEqual([]);

@@ -80,6 +80,7 @@ export const captureGitHubPrDeliveryCallScope = (
   callId: string,
   owner: GitHubPrDeliveryOwnerBinding,
   turn: { id: string; sequence: number },
+  directProductionGrantDigest?: string,
 ) => {
   const projection = currentGitHubPrDeliveryAuthorityProjection();
   const subject = projection.current;
@@ -91,7 +92,7 @@ export const captureGitHubPrDeliveryCallScope = (
   ) {
     throw new Error("The delivery approval no longer belongs to the current reviewed app.");
   }
-  const capture = {
+  const capture: GitHubPrDeliveryCallScope = {
     owner,
     callId,
     turnId: turn.id,
@@ -102,6 +103,9 @@ export const captureGitHubPrDeliveryCallScope = (
       (entry) => entry.appId === subject.appId && entry.repositoryId === input.repositoryId,
     ),
   };
+  if (directProductionGrantDigest !== undefined) {
+    capture.directProductionGrantDigest = directProductionGrantDigest;
+  }
   const previous = calls.get().find((entry) => entry.callId === callId);
   if (
     previous !== undefined &&
@@ -111,6 +115,7 @@ export const captureGitHubPrDeliveryCallScope = (
       previous.turnSequence === turn.sequence,
       isDeepStrictEqual(previous.owner, capture.owner),
       previous.inputDigest === capture.inputDigest,
+      previous.directProductionGrantDigest === capture.directProductionGrantDigest,
       isDeepStrictEqual(previous.subject, capture.subject),
     ].every(Boolean)
   ) {

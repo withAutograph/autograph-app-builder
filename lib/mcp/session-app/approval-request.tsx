@@ -69,18 +69,20 @@ export function ApprovalRequest({
   secondaryLabel?: string;
   title: string;
 }) {
-  const readyToBuild = title === "Build this app?";
+  const directProduction = title === "Build and release to Production?";
+  const readyToBuild = title === "Build this app?" || directProduction;
   const publishDraft = title === "Publish the reviewed changes?";
   const previewApproval = title === "Do you approve creating a preview?";
-  const supportingCopy =
-    description ??
-    (readyToBuild
-      ? "Build and validate the app shown above in your private workspace. This does not publish or deploy it."
-      : undefined);
+  let supportingCopy = description;
+  if (supportingCopy === undefined && readyToBuild) {
+    supportingCopy = directProduction
+      ? "Build the app and release it to Production after the required checks pass."
+      : "Build and validate the app shown above in your private workspace. This does not publish or deploy it.";
+  }
   const hint = readyToBuild ? "Keep chatting to refine your app." : "Cancel and return to chat.";
   let defaultPrimaryLabel = "Accept";
   if (readyToBuild) {
-    defaultPrimaryLabel = "Build app";
+    defaultPrimaryLabel = directProduction ? "Build and release" : "Build app";
   } else if (publishDraft) {
     defaultPrimaryLabel = "Publish draft PR";
   }
@@ -98,7 +100,7 @@ export function ApprovalRequest({
       ) : (
         <>
           <p className="approval-request__eyebrow">Approval required</p>
-          <h2>{readyToBuild ? "Ready to build your app?" : title}</h2>
+          <h2>{readyToBuild && !directProduction ? "Ready to build your app?" : title}</h2>
         </>
       )}
       <ApprovalDescription supportingCopy={supportingCopy} previewApproval={previewApproval} />

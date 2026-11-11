@@ -5,6 +5,7 @@ import {
   claimHostedBuildMessage,
 } from "../agent/approved-build-continuation-runtime";
 import { readInternalBuildMarker } from "../agent/approved-build-continuation";
+import { createDirectProductionGrant } from "../agent/direct-production-authorization";
 import { continueApprovedHostedBuild } from "./approved-build-controller";
 import { hostedEveOperationScopes } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
@@ -13,7 +14,7 @@ import { InMemoryHostedEveStore, toDurableHostedSessionRecord } from "./hosted-s
 
 const principal: HostedPrincipal = {
   audience: "https://builder.example/mcp",
-  issuer: "https://builder.example/auth",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
   scopes: Object.values(hostedEveOperationScopes),
   workspaceId: "workspace",
@@ -45,7 +46,33 @@ const decision = {
 };
 
 describe("recovered approved build continuation", () => {
-  it("carries early projection into the canonical child, then dispatches and claims its logical marker", async () => {
+  it.each([false, true])("restores Build state (Production: %s)", async (directProduction) => {
+    const grant = directProduction
+      ? createDirectProductionGrant({
+          callId: "original-build",
+          toolName: "apply_app_creation",
+          subject: {
+            version: 1,
+            appId: decision.scope.appId,
+            appSpecDigest: decision.scope.appSpecDigest,
+            proposalDigest: decision.scope.proposalDigest,
+            sessionId: logicalSessionId,
+            buildWorkspaceId: decision.scope.workspaceId,
+            authority: {
+              audience: principal.audience,
+              issuer: principal.issuer,
+              ownerUserId: principal.ownerUserId,
+              workspaceId: principal.workspaceId,
+            },
+            repositoryId: "42",
+            repositoryFullName: "withAutograph/arrusted-development",
+            installationId: "43",
+            baseBranch: "main",
+            storageKind: "postgres",
+          },
+        })
+      : undefined;
+    const projected = { ...decision, directProduction: grant };
     const store = new InMemoryHostedEveStore();
     const savedSession = async (sessionId: string) => {
       const record = await store.getSession(principal, sessionId);
@@ -132,7 +159,7 @@ describe("recovered approved build continuation", () => {
 
     // Native activation may run this hook before the public child row is settled.
     await persistHostedBuildDecision({
-      decision,
+      decision: projected,
       ownerSessionId: authoritySessionId,
       principal,
       store,
@@ -167,7 +194,7 @@ describe("recovered approved build continuation", () => {
     expect(firstSavedChild.privateBuildDecision?.adapterSessionId).toBe(physicalOwnerRunId);
 
     await persistHostedBuildDecision({
-      decision: { ...decision, turnSequence: 15 },
+      decision: { ...projected, turnSequence: 15 },
       ownerSessionId: authoritySessionId,
       principal,
       store,
@@ -177,6 +204,7 @@ describe("recovered approved build continuation", () => {
       adapterSessionId: physicalOwnerRunId,
       turnSequence: 15,
     });
+    expect(savedChild.privateBuildDecision?.directProduction).toEqual(grant);
     const sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(async () => {
       await Promise.resolve();
     });

@@ -44,7 +44,8 @@ projection preserves the accepted product, scope, artifacts, and saved plan.
 
 Builder shows the initial design and proposed scope and asks **Build this app?**
 That decision starts implementation and covers in-scope setup, preview, checks,
-and repairs. External effects retain their own approvals.
+and repairs. An explicit request for a new private app in Arrusted Production
+uses **Build and release to Production?** with the delivery scope below.
 
 ### 6. Run and review the app
 
@@ -112,17 +113,28 @@ previews retain their owner, app, source, lifetime, origin and recording
 protections. This internal target creates no creator input or prepared-Preview
 requirement.
 
-The default private preview launch uses the selected app's repository
-development script, workspace, port, and catalog entry route. Builder checks
-that route before offering the authenticated link. If the app returns a
-missing route, Builder closes that startup attempt and reports the route
-failure. Revalidation of unchanged source reuses the live preview.
+The default Build presents a working private preview as the first app handoff.
+The default preview command uses the selected app's repository development
+script, workspace, port, and catalog entry route. The launch verifies that
+route before offering its authenticated link. Reuse a live launch for the same
+source and settings across validation. Report a failed startup with its
+diagnosis and keep optional browser results separate from preview readiness.
+
+An explicit request to go directly to Production on a new private Arrusted app
+can be approved on the Build card. The release uses required repository
+validation, destination review, draft publication, managed data and access,
+Ready and checked merge, then watches native activation. A private preview or
+optional browser check never delays this path. For an already approved private
+build, a later Production request uses one release approval for the same scope.
+Linked creators continue directly. If the app needs one-time sign-in, Builder
+shows the sign-in link and watches the same setup for up to five minutes. Setup
+and its link stay available in the same session for a later continuation.
 
 For requested GitHub delivery, passing repository build and declared app tests
 produce a technically validated, reviewable candidate. The tool keeps that
 technical result successful when an optional private browser check fails or is
 unavailable, retaining the separate browser failure and unverified acceptance.
-Builder continues normal destination review and native draft-publication approval
+Builder continues normal destination review and approved draft publication
 before optional browser qualification. This saves reviewable work without claiming
 the app is usable, Ready, merged or deployed. Actual build or test command failure
 still requires repair, and exact reviewed-source approvals and required CI remain

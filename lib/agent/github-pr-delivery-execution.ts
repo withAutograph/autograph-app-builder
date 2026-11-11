@@ -87,6 +87,7 @@ export const continueGitHubPrDeliveryWithPorts = async (
 ) => {
   const readAuthority = ports.readAuthority ?? readGitHubPrDeliveryAuthority;
   const authority = await readAuthority(approval, ctx);
+  const directProduction = "directProduction" in authority;
   // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Verify canonical ownership before opening the scoped provider runtime.
   const { githubPublicationRuntimeForSession } =
     await import("./deployment-github-publication-runtime");
@@ -141,19 +142,51 @@ export const continueGitHubPrDeliveryWithPorts = async (
     if (readyAt !== undefined && observed.readyAt === readyAt) {
       await run({ ...effect, kind: "pr-merge", readyAt, reconcileOnly: true });
     }
-    const managed = authority.requirements.some(
-      (requirement) =>
-        requirement.appId === productionTarget.appId &&
-        requirement.repositoryId === productionTarget.repositoryId &&
-        requirement.repositoryFullName === productionTarget.repositoryFullName,
-    );
+    const managed =
+      directProduction ||
+      authority.requirements.some(
+        (requirement) =>
+          requirement.appId === productionTarget.appId &&
+          requirement.repositoryId === productionTarget.repositoryId &&
+          requirement.repositoryFullName === productionTarget.repositoryFullName,
+      );
     return mergedDelivery(observed.mergeCommitSha, managed ? productionTarget : undefined);
   }
   if (observed.state !== "open") {
     return { status: "closed" as const };
   }
 
+  const readProductionSetup = async () => {
+    const setup = await (ports.readProduction ?? readGitHubProductionDeliveryReadiness)(
+      productionTarget,
+      ctx,
+      {
+        requirements: authority.requirements,
+        retain: () => {
+          /* The durable parent projection retains service enrollment. */
+        },
+      },
+    );
+    if (directProduction && !setup.applicable) {
+      throw new Error("Builder must restore this app’s managed Production setup before release.");
+    }
+    return setup;
+  };
+
   if (readyAt === undefined) {
+    if (directProduction) {
+      const productionSetup = await readProductionSetup();
+      if (
+        productionSetup.applicable &&
+        (productionSetup.state !== "ready" || productionSetup.preparationRequired)
+      ) {
+        return {
+          status: "production-setup-required" as const,
+          productionSetup,
+          nextCall: githubProductionSetupContinuation(productionSetup),
+        };
+      }
+    }
     return await startReadyCycle({
       approvedReadyAt,
       observed,
@@ -178,16 +211,7 @@ export const continueGitHubPrDeliveryWithPorts = async (
     return { status: WAITING_FOR_CHECKS, readyAt } as const;
   }
 
-  const productionSetup = await (ports.readProduction ?? readGitHubProductionDeliveryReadiness)(
-    productionTarget,
-    ctx,
-    {
-      requirements: authority.requirements,
-      retain: () => {
-        /* The durable parent projection retains service enrollment. */
-      },
-    },
-  );
+  const productionSetup = await readProductionSetup();
   if (
     productionSetup.applicable &&
     (productionSetup.state !== "ready" || productionSetup.preparationRequired)

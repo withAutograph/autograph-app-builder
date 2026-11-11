@@ -23,6 +23,8 @@ import * as browserRunner from "./app-browser-test-runner";
 
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on the actual prepared runtime resolver for this local browser boundary.
 import * as preparedRuntime from "./prepared-runtime-execution";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Establish the existing preview's current behavior identity.
+import * as productBehavior from "./product-behavior-state";
 import { workingPreviewState } from "./working-preview-state";
 import type { PreparedRuntimeExecution } from "./prepared-runtime-execution";
 import { runAppBrowserTests as runResolvedAppBrowserTests } from "./app-browser-test-runner";
@@ -314,6 +316,54 @@ describe("private app browser tests", () => {
       reason: "private-preview-refresh-required",
     });
     expect(run).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("private-canary");
+  });
+
+  it("returns an optional browser setup failure and preserves the working preview", async () => {
+    const appId = "spend-review";
+    const root = "/workspace/repository";
+    vi.spyOn(preparedRuntime, "resolvePreparedRuntimeExecution").mockResolvedValue(null);
+    vi.spyOn(productBehavior, "hasCurrentProductBehaviorPreview").mockReturnValue(true);
+    vi.spyOn(workingPreviewState, "get").mockReturnValue({
+      sandboxId: "owned",
+      providerSessionId: "provider",
+      commandId: "original",
+      receipt: {
+        appId,
+        expiresAt: new Date(Date.now() + 120_000).toISOString(),
+        verifiedAt: new Date().toISOString(),
+        url: "https://original.vercel.run/__autograph_preview_launch?token=private-canary",
+        status: "ready",
+      },
+    });
+    const previewUpdate = vi.spyOn(workingPreviewState, "update");
+    const run = vi
+      .fn<SandboxSession["run"]>()
+      .mockRejectedValueOnce(new Error("Provider failed to prepare private-canary"));
+    const writeTextFile = vi.fn<SandboxSession["writeTextFile"]>();
+    const result = await runAppBrowserTests({
+      appId,
+      root,
+      sandbox: { run, writeTextFile },
+      execution: {
+        appId,
+        root,
+        sandboxId: "owned",
+        sessionId: "owner-session",
+        sessionAuth: {},
+        state: { phase: "validated" },
+      },
+    });
+    expect(result).toMatchObject({
+      exitCode: null,
+      status: "failed",
+      reason: "private-preview-browser-unavailable",
+      stdout: "",
+      stderr: "",
+    });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(writeTextFile).not.toHaveBeenCalled();
+    expect(previewUpdate).not.toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toContain("private-canary");
   });
 

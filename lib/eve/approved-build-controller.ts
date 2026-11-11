@@ -338,7 +338,7 @@ export const continueApprovedHostedBuild = async (
     return await restoreExisting(input, ready, existing);
   }
   const nonce = randomBytes(32).toString("hex");
-  const message = internalBuildMessage(operationId, nonce);
+  const message = internalBuildMessage(operationId, nonce, decision.directProduction !== undefined);
   const requestDigest = digest({ clientRequestId, decision, sessionId: session.sessionId });
   const now = input.now();
   const candidate = hostedOperationRecordSchema.parse({

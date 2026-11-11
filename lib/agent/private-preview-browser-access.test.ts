@@ -176,4 +176,29 @@ describe("owned private browser authority", () => {
     expect(run).not.toHaveBeenCalled();
     expect(operation).not.toHaveBeenCalled();
   });
+
+  it("preserves owner cancellation when private connection preparation rejects", async () => {
+    const controller = new AbortController();
+    const cancelled = new Error("cancelled by owner");
+    const run = vi.fn(() => {
+      controller.abort(cancelled);
+      throw new Error("provider transport closed");
+    });
+    const writeTextFile = vi.fn();
+    const operation = vi.fn();
+    await expect(
+      withPrivatePreviewBrowserAccess({
+        appId: "example",
+        root: "/workspace/repository",
+        sandboxId: "sandbox",
+        preview: preview(),
+        sandbox: { run, writeTextFile },
+        signal: controller.signal,
+        assertCurrent: () => {},
+        operation,
+      }),
+    ).rejects.toBe(cancelled);
+    expect(writeTextFile).not.toHaveBeenCalled();
+    expect(operation).not.toHaveBeenCalled();
+  });
 });

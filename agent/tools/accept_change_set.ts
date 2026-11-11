@@ -18,6 +18,8 @@ import {
 } from "@/lib/agent/workflow-state";
 import { createReviewedChangeSetReceipt } from "@/lib/repository/reviewed-change-set";
 import { reviewedChangeSetSummary } from "@/lib/agent/review-result-summaries";
+import { currentDirectProductionGrant } from "@/lib/agent/direct-production-state";
+import { draftReviewAfterTechnicalValidation } from "@/lib/agent/draft-review-continuation";
 import { checkedNativeToolResult } from "@/lib/eve/payload-envelope";
 
 export interface ChangeSetAcceptanceRuntime {
@@ -25,12 +27,14 @@ export interface ChangeSetAcceptanceRuntime {
   reviewSource: typeof reviewAppliedProductSource;
   prepareSourceReview?: typeof prepareAppliedProductSourceReview;
   finalizeSourceReview?: typeof finalizeAppliedProductSourceReview;
+  readDirectProductionGrant?: typeof currentDirectProductionGrant;
 }
 const changeSetAcceptanceRuntime: ChangeSetAcceptanceRuntime = {
   observeChangeSet: observeNormalizedChangeSet,
   reviewSource: reviewAppliedProductSource,
   prepareSourceReview: prepareAppliedProductSourceReview,
   finalizeSourceReview: finalizeAppliedProductSourceReview,
+  readDirectProductionGrant: currentDirectProductionGrant,
 };
 /** Internal ports preserve optional independent source review without public injection. */
 export const createChangeSetAcceptanceTool = (
@@ -111,6 +115,17 @@ export const createChangeSetAcceptanceTool = (
         toolName: "accept_change_set",
         turnId: ctx.session.turn.id,
       };
+      const nextDeliveryStep = () => {
+        const grant = runtime.readDirectProductionGrant?.(ctx, { appId: state.appSpec.appId });
+        if (grant === undefined) {
+          return {};
+        }
+        const draftReview = draftReviewAfterTechnicalValidation(
+          appBuilderWorkflowState.get(),
+          true,
+        );
+        return draftReview === undefined ? {} : { nextCall: draftReview.nextCall };
+      };
       if (state.phase === "reviewed") {
         const expectedReceipt = createReviewedChangeSetReceipt(
           changeSet,
@@ -118,13 +133,16 @@ export const createChangeSetAcceptanceTool = (
         );
         if (expectedReceipt.digest === state.reviewReceipt.digest) {
           return checkedNativeToolResult(
-            reviewedChangeSetSummary({
-              productAcceptance,
-              receipt: state.reviewReceipt,
-              reused: true,
-              sessionId: ctx.session.id,
-              sourceAssessment,
-            }),
+            {
+              ...reviewedChangeSetSummary({
+                productAcceptance,
+                receipt: state.reviewReceipt,
+                reused: true,
+                sessionId: ctx.session.id,
+                sourceAssessment,
+              }),
+              ...nextDeliveryStep(),
+            },
             metadata,
           );
         }
@@ -183,13 +201,16 @@ export const createChangeSetAcceptanceTool = (
         },
       });
       return checkedNativeToolResult(
-        reviewedChangeSetSummary({
-          productAcceptance,
-          receipt,
-          reused: false,
-          sessionId: ctx.session.id,
-          sourceAssessment,
-        }),
+        {
+          ...reviewedChangeSetSummary({
+            productAcceptance,
+            receipt,
+            reused: false,
+            sessionId: ctx.session.id,
+            sourceAssessment,
+          }),
+          ...nextDeliveryStep(),
+        },
         metadata,
       );
     },
