@@ -135,7 +135,7 @@ const observationOwnerEpoch = (session: RepositoryProductionObservationSession) 
   repository: observationRepository(session),
 });
 
-/** Resolve saved owned destinations without loading captures, executing setup, or inspecting source. */
+/** Resolve saved destinations for read-only native availability. */
 export const createRepositoryProductionObservationResolver =
   (deps: {
     repositories: readonly ManagementProfile[];
@@ -143,6 +143,11 @@ export const createRepositoryProductionObservationResolver =
       owner: RepositoryProductionRequestOwner,
     ) => Promise<RepositoryProductionObservationSession>;
     store: Pick<RepositoryProductionStore, "read">;
+    canObserveSavedSetup?: (
+      owner: RepositoryProductionRequestOwner,
+      scope: RepositoryProductionScope,
+      row: RepositoryProductionRow,
+    ) => Promise<boolean>;
   }) =>
   async (
     owner: RepositoryProductionRequestOwner,
@@ -183,17 +188,24 @@ export const createRepositoryProductionObservationResolver =
         const row = await deps.store.read(scope);
         await assertCurrentOwner();
         if (row !== undefined) {
+          const savedSessionId = row.record.intent.sessionId;
           const savedOwner = row.record.ownerContext;
           const savedOwnerMatches =
             savedOwner === undefined ||
-            (savedOwner.sessionId === owner.sessionId &&
+            (savedOwner.sessionId === savedSessionId &&
               isDeepStrictEqual(savedOwner.authority, owner.ownerContext.authority));
-          if (
-            !isDeepStrictEqual(row.record.scope, scope) ||
-            row.record.intent.sessionId !== owner.sessionId ||
-            !savedOwnerMatches
-          ) {
+          if (!isDeepStrictEqual(row.record.scope, scope) || !savedOwnerMatches) {
             throw new HostedOperatorError("authorization_required");
+          }
+          if (savedSessionId !== owner.sessionId) {
+            if (
+              savedOwner === undefined ||
+              row.operationRef !== repositoryProductionOperationRef(scope) ||
+              (await deps.canObserveSavedSetup?.(owner, scope, row)) !== true
+            ) {
+              throw new HostedOperatorError("authorization_required");
+            }
+            await assertCurrentOwner();
           }
         }
         return { row, scope };

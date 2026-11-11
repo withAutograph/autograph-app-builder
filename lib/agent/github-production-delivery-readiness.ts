@@ -66,9 +66,9 @@ export const githubProductionSetupContinuation = (
   input: { appId: setup.appId },
 });
 
-/** All app and repository identities come from the saved reviewed publication, never a tool argument. */
+/** The app, repository and head come from the saved publication and its current GitHub observation. */
 export const readGitHubProductionDeliveryReadiness = async (
-  target: Target,
+  target: Target & { reviewedHeadSha: string },
   ctx: WorkflowStepToolContext,
   projection?: {
     requirements: readonly ManagedProductionDeliveryRequirement[];
@@ -86,6 +86,7 @@ export const readGitHubProductionDeliveryReadiness = async (
       return await client.deliveryStatus(target.appId, {
         repositoryId: target.repositoryId,
         repositoryFullName: target.repositoryFullName,
+        reviewedHeadSha: target.reviewedHeadSha,
       });
     },
   });

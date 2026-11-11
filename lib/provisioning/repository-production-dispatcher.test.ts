@@ -203,6 +203,31 @@ describe("protected repository Production dispatcher", () => {
     expect(f.deps.management.execute).not.toHaveBeenCalled();
   });
 
+  it.each([40, 64])(
+    "forwards the %s-character reviewed SHA only in the readiness request",
+    async (length) => {
+      const f = fixture();
+      const repository = { repositoryId: "123", repositoryFullName: "example/repo" };
+      const reviewedHeadSha = "a".repeat(length);
+      const status = { version: 1, appId: owner.appId, ...repository, applicable: false } as const;
+      vi.mocked(f.deps.readDeliveryStatus).mockResolvedValueOnce(status);
+      const response = await f.send({
+        version: 1,
+        ...owner,
+        ...repository,
+        action: "delivery-status",
+        reviewedHeadSha,
+      });
+      expect(response.status).toBe(200);
+      expect(f.deps.readDeliveryStatus).toHaveBeenCalledExactlyOnceWith(owner, {
+        ...repository,
+        reviewedHeadSha,
+      });
+      expect(await response.json()).toEqual(status);
+      expect(f.prepared).not.toHaveBeenCalled();
+    },
+  );
+
   it("keeps unreadable or unauthorized delivery status closed rather than reporting unmanaged", async () => {
     const f = fixture();
     const request = {
@@ -247,14 +272,18 @@ describe("protected repository Production dispatcher", () => {
     ).toBe(403);
   });
 
-  it("rejects malformed delivery targets before invoking the read", async () => {
+  it.each([
+    { repositoryId: "repo", reviewedHeadSha: "a".repeat(40) },
+    { repositoryId: "123", reviewedHeadSha: "main" },
+    { repositoryId: "123", reviewedHeadSha: "a".repeat(41) },
+  ])("rejects malformed delivery targets before invoking the read: %o", async (target) => {
     const f = fixture();
     expect(
       (
         await f.send({
           version: 1,
           ...owner,
-          repositoryId: "repo",
+          ...target,
           repositoryFullName: "example/repo",
           action: "delivery-status",
         })

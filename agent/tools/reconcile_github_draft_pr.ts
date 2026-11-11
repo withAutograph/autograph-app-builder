@@ -25,10 +25,15 @@ import {
   publishedDraftRepairCompletions,
   draftReconciliationCompletions,
   retainDraftReconciliationCompletion,
+  samePersistedDraftCandidate,
   updateExactDraftReconciliation,
 } from "@/lib/agent/draft-reconciliation-state";
-import type { DraftReconciliationCompletion } from "@/lib/agent/draft-reconciliation-state";
+import type {
+  DraftReconciliationCandidate,
+  DraftReconciliationCompletion,
+} from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import type { AppBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { recordPublishedReconciliationForSession } from "@/lib/agent/published-app-source";
 import { assertReconciliationCompletionOwnerForSession } from "@/lib/agent/compiled-operator-artifacts";
 import { inspectDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
@@ -39,6 +44,48 @@ const missingCompletion = () => ({
   nextAction:
     "The original approved proposal, reviews and exact compiled release association are unavailable. No GitHub write was attempted. Preserve this published head and resolve its source-recording context; do not republish it.",
 });
+
+const matchingApprovedCandidate = (
+  workflow: AppBuilderWorkflowState,
+  candidate: DraftReconciliationCandidate | null,
+  completion: DraftReconciliationCompletion,
+) => {
+  const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
+  const githubSource = currentDraftCandidateSource(workflow, candidate);
+  const { proposal, review, appReview } = completion;
+  if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Check the full retained approval binding before treating a candidate as current.
+    candidate === null ||
+    candidate.kind === "published-draft-repair" ||
+    candidate.proposal?.digest !== proposal.digest ||
+    candidate.review?.digest !== review.digest ||
+    candidate.validation === undefined ||
+    state.phase !== "reviewed" ||
+    githubSource === undefined ||
+    state.reviewReceipt.digest !== candidate.originalReviewDigest ||
+    state.appSpec.appId !== completion.appId ||
+    state.appSpec.digest !== appReview.appSpecDigest ||
+    githubSource.repository.repositoryId !== proposal.repositoryId ||
+    candidate.githubSourceDigest !== completion.githubSourceDigest ||
+    candidate.root !== completion.root ||
+    state.reviewReceipt.digest !== appReview.digest
+  ) {
+    return null;
+  }
+  return { candidate, validation: candidate.validation };
+};
+
+const retainPublishedReconciliation = (
+  candidate: DraftReconciliationCandidate,
+  proposal: DraftReconciliationCompletion["proposal"],
+) => {
+  updateExactDraftReconciliation({
+    expected: candidate,
+    operation: "recording the provider-verified published merge",
+    transition: (current) =>
+      current === null ? null : { ...current, publishedReconciliation: proposal },
+  });
+};
 
 export default defineTool({
   approval: always(),
@@ -187,6 +234,31 @@ export default defineTool({
       }
     };
     if (inspected.applied) {
+      // A successful Git write can outlive its local delivery projection. Only restore it for
+      // the still-current approved candidate; historical recording remains independently valid.
+      await assertReconciliationCompletionOwnerForSession(session);
+      ctx.abortSignal?.throwIfAborted();
+      const current = matchingApprovedCandidate(
+        appBuilderWorkflowState.get(),
+        draftReconciliationState.get(),
+        completion,
+      );
+      if (
+        current !== null &&
+        [
+          samePersistedDraftCandidate(current.candidate, candidate),
+          current.candidate.appId === completion.appId,
+          current.candidate.repositoryId === proposal.repositoryId,
+          current.candidate.pullRequestNumber === proposal.pullRequestNumber,
+          current.candidate.publishedOrigin?.digest === completion.publishedOrigin?.digest,
+          current.candidate.publicationScope?.publication.digest ===
+            completion.publicationScope?.publication.digest,
+          current.validation.resolvedTree === proposal.resolvedTree,
+          current.candidate.publishedReconciliation?.digest !== proposal.digest,
+        ].every(Boolean)
+      ) {
+        retainPublishedReconciliation(current.candidate, proposal);
+      }
       return await finish(inspected.observation);
     }
     if (input.recordCurrentEquivalentRelease === true) {
@@ -201,41 +273,26 @@ export default defineTool({
       return missingCompletion();
     }
     // Fresh publication retains every mutable candidate/review check after the read-only recovery decision.
-    const githubSource = currentDraftCandidateSource(state, candidate);
-    if (
-      // oxlint-disable-next-line sonarjs/expression-complexity -- Fresh writes retain the complete sealed candidate and current workflow authority binding.
-      candidate === null ||
-      candidate.kind === "published-draft-repair" ||
-      candidate.proposal?.digest !== proposal.digest ||
-      candidate.review?.digest !== review.digest ||
-      candidate.validation === undefined ||
-      state.phase !== "reviewed" ||
-      githubSource === undefined ||
-      state.reviewReceipt.digest !== candidate.originalReviewDigest ||
-      state.appSpec.appId !== completion.appId ||
-      state.appSpec.digest !== completion.appReview.appSpecDigest ||
-      githubSource.repository.repositoryId !== proposal.repositoryId ||
-      candidate.githubSourceDigest !== completion.githubSourceDigest ||
-      candidate.root !== completion.root ||
-      state.reviewReceipt.digest !== completion.appReview.digest
-    ) {
+    const current = matchingApprovedCandidate(workflow, candidate, completion);
+    if (current === null) {
       throw new Error(
         "The approved draft reconciliation is unavailable or no longer matches the selected app. Review and seal its current merge before requesting approval.",
       );
     }
     const sandbox = await getSourceBoundSandbox(ctx);
-    const observed = await inspectDraftReconciliation({ prepared: candidate, sandbox });
+    const observed = await inspectDraftReconciliation({ prepared: current.candidate, sandbox });
     if (
       observed.unresolvedConflicts.length > 0 ||
       observed.resolvedTree !== proposal.resolvedTree ||
-      observed.resolvedTree !== candidate.validation.resolvedTree
+      observed.resolvedTree !== current.validation.resolvedTree
     ) {
       throw new Error(
         "The reconciled checkout changed after validation and approval. Rerun checks, review both diffs, and request approval for the new result.",
       );
     }
     const changes = new Map(review.baseChanges.map((change) => [change.path, change]));
-    const relativeRoot = candidate.root.slice(candidate.workspaceRoot.length + 1);
+    const { root, workspaceRoot } = current.candidate;
+    const relativeRoot = root.slice(workspaceRoot.length + 1);
     const contentSource = {
       async readFile(path: string) {
         const expected = changes.get(path);
@@ -265,12 +322,7 @@ export default defineTool({
       recovery,
       review,
     });
-    updateExactDraftReconciliation({
-      expected: candidate,
-      operation: "recording the provider-verified published merge",
-      transition: (current) =>
-        current === null ? null : { ...current, publishedReconciliation: proposal },
-    });
+    retainPublishedReconciliation(current.candidate, proposal);
     return await finish(publication);
   },
   inputSchema: z.strictObject({

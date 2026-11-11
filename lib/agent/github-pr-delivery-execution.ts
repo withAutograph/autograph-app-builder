@@ -158,7 +158,7 @@ export const continueGitHubPrDeliveryWithPorts = async (
 
   const readProductionSetup = async () => {
     const setup = await (ports.readProduction ?? readGitHubProductionDeliveryReadiness)(
-      productionTarget,
+      { ...productionTarget, reviewedHeadSha: observed.reviewedTarget.headSha },
       ctx,
       {
         requirements: authority.requirements,

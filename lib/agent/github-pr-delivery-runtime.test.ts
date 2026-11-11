@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
         appId: string;
         repositoryId: string;
         repositoryFullName: string;
+        reviewedHeadSha: string;
       }) => Promise<RepositoryProductionDeliveryStatus>
     >(),
 }));
@@ -47,9 +48,11 @@ vi.mock("./github-production-delivery-readiness", () => ({
 beforeEach(() => {
   mocks.production.mockReset();
   // oxlint-disable-next-line eslint/require-await -- This controlled service port resolves without provider work.
-  mocks.production.mockImplementation(async (target) => ({
+  mocks.production.mockImplementation(async ({ appId, repositoryId, repositoryFullName }) => ({
     version: 1,
-    ...target,
+    appId,
+    repositoryId,
+    repositoryFullName,
     applicable: false,
   }));
 });
@@ -217,6 +220,15 @@ it("automatically directs managed setup before exposing the Ready/merge approval
     nextCall: { tool: "plan-app-production", input: { appId: "demo" } },
   });
   expect(result).not.toHaveProperty("approval");
+  expect(mocks.production).toHaveBeenCalledExactlyOnceWith(
+    {
+      appId: "demo",
+      repositoryId: reviewedTarget.repositoryId,
+      repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
+      reviewedHeadSha: reviewedTarget.headSha,
+    },
+    expect.anything(),
+  );
   expect(mutate).not.toHaveBeenCalled();
 });
 

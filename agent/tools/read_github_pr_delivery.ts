@@ -51,6 +51,7 @@ export default defineTool({
           appId: subject.appId,
           repositoryId: observation.reviewedTarget.repositoryId,
           repositoryFullName: `${observation.reviewedTarget.owner}/${observation.reviewedTarget.name}`,
+          reviewedHeadSha: observation.reviewedTarget.headSha,
         },
         ctx,
       );
