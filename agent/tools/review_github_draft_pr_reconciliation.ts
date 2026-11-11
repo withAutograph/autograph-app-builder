@@ -20,7 +20,7 @@ import { summarizeReconciliationChanges } from "@/lib/agent/draft-reconciliation
 
 export default defineTool({
   description:
-    "Reobserve the validated isolated merge and record both exact diffs in server state. Return counts and the first bounded metadata page for each diff; use optional inspect_github_draft_pr_reconciliation change or raw diff pages for more detail. No complete diff read is required. This does not update GitHub.",
+    "Reobserve the validated isolated merge and record both exact diffs in server state. Return the exact next sealing call, counts, and the first bounded metadata page for each diff; use optional inspect_github_draft_pr_reconciliation change or raw diff pages for more detail. No complete diff read is required. This does not update GitHub.",
   async execute(_input, ctx) {
     ctx.abortSignal?.throwIfAborted();
     const candidate = draftReconciliationState.get();
@@ -140,6 +140,10 @@ export default defineTool({
       validation: candidate.validation,
       baseChanges,
       headChanges,
+      nextCall: {
+        tool: "seal_github_draft_pr_reconciliation",
+        arguments: { expectedReviewDigest: review.digest },
+      },
     };
   },
   inputSchema: z.strictObject({}),

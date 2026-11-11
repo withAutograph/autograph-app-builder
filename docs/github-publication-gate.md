@@ -181,11 +181,12 @@ assessment. Optional `inspect_github_draft_pr_reconciliation` calls with
 `kind: "changes"` page the file index, while `kind: "diff"` supports raw byte
 cursors/path selection for the resolved diff against the live base and the delta
 from the old PR head. Neither pagination must be exhausted. Inspection progress
-is not review or publication authority. A separate sealed approval binds both
-parent commits, the resolved
-tree, both diffs, the draft PR, and the tenant-scoped repository. GitHub receives
-a merge commit through an expected-head update without force pushing. A moved
-base or head requires a fresh merge, validation, review, and approval.
+is not review or publication authority. Use the review's returned `nextCall` to
+seal that exact candidate. A separate approval binds both parent commits, the
+resolved tree, both diffs, the draft PR, and the tenant-scoped repository.
+GitHub receives a merge commit through an expected-head update without force
+pushing. A moved base or head requires a fresh merge, validation, review, and
+approval.
 
 When only the base advances, preparation carries the same draft's private app
 repairs into a fresh candidate through a three-way Git merge against the previous

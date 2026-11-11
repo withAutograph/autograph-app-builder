@@ -408,7 +408,14 @@ const publishValidatedCandidate = async () => {
   ).toBe(true);
   expect(draftReconciliationState.get()?.review).toBeUndefined();
   const review = z
-    .object({ reviewDigest: z.string(), resolvedTree: z.string() })
+    .object({
+      reviewDigest: z.string(),
+      resolvedTree: z.string(),
+      nextCall: z.object({
+        tool: z.literal("seal_github_draft_pr_reconciliation"),
+        arguments: z.strictObject({ expectedReviewDigest: z.string() }),
+      }),
+    })
     .parse(
       await reviewCandidate.execute({}, { ...candidateContext, callId: "owned-candidate-review" }),
     );
@@ -478,10 +485,10 @@ const publishValidatedCandidate = async () => {
         },
       }),
   );
-  const sealed = await sealCandidate.execute(
-    { expectedReviewDigest: review.reviewDigest },
-    { ...candidateContext, callId: "owned-candidate-seal" },
-  );
+  const sealed = await sealCandidate.execute(review.nextCall.arguments, {
+    ...candidateContext,
+    callId: "owned-candidate-seal",
+  });
   if (!("approvalReceipt" in sealed)) {
     throw new Error("The controlled sealing call did not return its approval receipt");
   }
