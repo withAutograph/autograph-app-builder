@@ -1,3 +1,4 @@
+import { directProductionGrantSchema } from "./direct-production-authorization";
 import { githubPrDeliveryAuthorityProjectionSchema } from "./github-pr-delivery-authority-contract";
 import {
   localSourcePrerequisiteObservationSchema,
@@ -27,6 +28,7 @@ export const approvedBuildScopeSchema = z.strictObject({
 export const approvedBuildDecisionSchema = z.strictObject({
   adapterSessionId: z.string().min(1),
   githubDelivery: githubPrDeliveryAuthorityProjectionSchema.optional(),
+  directProduction: directProductionGrantSchema.optional(),
   currentSpec: z
     .strictObject({
       appId: z.string(),

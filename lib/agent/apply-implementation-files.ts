@@ -28,6 +28,50 @@ export const implementationFilesSchema = z
 
 export type ImplementationFile = z.infer<typeof implementationFilesSchema>[number];
 
+const generatedRuntime = "@autograph/generated-app-runtime";
+const packageManifest = z.looseObject({
+  dependencies: z.record(z.string(), z.string()).optional(),
+});
+
+const parsePackageManifest = (content: string | null) => {
+  if (content === null) {
+    return null;
+  }
+  try {
+    return packageManifest.parse(JSON.parse(content));
+  } catch {
+    // The repository's install or validation command diagnoses malformed manifests.
+    return null;
+  }
+};
+
+/** A replacement manifest retains the runtime selected by the repository's CUE scaffold. */
+const preserveGeneratedRuntime = async (input: {
+  files: ImplementationFile[];
+  path: string;
+  root: string;
+  sandbox: Parameters<ApplyCommandExecutor>[0]["sandbox"];
+}): Promise<ImplementationFile[]> => {
+  const file = input.files.find(({ path }) => path === input.path);
+  if (file === undefined || file.operation === "delete") {
+    return input.files;
+  }
+  const authored = parsePackageManifest(file.content);
+  if (authored === null || authored.dependencies?.[generatedRuntime] !== undefined) {
+    return input.files;
+  }
+  const generated = parsePackageManifest(
+    await input.sandbox.readTextFile({ path: `${input.root}/${input.path}` }),
+  );
+  const specifier = generated?.dependencies?.[generatedRuntime];
+  if (specifier === undefined) {
+    return input.files;
+  }
+  authored.dependencies = { ...authored.dependencies, [generatedRuntime]: specifier };
+  const content = `${JSON.stringify(authored, null, 2)}\n`;
+  return input.files.map((change) => (change === file ? { ...file, content } : change));
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertExistingAppImplementationFiles(
   files: readonly ImplementationFile[],
@@ -110,12 +154,23 @@ export function withImplementationFiles(
       return result;
     }
 
-    await applyApplicationFileChanges(
-      input.sandbox,
-      relativeApplyRoot,
-      files.filter((file) => file.path !== cuePath),
-    );
-    if (options?.reconcileNewWorkspace === true && !("operation" in input.proposal)) {
+    const reconcileNewWorkspace =
+      options?.reconcileNewWorkspace === true && !("operation" in input.proposal);
+    let authoredFiles = files.filter((file) => file.path !== cuePath);
+    if (
+      reconcileNewWorkspace &&
+      ((cue !== undefined && cue.operation !== "delete") ||
+        input.proposal.plan.source.schema.kind === "kernel")
+    ) {
+      authoredFiles = await preserveGeneratedRuntime({
+        files: authoredFiles,
+        path: `${input.proposal.plan.source.workspacePath}/package.json`,
+        root: relativeApplyRoot,
+        sandbox: input.sandbox,
+      });
+    }
+    await applyApplicationFileChanges(input.sandbox, relativeApplyRoot, authoredFiles);
+    if (reconcileNewWorkspace) {
       // The generator and approved file writes can both change the workspace graph.
       const install = await input.sandbox.run({
         command: workspaceBinInstallCommand(input.applyRoot, false),

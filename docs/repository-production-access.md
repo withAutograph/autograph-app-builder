@@ -386,6 +386,12 @@ immediately before its GitHub merge effect, retaining exact revision, native
 approval, required-check and ready-cycle protections. A passing Check alone
 cannot merge an app whose required runtime binding is still absent.
 
+For a scoped Arrusted release, the operator can verify the original Build or
+release approval against the active owner's saved app and the exact current
+setup plan. It independently reads the actual owner decision and reviewed
+published source before applying that plan. Existing setup approvals are
+accepted through the same ownership and plan checks.
+
 After a managed merge, the read-only `native-status` action observes the
 current Production app through the saved owner, app and repository binding.
 It checks the provider’s current Production deployment and public domain,

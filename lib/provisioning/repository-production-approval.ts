@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
 import { appAccessIntentSchema, resolveAppAccessIntent } from "../agent/app-access-intent";
+import type { DirectProductionSubject } from "../agent/direct-production-authorization";
 import {
   repositoryProductionDigest,
   repositoryProductionIntentSchema,
@@ -116,6 +117,19 @@ export const repositoryProductionApprovalReference = (
     review,
   };
 };
+
+/** Combined delivery consent covers only the resolved private app and its declared storage. */
+export const matchesDirectProductionSetupReference = (
+  subject: DirectProductionSubject,
+  reference: RepositoryProductionApprovalReference,
+): boolean =>
+  [
+    reference.appId === subject.appId,
+    reference.repositoryId === subject.repositoryId,
+    reference.review.repositoryFullName === subject.repositoryFullName,
+    reference.review.storageKind === subject.storageKind,
+    reference.review.access.mode === "private",
+  ].every(Boolean);
 
 /** Compare against the freshly resolved owner-scoped plan before observing approval or writes. */
 export const assertRepositoryProductionApprovalReference = (
