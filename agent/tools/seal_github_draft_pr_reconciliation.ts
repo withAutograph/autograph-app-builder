@@ -95,6 +95,7 @@ export default defineTool({
     );
     const priorPublishedProposalDigest =
       candidate.publishedOrigin?.publicationProposalDigest ??
+      candidate.publicationScope?.proposal.digest ??
       state.publishedGitHubDraftProposalDigest ??
       state.githubDraftProposal?.proposal.digest;
     const request = {

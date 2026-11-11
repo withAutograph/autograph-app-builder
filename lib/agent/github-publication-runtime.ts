@@ -57,10 +57,13 @@ import {
   reconcileExistingDraft,
   inspectAppliedExistingDraftReconciliation,
   sealExistingDraftReconciliation,
+  assertOwnedPublicationReconciliationOrigin,
+  isFirstAppPublicationPathScope,
 } from "../repository/github-draft-reconciliation";
 import type {
   ExistingDraftReconciliationAdapter,
   OwnedDraftInspectionRecovery,
+  OwnedPublicationReconciliationScope,
   ExistingDraftReconciliationProposal,
   ReconciliationReviewReceipt,
 } from "../repository/github-draft-reconciliation";
@@ -144,6 +147,64 @@ const readOwnedDraftPublication = async (input: {
     );
   }
   return prior;
+};
+
+type OwnedPublicationOrigin = Pick<OwnedPublicationReconciliationScope, "proposal" | "publication">;
+
+/** Carry only the unchanged, approved first app publication into the automatic merge. */
+const readOwnedFirstAppPublication = async (input: {
+  appId: string | undefined;
+  proposalDigest: string | undefined;
+  prior: DraftPullRequestSuccessReceipt | undefined;
+  draft: ExistingDraftObservation;
+  base: GitHubRepositoryObservation;
+  adapter: GitHubPublicationAdapter;
+  proposals: GitHubPublicationProposalStore;
+}): Promise<OwnedPublicationOrigin | undefined> => {
+  const { appId, proposalDigest, prior, draft, base, adapter, proposals } = input;
+  if (appId === undefined || proposalDigest === undefined || prior === undefined) {
+    return undefined;
+  }
+  const exactOriginalHead = [
+    prior.proposalDigest === proposalDigest,
+    prior.branchSha === draft.headSha,
+    prior.branchTree === draft.headTree,
+    prior.baseBranch === draft.baseBranch,
+    draft.verifiedBuilderOrigin?.marker === prior.idempotencyKey,
+  ].every(Boolean);
+  if (!exactOriginalHead || adapter.inspectDestinationFiles === undefined) {
+    return undefined;
+  }
+  const proposal = await proposals.read(proposalDigest);
+  if (proposal === undefined || proposal.intendedOutcome !== DRAFT_PUBLICATION_OUTCOME) {
+    return undefined;
+  }
+  const origin = { proposal, publication: prior };
+  assertOwnedPublicationReconciliationOrigin(origin);
+  if (
+    proposal.owner !== draft.owner ||
+    proposal.name !== draft.name ||
+    !isFirstAppPublicationPathScope(proposal.approvedPaths, appId)
+  ) {
+    return undefined;
+  }
+  // The adapter reads this commit and tree again before checking the path.
+  const originalBase = createRepositoryObservation({
+    defaultBranch: proposal.baseBranch,
+    headSha: proposal.baseSha,
+    headTree: proposal.baseTree,
+    installationIdentityDigest: base.installationIdentityDigest,
+    name: proposal.name,
+    owner: proposal.owner,
+    releaseGate: base.releaseGate,
+    repositoryId: proposal.repositoryId,
+    visibility: base.visibility,
+  });
+  const originalApp = await adapter.inspectDestinationFiles({
+    paths: [`apps/${appId}/package.json`],
+    repository: originalBase,
+  });
+  return originalApp.length === 0 ? origin : undefined;
 };
 
 const readAppliedOwnedReconciliation = async (input: {
@@ -504,6 +565,8 @@ export interface GitHubPublicationRuntime {
     name: string;
     pullRequestNumber: number;
     priorPublishedProposalDigest?: string;
+    /** The retained first-publication app from this saved workflow. */
+    firstPublicationAppId?: string;
     /** Retained server-owned sealed candidate; never a caller-supplied baseline SHA. */
     previousReconciliation?: ExistingDraftReconciliationProposal;
     publishedReconciliation?: ExistingDraftReconciliationProposal;
@@ -515,6 +578,7 @@ export interface GitHubPublicationRuntime {
     base: GitHubRepositoryObservation;
     publishedHeadSha?: string;
     publishedReconciliation?: ExistingDraftReconciliationProposal;
+    ownedPublication?: OwnedPublicationOrigin;
   }>;
   sealExistingDraftReconciliation: (input: {
     githubSource: ImmutableGitHubSourceReceipt;
@@ -1424,6 +1488,15 @@ export function composeGitHubPublicationRuntime(input: {
             "The draft PR base no longer matches the connected repository's default branch. Reopen the current PR and select its intended base before reconciliation.",
           );
         }
+        const ownedPublication = await readOwnedFirstAppPublication({
+          appId: request.firstPublicationAppId,
+          proposalDigest: request.priorPublishedProposalDigest,
+          prior,
+          draft,
+          base,
+          adapter,
+          proposals,
+        });
         const publishedReconciliation = await readAppliedOwnedReconciliation({
           adapter,
           draft,
@@ -1448,6 +1521,9 @@ export function composeGitHubPublicationRuntime(input: {
         }
         if (publishedReconciliation !== undefined) {
           result.publishedReconciliation = publishedReconciliation;
+        }
+        if (ownedPublication !== undefined) {
+          result.ownedPublication = ownedPublication;
         }
         return result;
       } finally {

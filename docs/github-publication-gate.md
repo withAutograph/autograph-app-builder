@@ -373,9 +373,16 @@ by that app, including the workspace lockfile and route registration when they
 changed. When the saved build selected concrete framework versions, Builder
 applies those versions to the destination's catalog and shows the shared
 upgrade in the same review. That scope comes from the verified first creation,
-accepted build plan and repository output. Revisions to an app already present in the destination use the
-existing-app review scope. The creator accepts the current destination diff
-and approves the sealed publication through Builder.
+accepted build plan and repository output. Revisions to an app already present
+in the destination use the existing-app review scope. The creator accepts the
+current destination diff and approves the sealed publication through Builder.
+
+An app-only correction to that first draft retains its approved registration.
+Builder verifies the original proposal, successful publication, and current
+draft head before carrying the registration into the private merge candidate.
+The repository's automatic merge supplies the non-app files. Builder checks
+that those files stay unchanged while reviewing the correction and binds the
+update approval to the current draft and resolved tree.
 
 If retained workspace metadata is missing after recovery, Builder reconstructs
 that original manifest from the saved source commit's Git blobs and verifies it
