@@ -27,12 +27,14 @@ export interface ChangeSetAcceptanceRuntime {
   reviewSource: typeof reviewAppliedProductSource;
   prepareSourceReview?: typeof prepareAppliedProductSourceReview;
   finalizeSourceReview?: typeof finalizeAppliedProductSourceReview;
+  readDirectProductionGrant?: typeof currentDirectProductionGrant;
 }
 const changeSetAcceptanceRuntime: ChangeSetAcceptanceRuntime = {
   observeChangeSet: observeNormalizedChangeSet,
   reviewSource: reviewAppliedProductSource,
   prepareSourceReview: prepareAppliedProductSourceReview,
   finalizeSourceReview: finalizeAppliedProductSourceReview,
+  readDirectProductionGrant: currentDirectProductionGrant,
 };
 /** Internal ports preserve optional independent source review without public injection. */
 export const createChangeSetAcceptanceTool = (
@@ -114,7 +116,8 @@ export const createChangeSetAcceptanceTool = (
         turnId: ctx.session.turn.id,
       };
       const nextDeliveryStep = () => {
-        if (currentDirectProductionGrant(ctx, { appId: state.appSpec.appId }) === undefined) {
+        const grant = runtime.readDirectProductionGrant?.(ctx, { appId: state.appSpec.appId });
+        if (grant === undefined) {
           return {};
         }
         const draftReview = draftReviewAfterTechnicalValidation(
