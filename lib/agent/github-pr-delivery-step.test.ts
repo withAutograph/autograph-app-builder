@@ -192,6 +192,7 @@ it("refuses a mismatch between the approval target and the live reviewed publica
   await expect(step({ ...approval, headSha: "d".repeat(40) })).resolves.toEqual({
     status: "revision-changed",
   });
+  expect(mocks.production).not.toHaveBeenCalled();
   expect(mocks.run).not.toHaveBeenCalled();
 });
 
@@ -244,21 +245,43 @@ it("waits for managed setup and the current required check in a delegated Produc
   });
   mocks.run.mockResolvedValue({ evidence: { kind: "pr-ready", readyAt }, status: "succeeded" });
   await expect(step(approval)).resolves.toEqual({ readyAt, status: "waiting-for-checks" });
+  const productionRead = {
+    appId: managedSetup.appId,
+    repositoryId: managedSetup.repositoryId,
+    repositoryFullName: managedSetup.repositoryFullName,
+    reviewedHeadSha: reviewedTarget.headSha,
+  };
+  expect(mocks.production).toHaveBeenLastCalledWith(
+    productionRead,
+    expect.anything(),
+    expect.anything(),
+  );
+  mocks.production.mockClear();
 
   mocks.inspect.mockResolvedValue(observe({ checks: "pending" }));
   await expect(step(approval, readyAt)).resolves.toEqual({ readyAt, status: "waiting-for-checks" });
   expect(mocks.run).toHaveBeenCalledTimes(1);
+  expect(mocks.production).not.toHaveBeenCalled();
 
   mocks.inspect.mockResolvedValue(observe({ checks: "passed" }));
   mocks.run.mockResolvedValue({
     evidence: { kind: "pr-merge", mergeCommitSha },
     status: "succeeded",
   });
-  await expect(step(approval, readyAt)).resolves.toMatchObject({
+  await expect(step(approval, readyAt)).resolves.toEqual({
     status: "merged",
     mergeCommitSha,
-    nativeProductionTarget: { appId: "example-app" },
+    nativeProductionTarget: {
+      appId: managedSetup.appId,
+      repositoryId: managedSetup.repositoryId,
+      repositoryFullName: managedSetup.repositoryFullName,
+    },
   });
+  expect(mocks.production).toHaveBeenCalledExactlyOnceWith(
+    productionRead,
+    expect.anything(),
+    expect.anything(),
+  );
   expect(mocks.run).toHaveBeenNthCalledWith(
     2,
     expect.objectContaining({ kind: "pr-merge", readyAt, reviewedTarget }),

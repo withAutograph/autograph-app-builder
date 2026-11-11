@@ -17,7 +17,10 @@ import type {
 import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contract";
 import { appAccessSnapshotSchema } from "../app-access/contracts";
 import { describeAppAccessIntent } from "./app-access-intent";
-import { repositoryProductionDeliveryStatusSchema } from "../provisioning/repository-production-delivery";
+import {
+  repositoryProductionDeliveryStatusSchema,
+  repositoryProductionDeliveryTargetSchema,
+} from "../provisioning/repository-production-delivery";
 import type { RepositoryProductionDeliveryTarget } from "../provisioning/repository-production-delivery";
 import { retainManagedProductionDeliveryRequirement } from "./production-delivery-requirement";
 import { repositoryProductionNativeStatusSchema } from "../provisioning/repository-production-native-status-contract";
@@ -54,8 +57,18 @@ interface RepositoryProductionRequestExtras {
   creatorEmail?: string;
   repositoryId?: string;
   repositoryFullName?: string;
+  reviewedHeadSha?: string;
   approvalReference?: RepositoryProductionApprovalReference;
 }
+
+const repositoryProductionErrorCode = async (response: Response): Promise<string | undefined> => {
+  try {
+    const failure = z.object({ code: z.string() }).safeParse(await response.json());
+    return failure.success ? failure.data.code : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 /** A failed read is not evidence that preparation ran or changed a resource. */
 export const repositoryProductionResponseError = async (
@@ -67,15 +80,7 @@ export const repositoryProductionResponseError = async (
       ? new RepositoryProductionNativeAccessChangedError()
       : new Error("Builder could not check this app’s current availability.");
   }
-  let code = "";
-  try {
-    const failure = z.object({ code: z.string() }).safeParse(await response.json());
-    if (failure.success) {
-      ({ code } = failure.data);
-    }
-  } catch {
-    // A non-JSON transport failure retains the ordinary uncertainty message.
-  }
+  const code = await repositoryProductionErrorCode(response);
   if (code === "app_setup_destination_required") {
     return new Error(
       "Builder could not yet resolve this app's repository and current source for Production. Continue its saved delivery in the same session, then check Production setup again.",
@@ -116,11 +121,10 @@ export const createRepositoryProductionClient = (input: {
 }) => {
   const endpoint = repositoryProductionEndpoint(input.endpoint);
   const { ownerContext } = input;
-  const send = async <T>(
+  const request = async (
     appId: string,
     action: RepositoryProductionAction,
-    schema: z.ZodType<T>,
-    extra: RepositoryProductionRequestExtras = {},
+    extra: RepositoryProductionRequestExtras,
   ) => {
     input.signal.throwIfAborted();
     const workload = await input.workloadToken();
@@ -143,6 +147,27 @@ export const createRepositoryProductionClient = (input: {
       }),
     });
     input.signal.throwIfAborted();
+    return response;
+  };
+  const send = async <T>(
+    appId: string,
+    action: RepositoryProductionAction,
+    schema: z.ZodType<T>,
+    extra: RepositoryProductionRequestExtras = {},
+  ) => {
+    let response = await request(appId, action, extra);
+    const withReviewedHead = action === "delivery-status" && extra.reviewedHeadSha !== undefined;
+    if (
+      withReviewedHead &&
+      response.status === 400 &&
+      (await repositoryProductionErrorCode(response.clone())) === "request_invalid"
+    ) {
+      // Older operators reject the additional field before their strict same-session read.
+      response = await request(appId, action, {
+        repositoryId: extra.repositoryId,
+        repositoryFullName: extra.repositoryFullName,
+      });
+    }
     if (!response.ok) {
       throw await repositoryProductionResponseError(response, action);
     }
@@ -239,7 +264,7 @@ export const createRepositoryProductionClient = (input: {
         appId,
         "delivery-status",
         repositoryProductionDeliveryStatusSchema,
-        target,
+        repositoryProductionDeliveryTargetSchema.parse(target),
       );
       if (
         result.appId !== appId ||

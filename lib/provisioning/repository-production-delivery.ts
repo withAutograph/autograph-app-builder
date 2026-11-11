@@ -1,9 +1,17 @@
 import { z } from "zod";
 
-/** The reviewed GitHub destination, independently resolved by the protected service. */
-export const repositoryProductionDeliveryTargetSchema = z.strictObject({
+const repositoryFields = {
   repositoryId: z.string().regex(/^[1-9][0-9]*$/u),
   repositoryFullName: z.string().regex(/^[^/\s]+\/[^/\s]+$/u),
+};
+
+/** The reviewed GitHub destination and optional read-only head evidence. */
+export const repositoryProductionDeliveryTargetSchema = z.strictObject({
+  ...repositoryFields,
+  reviewedHeadSha: z
+    .string()
+    .regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u)
+    .optional(),
 });
 export type RepositoryProductionDeliveryTarget = z.infer<
   typeof repositoryProductionDeliveryTargetSchema
@@ -12,7 +20,7 @@ export type RepositoryProductionDeliveryTarget = z.infer<
 const fields = {
   version: z.literal(1),
   appId: z.string().min(1),
-  ...repositoryProductionDeliveryTargetSchema.shape,
+  ...repositoryFields,
 };
 /** Read-only setup facts; readiness does not perform or authorize a provider effect. */
 export const repositoryProductionDeliveryStatusSchema = z.discriminatedUnion("applicable", [

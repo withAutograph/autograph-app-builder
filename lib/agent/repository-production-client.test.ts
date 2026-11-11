@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { repositoryProductionResponseError } from "./repository-production-client";
+import { describe, expect, it, vi } from "vitest";
+import {
+  createRepositoryProductionClient,
+  repositoryProductionResponseError,
+} from "./repository-production-client";
 
 describe("Production request failure guidance", () => {
   it.each(["plan", "setup-status"] as const)(
@@ -31,5 +34,116 @@ describe("Production request failure guidance", () => {
     expect(error.message).toContain("saved delivery in the same session");
     expect(error.message).toContain("repository and current source for Production");
     expect(error.message).not.toContain("never expose");
+  });
+});
+
+const repository = { repositoryId: "123", repositoryFullName: "example/repo" };
+const reviewedTarget = { ...repository, reviewedHeadSha: "a".repeat(40) };
+const status = {
+  version: 1,
+  appId: "example-app",
+  ...repository,
+  applicable: true,
+  operationRef: "11111111-1111-4111-a111-111111111111",
+  state: "ready",
+  preparationRequired: false,
+};
+
+const deliveryClient = () => {
+  const authority = {
+    audience: "https://builder.test/mcp",
+    issuer: "https://builder.test/api/auth",
+    ownerUserId: "owner",
+    workspaceId: "workspace",
+  };
+  const ownerContext = {
+    kind: "direct" as const,
+    authority,
+    principal: { ...authority, scopes: ["autograph:send"] },
+    sessionId: "session",
+    adapterSessionId: "adapter",
+    adapterGeneration: 1,
+  };
+  const fetch = vi.fn<typeof globalThis.fetch>();
+  const client = createRepositoryProductionClient({
+    endpoint: "https://operator.test/",
+    ownerContext,
+    callId: "delivery-status",
+    signal: new AbortController().signal,
+    workloadToken: vi.fn<() => Promise<string>>().mockResolvedValue("builder-token"),
+    fetch,
+  });
+  const requestBody = (target: typeof repository) =>
+    JSON.stringify({
+      version: 1,
+      action: "delivery-status",
+      appId: status.appId,
+      sessionId: ownerContext.sessionId,
+      ownerContext,
+      ...target,
+    });
+  return { client, fetch, requestBody };
+};
+
+describe("reviewed-head Production readiness transport", () => {
+  it("sends the reviewed SHA in the read and preserves the readiness response shape", async () => {
+    const fixture = deliveryClient();
+    fixture.fetch.mockResolvedValueOnce(Response.json(status));
+    await expect(fixture.client.deliveryStatus(status.appId, reviewedTarget)).resolves.toEqual(
+      status,
+    );
+    expect(fixture.fetch).toHaveBeenCalledExactlyOnceWith(
+      new URL("https://operator.test/v1/repository-production"),
+      expect.objectContaining({ body: fixture.requestBody(reviewedTarget) }),
+    );
+  });
+
+  it("retries the exact legacy read once on an explicit request-shape rejection", async () => {
+    const fixture = deliveryClient();
+    fixture.fetch
+      .mockResolvedValueOnce(Response.json({ code: "request_invalid" }, { status: 400 }))
+      .mockResolvedValueOnce(Response.json(status));
+    await expect(fixture.client.deliveryStatus(status.appId, reviewedTarget)).resolves.toEqual(
+      status,
+    );
+    expect(fixture.fetch).toHaveBeenCalledTimes(2);
+    expect(fixture.fetch).toHaveBeenNthCalledWith(
+      2,
+      new URL("https://operator.test/v1/repository-production"),
+      expect.objectContaining({ body: fixture.requestBody(repository) }),
+    );
+  });
+
+  it.each([
+    [403, "app_access_denied"],
+    [403, "request_invalid"],
+    [400, "app_access_denied"],
+    [503, "app_access_unknown"],
+  ] as const)("keeps %s %s closed without a fallback", async (statusCode, code) => {
+    const fixture = deliveryClient();
+    fixture.fetch.mockResolvedValueOnce(Response.json({ code }, { status: statusCode }));
+    await expect(fixture.client.deliveryStatus(status.appId, reviewedTarget)).rejects.toThrow(
+      "could not read this app's Production setup",
+    );
+    expect(fixture.fetch).toHaveBeenCalledOnce();
+  });
+
+  it("preserves a denial from an older operator when the legacy read cannot prove authority", async () => {
+    const fixture = deliveryClient();
+    fixture.fetch
+      .mockResolvedValueOnce(Response.json({ code: "request_invalid" }, { status: 400 }))
+      .mockResolvedValueOnce(Response.json({ code: "app_access_denied" }, { status: 403 }));
+    await expect(fixture.client.deliveryStatus(status.appId, reviewedTarget)).rejects.toThrow(
+      "could not read this app's Production setup",
+    );
+    expect(fixture.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a malformed reviewed SHA without contacting the operator", async () => {
+    const fixture = deliveryClient();
+    await expect(
+      fixture.client.deliveryStatus(status.appId, { ...repository, reviewedHeadSha: "main" }),
+    ).rejects.toThrow();
+    expect(fixture.fetch).not.toHaveBeenCalled();
   });
 });

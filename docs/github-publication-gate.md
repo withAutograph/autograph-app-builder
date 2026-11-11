@@ -228,6 +228,9 @@ Result recovery runs before recording the new published source, so that record
 is not a prerequisite for proving an already accepted write. Live-ref rereads,
 expected-OID non-force updates, review and separate effect approval remain
 required. An unproved branch advance still leaves the draft untouched.
+When recovery verifies an already applied result for the still-current approved
+candidate, Builder retains the recovered reconciliation for Ready and merge.
+Recovery records the existing publication without a second GitHub update.
 
 When the original app review cannot be replayed onto its current owned draft,
 `prepare_github_draft_pr_reconciliation` supports the explicit

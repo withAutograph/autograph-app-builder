@@ -93,6 +93,7 @@ import { PhysicalResourceLeaseBusyError } from "./postgres-physical-resource-lea
 import { createRepositoryProductionWorkers } from "./repository-production-workers";
 import { createRepositoryProductionSetup } from "./repository-production-setup";
 import { createRepositoryProductionDeliveryStatus } from "./repository-production-delivery-status";
+import { canReuseCompletedRepositoryProductionSetup } from "./repository-production-setup-reuse";
 import type {
   RepositoryProductionEffectContext,
   RepositoryProductionSetupPorts,
@@ -1124,6 +1125,14 @@ export const createRepositoryProductionNativeHandler =
             repositories: configuration.repositories,
             readSession: readObservationSession,
             store,
+            canObserveSavedSetup: async (owner, scope, row) =>
+              canReuseCompletedRepositoryProductionSetup({
+                owner,
+                scope,
+                row,
+                current: await resolve(owner),
+                isRuntimeBindingReady: (saved) => workers(scope).isRuntimeBindingReady(saved),
+              }),
           }),
           teamId: configuration.operator.ownerId,
           readCredential,

@@ -6,7 +6,10 @@ import {
   ContextContainer,
   contextStorage,
 } from "../../node_modules/eve/dist/src/context/container.js";
-import type { DraftReconciliationCompletion } from "./draft-reconciliation-state";
+import type {
+  DraftReconciliationCandidate,
+  DraftReconciliationCompletion,
+} from "./draft-reconciliation-state";
 import type { approvalReceiptSchema as ActualApprovalReceiptSchema } from "./approval-receipt";
 
 import publishTool from "../../agent/tools/publish_github_draft_pr";
@@ -100,6 +103,8 @@ const hooks = vi.hoisted(() => {
     },
     candidate: {
       appId: "spend-review",
+      repositoryId: proposal.repositoryId,
+      pullRequestNumber: proposal.pullRequestNumber,
       proposal,
       review: reconciliationReview,
       validation: {
@@ -160,6 +165,10 @@ vi.mock("./draft-reconciliation-state", () => ({
   retainDraftReconciliationCompletion: (completion: DraftReconciliationCompletion) => {
     hooks.completions.push(completion);
   },
+  samePersistedDraftCandidate: (
+    left: DraftReconciliationCandidate | null,
+    right: DraftReconciliationCandidate | null,
+  ) => JSON.stringify(left) === JSON.stringify(right),
   updateExactDraftReconciliation: ({
     expected,
     operation,
@@ -593,7 +602,37 @@ describe("publication records actual source for its compiled app release", () =>
     expect(hooks.assertOwner).toHaveBeenCalled();
     expect(hooks.reconcile).not.toHaveBeenCalled();
     expect(hooks.inspect).not.toHaveBeenCalled();
+    expect(hooks.candidate.publishedReconciliation).toEqual(completion?.proposal);
   });
+
+  it.each(["moved candidate", "different app", "different pull request"] as const)(
+    "records the verified historical source without projecting it over a %s",
+    async (change) => {
+      if (change === "different app") {
+        hooks.candidate.appId = "different-app";
+      } else if (change === "different pull request") {
+        hooks.candidate.pullRequestNumber += 1;
+      }
+      const [completion] = hooks.completions;
+      const publication = { repositoryId: "repository", headSha: "verified-existing-head" };
+      hooks.applied.mockImplementationOnce(async () => {
+        if (change === "moved candidate") {
+          hooks.candidate = { ...hooks.candidate, root: "/workspace/new-candidate" };
+        }
+        return await Promise.resolve({ applied: true, observation: publication });
+      });
+      // SAFETY: The controlled owner and publication ports consume this minimal session context.
+      await expect(reconcileTool.execute(input, ctx as never)).resolves.toMatchObject({
+        appSourceRecording: { status: "recorded" },
+      });
+      expect(hooks.record).toHaveBeenCalledWith(
+        expect.objectContaining({ completion, publication }),
+      );
+      expect(hooks.candidate.publishedReconciliation).toBeUndefined();
+      expect(hooks.reconcile).not.toHaveBeenCalled();
+      expect(hooks.inspect).not.toHaveBeenCalled();
+    },
+  );
   it("reports a changed current capture as recovery required rather than a recorded current release", async () => {
     hooks.applied.mockResolvedValue({
       applied: true,
@@ -614,6 +653,7 @@ describe("publication records actual source for its compiled app release", () =>
     // SAFETY: Controlled ports consume only the supplied session and call ID; no real provider work is possible.
     await reconcileTool.execute({ ...input, recordCurrentEquivalentRelease: true }, ctx as never);
     expect(hooks.applied).toHaveBeenCalled();
+    expect(hooks.candidate.publishedReconciliation).toBeUndefined();
     expect(hooks.reconcile).not.toHaveBeenCalled();
     expect(hooks.record).not.toHaveBeenCalled();
     expect(hooks.inspect).not.toHaveBeenCalled();

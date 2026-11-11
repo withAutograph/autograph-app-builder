@@ -235,10 +235,11 @@ export const createRepositoryProductionHandler =
         return reply({ version: 1, ...(await deps.readSetup(owner)) });
       }
       if (body.action === "delivery-status") {
-        const target = {
-          repositoryId: body.repositoryId,
-          repositoryFullName: body.repositoryFullName,
-        };
+        const { repositoryId, repositoryFullName, reviewedHeadSha } = body;
+        const target: RepositoryProductionDeliveryTarget = { repositoryId, repositoryFullName };
+        if (reviewedHeadSha !== undefined) {
+          target.reviewedHeadSha = reviewedHeadSha;
+        }
         const result = repositoryProductionDeliveryStatusSchema.parse(
           await deps.readDeliveryStatus(owner, target),
         );

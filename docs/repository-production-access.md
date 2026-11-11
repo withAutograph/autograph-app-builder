@@ -378,6 +378,14 @@ owner, saved app and reviewed repository identity. It projects existing setup
 journal/effect and runtime-binding receipt readiness without launching People or
 Auth workers, acquiring an effect lease, changing resources, or testing the app.
 
+A source-only revision in a new session can use the completed setup for the
+same canonical owner, app, and configured Production destination. The
+operator compares the published capture at the reviewed GitHub head with the
+saved approved setup effects, including the checked release, creator access
+and roles. The original setup remains the owner of its database and runtime
+binding. The revision can read readiness and observe availability. Changes to
+the approved setup still require the existing setup authority and approval.
+
 `read_github_pr_delivery` returns the normal plan/preparation continuation when
 required setup is missing or changed, or the saved status continuation while an
 existing setup is progressing. It exposes the existing PR approval once those

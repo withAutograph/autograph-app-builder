@@ -71,7 +71,10 @@ interface FixtureActivation {
   aliasAssigned?: boolean;
   aliasError?: { code: string; message: string } | null;
 }
-const fixture = (appId = "requests") => {
+type CanObserveSavedSetup = NonNullable<
+  Parameters<typeof createRepositoryProductionObservationResolver>[0]["canObserveSavedSetup"]
+>;
+const fixture = (appId = "requests", canObserveSavedSetup?: CanObserveSavedSetup) => {
   const owner = ownerFor(appId);
   const scope: RepositoryProductionScope = {
     authority,
@@ -105,6 +108,7 @@ const fixture = (appId = "requests") => {
     repositories: [profile],
     readSession,
     store,
+    canObserveSavedSetup,
   });
   let activeId = "provider-current";
   let readyState = "READY";
@@ -209,9 +213,9 @@ const fixture = (appId = "requests") => {
     requests,
     controller,
     read,
-    saved: (persistent = false) => {
+    saved: (persistent = false, sessionId = owner.sessionId) => {
       const record = initialRepositoryProductionRecord(scope, {
-        sessionId: owner.sessionId,
+        sessionId,
         sourceSha: "a".repeat(40),
         creatorRoles: [],
         entryPath: `/${appId}`,
@@ -225,7 +229,7 @@ const fixture = (appId = "requests") => {
             }
           : { kind: "none" },
       });
-      record.ownerContext = owner.ownerContext;
+      record.ownerContext = { ...structuredClone(owner.ownerContext), sessionId };
       row = { operationRef: repositoryProductionOperationRef(scope), revision: 1, record };
       return row;
     },
@@ -289,14 +293,64 @@ describe("read-only native Production observation", () => {
     },
   );
   it("reads a retained persistent app without its old artifacts, setup approval or completed effects", async () => {
-    const f = fixture();
+    const canObserveSavedSetup = vi.fn<CanObserveSavedSetup>().mockResolvedValue(false);
+    const f = fixture("requests", canObserveSavedSetup);
     const row = f.saved(true);
     delete f.session.builderDestination;
     expect(row.record.approval).toBeUndefined();
     const result = await f.read(f.owner);
     expect(result.status).toBe("available");
+    expect(canObserveSavedSetup).not.toHaveBeenCalled();
     expect(row.revision).toBe(1);
     expect(row.record.effects["allocate-storage"].state).toBe("idle");
+  });
+  it("observes an existing app from a fresh revision only through verified saved setup", async () => {
+    const canObserveSavedSetup = vi.fn<CanObserveSavedSetup>().mockResolvedValue(true);
+    const f = fixture("requests", canObserveSavedSetup);
+    const row = f.saved(true, "prior-session");
+    const before = structuredClone(row);
+    // The authenticated revision proof can establish the exact repository when
+    // a fresh session lacks an explicit saved destination.
+    delete f.session.builderDestination;
+    expect(await f.read(f.owner)).toMatchObject({
+      status: "available",
+      app: { state: "sign-in-required", url: "https://apps.example/requests" },
+      requestedRevision: "unassessed",
+    });
+    expect(canObserveSavedSetup).toHaveBeenCalledWith(f.owner, f.scope, row);
+    expect(row).toEqual(before);
+    expect(f.requests.every(({ initial }) => initial?.method === "GET")).toBe(true);
+  });
+  it("does not disclose availability when another session's setup proof is unavailable", async () => {
+    const f = fixture("requests", vi.fn<CanObserveSavedSetup>().mockResolvedValue(false));
+    f.saved(true, "prior-session");
+    await expect(f.read(f.owner)).rejects.toMatchObject({ code: "authorization_required" });
+    expect(f.readCredential).not.toHaveBeenCalled();
+    expect(f.requests).toEqual([]);
+  });
+  it("does not try cross-session setup proof for a different saved owner", async () => {
+    const canObserveSavedSetup = vi.fn<CanObserveSavedSetup>().mockResolvedValue(true);
+    const f = fixture("requests", canObserveSavedSetup);
+    const row = f.saved(true, "prior-session");
+    if (!row.record.ownerContext) {
+      throw new Error("Missing fixture owner");
+    }
+    row.record.ownerContext.authority.ownerUserId = "another-owner";
+    await expect(f.read(f.owner)).rejects.toMatchObject({ code: "authorization_required" });
+    expect(canObserveSavedSetup).not.toHaveBeenCalled();
+    expect(f.requests).toEqual([]);
+  });
+  it("rechecks Stop after a pending cross-session setup read before provider access", async () => {
+    const canObserveSavedSetup = vi.fn<CanObserveSavedSetup>();
+    const f = fixture("requests", canObserveSavedSetup);
+    f.saved(true, "prior-session");
+    canObserveSavedSetup.mockImplementation(async () => {
+      f.session.status = "cancelled";
+      return true;
+    });
+    await expect(f.read(f.owner)).rejects.toMatchObject({ code: "authorization_required" });
+    expect(f.readCredential).not.toHaveBeenCalled();
+    expect(f.requests).toEqual([]);
   });
   it("returns a nonblocking managed service issue when no owned destination can be resolved", async () => {
     const f = fixture();

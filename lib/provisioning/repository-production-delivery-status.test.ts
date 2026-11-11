@@ -68,8 +68,12 @@ interface DeliveryFixtureState {
   row?: RepositoryProductionRow;
 }
 
-const fixture = () => {
-  const current = { scope: structuredClone(scope), intent: structuredClone(intent) };
+const fixture = (currentOwner = owner) => {
+  const current = {
+    scope: structuredClone(scope),
+    intent: { ...structuredClone(intent), sessionId: currentOwner.sessionId },
+    publishedDescription: true,
+  };
   const record = initialRepositoryProductionRecord(scope, intent);
   record.ownerContext = structuredClone(owner.ownerContext);
   record.approval = {
@@ -92,9 +96,9 @@ const fixture = () => {
     repositories: [profile],
     readSession: vi.fn(async (requested: RepositoryProductionRequestOwner) => {
       if (
-        requested.appId !== owner.appId ||
-        requested.sessionId !== owner.sessionId ||
-        !isDeepStrictEqual(requested.ownerContext, owner.ownerContext)
+        requested.appId !== currentOwner.appId ||
+        requested.sessionId !== currentOwner.sessionId ||
+        !isDeepStrictEqual(requested.ownerContext, currentOwner.ownerContext)
       ) {
         throw new HostedOperatorError("authorization_required");
       }
@@ -112,7 +116,100 @@ const fixture = () => {
   };
 };
 
+const revision = () => {
+  const currentOwner = {
+    ...owner,
+    sessionId: "revision",
+    ownerContext: { ...owner.ownerContext, sessionId: "revision", adapterSessionId: "revision" },
+  };
+  const f = fixture(currentOwner);
+  const reviewedHeadSha = "e".repeat(40);
+  f.current.intent.sourceSha = reviewedHeadSha;
+  if (f.current.intent.storage.kind === "postgres") {
+    f.current.intent.storage.artifactRef = "revision-artifact";
+  }
+  return { ...f, currentOwner, target: { ...target, reviewedHeadSha } };
+};
+
 describe("read-only managed Production delivery status", () => {
+  it("reuses completed setup for an equivalent published app revision in a new session", async () => {
+    const f = revision();
+    const before = structuredClone(f.saved.row);
+    expect(await f.read(f.currentOwner, f.target)).toMatchObject({
+      ...target,
+      appId: owner.appId,
+      applicable: true,
+      preparationRequired: false,
+      state: "ready",
+      operationRef: before?.operationRef,
+    });
+    expect(f.saved.row).toEqual(before);
+    expect(f.deps.readSession).toHaveBeenCalledTimes(2);
+  });
+
+  it("requires the exact published GitHub head before a revision can reuse setup", async () => {
+    const f = revision();
+    await expect(f.read(f.currentOwner, target)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    await expect(
+      f.read(f.currentOwner, { ...f.target, reviewedHeadSha: "f".repeat(40) }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    f.current.publishedDescription = false;
+    await expect(f.read(f.currentOwner, f.target)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.deps.isRuntimeBindingReady).not.toHaveBeenCalled();
+  });
+
+  it.each(
+    Object.entries({
+      approval(f) {
+        delete f.record.approval;
+      },
+      owner(f) {
+        f.record.ownerContext = {
+          ...owner.ownerContext,
+          authority: { ...authority, ownerUserId: "other-owner" },
+        };
+      },
+      session(f) {
+        f.record.ownerContext = { ...owner.ownerContext, sessionId: "different-setup-session" };
+      },
+      schema(f) {
+        if (f.current.intent.storage.kind === "postgres") {
+          f.current.intent.storage.manifestSha256 = "f".repeat(64);
+        }
+      },
+      role(f) {
+        f.current.intent.creatorRoles = ["editor"];
+      },
+      account(f) {
+        f.current.intent.creatorEmail = "different@example.com";
+      },
+      access(f) {
+        f.current.intent.access = {
+          mode: "self-signup",
+          eligibility: "public",
+          appRoles: ["member"],
+        };
+      },
+      organization(f) {
+        f.current.scope.organizationId = "other-organization";
+      },
+      pending(f) {
+        f.record.effects["install-schema"] = { state: "pending", attemptId: "attempt" };
+      },
+      "runtime binding"(f) {
+        f.deps.isRuntimeBindingReady.mockReturnValue(false);
+      },
+    } satisfies Record<string, (fixture: ReturnType<typeof revision>) => void>),
+  )("does not reuse cross-session setup with changed %s", async (_kind, change) => {
+    const f = revision();
+    change(f);
+    await expect(f.read(f.currentOwner, f.target)).rejects.toThrow();
+  });
+
   it("reports the same ready setup across a code-only source revision", async () => {
     const f = fixture();
     f.current.intent.sourceSha = "c".repeat(40);

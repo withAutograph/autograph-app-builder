@@ -16,6 +16,7 @@ import { sameRepositoryProductionSetupEffects } from "./repository-production-in
 import { assertRepositoryProductionManagementRecord } from "./repository-production-management-subject";
 import type { ManagementProfile } from "./repository-production-management-subject";
 import { repositoryProductionSetupComplete } from "./repository-production-setup";
+import { canReuseCompletedRepositoryProductionSetup } from "./repository-production-setup-reuse";
 import type {
   RepositoryProductionSetupResult,
   RepositoryProductionStore,
@@ -24,9 +25,11 @@ import type {
 interface DeliveryStatusDependencies {
   repositories: readonly ManagementProfile[];
   readSession: (owner: RepositoryProductionRequestOwner) => Promise<void>;
-  resolveCurrent: (
-    owner: RepositoryProductionRequestOwner,
-  ) => Promise<{ scope: RepositoryProductionScope; intent: RepositoryProductionIntent }>;
+  resolveCurrent: (owner: RepositoryProductionRequestOwner) => Promise<{
+    scope: RepositoryProductionScope;
+    intent: RepositoryProductionIntent;
+    publishedDescription?: boolean;
+  }>;
   store: Pick<RepositoryProductionStore, "read">;
   isRuntimeBindingReady: (row: RepositoryProductionRow) => boolean;
 }
@@ -43,7 +46,8 @@ export const createRepositoryProductionDeliveryStatus =
     if (owner.sessionId !== owner.ownerContext.sessionId) {
       throw new HostedOperatorError("authorization_required");
     }
-    const result = { version: 1 as const, appId: owner.appId, ...target };
+    const { repositoryId, repositoryFullName, reviewedHeadSha } = target;
+    const result = { version: 1 as const, appId: owner.appId, repositoryId, repositoryFullName };
     const matches = deps.repositories.filter(
       (profile) =>
         profile.workspaceId === owner.ownerContext.authority.workspaceId &&
@@ -73,6 +77,28 @@ export const createRepositoryProductionDeliveryStatus =
       throw new HostedOperatorError("authorization_required");
     }
     const row = await deps.store.read(scope);
+    if (row !== undefined && row.record.intent.sessionId !== owner.sessionId) {
+      const reuse =
+        reviewedHeadSha === current.intent.sourceSha &&
+        canReuseCompletedRepositoryProductionSetup({
+          owner,
+          scope,
+          row,
+          current,
+          isRuntimeBindingReady: deps.isRuntimeBindingReady,
+        });
+      if (!reuse) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      await deps.readSession(owner);
+      return repositoryProductionDeliveryStatusSchema.parse({
+        ...result,
+        applicable: true,
+        operationRef: row.operationRef,
+        preparationRequired: false,
+        state: "ready",
+      });
+    }
     if (row !== undefined) {
       assertRepositoryProductionManagementRecord(owner, scope, row);
     }
