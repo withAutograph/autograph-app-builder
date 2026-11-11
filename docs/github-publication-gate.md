@@ -181,11 +181,12 @@ assessment. Optional `inspect_github_draft_pr_reconciliation` calls with
 `kind: "changes"` page the file index, while `kind: "diff"` supports raw byte
 cursors/path selection for the resolved diff against the live base and the delta
 from the old PR head. Neither pagination must be exhausted. Inspection progress
-is not review or publication authority. A separate sealed approval binds both
-parent commits, the resolved
-tree, both diffs, the draft PR, and the tenant-scoped repository. GitHub receives
-a merge commit through an expected-head update without force pushing. A moved
-base or head requires a fresh merge, validation, review, and approval.
+is not review or publication authority. Use the review's returned `nextCall` to
+seal that exact candidate. A separate approval binds both parent commits, the
+resolved tree, both diffs, the draft PR, and the tenant-scoped repository.
+GitHub receives a merge commit through an expected-head update without force
+pushing. A moved base or head requires a fresh merge, validation, review, and
+approval.
 
 When only the base advances, preparation carries the same draft's private app
 repairs into a fresh candidate through a three-way Git merge against the previous
@@ -730,8 +731,10 @@ availability with a read of the same owned app and destination. The merge
 approval ends at merge. Provider activation proceeds independently, and a
 currently available app can be opened while delivery of the latest update
 remains unconfirmed. A saved session can check its app again through
-`observe-app-production` using current owner access. Old finished calls are not
-migrated or resurrected by this recovery.
+`observe-app-production` using current owner access. That standalone check
+returns the current result, including pending, after one observation. Pending
+availability leaves the normal draft and Ready/merge flow available. Old finished
+calls are not migrated or resurrected by this recovery.
 
 An owned open PR that has already become Ready can be corrected through the same
 private preparation, validation, review and approved update flow. Builder proves

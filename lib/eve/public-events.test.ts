@@ -2225,6 +2225,21 @@ describe("native app availability progress", () => {
     expect(JSON.stringify(events)).not.toContain(url);
   });
 
+  it("completes a pending availability check without offering an unverified app link", () => {
+    const events = projectInstalledEveEvents([
+      complete("observe-app-production", {
+        ...nativeProduction,
+        status: "pending",
+        app: { state: "not-observed", url: appUrl },
+      }),
+    ]);
+    expect(events).toMatchObject([
+      { state: "completed", type: "progress" },
+      { type: "assistant_message" },
+    ]);
+    expect(JSON.stringify(events)).not.toContain(appUrl);
+  });
+
   it("reports a service interruption with an existing safe app link", () => {
     const events = projectInstalledEveEvents([
       complete("finish-github-pr-delivery", {
