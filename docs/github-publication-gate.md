@@ -362,6 +362,21 @@ Builder includes the retained registration and dependency changes against the
 original starter manifest. If the destination has independently changed one of
 those shared files, reconcile that file against the current destination before
 publishing.
+
+A saved new app may have acquired its delivery repository as its source. The
+same `prepare_github_draft_review` flow can recover its first publication.
+Builder retains the saved app, private workspace, original source receipt and
+destination. It verifies the app was absent at the acquired source commit and
+tree and is still absent on the destination's observed default branch. It then
+reviews the complete app and the repository-produced root registration needed
+by that app, including the workspace lockfile and route registration when they
+changed. When the saved build selected concrete framework versions, Builder
+applies those versions to the destination's catalog and shows the shared
+upgrade in the same review. That scope comes from the verified first creation,
+accepted build plan and repository output. Revisions to an app already present in the destination use the
+existing-app review scope. The creator accepts the current destination diff
+and approves the sealed publication through Builder.
+
 If retained workspace metadata is missing after recovery, Builder reconstructs
 that original manifest from the saved source commit's Git blobs and verifies it
 against the existing source tree and workspace digest. It restores only the
@@ -467,8 +482,9 @@ destination setup at `/builds/<session-id>/destination`. Use that setup to choos
 where to store and release the app, then resume the saved build. Publication
 retains its separate approval.
 
-If the user explicitly chose an existing repository for a fresh-template app,
-pass it as `destination: { repository: "owner/name", selectedInstallationId? }`.
+For a new app, a repository the user explicitly chose is its delivery
+destination. Acquire the canonical starter as `fresh-template` and pass the
+chosen repository as `destination: { repository: "owner/name", selectedInstallationId? }`.
 Preparation observes the actual repository and installation through the ordinary
 session-owned GitHub connection. The creator may supply a GitHub repository URL or
 `owner/name`; Builder resolves its connected installation and numeric repository

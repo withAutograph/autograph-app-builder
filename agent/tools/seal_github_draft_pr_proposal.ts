@@ -7,6 +7,7 @@ import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-githu
 import { appBuilderWorkflowState, updateExactWorkflow } from "@/lib/agent/workflow-state";
 import { sourceReceiptEvidence } from "@/lib/repository/source-receipt";
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
+import { firstAppRegistrationPaths } from "@/lib/repository/github-destination-review";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 import { exactNormalizedChangeSet } from "./change_set_status";
 import { publicationDestinationFromReview } from "@/lib/agent/github-publication-destination";
@@ -41,6 +42,7 @@ export default defineTool({
       state.appSpec.appId,
       state.sourceReceipt.sourceKind,
       appBaselineState.get()?.receipt,
+      firstAppRegistrationPaths(state.githubDestinationReview, state.appSpec.appId),
     );
     const runtime =
       state.githubSource === undefined

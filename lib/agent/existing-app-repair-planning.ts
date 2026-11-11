@@ -259,6 +259,20 @@ const sameOwnedAppRepairSource = (
     base.applyReceipt.applyRoot === state.applyReceipt.applyRoot,
   ].every(Boolean);
 
+/** A later app-local repair may retain the first build's applied framework pins. */
+export const firstPublicationFrameworkVersions = (
+  state: Extract<AppBuilderWorkflowState, { phase: "validated" | "reviewed" }>,
+  sessionId: string,
+) =>
+  state.applyReceipt.frameworkUpgrade ??
+  existingAppRepairHistory
+    .get()
+    .findLast(
+      (record) =>
+        record.approvedBase.applyReceipt.frameworkUpgrade !== undefined &&
+        sameOwnedAppRepairSource(record, state, sessionId),
+    )?.approvedBase.applyReceipt.frameworkUpgrade;
+
 /** Lookup context for a new revision; only the provider can prove the prior PR merged. */
 export const priorOwnedAppDraftPublication = (
   state: Extract<AppBuilderWorkflowState, { phase: "validated" | "reviewed" }>,

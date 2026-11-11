@@ -20,6 +20,7 @@ export const planApplicationSourceRegistration = async (
   sandbox: SandboxSession,
   appId: string,
   configBytes?: string,
+  privateCheckout?: { workingDirectory: string; signal?: AbortSignal },
 ) => {
   if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId)) {
     throw new Error("Invalid imported app identity.");
@@ -27,10 +28,20 @@ export const planApplicationSourceRegistration = async (
   const packageName = `@autograph/${appId}`;
   const routes = [`/${appId}`, `/${appId}/:path*`];
   const source = `import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {planMicrofrontendRegistration} from './packages/platform-microfrontends/src/policy/config-registration.ts';const bytes=${configBytes === undefined ? "readFileSync('microfrontends.json','utf8')" : JSON.stringify(configBytes)}; console.log(JSON.stringify(planMicrofrontendRegistration(bytes,{projectName:${JSON.stringify(appId)},packageName:${JSON.stringify(packageName)},routes:${JSON.stringify(routes)},expectedDigest:createHash('sha256').update(bytes).digest('hex')})));`;
-  let result = await sandbox.run({
-    command: `bun -e ${quote(source)}`,
-    workingDirectory: repositoryWorkingDirectory,
-  });
+  const run = async (command: string) => {
+    privateCheckout?.signal?.throwIfAborted();
+    if (privateCheckout === undefined) {
+      return await sandbox.run({ command, workingDirectory: repositoryWorkingDirectory });
+    }
+    const result = await sandbox.run({
+      abortSignal: privateCheckout.signal,
+      command: `MISE_TRUSTED_CONFIG_PATHS="$MISE_TRUSTED_CONFIG_PATHS:"${quote(privateCheckout.workingDirectory)} mise exec --no-deps -- ${command}`,
+      workingDirectory: privateCheckout.workingDirectory,
+    });
+    privateCheckout.signal?.throwIfAborted();
+    return result;
+  };
+  let result = await run(`bun -e ${quote(source)}`);
   if (
     result.exitCode !== 0 &&
     /cannot find module|module_not_found|node_modules|dependencies? (?:are )?missing/iu.test(
@@ -38,17 +49,13 @@ export const planApplicationSourceRegistration = async (
     )
   ) {
     await setBuilderSandboxNetworkPolicy(sandbox, "allow-all");
-    const dependencies = await sandbox.run({
-      command: "bun install --ignore-scripts --filter @autograph/platform-microfrontends",
-      workingDirectory: repositoryWorkingDirectory,
-    });
+    const dependencies = await run(
+      "bun install --ignore-scripts --filter @autograph/platform-microfrontends",
+    );
     if (dependencies.exitCode !== 0) {
       throw new Error("The platform registration planner dependencies are unavailable.");
     }
-    result = await sandbox.run({
-      command: `bun -e ${quote(source)}`,
-      workingDirectory: repositoryWorkingDirectory,
-    });
+    result = await run(`bun -e ${quote(source)}`);
   }
   if (result.exitCode !== 0) {
     throw new Error("The acquired platform could not plan the imported app registration.");

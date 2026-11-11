@@ -52,23 +52,23 @@ export const assertExistingAppReviewScope = (
   appId: string,
   sourceKind: SourceKind,
   baseline?: AppBaselineReceipt,
+  registrationPaths: readonly string[] = [],
 ): void => {
   if (sourceKind !== "existing-repository") {
     return;
   }
-  const baselineSpecs = new Set(
-    baseline?.appId === appId && baseline.platform.commitSha === review.sourceSha
-      ? [`.config/app-specs/${appId}.cue`, `.config/app-specs/${appId}.md`]
-      : [],
-  );
+  const sharedPaths = new Set(registrationPaths);
+  if (baseline?.appId === appId && baseline.platform.commitSha === review.sourceSha) {
+    sharedPaths.add(`.config/app-specs/${appId}.cue`);
+    sharedPaths.add(`.config/app-specs/${appId}.md`);
+  }
+  if (review.frameworkUpgrade !== undefined) {
+    for (const path of frameworkSharedPaths) {
+      sharedPaths.add(path);
+    }
+  }
   const outside = review.approvedPaths.find(
-    (path) =>
-      !path.startsWith(`apps/${appId}/`) &&
-      !baselineSpecs.has(path) &&
-      !(
-        review.frameworkUpgrade !== undefined &&
-        frameworkSharedPaths.some((shared) => path === shared)
-      ),
+    (path) => !path.startsWith(`apps/${appId}/`) && !sharedPaths.has(path),
   );
   if (outside !== undefined) {
     throw new Error(
