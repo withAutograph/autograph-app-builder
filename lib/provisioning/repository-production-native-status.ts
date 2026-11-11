@@ -39,6 +39,8 @@ const deploymentSchema = z.object({
   projectId: id,
   target: z.string().nullable(),
   readyState: id,
+  aliasAssigned: z.boolean().optional(),
+  aliasError: z.object({}).nullish(),
 });
 const catalogSchema = z.object({
   applications: z.array(z.object({ id, basePath: z.string().min(1) })),
@@ -252,16 +254,26 @@ export const createRepositoryProductionNativeStatus =
         const redirects = (domain.redirect ?? null) !== null;
         const domainMatches =
           domain.name === hostname && domain.verified && !branchBound && !redirects;
-        const aliasMatches =
-          alias.alias === hostname &&
-          alias.projectId === scope.projectId &&
-          alias.deploymentId === activeId;
+        const aliasMatches = alias.alias === hostname && alias.projectId === scope.projectId;
         const deploymentMatches =
           deployment.id === activeId &&
           deployment.projectId === scope.projectId &&
           deployment.target === "production";
         if (!domainMatches || !aliasMatches || !deploymentMatches) {
           throw new NativeObservationReadError(domainBinding);
+        }
+        if (alias.deploymentId !== activeId) {
+          const building = ["QUEUED", "INITIALIZING", "BUILDING"].includes(deployment.readyState);
+          const awaitingAlias =
+            deployment.readyState === "READY" && deployment.aliasAssigned === false;
+          if ((!building && !awaitingAlias) || (deployment.aliasError ?? null) !== null) {
+            throw new NativeObservationReadError(domainBinding);
+          }
+          // Vercel can select a build before it assigns the alias, including while deployment checks run.
+          await assertCurrent();
+          result.app = { state: notObserved };
+          result.observedAt = (deps.now?.() ?? new Date()).toISOString();
+          return repositoryProductionNativeStatusSchema.parse(result);
         }
         if (deployment.readyState === "READY") {
           result.deployment = { state: "active" };

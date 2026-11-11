@@ -67,6 +67,10 @@ interface FixtureDomain {
   gitBranch: string | null;
   redirect: string | null;
 }
+interface FixtureActivation {
+  aliasAssigned?: boolean;
+  aliasError?: { code: string; message: string } | null;
+}
 const fixture = (appId = "requests") => {
   const owner = ownerFor(appId);
   const scope: RepositoryProductionScope = {
@@ -104,6 +108,9 @@ const fixture = (appId = "requests") => {
   });
   let activeId = "provider-current";
   let readyState = "READY";
+  let activation: FixtureActivation = {};
+  let aliasDeploymentId: string | undefined;
+  let aliasProjectId = profile.projectId;
   let registered = true;
   let routeStatus = 303;
   let routeOwner: string | null = appId;
@@ -142,8 +149,8 @@ const fixture = (appId = "requests") => {
       if (url.pathname === "/v4/aliases/apps.example") {
         return Response.json({
           alias: "apps.example",
-          projectId: profile.projectId,
-          deploymentId: activeId,
+          projectId: aliasProjectId,
+          deploymentId: aliasDeploymentId ?? activeId,
         });
       }
       if (url.pathname.startsWith("/v13/deployments/")) {
@@ -152,6 +159,7 @@ const fixture = (appId = "requests") => {
           projectId: profile.projectId,
           target: "production",
           readyState,
+          ...activation,
         });
       }
       throw new Error("Unexpected provider read");
@@ -247,6 +255,13 @@ const fixture = (appId = "requests") => {
     },
     setReadyState: (value: string) => {
       readyState = value;
+    },
+    setActivation: (value: FixtureActivation) => {
+      activation = value;
+    },
+    setAlias: (value: { deploymentId?: string; projectId?: string }) => {
+      aliasDeploymentId = value.deploymentId;
+      aliasProjectId = value.projectId ?? profile.projectId;
     },
     setDomain: (value: Partial<FixtureDomain>) => {
       domain = { ...domain, ...value };
@@ -355,11 +370,70 @@ describe("read-only native Production observation", () => {
     });
   });
   it.each([
+    { readyState: "QUEUED", activation: {} },
+    { readyState: "INITIALIZING", activation: {} },
+    { readyState: "BUILDING", activation: {} },
+    { readyState: "READY", activation: { aliasAssigned: false, aliasError: null } },
+  ])(
+    "waits while the selected Production deployment is $readyState and the alias still serves the previous deployment",
+    async ({ readyState, activation }) => {
+      const f = fixture();
+      f.saved();
+      f.setReadyState(readyState);
+      f.setActivation(activation);
+      f.setAlias({ deploymentId: "previous-production" });
+      const pending = await f.read(f.owner);
+      expect(pending).toMatchObject({
+        status: "pending",
+        deployment: { state: "not-observed" },
+        app: { state: "not-observed" },
+      });
+      expect(pending.app.url).toBeUndefined();
+      expect(pending.serviceIssue).toBeUndefined();
+
+      f.setAlias({});
+      f.setReadyState("READY");
+      f.setActivation({ aliasAssigned: true, aliasError: null });
+      expect(await f.read(f.owner)).toMatchObject({
+        status: "available",
+        deployment: { state: "active" },
+        app: { state: "sign-in-required", url: "https://apps.example/requests" },
+      });
+    },
+  );
+  it.each([
+    { readyState: "BUILDING", projectId: "another-project", activation: {} },
+    { readyState: "READY", activation: {} },
+    { readyState: "READY", activation: { aliasAssigned: true, aliasError: null } },
+    {
+      readyState: "READY",
+      activation: {
+        aliasAssigned: false,
+        aliasError: { code: "alias_failed", message: "Assignment failed" },
+      },
+    },
+    { readyState: "ERROR", activation: { aliasAssigned: false, aliasError: null } },
+  ])(
+    "keeps an invalid alias binding actionable: %j",
+    async ({ readyState, projectId, activation }) => {
+      const f = fixture();
+      f.setReadyState(readyState);
+      f.setActivation(activation);
+      f.setAlias({ deploymentId: "previous-production", projectId });
+      expect(await f.read(f.owner)).toMatchObject({
+        status: "service-unavailable",
+        serviceIssue: "domain-binding",
+      });
+    },
+  );
+  it.each([
     { verified: false },
     { gitBranch: "a-preview-branch" },
     { redirect: "https://other.example" },
   ])("does not describe an incompatible Production domain as active: %j", async (domain) => {
     const f = fixture();
+    f.setReadyState("BUILDING");
+    f.setAlias({ deploymentId: "previous-production" });
     f.setDomain(domain);
     expect(await f.read(f.owner)).toMatchObject({
       status: "service-unavailable",

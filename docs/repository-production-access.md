@@ -389,7 +389,11 @@ cannot merge an app whose required runtime binding is still absent.
 After a managed merge, the read-only `native-status` action observes the
 current Production app through the saved owner, app and repository binding.
 It checks the provider’s current Production deployment and public domain,
-then checks the app’s registered route and entry on the Gateway. The result
+then checks the app’s registered route and entry on the Gateway. The read
+reports pending activation while the verified public alias still serves the
+previous deployment and Vercel is building the selected deployment or explicitly
+reports that its ready deployment awaits alias assignment. Required deployment
+checks can delay that assignment. The result
 describes current availability and may include the app’s public entry URL.
 The delivery of the requested revision remains unassessed. The completed merge
 is independent of these observations. The owner can check the same saved app
