@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DependencyAttemptResult } from "./checkout-dependencies";
+import type {
+  getPriorPreviewCommand,
+  WorkingPreviewRuntime,
+} from "../sandbox/working-preview-runtime";
+import type { hasLiveWorkingPreview } from "./working-preview-state";
 import { createStartAppPreview } from "../../agent/tools/start_app_preview";
 import {
   previewWorkingDirectorySchema,
@@ -10,10 +15,11 @@ interface MockWorkflowState {
   checkoutDependencyAttempts?: readonly DependencyAttemptResult[];
   appSpec?: { appId: string };
   applyReceipt?: { applyRoot: string };
-  identityReceipt?: { identity: { appId: string; baseRoutes: string[] } };
+  identityReceipt?: { identity: { appId: string; baseRoutes: string[]; workspacePath?: string } };
   githubSource?: { digest: string };
   phase?: string;
   sourceReceipt?: { sourceKind: string };
+  validationReceipt?: { digest: string };
   workspace?: { workspacePath: string };
 }
 
@@ -25,10 +31,12 @@ const mocks = vi.hoisted(() => {
   return {
     bind: vi.fn(),
     dependencies: vi.fn().mockResolvedValue({ status: "reused" }),
+    getProvider: vi.fn(),
     invalidate: vi.fn(),
     nativeBindings: vi.fn().mockResolvedValue(null),
     nativePreview: vi.fn(),
     prepare: vi.fn().mockResolvedValue({ status: "prepared" }),
+    previewStateGet: vi.fn<() => WorkingPreviewRuntime | null>().mockReturnValue(null),
     previewStateUpdate:
       vi.fn<(transition: (state: { commandId: string } | null) => null) => void>(),
     prior: vi.fn(),
@@ -57,18 +65,24 @@ vi.mock("./workflow-state", () => ({
   },
 }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./working-preview-state dependency used by this test.
-vi.mock("./working-preview-state", () => ({
+vi.mock("./working-preview-state", async (importOriginal) => ({
+  ...(await importOriginal<{ hasLiveWorkingPreview: typeof hasLiveWorkingPreview }>()),
   workingPreviewAttemptState: { get: () => null, update: vi.fn() },
-  workingPreviewState: { get: () => null, update: mocks.previewStateUpdate },
+  workingPreviewState: { get: mocks.previewStateGet, update: mocks.previewStateUpdate },
 }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../sandbox/deployment-execution-lease dependency used by this test.
 vi.mock("../sandbox/deployment-execution-lease", () => ({
   assertHostedSandboxCommandAuthority: vi.fn(),
 }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../sandbox/vercel-preview-provider dependency used by this test.
-vi.mock("../sandbox/vercel-preview-provider", () => ({ getVercelPreviewProvider: vi.fn() }));
+vi.mock("../sandbox/vercel-preview-provider", () => ({
+  getVercelPreviewProvider: mocks.getProvider,
+}));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../sandbox/working-preview-runtime dependency used by this test.
-vi.mock("../sandbox/working-preview-runtime", () => ({ startWorkingPreview: mocks.start }));
+vi.mock("../sandbox/working-preview-runtime", async (importOriginal) => ({
+  ...(await importOriginal<{ getPriorPreviewCommand: typeof getPriorPreviewCommand }>()),
+  startWorkingPreview: mocks.start,
+}));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./prepared-runtime-execution dependency used by this test.
 vi.mock("./prepared-runtime-execution", () => ({
   resolvePreparedRuntimeExecution: mocks.runtime,
@@ -110,6 +124,105 @@ const startAppPreview = createStartAppPreview({ nativePreview: mocks.nativePrevi
 const parseDirectory = (value?: string) => previewWorkingDirectorySchema.parse(value);
 
 describe("preview command working directory", () => {
+  it("opens the registered app on its repository-assigned port and reuses it after validation", async () => {
+    const saved = mocks.workflowState;
+    mocks.workflowState = {
+      appSpec: { appId: "app" },
+      applyReceipt: { applyRoot: "/workspace/repository" },
+      identityReceipt: {
+        identity: {
+          appId: "app",
+          baseRoutes: ["/app", "/app/:path*"],
+          workspacePath: "apps/app",
+        },
+      },
+      phase: "applied",
+    };
+    const provider = {
+      currentSession: () => ({ sessionId: "provider-session" }),
+      getCommand: vi.fn().mockResolvedValue({ exitCode: null }),
+    };
+    const receipt = {
+      appId: "app",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      status: "ready" as const,
+      url: "https://app.example/preview",
+      verifiedAt: new Date().toISOString(),
+    };
+    mocks.getProvider.mockResolvedValueOnce(provider).mockResolvedValueOnce(provider);
+    mocks.start.mockClear();
+    mocks.start.mockImplementationOnce(({ requestDigest }: { requestDigest: string }) => {
+      mocks.previewStateGet.mockReturnValueOnce({
+        commandId: "preview-command",
+        providerSessionId: "provider-session",
+        receipt,
+        requestDigest,
+        sandboxId: "sandbox",
+      });
+      return { commandId: "preview-command", receipt };
+    });
+    const run = vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "4703\n" });
+    const sandbox = {
+      id: "sandbox",
+      readTextFile: vi.fn(({ path }: { path: string }) => {
+        if (path === "/workspace/repository/package.json") {
+          return JSON.stringify({ packageManager: "bun@1.3.0" });
+        }
+        if (path === "/workspace/repository/apps/app/package.json") {
+          return JSON.stringify({
+            scripts: { dev: "next dev --port $(microfrontends port)" },
+          });
+        }
+        return null;
+      }),
+      run,
+    };
+    const ctx = {
+      abortSignal: new AbortController().signal,
+      callId: "derived-preview",
+      getSandbox: vi.fn().mockResolvedValue(sandbox),
+      getToken: vi.fn(),
+      requireAuth: (): never => {
+        throw new Error("Unexpected auth request");
+      },
+      session: {
+        auth: { current: null, initiator: null },
+        id: "session",
+        turn: { id: "turn", sequence: 0 },
+      },
+      toolName: "start_app_preview",
+    };
+    try {
+      const input = { workingDirectory: "." };
+      const result = await startAppPreview.execute(input, ctx);
+      expect(result).toMatchObject({ workingPreview: receipt });
+      expect(run).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "bun run microfrontends port",
+          workingDirectory: "/workspace/repository/apps/app",
+        }),
+      );
+      expect(mocks.start).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: { args: ["run", "dev"], executable: "bun" },
+          cwd: "/workspace/repository/apps/app",
+          landingPath: "/app",
+          port: 4703,
+        }),
+      );
+      mocks.workflowState = {
+        ...mocks.workflowState,
+        phase: "validated",
+        validationReceipt: { digest: "new-validation" },
+      };
+      const reopened = await startAppPreview.execute(input, ctx);
+      expect(reopened).toMatchObject({ workingPreview: receipt });
+      expect(mocks.start).toHaveBeenCalledOnce();
+      expect(run).toHaveBeenCalledOnce();
+    } finally {
+      mocks.workflowState = saved;
+    }
+  });
   it("restores approved hosted persistence and updates the private gateway origin without local setup", async () => {
     const prepareAuthenticatedOrigin = vi.fn();
     mocks.runtime.mockResolvedValueOnce({

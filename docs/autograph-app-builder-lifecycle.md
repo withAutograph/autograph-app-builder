@@ -112,6 +112,12 @@ previews retain their owner, app, source, lifetime, origin and recording
 protections. This internal target creates no creator input or prepared-Preview
 requirement.
 
+The default private preview launch uses the selected app's repository
+development script, workspace, port, and catalog entry route. Builder checks
+that route before offering the authenticated link. If the app returns a
+missing route, Builder closes that startup attempt and reports the route
+failure. Revalidation of unchanged source reuses the live preview.
+
 For requested GitHub delivery, passing repository build and declared app tests
 produce a technically validated, reviewable candidate. The tool keeps that
 technical result successful when an optional private browser check fails or is

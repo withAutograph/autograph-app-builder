@@ -21,7 +21,10 @@ import { createPostgresAppAccessOperationStore } from "../app-access/postgres-st
 import { AppAccessError } from "../app-access/errors";
 import type { AppAccessCommand } from "../app-access/contracts";
 import type { ManagedAppAccess } from "../app-access/management";
-import { readRepositoryProductionApproval } from "../eve/private-repository-production-approval";
+import {
+  assertDirectRepositoryProductionApproval,
+  readRepositoryProductionApproval,
+} from "../eve/private-repository-production-approval";
 import { readHostedOperatorOwnerReaderConfiguration } from "./hosted-operator-owner-context";
 import {
   createHostedOperatorAppOwnerAuthority,
@@ -663,7 +666,11 @@ export const createRepositoryProductionNativeHandler =
         );
         return z.object({ result: z.unknown() }).parse(response).result;
       };
-      const setup = (scope: RepositoryProductionScope, held?: () => Promise<void>) => {
+      const setup = (
+        scope: RepositoryProductionScope,
+        held?: () => Promise<void>,
+        assertDirectApproval?: () => Promise<void>,
+      ) => {
         const signupGuard = createRepositoryProductionSignupLeaseGuard(
           async (target, intent, assertFence) => {
             await signup.assertNoPending(target, intent, undefined, assertFence);
@@ -707,8 +714,16 @@ export const createRepositoryProductionNativeHandler =
             }),
           },
           async (target, intent, run) => {
-            const underLease = async (assertFence: () => Promise<void>) =>
-              await signupGuard.run(assertFence, run);
+            const underLease = async (assertFence: () => Promise<void>) => {
+              const assertCurrent =
+                assertDirectApproval === undefined
+                  ? assertFence
+                  : async () => {
+                      await assertFence();
+                      await assertDirectApproval();
+                    };
+              return await signupGuard.run(assertCurrent, run);
+            };
             return held ? await underLease(held) : await withLease(target, underLease, intent);
           },
         );
@@ -1132,10 +1147,43 @@ export const createRepositoryProductionNativeHandler =
         },
         resolveSetup: async (owner, approvedByCallId, creatorEmail, approvalReference) => {
           const found = await resolve(owner);
+          const session = await readSession(owner);
+          const savedGrant = session.privateBuildDecision?.directProduction;
+          const directProduction = savedGrant?.callId === approvedByCallId ? savedGrant : undefined;
+          if (
+            directProduction !== undefined &&
+            (approvalReference === undefined || creatorEmail !== undefined)
+          ) {
+            throw new Error("repository_production_approval_required");
+          }
           await selectCreatorEmail(found, creatorEmail);
           const currentPlan = repositoryProductionApprovalInput(found.scope, found.intent);
           if (approvalReference !== undefined) {
             assertRepositoryProductionApprovalReference(currentPlan, approvalReference);
+          }
+          const assertDirectApproval = async () => {
+            if (directProduction === undefined) {
+              await found.assertCurrentOwner();
+              return;
+            }
+            const currentOwnerSession = await readSession(owner);
+            if (currentOwnerSession.status === "cancelled") {
+              throw new Error("repository_production_approval_required");
+            }
+            assertDirectRepositoryProductionApproval({
+              plan: currentPlan,
+              grant: directProduction,
+              decision: currentOwnerSession.privateBuildDecision,
+              destination: currentOwnerSession.builderDestination,
+              logicalSessionId:
+                currentOwnerSession.nativeRecoveryBinding?.logicalSessionId ??
+                currentOwnerSession.adapterSessionId,
+              owner: owner.ownerContext,
+              publishedDescription: found.publishedDescription,
+            });
+          };
+          if (directProduction !== undefined) {
+            await assertDirectApproval();
           }
           const transport = createNativeTargetApprovalHistoryTransport({
             builderOrigin,
@@ -1156,11 +1204,11 @@ export const createRepositoryProductionNativeHandler =
           if (!transport.observePrivateHistory) {
             throw new Error("repository_production_approval_unavailable");
           }
-          const approved = await readRepositoryProductionApproval({
+          const approvalInput: Parameters<typeof readRepositoryProductionApproval>[0] = {
             plan: currentPlan,
             callId: approvedByCallId,
             owner: owner.ownerContext,
-            assertOwner: found.assertCurrentOwner,
+            assertOwner: assertDirectApproval,
             // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
             readHistory: (startIndex, onEvent) =>
               defined(transport.observePrivateHistory)({
@@ -1170,7 +1218,15 @@ export const createRepositoryProductionNativeHandler =
                 startIndex,
                 onEvent,
               }),
-          });
+          };
+          if (directProduction !== undefined) {
+            approvalInput.directProduction = {
+              grant: directProduction,
+              logicalSessionId:
+                session.nativeRecoveryBinding?.logicalSessionId ?? session.adapterSessionId,
+            };
+          }
+          const approved = await readRepositoryProductionApproval(approvalInput);
           if (!approved) {
             throw new Error("repository_production_approval_required");
           }
@@ -1198,19 +1254,30 @@ export const createRepositoryProductionNativeHandler =
               assertAuthorized: async (scope, intent) => {
                 const canonical = await resolve(owner);
                 await selectCreatorEmail(canonical, found.intent.creatorEmail);
-                await readSession(canonical.owner);
+                await assertDirectApproval();
                 if (
                   !isDeepStrictEqual(canonical.scope, scope) ||
                   repositoryProductionApprovalDigest(scope, canonical.intent) !==
                     approval.planDigest ||
-                  repositoryProductionApprovalDigest(scope, intent) !== approval.planDigest
+                  repositoryProductionApprovalDigest(scope, intent) !== approval.planDigest ||
+                  (directProduction !== undefined &&
+                    (!canonical.publishedDescription ||
+                      canonical.intent.sourceSha !== currentPlan.intent.sourceSha))
                 ) {
                   throw new Error("repository_production_approval_required");
                 }
               },
             }),
           });
-          return { scope: found.scope, intent: found.intent, setup: setup(found.scope) };
+          return {
+            scope: found.scope,
+            intent: found.intent,
+            setup: setup(
+              found.scope,
+              undefined,
+              directProduction === undefined ? undefined : assertDirectApproval,
+            ),
+          };
         },
         completeSignup: async (policyId, claimId) => {
           const work = signup.complete(policyId, claimId);

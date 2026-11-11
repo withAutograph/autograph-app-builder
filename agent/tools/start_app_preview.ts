@@ -14,14 +14,11 @@ import { defineTool } from "eve/tools";
 import type { ToolContext } from "eve/tools";
 import { z } from "zod";
 
-import {
-  previewWorkingDirectorySchema,
-  resolvePreviewWorkingDirectory,
-} from "@/lib/agent/preview-working-directory";
+import { previewWorkingDirectorySchema } from "@/lib/agent/preview-working-directory";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { priorValidatedPrivateArtifact } from "@/lib/agent/prior-validated-private-artifact";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
-import { resolvePreviewPackageManager } from "@/lib/agent/preview-package-manager";
+import { resolvePreviewLaunch, resolvePreviewLaunchPort } from "@/lib/agent/preview-launch";
 import { ensureCheckoutDependencies } from "@/lib/agent/checkout-dependencies";
 import { nativeWorkingPreview } from "@/lib/agent/native-working-preview";
 import {
@@ -43,7 +40,7 @@ import {
 } from "@/lib/agent/working-preview-state";
 import { assertHostedSandboxCommandAuthority } from "@/lib/sandbox/deployment-execution-lease";
 import { getVercelPreviewProvider } from "@/lib/sandbox/vercel-preview-provider";
-import { startWorkingPreview } from "@/lib/sandbox/working-preview-runtime";
+import { getPriorPreviewCommand, startWorkingPreview } from "@/lib/sandbox/working-preview-runtime";
 
 const recordPreviewDependencyAttempt = (attempt: DependencyAttemptResult) => {
   appBuilderWorkflowState.update((state) =>
@@ -54,21 +51,6 @@ const recordPreviewDependencyAttempt = (attempt: DependencyAttemptResult) => {
           checkoutDependencyAttempts: [...(state.checkoutDependencyAttempts ?? []), attempt],
         },
   );
-};
-
-const validationAttemptDigest = (
-  state: ReturnType<typeof appBuilderWorkflowState.get>,
-): string | undefined => {
-  if ("validationReceipt" in state) {
-    return state.validationReceipt.digest;
-  }
-  if ("validationFailure" in state) {
-    return state.validationFailure.attemptDigest;
-  }
-  if ("validationAttempt" in state) {
-    return state.validationAttempt.digest;
-  }
-  return undefined;
 };
 
 const dependencyLogStore = (ctx: ToolContext): ValidationLogStore | undefined => {
@@ -149,12 +131,17 @@ export const createStartAppPreview = ({
 }: { nativePreview?: typeof nativeWorkingPreview } = {}) =>
   defineTool({
     description:
-      "Open the selected existing app or applied new app and return a working browser URL. An approved protected runtime publishes its verified native Gateway app route; other apps start a private Sandbox preview. For a prepared existing GitHub checkout, supply appId from the repository's apps directory; this only previews current files and does not grant build or publication approval. Discover the development script and package manager from the checkout's package.json, then use workingDirectory relative to the repository root. Configure it to listen on the supplied port. Use artifact=prior-validated to preview the exact last validated local artifact while a newer plan remains unapplied. A reachable page is not proof of backend product behavior.",
+      "Open the selected existing app or applied new app and return a working browser URL. An approved protected runtime publishes its verified native Gateway app route; other apps start a private Sandbox preview. Omit command to run the app's development script in its repository-owned app workspace and open its registered route. For a prepared existing GitHub checkout, supply appId. Supply command, workingDirectory and port for a custom development server. Use artifact=prior-validated to preview the exact last validated local artifact while a newer plan remains unapplied. A reachable page is not proof of backend product behavior.",
     async execute(input, ctx) {
       let current = appBuilderWorkflowState.get();
       const native =
         input.artifact === undefined
-          ? await resolveNativePreview(input, ctx, current, nativePreview)
+          ? await resolveNativePreview(
+              { ...input, landingPath: input.landingPath ?? "/" },
+              ctx,
+              current,
+              nativePreview,
+            )
           : null;
       if (native) {
         invalidateProductBehaviorPreview("preview-replaced");
@@ -177,14 +164,31 @@ export const createStartAppPreview = ({
           ? undefined
           : { applyDigest: prior.revision, validationDigest: prior.validationDigest };
       let selected = prior ?? (await runnableSelectedApp({ appId: input.appId, state: current }));
-      const cwd = resolvePreviewWorkingDirectory(selected.root, input.workingDirectory);
-      let launch = resolvePreviewPackageManager(
-        input.command,
-        await sandbox.readTextFile({ path: `${selected.root}/package.json` }),
-      );
-      let evidenceGeneration = currentProductBehaviorGeneration();
       await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
       prior?.assertCurrent();
+      const resolveLaunch = async () => {
+        const accepted =
+          prior === undefined && "identityReceipt" in current
+            ? current.identityReceipt.identity
+            : undefined;
+        const identity =
+          accepted?.appId === selected.appId
+            ? { routes: accepted.baseRoutes, workspacePath: accepted.workspacePath }
+            : undefined;
+        const launchInput: Parameters<typeof resolvePreviewLaunch>[0] = {
+          appId: selected.appId,
+          root: selected.root,
+          request: input,
+          sandbox,
+          signal: ctx.abortSignal,
+        };
+        if (identity !== undefined) {
+          launchInput.identity = identity;
+        }
+        return await resolvePreviewLaunch(launchInput);
+      };
+      let launch = await resolveLaunch();
+      let evidenceGeneration = currentProductBehaviorGeneration();
       const provider = await getVercelPreviewProvider(
         getBuilderSandboxId(sandbox),
         ctx.abortSignal,
@@ -203,20 +207,19 @@ export const createStartAppPreview = ({
             })
           : null;
       const previous = workingPreviewState.get();
-      let validationDigest = prior?.validationDigest ?? validationAttemptDigest(current);
       const previewRequestDigest = () =>
         createHash("sha256")
           .update(
             JSON.stringify({
               appId: selected.appId,
               command: launch.command,
-              cwd,
+              cwd: launch.cwd,
               evidenceGeneration,
-              landingPath: input.landingPath,
-              port: input.port,
+              landingPath: launch.landingPath,
+              port: launch.port,
+              portCommand: launch.portCommand,
               revision: selected.revision,
               runtimeStateDirectory: runtime?.stateDirectory,
-              validationDigest,
             }),
           )
           .digest("hex");
@@ -231,9 +234,9 @@ export const createStartAppPreview = ({
         hasLiveWorkingPreview(previous, getBuilderSandboxId(sandbox)) &&
         previous.providerSessionId === provider.currentSession().sessionId
       ) {
-        const command = await provider.getCommand(previous.commandId, { signal: ctx.abortSignal });
+        const command = await getPriorPreviewCommand(provider, previous.commandId, ctx.abortSignal);
         prior?.assertCurrent();
-        if (command.exitCode === null) {
+        if (command?.exitCode === null) {
           bindProductBehaviorPreview(previous.commandId, evidenceGeneration);
           return {
             commandAdjustment: launch.adjustment,
@@ -308,12 +311,8 @@ export const createStartAppPreview = ({
                     }
                     current = refreshed;
                     selected = await runnableSelectedApp({ appId, state: current });
-                    launch = resolvePreviewPackageManager(
-                      input.command,
-                      await sandbox.readTextFile({ path: `${selected.root}/package.json` }),
-                    );
+                    launch = await resolveLaunch();
                     evidenceGeneration = currentProductBehaviorGeneration();
-                    validationDigest = validationAttemptDigest(current);
                     dependencies = await ensureCheckoutDependencies({
                       ...dependencyInput,
                       root: selected.root,
@@ -337,6 +336,8 @@ export const createStartAppPreview = ({
         environmentPath = localRuntimeEnvironmentPath(selected.root, appId);
       }
       await prior?.verifyCurrent();
+      const port = await resolvePreviewLaunchPort(launch, sandbox, ctx.abortSignal);
+      assertCurrentDependencies();
       invalidateProductBehaviorPreview("preview-replaced");
       workingPreviewState.update(() => null);
       let ownedAttemptId: string | undefined;
@@ -367,10 +368,11 @@ export const createStartAppPreview = ({
         };
       }
       const preview = await startWorkingPreview({
-        ...input,
         appId: selected.appId,
         command: launch.command,
-        cwd,
+        cwd: launch.cwd,
+        landingPath: launch.landingPath,
+        port,
         environmentPath,
         onAttempt: (attempt) => {
           workingPreviewAttemptState.update((currentAttempt) => {
@@ -382,7 +384,7 @@ export const createStartAppPreview = ({
           });
         },
         prepareAuthenticatedOrigin,
-        assertCurrent: prior?.assertCurrent,
+        assertCurrent: assertCurrentDependencies,
         previous,
         provider,
         requestDigest,
@@ -406,12 +408,14 @@ export const createStartAppPreview = ({
         .string()
         .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
         .optional(),
-      command: z.object({
-        args: z.array(z.string().max(8192)).max(256),
-        executable: z.string().min(1).max(1024),
-      }),
-      landingPath: z.string().min(1).max(2048).default("/"),
-      port: z.number().int().min(1024).max(65_535).default(3000),
+      command: z
+        .object({
+          args: z.array(z.string().max(8192)).max(256),
+          executable: z.string().min(1).max(1024),
+        })
+        .optional(),
+      landingPath: z.string().min(1).max(2048).optional(),
+      port: z.number().int().min(1024).max(65_535).optional(),
       workingDirectory: previewWorkingDirectorySchema,
     }),
   });

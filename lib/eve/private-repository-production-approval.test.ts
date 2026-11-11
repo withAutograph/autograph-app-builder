@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { MessageStreamEvent } from "eve/client";
+import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
+import { createDirectProductionGrant } from "../agent/direct-production-authorization";
 import {
   repositoryProductionApprovalInput,
   repositoryProductionApprovalReference,
@@ -17,6 +19,7 @@ import {
   projectInstalledEveEvent,
 } from "./public-events";
 import {
+  assertDirectRepositoryProductionApproval,
   createPrivateRepositoryProductionApprovalCapture,
   readRepositoryProductionApproval,
 } from "./private-repository-production-approval";
@@ -50,8 +53,12 @@ const intent: RepositoryProductionIntent = {
 };
 const plan = repositoryProductionApprovalInput(scope, intent);
 const approvalWireInput = z.record(z.string(), z.json());
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This test wire boundary parses JSON shape while preserving malformed domain inputs for the real approval parser.
-const request = (value: unknown = plan, callId = "call"): MessageStreamEvent => ({
+const request = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Parse intentionally malformed domain inputs at the test wire boundary.
+  value: unknown = plan,
+  callId = "call",
+  toolName = "prepare-app-production",
+): MessageStreamEvent => ({
   type: "input.requested",
   meta: { at: "2026-11-06T00:00:00Z", id: "request-event" },
   data: {
@@ -65,7 +72,7 @@ const request = (value: unknown = plan, callId = "call"): MessageStreamEvent => 
         prompt: "Set up this app?",
         action: {
           kind: "tool-call",
-          toolName: "prepare-app-production",
+          toolName,
           callId,
           input: approvalWireInput.parse(value),
         },
@@ -96,6 +103,199 @@ const settle = (
     outcome,
   },
 });
+
+const directApprovalHistory =
+  (events: MessageStreamEvent[]) =>
+  async (_start: number, observe: (event: MessageStreamEvent) => void) => {
+    for (const event of events) {
+      observe(event);
+    }
+    return await Promise.resolve({
+      complete: true,
+      nativeTailIndex: events.length,
+      nextNativeIndex: events.length,
+    });
+  };
+
+describe("direct Production setup consent", () => {
+  const repository = {
+    repositoryId: "1234",
+    owner: "withAutograph",
+    name: "arrusted-development",
+    defaultBranch: "main",
+  };
+  const storageKind = "postgres" as const;
+  const directPlan = repositoryProductionApprovalInput(
+    {
+      ...scope,
+      repositoryId: repository.repositoryId,
+      repositoryFullName: "withAutograph/arrusted-development",
+    },
+    intent,
+  );
+  const subject = {
+    version: 1 as const,
+    authority: scope.authority,
+    appId: scope.appId,
+    appSpecDigest: "d".repeat(64),
+    proposalDigest: "e".repeat(64),
+    sessionId: "native-logical",
+    buildWorkspaceId: "approved-build-workspace",
+    repositoryId: repository.repositoryId,
+    repositoryFullName: "withAutograph/arrusted-development" as const,
+    installationId: "5432",
+    baseBranch: repository.defaultBranch,
+    storageKind,
+  };
+  const callId = "build-or-release-call";
+  const grant = createDirectProductionGrant({ callId, subject, toolName: "apply_app_creation" });
+  const currentSpec = {
+    appId: subject.appId,
+    appSpecDigest: subject.appSpecDigest,
+    proposalDigest: subject.proposalDigest,
+    sessionId: subject.sessionId,
+    workspaceId: subject.buildWorkspaceId,
+  };
+  const decision: ApprovedBuildDecision = {
+    version: 1,
+    adapterSessionId: owner.adapterSessionId,
+    workflowPhase: "reviewed",
+    decision: "working",
+    turnId: "turn",
+    turnSequence: 1,
+    directProduction: grant,
+    currentSpec,
+  };
+  const authority = {
+    plan: directPlan,
+    grant,
+    decision,
+    destination: {
+      kind: "existing-repository" as const,
+      version: 1 as const,
+      appId: subject.appId,
+      installationId: subject.installationId,
+      repository,
+      confirmedByCallId: "repository-selection",
+    },
+    logicalSessionId: subject.sessionId,
+    owner,
+    publishedDescription: true,
+  };
+  it.each(["apply_app_creation", "release-app-production"] as const)(
+    "uses the genuine settled owner approval for %s",
+    async (toolName) => {
+      const approved = createDirectProductionGrant({ callId, subject, toolName });
+      await expect(
+        readRepositoryProductionApproval({
+          plan: directPlan,
+          callId,
+          owner,
+          directProduction: { grant: approved, logicalSessionId: subject.sessionId },
+          assertOwner: async () => {},
+          readHistory: directApprovalHistory([
+            request({ directProduction: subject }, callId, toolName),
+            settle(),
+          ]),
+        }),
+      ).resolves.toEqual({ approvalId: "request", approvedByCallId: callId });
+    },
+  );
+  it.each([
+    { name: "private Build", events: [request({}, callId, grant.toolName), settle()] },
+    {
+      name: "changed scope",
+      events: [
+        request({ directProduction: { ...subject, storageKind: "none" } }, callId, grant.toolName),
+        settle(),
+      ],
+    },
+    {
+      name: "wrong call",
+      events: [request({ directProduction: subject }, "different-call", grant.toolName), settle()],
+    },
+    {
+      name: "another responder",
+      events: [request({ directProduction: subject }, callId, grant.toolName), settle("other")],
+    },
+    {
+      name: "cancelled approval",
+      events: [
+        request({ directProduction: subject }, callId, grant.toolName),
+        settle(scope.authority.ownerUserId, "cancelled"),
+      ],
+    },
+  ])("rejects $name as delegated Production consent", async ({ events }) => {
+    await expect(
+      readRepositoryProductionApproval({
+        plan: directPlan,
+        callId,
+        owner,
+        directProduction: { grant, logicalSessionId: subject.sessionId },
+        assertOwner: async () => {},
+        readHistory: directApprovalHistory(events),
+      }),
+    ).resolves.toBeNull();
+  });
+  it("uses the approved logical session with the exact reviewed and published app", () => {
+    expect(() => {
+      assertDirectRepositoryProductionApproval(authority);
+    }).not.toThrow();
+  });
+  it.each([
+    { name: "unpublished source", change: { publishedDescription: false } },
+    { name: "different logical session", change: { logicalSessionId: "different-session" } },
+    {
+      name: "unreviewed current source",
+      change: { decision: { ...decision, workflowPhase: "applied" } },
+    },
+    {
+      name: "stopped delivery",
+      change: { decision: { ...decision, decision: "blocked" as const } },
+    },
+    {
+      name: "different Build workspace",
+      change: {
+        decision: {
+          ...decision,
+          currentSpec: { ...currentSpec, workspaceId: "other" },
+        },
+      },
+    },
+    {
+      name: "different repository branch",
+      change: {
+        destination: {
+          ...authority.destination,
+          repository: { ...repository, defaultBranch: "other" },
+        },
+      },
+    },
+    {
+      name: "different managed storage",
+      change: {
+        plan: repositoryProductionApprovalInput(directPlan.scope, {
+          ...intent,
+          storage: { kind: "none" },
+        }),
+      },
+    },
+    {
+      name: "broader signup access",
+      change: {
+        plan: repositoryProductionApprovalInput(directPlan.scope, {
+          ...intent,
+          access: { mode: "self-signup", eligibility: "public", appRoles: [] },
+        }),
+      },
+    },
+  ])("rejects $name before retaining approval", ({ change }) => {
+    expect(() => {
+      assertDirectRepositoryProductionApproval({ ...authority, ...change });
+    }).toThrow("repository_production_approval_required");
+  });
+});
+
 describe("Production setup consent", () => {
   it.each([
     { name: "private database", intent },

@@ -52,6 +52,10 @@ describe("direct app creation", () => {
       const installCommand = workspaceBinInstallCommand("/workspace/repository", false);
       const manifestPath = "repository/apps/inventory/package.json";
       const sandbox = {
+        readTextFile: vi.fn(async ({ path }: { path: string }) => {
+          expect(path).toBe(manifestPath);
+          return '{"dependencies":{"@autograph/generated-app-runtime":"workspace:*"}}';
+        }),
         run: vi.fn(async ({ command }: { command: string }) => {
           calls.push(command);
           if (command === installCommand && calls.includes(manifestPath) && exitCode !== 0) {
@@ -60,8 +64,8 @@ describe("direct app creation", () => {
           return { exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) };
         }),
         setNetworkPolicy: vi.fn<() => Promise<void>>().mockResolvedValue(),
-        writeTextFile: vi.fn(async ({ path }: { path: string }) => {
-          calls.push(path);
+        writeTextFile: vi.fn(async (write: { path: string; content: string }) => {
+          calls.push(write.path);
         }),
       };
       const result = await withImplementationFiles(
@@ -69,7 +73,10 @@ describe("direct app creation", () => {
         [
           { content: "package inventory", path: ".config/app-specs/inventory.cue" },
           { content: "export default null", path: "apps/inventory/app/page.tsx" },
-          { content: '{"name":"@autograph/inventory"}', path: "apps/inventory/package.json" },
+          {
+            content: '{"name":"@autograph/inventory","dependencies":{"server-only":"catalog:"}}',
+            path: "apps/inventory/package.json",
+          },
         ],
         { reconcileNewWorkspace: true },
       )({
@@ -93,6 +100,16 @@ describe("direct app creation", () => {
         manifestPath,
         installCommand,
       ]);
+      const writtenManifest = sandbox.writeTextFile.mock.calls.find(
+        ([write]) => write.path === manifestPath,
+      )?.[0];
+      expect(JSON.parse(writtenManifest?.content ?? "{}")).toMatchObject({
+        name: "@autograph/inventory",
+        dependencies: {
+          "@autograph/generated-app-runtime": "workspace:*",
+          "server-only": "catalog:",
+        },
+      });
       expect(result).toMatchObject(
         exitCode === 0
           ? { exitCode, stdout: JSON.stringify(receipt) }

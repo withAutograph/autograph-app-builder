@@ -44,7 +44,7 @@ const isMissingPreviewCommand = (error: unknown): boolean =>
   error.response.status === 404 &&
   /command not found or has exited/iu.test(error.message);
 
-const getPriorPreviewCommand = async (
+export const getPriorPreviewCommand = async (
   provider: Sandbox,
   commandId: string,
   signal: AbortSignal,
@@ -173,6 +173,15 @@ const absorbCookies = (cookies: Map<string, string>, response: Response) => {
   }
 };
 
+class PreviewEntryNotFoundError extends Error {
+  constructor() {
+    super(
+      "The development server returned HTTP 404 at the registered preview entry. Serve that pathname in the app router before reopening the preview.",
+    );
+    this.name = "PreviewEntryNotFoundError";
+  }
+}
+
 const openApp = async (input: {
   launchUrl: string;
   observe: (observation: string) => void;
@@ -215,6 +224,9 @@ const openApp = async (input: {
     const ready = response.ok && response.headers.get("content-type")?.includes("text/html");
     // oxlint-disable-next-line eslint/no-await-in-loop -- Release the current response before following its redirect.
     await response.body?.cancel();
+    if (redirects === 0 && response.status === 404) {
+      throw new PreviewEntryNotFoundError();
+    }
     if (ready ?? false) {
       return true;
     }
@@ -272,6 +284,9 @@ const waitForPreview = async (input: {
         }
       } catch (error) {
         input.signal.throwIfAborted();
+        if (error instanceof PreviewEntryNotFoundError) {
+          throw error;
+        }
         // Report known classes, never messages, URLs, headers, or custom names.
         let diagnostic = "Readiness check Error";
         if (readinessSignal.aborted) {

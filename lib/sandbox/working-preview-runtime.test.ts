@@ -171,6 +171,21 @@ describe("shared working preview startup", () => {
     );
   });
 
+  it("reports a missing registered preview entry and cleans up the failed launch", async () => {
+    const { command, options, provider } = setup();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(launchResponse())
+      .mockResolvedValueOnce(new Response("Route missing", { status: 404 }));
+    await expect(startWorkingPreview({ ...options, fetch: fetcher })).rejects.toThrow(
+      "HTTP 404 at the registered preview entry",
+    );
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(command.kill).toHaveBeenCalledOnce();
+    expect(provider.update).toHaveBeenLastCalledWith({ ports: [] }, expect.anything());
+    expect(ownership.current).toBeNull();
+  });
+
   it.each(["listener", "HTTP"])(
     "keeps one startup past two minutes of %s readiness",
     async (phase) => {
