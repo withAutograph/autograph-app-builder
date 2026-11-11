@@ -29,6 +29,7 @@ import { publicApprovalDescription } from "../agent/approval-receipt";
 import { repositoryProductionPrepareInputSchema } from "../provisioning/repository-production-approval";
 import { describeAppAccessIntent } from "../agent/app-access-intent";
 import { continuityStatusSchema } from "../provisioning/hosted-operator-continuity-contract";
+import { repositoryProductionNativeStatusSchema } from "../provisioning/repository-production-native-status-contract";
 import {
   githubRepositoryAccessSchema,
   githubRepositoryAccessViewModel,
@@ -37,6 +38,9 @@ import {
 const preparingAppDataModelLabel = "Preparing the app's data model";
 const prepareHostedRuntimeTool = "prepare-app-hosted-runtime";
 const prepareAppProductionTool = "prepare-app-production";
+const observeAppProductionTool = "observe-app-production";
+const finishGitHubDeliveryTool = "finish-github-pr-delivery";
+const nativeProductionLabel = "Checking your app’s availability";
 const runAppBrowserTestsTool = "run-app-browser-tests";
 const runAppContinuityTestsTool = "run-app-continuity-tests";
 const validateAppCreationTool = "validate-app-creation";
@@ -105,6 +109,7 @@ const visibleOperations = new Map([
   ["plan-app-production", "Preparing your app’s setup"],
   [prepareAppProductionTool, "Setting up your app’s data and access"],
   ["get-app-production", "Checking your app’s setup"],
+  [observeAppProductionTool, nativeProductionLabel],
   ["cleanup-app-hosted-runtime", "Removing the app's Preview resources"],
   ["export-app-hosted-data", "Exporting approved app data privately"],
   [runAppContinuityTestsTool, "Checking that the app stays connected after restart"],
@@ -1482,6 +1487,74 @@ const productionIdentityEvents = (
   ];
 };
 
+const nativeObservationSchema = z.union([
+  repositoryProductionNativeStatusSchema,
+  z.strictObject({
+    status: z.literal("monitoring-stopped"),
+    requestedRevision: z.literal("unassessed"),
+  }),
+]);
+
+/** Project only a new native observation. Historical merge results retain their public cursor. */
+const nativeProductionEvents = (
+  result: { toolName: string; callId: string; output: unknown; isError?: boolean },
+  index: number,
+  turnId: string,
+  completed: boolean,
+): InternalEveEvent[] | undefined => {
+  const merged = result.toolName === finishGitHubDeliveryTool;
+  if (!merged && result.toolName !== observeAppProductionTool) {
+    return undefined;
+  }
+
+  const output = merged
+    ? z
+        .object({ status: z.literal("merged"), nativeProduction: nativeObservationSchema })
+        .safeParse(result.output)
+    : undefined;
+  if (merged && output?.success !== true) {
+    return undefined;
+  }
+
+  const parsed =
+    output?.success === true
+      ? { success: true as const, data: output.data.nativeProduction }
+      : nativeObservationSchema.safeParse(result.output);
+  const observed = completed && result.isError !== true && parsed.success ? parsed.data : undefined;
+  const state: ProgressState = observed?.status === "available" ? "completed" : "failed";
+  const progress: InternalEveEvent = {
+    index,
+    label: nativeProductionLabel,
+    state,
+    type: "progress",
+  };
+  if (observed === undefined || observed.status === "pending") {
+    return [progress];
+  }
+
+  let text: string;
+  if (observed.status === "monitoring-stopped") {
+    text = "Builder stopped checking the live app. Continue this session to check again.";
+  } else {
+    const link =
+      observed.app.url === undefined ? "" : `\n\n[Open app](<${new URL(observed.app.url).href}>)`;
+    const availability =
+      observed.status === "available"
+        ? "The live app is available."
+        : "Builder could not check the app’s current availability. Continue this session to check again.";
+    text = `${availability}${link}\n\nDelivery of the latest update remains unconfirmed.`;
+  }
+  return [
+    progress,
+    {
+      index,
+      text: merged ? `Your changes are merged. ${text}` : text,
+      turnId: `${turnId}:native-availability:${result.callId}`,
+      type: assistantMessageEvent,
+    },
+  ];
+};
+
 /** Converts only the installed Eve 0.68 events that belong in the public MCP projection. */
 export const projectInstalledEveEvent = (
   event: MessageStreamEvent,
@@ -1540,6 +1613,14 @@ export const projectInstalledEveEvent = (
     case "action.partial": {
       const { result, turnId, sequence } = event.data;
       if (
+        result.kind === toolResultKind &&
+        result.toolName === finishGitHubDeliveryTool &&
+        result.isError !== true &&
+        recordStringField(result.output, "status") === "merged"
+      ) {
+        return [{ index, label: nativeProductionLabel, state: "started", type: "progress" }];
+      }
+      if (
         result.kind !== toolResultKind ||
         result.toolName !== prepareHostedRuntimeTool ||
         result.isError === true
@@ -1571,6 +1652,15 @@ export const projectInstalledEveEvent = (
     case actionResultEvent: {
       if (event.data.result?.kind !== toolResultKind) {
         return [];
+      }
+      const native = nativeProductionEvents(
+        event.data.result,
+        index,
+        event.data.turnId,
+        event.data.status === "completed",
+      );
+      if (native !== undefined) {
+        return native;
       }
       const label = draftValidationLabel(
         event.data.result.toolName,

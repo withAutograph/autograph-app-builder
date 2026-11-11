@@ -153,6 +153,28 @@ it("authenticates the saved signup policy before completing a claim without acce
 });
 
 describe("protected repository Production dispatcher", () => {
+  it("reads native availability without setup, People, or a new effect approval", async () => {
+    const f = fixture();
+    const native = {
+      version: 1 as const,
+      appId: owner.appId,
+      observedAt: "2026-11-10T15:00:00Z",
+      status: "available" as const,
+      deployment: { state: "active" as const },
+      app: { state: "sign-in-required" as const, url: "https://apps.test/requests" },
+      requestedRevision: "unassessed" as const,
+    };
+    Object.assign(f.deps, { readNativeStatus: async () => native });
+    const response = await f.send({ version: 1, ...owner, action: "native-status" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(native);
+    expect(f.prepared).not.toHaveBeenCalled();
+    expect(f.deps.resolvePlan).not.toHaveBeenCalled();
+    expect(f.deps.resolveSetup).not.toHaveBeenCalled();
+    expect(f.deps.management.read).not.toHaveBeenCalled();
+    expect(f.deps.management.execute).not.toHaveBeenCalled();
+  });
+
   it("reads delivery prerequisites for the exact reviewed repository without preparing or reading People", async () => {
     const f = fixture();
     const target = { repositoryId: "123", repositoryFullName: "example/repo" };

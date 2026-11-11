@@ -2154,3 +2154,97 @@ describe("Production app identity invitation", () => {
     expect(events.filter((event) => event.type.startsWith("auth_identity_"))).toEqual([]);
   });
 });
+
+describe("native app availability progress", () => {
+  const appUrl = "https://apps.example.com/saved-app";
+  const merged = { status: "merged", mergeCommitSha: "c".repeat(40) };
+  const nativeProduction = {
+    version: 1,
+    appId: "saved-app",
+    observedAt: "2026-11-11T00:00:00Z",
+    status: "available",
+    destination: { repositoryId: "private-repository-id", repositoryFullName: "example/app" },
+    deployment: { state: "active" },
+    app: { state: "sign-in-required", url: appUrl },
+    requestedRevision: "unassessed",
+  };
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Eve tool results are untrusted values.
+  const complete = (toolName: string, output: unknown) =>
+    installedEvent({
+      type: "action.result",
+      data: {
+        turnId: "owner-turn",
+        sequence: 2,
+        stepIndex: 1,
+        status: "completed",
+        result: { kind: "tool-result", toolName, callId: "native-status-call", output },
+      },
+    });
+
+  it("keeps historical GitHub-only merge events at the same saved cursor", () => {
+    const message = installedEvent({
+      type: "message.completed",
+      data: { turnId: "owner-turn", message: "Your changes are merged." },
+    });
+    const historical = [
+      installedEvent({
+        type: "actions.requested",
+        data: {
+          turnId: "owner-turn",
+          actions: [{ kind: "tool-call", toolName: "finish-github-pr-delivery", input: {} }],
+        },
+      }),
+      complete("finish-github-pr-delivery", merged),
+      message,
+    ];
+    expect(projectInstalledEveEvents(historical)).toEqual(projectInstalledEveEvents([message]));
+    const events = projectInstalledEveEvents([
+      ...historical,
+      complete("observe-app-production", nativeProduction),
+    ]).slice(1);
+    expect(events).toMatchObject([
+      { state: "completed", type: "progress" },
+      { type: "assistant_message" },
+    ]);
+    expect(events.find((event) => event.type === "assistant_message")?.text).toContain(appUrl);
+    expect(JSON.stringify(events)).not.toContain("private-repository-id");
+  });
+
+  it.each([
+    "http://apps.example.com/saved-app",
+    "https://user:password@apps.example.com/saved-app",
+    "https://private.vercel-infra.com/saved-app",
+  ])("does not expose an unsafe or private app URL", (url) => {
+    const events = projectInstalledEveEvents([
+      complete("observe-app-production", {
+        ...nativeProduction,
+        app: { ...nativeProduction.app, url },
+      }),
+    ]);
+    expect(events).toMatchObject([{ state: "failed", type: "progress" }]);
+    expect(JSON.stringify(events)).not.toContain(url);
+  });
+
+  it("reports a service interruption with an existing safe app link", () => {
+    const events = projectInstalledEveEvents([
+      complete("finish-github-pr-delivery", {
+        ...merged,
+        nativeProduction: {
+          ...nativeProduction,
+          status: "service-unavailable",
+          serviceIssue: "gateway-read",
+          app: { state: "registered", url: appUrl },
+        },
+      }),
+    ]);
+    expect(events).toMatchObject([
+      { state: "failed", type: "progress" },
+      { type: "assistant_message" },
+    ]);
+    expect(events.find((event) => event.type === "assistant_message")?.text).toContain(appUrl);
+    expect(events.find((event) => event.type === "assistant_message")?.text).toContain(
+      "Delivery of the latest update remains unconfirmed",
+    );
+    expect(JSON.stringify(events)).not.toContain("gateway-read");
+  });
+});

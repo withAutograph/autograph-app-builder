@@ -272,7 +272,15 @@ it("retains the same review and ready cycle while saved setup is still progressi
     evidence: { kind: "pr-merge", mergeCommitSha },
     status: "succeeded",
   });
-  await expect(step(approval, readyAt)).resolves.toEqual({ status: "merged", mergeCommitSha });
+  await expect(step(approval, readyAt)).resolves.toEqual({
+    status: "merged",
+    mergeCommitSha,
+    nativeProductionTarget: {
+      appId: "example-app",
+      repositoryId: reviewedTarget.repositoryId,
+      repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
+    },
+  });
   expect(mocks.run).toHaveBeenCalledExactlyOnceWith(
     expect.objectContaining({
       approvedByCallId: callId,
@@ -304,4 +312,26 @@ it("recovers a ready transition after the original response is lost", async () =
     reconcileOnly: true,
     reviewedTarget,
   });
+});
+
+it("recovers the same owned managed merge and passes its exact saved native target", async () => {
+  const target = {
+    appId: "example-app",
+    repositoryId: reviewedTarget.repositoryId,
+    repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
+  };
+  mocks.readAuthority.mockResolvedValue({
+    subject: { appId: target.appId },
+    requirements: [{ ...target, operationRef: "11111111-1111-4111-8111-111111111111" }],
+  });
+  mocks.inspect.mockResolvedValue(observe({ state: "merged", mergeCommitSha }));
+  await expect(step(approval, readyAt)).resolves.toEqual({
+    status: "merged",
+    mergeCommitSha,
+    nativeProductionTarget: target,
+  });
+  expect(mocks.production).not.toHaveBeenCalled();
+  expect(mocks.run).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ kind: "pr-merge", reconcileOnly: true }),
+  );
 });

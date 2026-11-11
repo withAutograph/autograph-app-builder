@@ -20,6 +20,7 @@ import { describeAppAccessIntent } from "./app-access-intent";
 import { repositoryProductionDeliveryStatusSchema } from "../provisioning/repository-production-delivery";
 import type { RepositoryProductionDeliveryTarget } from "../provisioning/repository-production-delivery";
 import { retainManagedProductionDeliveryRequirement } from "./production-delivery-requirement";
+import { repositoryProductionNativeStatusSchema } from "../provisioning/repository-production-native-status-contract";
 
 const setupSchema = z.object({
   operationRef: z.uuid(),
@@ -33,8 +34,21 @@ const setupSchema = z.object({
   signInUrl: z.url().optional(),
   expiresAt: z.iso.datetime({ offset: true }).optional(),
 });
-// oxlint-disable-next-line sonarjs/max-union-size -- These are the four closed app setup/read actions on the existing protected service.
-type RepositoryProductionAction = "plan" | "prepare" | "setup-status" | "delivery-status";
+// oxlint-disable-next-line sonarjs/max-union-size -- Each protected setup/read action has distinct existing service handling.
+type RepositoryProductionAction =
+  | "plan"
+  | "prepare"
+  | "setup-status"
+  | "delivery-status"
+  | "native-status";
+
+export class RepositoryProductionNativeAccessChangedError extends Error {
+  constructor() {
+    super("Builder stopped checking this app after its saved access or destination changed.");
+    this.name = "RepositoryProductionNativeAccessChangedError";
+  }
+}
+
 interface RepositoryProductionRequestExtras {
   approvedByCallId?: string;
   creatorEmail?: string;
@@ -48,6 +62,11 @@ export const repositoryProductionResponseError = async (
   response: Response,
   action: RepositoryProductionAction,
 ): Promise<Error> => {
+  if (action === "native-status") {
+    return response.status === 403
+      ? new RepositoryProductionNativeAccessChangedError()
+      : new Error("Builder could not check this app’s current availability.");
+  }
   let code = "";
   try {
     const failure = z.object({ code: z.string() }).safeParse(await response.json());
@@ -206,6 +225,13 @@ export const createRepositoryProductionClient = (input: {
     },
     status: async (appId: string) =>
       await send(appId, "setup-status", setupSchema.extend({ version: z.literal(1) })),
+    nativeStatus: async (appId: string) => {
+      const result = await send(appId, "native-status", repositoryProductionNativeStatusSchema);
+      if (result.appId !== appId) {
+        throw new RepositoryProductionNativeAccessChangedError();
+      }
+      return result;
+    },
     deliveryStatus: async (appId: string, target: RepositoryProductionDeliveryTarget) => {
       const result = await send(
         appId,

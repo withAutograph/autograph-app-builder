@@ -55,8 +55,11 @@ import { readRepositoryProductionConfiguration } from "./repository-production-c
 import type { RepositoryProductionRepository } from "./repository-production-configuration";
 import {
   createRepositoryProductionManagementResolver,
+  createRepositoryProductionObservationResolver,
+  readRepositoryProductionObservationSession,
   readRepositoryProductionManagementRecord,
 } from "./repository-production-management-subject";
+import { createRepositoryProductionNativeStatus } from "./repository-production-native-status";
 import {
   createRepositoryProductionCompletionStatus,
   completeRepositoryProductionFromStatus,
@@ -298,6 +301,16 @@ export const createRepositoryProductionNativeHandler =
           authority: owner.ownerContext.authority,
           ownerContext: owner.ownerContext,
           target: { appId: owner.appId, sessionId: owner.sessionId },
+        });
+      const readObservationSession = async (owner: RepositoryProductionRequestOwner) =>
+        await readRepositoryProductionObservationSession(owner, {
+          readCanonical: readSession,
+          readCurrent: async (requested, logicalSessionId) =>
+            await defined(sessions.readCurrentBuildSession).call(sessions, {
+              authoritySessionId: requested.sessionId,
+              logicalSessionId,
+              principal: requested.ownerContext.principal,
+            }),
         });
       const configured = (scope: RepositoryProductionScope) => {
         const found = configuration.repositories.find(
@@ -1091,6 +1104,16 @@ export const createRepositoryProductionNativeHandler =
             ? await setup(found.scope).status(found.scope, row.record.intent)
             : { operationRef: key(found.scope), state: "setting-up-data" };
         },
+        readNativeStatus: createRepositoryProductionNativeStatus({
+          resolve: createRepositoryProductionObservationResolver({
+            repositories: configuration.repositories,
+            readSession: readObservationSession,
+            store,
+          }),
+          teamId: configuration.operator.ownerId,
+          readCredential,
+          signal: request.signal,
+        }),
         readDeliveryStatus: createRepositoryProductionDeliveryStatus({
           repositories: configuration.repositories,
           readSession: async (owner) => {

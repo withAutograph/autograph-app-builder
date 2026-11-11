@@ -252,8 +252,13 @@ app calls for testing or independent assessment.
 
 For a selected existing repository with native Production deployment, including
 Arrusted, publish the reviewed draft, use the separate approved PR Ready and
-merge flow, and report the native deployment result. Before requesting Ready/merge,
-read the draft's delivery status and follow its normal Production setup continuation.
+merge flow. After merging a managed destination, the same delivery workflow
+follows provider-owned activation and checks the live app entry. Share its
+observed public URL when available. Current availability, delivery of the newly
+merged revision, and authenticated app behavior are separate facts. To check
+availability again in a saved session, use `observe-app-production` for the same
+app. Continue that read after a service issue using the saved session.
+Before requesting Ready/merge, read the draft's delivery status and follow its normal Production setup continuation.
 For a managed destination, prepare the required data, access and runtime bindings
 after draft publication and before merging. Native deployments capture their
 environment at creation; binding a database after merge cannot repair an already
