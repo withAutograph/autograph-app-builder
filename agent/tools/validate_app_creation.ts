@@ -1,3 +1,4 @@
+import { currentDirectProductionGrant } from "@/lib/agent/direct-production-state";
 /* oxlint-disable github/filenames-match-regex, unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { recoverHostedTemplateFoundation } from "@/lib/agent/hosted-template-foundation-recovery";
 import { resolveHostedTemplateFoundationBinding } from "@/lib/agent/hosted-template-foundation-binding";
@@ -712,7 +713,10 @@ export const createAppValidationTool = (
       return {
         attemptDigest: result.receipt.attemptDigest,
         backendValidation,
-        draftReview: draftReviewAfterTechnicalValidation(appBuilderWorkflowState.get()),
+        draftReview: draftReviewAfterTechnicalValidation(
+          appBuilderWorkflowState.get(),
+          currentDirectProductionGrant(ctx, { appId: current.appSpec.appId }) !== undefined,
+        ),
         commandCount: result.receipt.commands.length,
         logs: result.receipt.commands.map((command) => {
           const summary: ValidationCommandSummary = { name: command.name };

@@ -600,7 +600,25 @@ The boundary supports four operations:
 4. Recover an unknown provider outcome by the proposal's idempotency key
    without repeating the mutation.
 
-Repository creation and draft-PR publication are separate approvals. Each
+For a new private Arrusted app with an explicit direct Production request,
+Builder can collect a single owner-approved grant for Build, reviewed draft
+publication, managed Production setup, and reviewed Ready/merge. The grant
+binds the accepted product plan, workspace and creator, verified GitHub
+repository, installation and default branch, and whether the app needs managed
+storage. A private Build that later receives a Production request uses one
+release approval with the same scope. A private-only Build grants no outward
+authority.
+
+Each effect retains its own exact current reviewed inputs and operation
+journal. The draft writer checks the sealed candidate, the protected operator
+verifies the original approval and current setup plan, and the merge workflow
+checks the reviewed GitHub head and required checks. Moving or changing a
+reviewed revision invalidates stale authority for that revision. Changes to the
+approved app, destination, access or storage need a new decision. Activation
+stays with Vercel.
+
+Repository creation and draft-PR publication outside the scoped Arrusted
+release use separate approvals. Each
 proposal binds the exact installation identity, selected repository or private
 destination, reviewed change-set digest, source/base SHA and tree, and the
 observed `REPOSITORY_RELEASE_ENABLED` state. A fresh repository must keep the

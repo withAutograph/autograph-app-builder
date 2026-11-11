@@ -14,11 +14,13 @@ const mocks = vi.hoisted(() => ({
   production: vi.fn(),
   captureAuthority: vi.fn(),
   readAuthority: vi.fn(),
+  readGrant: vi.fn(),
 }));
 vi.mock("./github-pr-delivery-authority", () => ({
   captureGitHubPrDeliveryAuthority: mocks.captureAuthority,
   readGitHubPrDeliveryAuthority: mocks.readAuthority,
 }));
+vi.mock("./direct-production-state", () => ({ currentDirectProductionGrant: mocks.readGrant }));
 vi.mock("./draft-reconciliation-state", () => ({
   draftReconciliationState: { get: mocks.getCandidate },
 }));
@@ -87,6 +89,7 @@ const step = (input: GitHubPrDeliveryApproval, cycle?: string) =>
 
 beforeEach(() => {
   mocks.captureAuthority.mockReset();
+  mocks.readGrant.mockReset();
   mocks.captureAuthority.mockResolvedValue(null);
   mocks.readAuthority.mockReset();
   mocks.readAuthority.mockResolvedValue({ subject: { appId: "example-app" }, requirements: [] });
@@ -120,6 +123,27 @@ it("requires approval for the session's current reviewed publication", async () 
     type: "denied",
   });
   expect(mocks.inspect).not.toHaveBeenCalled();
+  expect(mocks.run).not.toHaveBeenCalled();
+});
+
+it("uses the original Production grant only for the exact current reviewed GitHub revision", async () => {
+  const grantDigest = "7".repeat(64);
+  const installationId = "10";
+  const approved = { ...approval, installationId };
+  mocks.getState.mockReturnValue({
+    ...mocks.getState(),
+    githubDestinationReview: { installation: { installationId } },
+  });
+  mocks.readGrant.mockReturnValue({ digest: grantDigest });
+  mocks.inspect.mockResolvedValue(observe({ draft: true }));
+
+  await expect(approve(approved)).resolves.toBe("approved");
+  expect(mocks.captureAuthority).toHaveBeenCalledWith(approved, expect.anything(), {
+    directProductionGrantDigest: grantDigest,
+  });
+  await expect(approve({ ...approved, headSha: "f".repeat(40) })).resolves.toMatchObject({
+    type: "denied",
+  });
   expect(mocks.run).not.toHaveBeenCalled();
 });
 
@@ -182,6 +206,63 @@ it("marks the approved draft ready and returns the observed cycle without mergin
     proposalDigest: approval.proposalDigest,
     reviewedTarget,
   });
+});
+
+it("waits for managed setup and the current required check in a delegated Production delivery", async () => {
+  mocks.readAuthority.mockResolvedValue({
+    subject: { appId: "example-app" },
+    requirements: [],
+    directProduction: true,
+  });
+  mocks.inspect.mockResolvedValue(observe({ draft: true }));
+  await expect(step(approval)).rejects.toThrow("restore this app’s managed Production setup");
+  expect(mocks.run).not.toHaveBeenCalled();
+
+  const managedSetup = {
+    version: 1,
+    appId: "example-app",
+    repositoryId: reviewedTarget.repositoryId,
+    repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
+    applicable: true,
+    operationRef: "11111111-1111-4111-8111-111111111111",
+  };
+  mocks.production.mockResolvedValue({
+    ...managedSetup,
+    state: "setting-up-data",
+    preparationRequired: true,
+  });
+  await expect(step(approval)).resolves.toMatchObject({
+    status: "production-setup-required",
+    nextCall: { tool: "plan-app-production" },
+  });
+  expect(mocks.run).not.toHaveBeenCalled();
+
+  mocks.production.mockResolvedValue({
+    ...managedSetup,
+    state: "ready",
+    preparationRequired: false,
+  });
+  mocks.run.mockResolvedValue({ evidence: { kind: "pr-ready", readyAt }, status: "succeeded" });
+  await expect(step(approval)).resolves.toEqual({ readyAt, status: "waiting-for-checks" });
+
+  mocks.inspect.mockResolvedValue(observe({ checks: "pending" }));
+  await expect(step(approval, readyAt)).resolves.toEqual({ readyAt, status: "waiting-for-checks" });
+  expect(mocks.run).toHaveBeenCalledTimes(1);
+
+  mocks.inspect.mockResolvedValue(observe({ checks: "passed" }));
+  mocks.run.mockResolvedValue({
+    evidence: { kind: "pr-merge", mergeCommitSha },
+    status: "succeeded",
+  });
+  await expect(step(approval, readyAt)).resolves.toMatchObject({
+    status: "merged",
+    mergeCommitSha,
+    nativeProductionTarget: { appId: "example-app" },
+  });
+  expect(mocks.run).toHaveBeenNthCalledWith(
+    2,
+    expect.objectContaining({ kind: "pr-merge", readyAt, reviewedTarget }),
+  );
 });
 
 it.each([

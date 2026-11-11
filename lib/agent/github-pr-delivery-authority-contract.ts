@@ -38,6 +38,7 @@ export const githubPrDeliveryCallScopeSchema = z.strictObject({
   turnSequence: z.number().int().nonnegative(),
   cancelled: z.literal(true).optional(),
   inputDigest: digest,
+  directProductionGrantDigest: digest.optional(),
   subject: githubPrDeliveryReviewScopeSchema,
   requirements: z.array(githubPrDeliveryManagedRequirementSchema),
 });

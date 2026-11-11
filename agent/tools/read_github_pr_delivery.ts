@@ -14,7 +14,7 @@ import {
 
 export default defineTool({
   description:
-    "Read this session's reviewed pull request and required checks. For a managed Production destination, finish its normal data, access and runtime binding setup after draft publication and before Ready/merge. Follow returned nextCall using the existing setup approval or saved continuation; no database details or app-test gate. A draft defers checks until Ready. Passing checks or setup do not claim native activation or hosted behavior.",
+    "Read this session's reviewed pull request and required checks. For a managed Production destination, finish its normal data, access and runtime binding setup after draft publication and before Ready/merge. Follow returned nextCall for setup or reviewed delivery using the current release approval; no database details or app-test gate. A draft defers checks until Ready. Passing checks or setup do not claim native activation or hosted behavior.",
   async execute(_input, ctx) {
     const subject = resolveGitHubPrDeliverySubject(
       appBuilderWorkflowState.get(),
@@ -81,7 +81,11 @@ export default defineTool({
       if (observation.readyAt !== undefined) {
         approval.readyAt = observation.readyAt;
       }
-      return { ...result, approval };
+      return {
+        ...result,
+        approval,
+        nextCall: { tool: "finish-github-pr-delivery" as const, input: approval },
+      };
     }
     return result;
   },

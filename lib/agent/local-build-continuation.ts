@@ -210,7 +210,9 @@ export const continueApprovedLocalBuild = async (input: {
   }
   // Reservation is durable before SDK submission. Its existence prevents any replay after a lost acknowledgement.
   try {
-    await input.dispatch(internalBuildMessage(operationId, nonce));
+    await input.dispatch(
+      internalBuildMessage(operationId, nonce, decision.directProduction !== undefined),
+    );
     await write(path.join(owned, `${op}.accepted.json`), JSON.stringify({ accepted: true }), true);
   } catch {
     await write(

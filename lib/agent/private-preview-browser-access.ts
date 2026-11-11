@@ -7,11 +7,17 @@ import type { WorkingPreviewRuntime } from "../sandbox/working-preview-runtime";
 import { localRuntimeEnvironmentPath } from "../repository/runtime-environment";
 
 export class PrivatePreviewBrowserPrerequisiteError extends Error {
-  readonly code = "private-preview-refresh-required";
-  constructor() {
+  readonly code: "private-preview-refresh-required" | "private-preview-browser-unavailable";
+
+  constructor(
+    code: PrivatePreviewBrowserPrerequisiteError["code"] = "private-preview-refresh-required",
+  ) {
     super(
-      "Refresh the selected app's current private working preview before browser verification. Its owner, source, lifetime and exact Auth origin must agree; public release and application authorization remain separate.",
+      code === "private-preview-browser-unavailable"
+        ? "The optional browser check could not prepare its private connection. You can still use the current working preview while it is available."
+        : "Refresh the selected app's current private working preview before browser verification. Its owner, source, lifetime and exact Auth origin must agree; public release and application authorization remain separate.",
     );
+    this.code = code;
     this.name = "PrivatePreviewBrowserPrerequisiteError";
   }
 }
@@ -134,7 +140,15 @@ export const withPrivatePreviewBrowserAccess = async <T>(input: {
   };
   input.signal?.throwIfAborted();
   input.assertCurrent();
-  await run("prepare");
+  try {
+    await run("prepare");
+  } catch (error) {
+    input.signal?.throwIfAborted();
+    if (error instanceof PrivatePreviewBrowserPrerequisiteError) {
+      throw error;
+    }
+    throw new PrivatePreviewBrowserPrerequisiteError("private-preview-browser-unavailable");
+  }
   try {
     input.assertCurrent();
     input.signal?.throwIfAborted();

@@ -1,3 +1,5 @@
+import { currentDirectProductionGrant } from "../../lib/agent/direct-production-state";
+import { repositoryProductionNativeStatusSchema } from "../../lib/provisioning/repository-production-native-status-contract";
 import {
   invalidateGitHubPrDeliveryCallsForTurn,
   gitHubPrDeliveryAuthorityProjectionChanged,
@@ -19,6 +21,7 @@ import {
   approvedBuildReviewProgress,
   authenticatedBuildDelivery,
   currentApprovedBuildProgress,
+  directProductionProgressState,
   recordApprovedBuildDecision,
 } from "../../lib/agent/approved-build-continuation-runtime";
 import { hasCurrentProductBehaviorPreview } from "../../lib/agent/product-behavior-state";
@@ -29,6 +32,46 @@ const completedReviewResult = z.object({
   sourceReview: z.object({ outcomeRef: z.string().min(1) }),
 });
 
+const draftPublished = z.object({
+  appSourceRecording: z.object({ status: z.literal("recorded") }),
+});
+const setupState = z.object({ state: z.literal("ready") });
+const preparedSetup = z.object({ setup: setupState });
+const mergedDelivery = z.object({
+  status: z.literal("merged"),
+  nativeProduction: repositoryProductionNativeStatusSchema.optional(),
+});
+const finishedDeliveryTool = "finish-github-pr-delivery";
+const observeProductionTool = "observe-app-production";
+const liveStage = "live";
+const activationUnavailable = "activation-unavailable";
+const deliveryProgress = (toolName: string, output: z.infer<ReturnType<typeof z.json>>) => {
+  if (toolName === "publish_github_draft_pr" && draftPublished.safeParse(output).success) {
+    return "draft";
+  }
+  if (
+    (toolName === "prepare-app-production" && preparedSetup.safeParse(output).success) ||
+    (toolName === "get-app-production" && setupState.safeParse(output).success)
+  ) {
+    return "setup";
+  }
+  if (toolName === finishedDeliveryTool) {
+    const delivered = mergedDelivery.safeParse(output);
+    if (delivered.success) {
+      return delivered.data.nativeProduction?.status === "available"
+        ? liveStage
+        : activationUnavailable;
+    }
+  }
+  if (toolName === observeProductionTool) {
+    const observed = repositoryProductionNativeStatusSchema.safeParse(output);
+    if (observed.data?.status === "available") {
+      return liveStage;
+    }
+  }
+  return null;
+};
+
 const boundary = defineState<{ pendingInputs: string[]; blocked: boolean }>(
   "autograph-app-builder.approved-build-boundary.v1",
   () => ({ blocked: false, pendingInputs: [] }),
@@ -36,7 +79,14 @@ const boundary = defineState<{ pendingInputs: string[]; blocked: boolean }>(
 const record = async (ctx: HookContext, forced?: "working" | "blocked") => {
   const current = boundary.get();
   const state = appBuilderWorkflowState.get();
+  const grant = "appSpec" in state ? currentDirectProductionGrant(ctx, state.appSpec) : undefined;
+  const progress = directProductionProgressState.get();
   const decision = decideApprovedBuildContinuation({
+    directProduction: grant,
+    releaseFinished:
+      progress !== null &&
+      progress.grantDigest === grant?.digest &&
+      [liveStage, activationUnavailable].includes(progress.stage),
     adapterSessionId: ctx.session.id,
     repositoryAccess: repositoryAccessReceiptState.get(),
 
@@ -58,22 +108,25 @@ const record = async (ctx: HookContext, forced?: "working" | "blocked") => {
   if (forced === "blocked" || (forced === "working" && decision.sourcePrerequisite === undefined)) {
     decision.decision = forced;
   }
-  const delivered = authenticatedBuildDelivery.get();
-  if (
-    forced === undefined &&
-    decision.decision === "runnable" &&
-    delivered?.turnId === ctx.session.turn.id &&
-    delivered.progress === currentApprovedBuildProgress()
-  ) {
+  if (forced === undefined && decision.decision === "runnable") {
     const preview = workingPreviewState.get();
-    const previewReady =
-      state.phase === "applied" &&
+    const privatePreviewPhase =
+      grant === undefined && (state.phase === "applied" || state.phase === "validated");
+    const matchingLivePreview =
+      privatePreviewPhase &&
       preview?.receipt.appId === state.appSpec.appId &&
-      Date.parse(preview.receipt.expiresAt) > Date.now() &&
-      hasCurrentProductBehaviorPreview(preview.commandId);
-    decision.decision = previewReady ? "settled" : "blocked";
-    if (!previewReady) {
-      decision.reason = "build_no_progress";
+      Date.parse(preview.receipt.expiresAt) > Date.now();
+    if (matchingLivePreview && hasCurrentProductBehaviorPreview(preview.commandId)) {
+      decision.decision = "settled";
+    } else {
+      const delivered = authenticatedBuildDelivery.get();
+      if (
+        delivered?.turnId === ctx.session.turn.id &&
+        delivered.progress === currentApprovedBuildProgress()
+      ) {
+        decision.decision = "blocked";
+        decision.reason = "build_no_progress";
+      }
     }
   }
   if (
@@ -92,6 +145,23 @@ export default defineHook({
       const { result, status } = event.data;
       if (status === "completed" && result.kind === "tool-result" && result.isError !== true) {
         const state = appBuilderWorkflowState.get();
+        const grant =
+          "appSpec" in state ? currentDirectProductionGrant(ctx, state.appSpec) : undefined;
+        const observed = z.json().safeParse(result.output);
+        const stage =
+          grant !== undefined && observed.success
+            ? deliveryProgress(result.toolName, observed.data)
+            : null;
+        if (grant !== undefined && stage !== null) {
+          const current = directProductionProgressState.get();
+          // A standalone status read cannot mark an unmerged release as live.
+          const canRecord =
+            result.toolName !== observeProductionTool ||
+            (current?.grantDigest === grant.digest && current.stage === activationUnavailable);
+          if (canRecord) {
+            directProductionProgressState.update(() => ({ grantDigest: grant.digest, stage }));
+          }
+        }
         if (state.phase === "validated") {
           const buildProgress = approvedBuildProgress(state);
           if (
@@ -120,7 +190,13 @@ export default defineHook({
         [
           "accept_app_spec",
           "apply_app_creation",
+          "release-app-production",
           "validate_app_creation",
+          "publish_github_draft_pr",
+          "prepare-app-production",
+          "get-app-production",
+          finishedDeliveryTool,
+          observeProductionTool,
           "prepare_workspace",
           "prepare_app_creation",
         ].includes(event.data.result.toolName)

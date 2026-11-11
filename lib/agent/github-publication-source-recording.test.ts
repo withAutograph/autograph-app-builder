@@ -1,6 +1,11 @@
 /* oxlint-disable anti-slop/no-module-mocking, typescript/no-unsafe-type-assertion -- Isolate Eve state and trusted publication/recording ports while exercising the production tool execute boundaries. */
+/* oxlint-disable sonarjs/no-internal-api-use -- Direct tool calls run in their own installed Eve session context. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { isDeepStrictEqual } from "node:util";
+import {
+  ContextContainer,
+  contextStorage,
+} from "../../node_modules/eve/dist/src/context/container.js";
 import type { DraftReconciliationCompletion } from "./draft-reconciliation-state";
 import type { approvalReceiptSchema as ActualApprovalReceiptSchema } from "./approval-receipt";
 
@@ -210,6 +215,9 @@ const ctx = {
   getSandbox: async () => await Promise.resolve({}),
 };
 
+const executeInPublicationSession = async <T>(execute: () => T) =>
+  await contextStorage.run(new ContextContainer(), async () => await execute());
+
 const originalCandidate = structuredClone(hooks.candidate);
 const originalState = structuredClone(hooks.state);
 const completionFixture = (): DraftReconciliationCompletion => ({
@@ -259,7 +267,7 @@ describe("publication records actual source for its compiled app release", () =>
       branchSha: "verified-head",
     });
     // SAFETY: This minimal Eve context supplies the exercised ports; the fixture controls owner, approval, state and publication dependencies.
-    await publishTool.execute(input, ctx as never);
+    await executeInPublicationSession(async () => await publishTool.execute(input, ctx as never));
     expect(hooks.state).toHaveProperty(
       "publishedGitHubDraftProposalDigest",
       input.expectedProposalDigest,
@@ -276,7 +284,7 @@ describe("publication records actual source for its compiled app release", () =>
         repositoryId: "repository",
       });
       // SAFETY: This minimal Eve context supplies the exercised ports while controlled publication results test refusal to record unverified markers.
-      await publishTool.execute(input, ctx as never);
+      await executeInPublicationSession(async () => await publishTool.execute(input, ctx as never));
       expect(hooks.state.publishedGitHubDraftProposalDigest).toBeUndefined();
     },
   );
@@ -309,10 +317,13 @@ describe("publication records actual source for its compiled app release", () =>
         return Promise.resolve({ status: "recorded" });
       });
       // SAFETY: This controlled Eve context adds the real AbortSignal to test cancellation while all state and outward-effect ports remain test-owned.
-      const result = await publishTool.execute(input, {
-        ...ctx,
-        abortSignal: cancellation.signal,
-      } as never);
+      const result = await executeInPublicationSession(
+        async () =>
+          await publishTool.execute(input, {
+            ...ctx,
+            abortSignal: cancellation.signal,
+          } as never),
+      );
       expect(result).toMatchObject({
         status: "succeeded",
         appSourceRecording: { status: "unavailable", recoveryRequired: true },
@@ -327,9 +338,9 @@ describe("publication records actual source for its compiled app release", () =>
       proposal: { ...hooks.state.githubDraftProposal.proposal, digest: "f".repeat(64) },
     };
     // SAFETY: The stale proposal guard runs before any framework context or publication adapter is consumed.
-    await expect(publishTool.execute(input, ctx as never)).rejects.toThrow(
-      "different draft-PR proposal",
-    );
+    await expect(
+      executeInPublicationSession(async () => await publishTool.execute(input, ctx as never)),
+    ).rejects.toThrow("different draft-PR proposal");
     expect(hooks.publish).not.toHaveBeenCalled();
     expect(hooks.record).not.toHaveBeenCalled();
   });
@@ -347,7 +358,9 @@ describe("publication records actual source for its compiled app release", () =>
         entry.publish.mockResolvedValue(publication);
         // SAFETY: The mocked Eve/publication ports consume only the supplied session, call ID and sandbox fields.
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Framework fixture supplies precisely the production execute path's consumed context.
-        const result = await entry.tool.execute(input, ctx as never);
+        const result = await executeInPublicationSession(
+          async () => await entry.tool.execute(input, ctx as never),
+        );
         expect(result).toMatchObject({ ...publication, appSourceRecording: { status } });
         expect(hooks.record).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -384,7 +397,9 @@ describe("publication records actual source for its compiled app release", () =>
       hooks.record.mockRejectedValue(new Error("private artifact detail"));
       // SAFETY: The mocked Eve/publication ports consume only the supplied session, call ID and sandbox fields.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Framework fixture supplies precisely the production execute path's consumed context.
-      const result = await entry.tool.execute(input, ctx as never);
+      const result = await executeInPublicationSession(
+        async () => await entry.tool.execute(input, ctx as never),
+      );
       expect(result).toMatchObject({
         ...publication,
         appSourceRecording: { recoveryRequired: true, status: "unavailable" },
@@ -398,9 +413,9 @@ describe("publication records actual source for its compiled app release", () =>
       entry.publish.mockRejectedValue(new Error("publication outcome unknown"));
       // SAFETY: The mocked Eve/publication ports consume only the supplied session, call ID and sandbox fields.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Framework fixture supplies precisely the production execute path's consumed context.
-      await expect(entry.tool.execute(input, ctx as never)).rejects.toThrow(
-        "publication outcome unknown",
-      );
+      await expect(
+        executeInPublicationSession(async () => await entry.tool.execute(input, ctx as never)),
+      ).rejects.toThrow("publication outcome unknown");
       expect(hooks.record).not.toHaveBeenCalled();
       expect(hooks.candidate).toEqual(candidateBefore);
     });
@@ -411,7 +426,9 @@ describe("publication records actual source for its compiled app release", () =>
       });
       // SAFETY: The mocked Eve/publication ports consume only the supplied session, call ID and sandbox fields.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Framework fixture supplies precisely the production execute path's consumed context.
-      await expect(entry.tool.execute(input, ctx as never)).rejects.toThrow("approval mismatch");
+      await expect(
+        executeInPublicationSession(async () => await entry.tool.execute(input, ctx as never)),
+      ).rejects.toThrow("approval mismatch");
       expect(entry.publish).not.toHaveBeenCalled();
       expect(hooks.record).not.toHaveBeenCalled();
     });

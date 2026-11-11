@@ -182,10 +182,31 @@ export const readGitHubPrDeliveryAuthority = async (
   if (!sameCall || !sameSubject) {
     throw unavailable(capturedCallMismatch);
   }
+  if (call.directProductionGrantDigest !== undefined) {
+    const grant = decision.directProduction;
+    const approved = grant?.subject;
+    const matchesRelease = [
+      grant?.digest === call.directProductionGrantDigest,
+      approved?.appId === spec.appId,
+      approved?.appSpecDigest === spec.appSpecDigest,
+      approved?.proposalDigest === spec.proposalDigest,
+      approved?.buildWorkspaceId === spec.workspaceId,
+      approved?.repositoryId === approval.repositoryId,
+      approved?.repositoryFullName === `${approval.owner}/${approval.name}`,
+      approved?.installationId === approval.installationId,
+      approved?.baseBranch === approval.baseBranch,
+    ].every(Boolean);
+    if (!matchesRelease) {
+      throw unavailable(capturedCallMismatch);
+    }
+  }
   const requirements = [...call.requirements, ...projection.requirements].filter(
     (entry) => entry.appId === subject.appId && entry.repositoryId === approval.repositoryId,
   );
-  return { subject, requirements };
+  const authority = { subject, requirements };
+  return call.directProductionGrantDigest === undefined
+    ? authority
+    : { ...authority, directProduction: true as const };
 };
 
 /** Capture scope facts in the parent; this is not a human approval receipt. */
@@ -196,6 +217,7 @@ export const captureGitHubPrDeliveryAuthority = async (
     readOwnerBinding?: OwnerBindingReader;
     readOwner?: GitHubPrDeliveryOwnerReader;
     persist?: typeof emitCurrentBuildWorkflowProjection;
+    directProductionGrantDigest?: string;
   } = {},
 ) => {
   ctx.abortSignal.throwIfAborted();
@@ -217,7 +239,13 @@ export const captureGitHubPrDeliveryAuthority = async (
   const before = await readOwnerBinding(ctx);
   ctx.abortSignal.throwIfAborted();
   assertSameBuild();
-  captureGitHubPrDeliveryCallScope(approval, ctx.callId, before, ctx.session.turn);
+  captureGitHubPrDeliveryCallScope(
+    approval,
+    ctx.callId,
+    before,
+    ctx.session.turn,
+    ports.directProductionGrantDigest,
+  );
   await (ports.persist ?? emitCurrentBuildWorkflowProjection)(ctx);
   const after = await readOwner(ctx);
   ctx.abortSignal.throwIfAborted();

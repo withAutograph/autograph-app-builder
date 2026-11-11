@@ -73,6 +73,7 @@ const fixture = vi.hoisted(() => {
     reviewReceipt: { digest: proposal.reviewDigest, changeSetDigest: proposal.changeSetDigest },
     githubDestinationReview: {
       digest: "7".repeat(64),
+      installation: { installationId: "10" },
       repository: {
         repositoryId: proposal.repositoryId,
         owner: proposal.owner,
@@ -88,7 +89,14 @@ const fixture = vi.hoisted(() => {
       githubSourceDigest: "f".repeat(64),
     },
   });
-  return { proposal, initial, state: initial(), seal: vi.fn(), publish: vi.fn() };
+  return {
+    proposal,
+    initial,
+    state: initial(),
+    seal: vi.fn(),
+    publish: vi.fn(),
+    readGrant: vi.fn(),
+  };
 });
 vi.mock("./workflow-state", async (importOriginal) => ({
   ...(await importOriginal<{
@@ -111,6 +119,7 @@ vi.mock("./deployment-github-publication-runtime", () => ({
       sealDraftPullRequestProposal: fixture.seal,
     }),
 }));
+vi.mock("./direct-production-state", () => ({ currentDirectProductionGrant: fixture.readGrant }));
 vi.mock("./app-baseline-state", () => ({ appBaselineState: { get: () => null } }));
 vi.mock("../repository/reviewed-change-set", () => ({ assertExistingAppReviewScope: () => {} }));
 vi.mock("../repository/source-receipt", () => ({ sourceReceiptEvidence: () => ({}) }));
@@ -254,6 +263,7 @@ const setup = (input: PublicationInput) => {
 beforeEach(() => {
   fixture.state = fixture.initial();
   context.getSandbox.mockClear();
+  fixture.readGrant.mockReset();
   fixture.seal.mockReset().mockResolvedValue(fixture.proposal);
   fixture.publish
     .mockReset()
@@ -261,6 +271,66 @@ beforeEach(() => {
 });
 
 describe("native draft publication approval", () => {
+  it("uses the current Production approval for the exact reviewed draft without opening another approval", async () => {
+    fixture.readGrant.mockReturnValue({ digest: "9".repeat(64) });
+    fixture.publish.mockResolvedValue({
+      status: "succeeded",
+      proposalDigest: fixture.proposal.digest,
+      repositoryId: fixture.proposal.repositoryId,
+    });
+    const input = {
+      expectedProposalDigest: fixture.proposal.digest,
+      approvalReceipt: approvalReceiptForDraftProposal(fixture.proposal),
+    };
+    const harness = setup(input);
+    await harness.run(harness.initial, { message: "Publish the reviewed app." });
+    expect(harness.events.some((event) => event.type === "input.requested")).toBe(false);
+    const publication = harness.events.find((event) => event.type === "action.result");
+    expect(publication?.data.result).toMatchObject({
+      output: { nextCall: { tool: "read_github_pr_delivery", input: {} } },
+    });
+    expect(fixture.readGrant).toHaveBeenCalledWith(expect.anything(), {
+      appId: "requests",
+      baseBranch: "main",
+      installationId: "10",
+      repositoryFullName: "fixture-team/fixture-apps",
+      repositoryId: "1234",
+    });
+    expect(fixture.publish).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        approvalReceipt: input.approvalReceipt,
+        approvedByCallId: context.callId,
+        expectedProposalDigest: input.expectedProposalDigest,
+      }),
+    );
+    expect(
+      z.object({ assertEffectCurrent: z.function() }).safeParse(fixture.publish.mock.calls[0]?.[0])
+        .success,
+    ).toBe(true);
+  });
+
+  it("stops a delegated publication when the release approval changes before provider dispatch", async () => {
+    fixture.readGrant.mockReturnValue({ digest: "9".repeat(64) });
+    context.getSandbox.mockImplementationOnce(async () => {
+      fixture.readGrant.mockReset();
+      return await Promise.resolve({});
+    });
+    const harness = setup({
+      expectedProposalDigest: fixture.proposal.digest,
+      approvalReceipt: approvalReceiptForDraftProposal(fixture.proposal),
+    });
+    await harness.run(harness.initial, { message: "Publish the reviewed app." });
+    expect(fixture.publish).not.toHaveBeenCalled();
+    expect(
+      harness.events.some(
+        (event) =>
+          event.type === "action.result" &&
+          event.data.result.kind === "tool-result" &&
+          event.data.result.isError === true,
+      ),
+    ).toBe(true);
+  });
+
   it.each(["approve", "cancel", "moved-proposal"] as const)(
     "requests consent before publication and handles %s",
     async (decision) => {
@@ -345,6 +415,7 @@ describe("retained draft publication subject recovery", () => {
           : undefined;
       fixture.seal.mockClear();
       context.getSandbox.mockClear();
+      fixture.readGrant.mockReset();
       const saved = structuredClone(fixture.state);
       const recovered = z
         .object({

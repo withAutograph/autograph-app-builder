@@ -177,7 +177,7 @@ export const createRepositoryProductionClient = (input: {
         accessSummary: describeAppAccessIntent(result.plan.scope.appId, result.plan.intent.access),
       };
     },
-    prepare: async (value: RepositoryProductionPrepareInput) => {
+    prepare: async (value: RepositoryProductionPrepareInput, directProductionCallId?: string) => {
       const plan = repositoryProductionPrepareInputSchema.parse(value);
       if (
         "scope" in plan &&
@@ -195,8 +195,10 @@ export const createRepositoryProductionClient = (input: {
               creatorEmail: plan.review.creatorEmail,
             }
           : { ...plan.scope, creatorEmail: plan.intent.creatorEmail };
-      const extra: RepositoryProductionRequestExtras = { approvedByCallId: input.callId };
-      if (creatorEmail !== undefined) {
+      const extra: RepositoryProductionRequestExtras = {
+        approvedByCallId: directProductionCallId ?? input.callId,
+      };
+      if (creatorEmail !== undefined && directProductionCallId === undefined) {
         extra.creatorEmail = creatorEmail;
       }
       if ("version" in plan) {

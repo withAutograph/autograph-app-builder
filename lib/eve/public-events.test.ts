@@ -1146,6 +1146,56 @@ describe("installed Eve 0.68 projection", () => {
     expect(JSON.stringify(projected.map(toPublicEvent))).not.toContain("apply_app_creation");
   });
 
+  it("shows the named Production effects on the single Build approval", () => {
+    const events = projectInstalledEveEvent(
+      installedEvent({
+        type: "input.requested",
+        data: {
+          requests: [
+            {
+              requestId: "req_build_release",
+              kind: "tool-approval",
+              prompt: "Raw Build prompt",
+              action: {
+                kind: "tool-call",
+                toolName: "apply_app_creation",
+                input: {
+                  productSummary: "Track equipment service dates.",
+                  directProduction: {
+                    version: 1,
+                    appId: "service-log",
+                    appSpecDigest: "a".repeat(64),
+                    proposalDigest: "b".repeat(64),
+                    sessionId: "private-session",
+                    buildWorkspaceId: "private-build",
+                    authority: {
+                      issuer: "https://builder.example/api/auth",
+                      audience: "https://builder.example/mcp",
+                      ownerUserId: "private-owner",
+                      workspaceId: "private-tenant",
+                    },
+                    repositoryId: "100",
+                    repositoryFullName: "withAutograph/arrusted-development",
+                    installationId: "200",
+                    baseBranch: "main",
+                    storageKind: "postgres",
+                  },
+                },
+              },
+            },
+          ],
+        },
+      }),
+      4,
+    ).map(toPublicEvent);
+    const approval = events.find((event) => event?.type === "input_required");
+    expect(approval?.request.title).toBe("Build and release to Production?");
+    expect(approval?.request.description).toContain("withAutograph/arrusted-development");
+    expect(approval?.request.description).toContain("managed database");
+    expect(approval?.request.description).toContain("required checks");
+    expect(approval?.request.description).not.toContain("private-owner");
+  });
+
   it("projects the one-time shared sign-in approval with the enrolled resource and effects", async () => {
     const { plan } = await rolloutFixture().service.plan(rolloutOwner, rolloutProfile.id);
     const events = projectInstalledEveEvent(
@@ -2042,6 +2092,35 @@ describe("Production app identity invitation", () => {
     const state = reduceIdentityInvitations(undefined, response);
     expect(sessionAuthorizationRefreshKey(response, state.invitations)).not.toBe("");
     expect(reduceIdentityInvitations(state, response)).toEqual(state);
+  });
+
+  it("shows the sign-in link while the direct release waits and clears it on setup readback", () => {
+    const pending = installedEvent({
+      type: "action.partial",
+      data: {
+        turnId: "owner-turn",
+        sequence: 8,
+        stepIndex: 2,
+        result: {
+          kind: "tool-result",
+          toolName: "prepare-app-production",
+          callId: "prepare-call",
+          output: output(),
+        },
+      },
+    });
+    const events = projectInstalledEveEvents([pending]);
+    const state = reduceIdentityInvitations(undefined, result(events));
+    expect(state.invitations).toEqual([{ callId: "prepare-call", expiresAt, operationRef, url }]);
+    expect(outstandingInstalledEveRequests([pending])).toEqual([]);
+    expect(JSON.stringify(events)).not.toContain("private-");
+    const ready = completed("prepare-app-production", "prepare-call", {
+      setup: { operationRef, state: "ready" },
+    });
+    expect(
+      reduceIdentityInvitations(state, result(projectInstalledEveEvents([pending, ready])))
+        .invitations,
+    ).toEqual([]);
   });
 
   it("clears only the matching setup when a later status call confirms ready", () => {

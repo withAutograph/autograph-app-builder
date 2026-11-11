@@ -34,7 +34,10 @@ const nextDraftReviewCall = (
 };
 
 /** An ordinary review read, never publication consent or evidence that the app works. */
-export const draftReviewAfterTechnicalValidation = (state: AppBuilderWorkflowState) => {
+export const draftReviewAfterTechnicalValidation = (
+  state: AppBuilderWorkflowState,
+  directProduction = false,
+) => {
   if (state.phase !== "validated" && state.phase !== "reviewed") {
     // oxlint-disable-next-line unicorn/no-useless-undefined -- An unvalidated workflow has no draft-review continuation.
     return undefined;
@@ -42,7 +45,8 @@ export const draftReviewAfterTechnicalValidation = (state: AppBuilderWorkflowSta
   return {
     status: "available" as const,
     nextCall: nextDraftReviewCall(state),
-    guidance:
-      "For requested GitHub delivery, continue normal draft review and its exact publication approval using the saved repository. A draft saves reviewable work without releasing it. Retain failed or unverified browser outcomes; they do not invalidate passed repository commands or prevent draft review. After publication, use the owned draft's normal current-base reconciliation and candidate validation when a shared source repair must be adopted, then rerun the affected app-owned behavior checks there. Do not claim a usable app, Ready, merge or deployment from this continuation.",
+    guidance: directProduction
+      ? "Continue the approved Arrusted Production release using the saved destination. Required repository commands passed. Use nextCall to review and seal the exact candidate, then publish, prepare managed data and access, and finish reviewed merge and native availability. Preview and optional browser results do not delay this release."
+      : "For requested GitHub delivery, continue normal draft review and its exact publication approval using the saved repository. A draft saves reviewable work without releasing it. Retain failed or unverified browser outcomes; they do not invalidate passed repository commands or prevent draft review. After publication, use the owned draft's normal current-base reconciliation and candidate validation when a shared source repair must be adopted, then rerun the affected app-owned behavior checks there. Do not claim a usable app, Ready, merge or deployment from this continuation.",
   };
 };

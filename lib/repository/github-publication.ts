@@ -2293,6 +2293,7 @@ export async function publishApprovedDraftPullRequest(input: {
   review: ReviewedChangeSetReceipt;
   contentSource: GitHubDraftPullRequestContentSource;
   approvedByCallId: string;
+  assertEffectCurrent?: () => void;
 }): Promise<DraftPullRequestSuccessReceipt> {
   assertExactDraftPullRequestProposal(input.proposal);
   reviewForProposal(input.proposal, input.review);
@@ -2381,6 +2382,7 @@ export async function publishApprovedDraftPullRequest(input: {
     review: input.review,
     source: input.contentSource,
   });
+  input.assertEffectCurrent?.();
   let acknowledgement: GitHubMutationAcknowledgement;
   try {
     acknowledgement = await input.adapter.publishDraftPullRequest(input.proposal, content);

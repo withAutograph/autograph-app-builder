@@ -1,4 +1,5 @@
 import { directProductionGrantSchema } from "./direct-production-authorization";
+import type { DirectProductionGrant } from "./direct-production-authorization";
 import { githubPrDeliveryAuthorityProjectionSchema } from "./github-pr-delivery-authority-contract";
 import {
   localSourcePrerequisiteObservationSchema,
@@ -118,9 +119,19 @@ export const reportApprovedBuildNoProgress = (result: EveSessionResult): EveSess
 const marker =
   /\n\[autograph-private-build:(?<operationId>[a-z0-9_:-]+):(?<nonce>[a-f0-9]{64})\]$/u;
 export const readInternalBuildMarker = (message: string) => marker.exec(message)?.groups;
-export const internalBuildMessage = (operationId: string, nonce: string) =>
-  "Continue the existing approved private app build from its latest tool result. Continue implementing the approved product requirements that remain unfinished. Use a working preview to inspect and verify the implementation, and finish review when requested for delivery. A preview of partial work completes the request only when the user asked to inspect the current work or explicitly deferred the missing behavior. If the current app lacks an approved capability, continue its implementation within the existing scope and verify the result. Stop when the requested result is ready or when an actual provider, human-input, or outward-effect approval boundary requires it. Keep the current session and scope. This runtime continuation grants no new approval." +
-  `\n[autograph-private-build:${operationId}:${nonce}]`;
+const privateBuildContinuation =
+  "Finish implementing the approved app. Show a working private preview at its registered app route as the first working app handoff. Hand it off as soon as it works, even if optional browser checks are unavailable. If preview startup fails, report the concrete error and retry only after repairing the cause. Wait for the user's request before releasing to Production.";
+const productionBuildContinuation =
+  "Finish implementing the approved app. After required build and test commands pass, follow the saved Arrusted destination review and seal the exact changes. Continue through publication, Production setup, Ready and merge, and native app availability using the existing authorized release operations. Do not launch or await an optional private preview or browser test on this release path. Share the verified live app URL after native activation.";
+
+export const internalBuildMessage = (
+  operationId: string,
+  nonce: string,
+  directProduction = false,
+) => {
+  const purpose = directProduction ? productionBuildContinuation : privateBuildContinuation;
+  return `Continue the existing approved app from its latest tool result. Keep the saved session and accepted scope. ${purpose} Stop when the requested result is ready or when an actual failure or new authority requires user input. This runtime continuation grants no new approval.\n[autograph-private-build:${operationId}:${nonce}]`;
+};
 
 const projectExistingRepositorySource = (
   workflow: AppBuilderWorkflowState,
@@ -174,6 +185,8 @@ export const decideApprovedBuildContinuation = (input: {
   approvalMatches: (scope: PrivateApplyScope) => boolean;
   repositoryAccess?: RepositoryAccessReceipt;
 
+  directProduction?: DirectProductionGrant;
+  releaseFinished?: boolean;
   pendingInput: boolean;
   blocked: boolean;
   sourcePrerequisite?: LocalSourcePrerequisiteObservation;
@@ -185,6 +198,9 @@ export const decideApprovedBuildContinuation = (input: {
     version: 1 as const,
     workflowPhase: input.state.phase,
   };
+  if (input.directProduction !== undefined) {
+    Object.assign(base, { directProduction: input.directProduction });
+  }
   const existingRepositorySource = projectExistingRepositorySource(
     input.state,
     input.repositoryAccess,
@@ -239,7 +255,14 @@ export const decideApprovedBuildContinuation = (input: {
       scope,
     };
   }
-  if (["planned", "applied", "validation_pending", "validated"].includes(state.phase)) {
+  if (input.directProduction !== undefined && input.releaseFinished === true) {
+    return { ...base, decision: "settled", scope };
+  }
+  const continuingRelease = state.phase === "reviewed" && input.directProduction !== undefined;
+  if (
+    continuingRelease ||
+    ["planned", "applied", "validation_pending", "validated"].includes(state.phase)
+  ) {
     return { ...base, decision: "runnable", scope };
   }
   if (state.phase !== "validation_failed") {

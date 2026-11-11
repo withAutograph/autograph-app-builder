@@ -3,7 +3,10 @@ import { internalCorrectionRequiresSuccessor } from "@/lib/agent/preapproval-aut
 import { applyApprovedPrivateComputeProfile } from "@/lib/sandbox/private-compute-activation";
 import { PRIVATE_COMPUTE_PROFILE_ID } from "@/lib/sandbox/private-compute-profile";
 import { completionGuidance } from "@/lib/agent/completion-guidance";
-import { stageImplementationFiles } from "@/lib/agent/staged-implementation";
+import {
+  newAppImplementationSchemaKind,
+  stageImplementationFiles,
+} from "@/lib/agent/staged-implementation";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import {
@@ -33,6 +36,11 @@ import {
   withImplementationFiles,
 } from "@/lib/agent/apply-implementation-files";
 import { invalidateProductBehaviorEvidence } from "@/lib/agent/product-behavior-state";
+import { directProductionSubjectSchema } from "@/lib/agent/direct-production-authorization";
+import {
+  recordDirectProductionGrant,
+  requestDirectProductionGrant,
+} from "@/lib/agent/direct-production-state";
 
 const APPROVAL_NOT_APPLICABLE = "not-applicable";
 
@@ -56,7 +64,16 @@ export default defineTool({
       discardPendingPrivateApplyApproval(ctx.callId);
       return APPROVAL_NOT_APPLICABLE;
     }
-    return requestPrivateApplyApproval(
+    const delivery =
+      ctx.toolInput?.directProduction === undefined
+        ? undefined
+        : requestDirectProductionGrant(ctx, {
+            callId: ctx.callId,
+            implementationFiles: ctx.toolInput.implementationFiles,
+            toolName: "apply_app_creation",
+            subject: ctx.toolInput.directProduction,
+          });
+    const build = requestPrivateApplyApproval(
       {
         appId: current.proposal.target.contract.appId,
         appSpecDigest: current.appSpec.digest,
@@ -66,9 +83,10 @@ export default defineTool({
       },
       ctx.callId,
     );
+    return delivery === "user-approval" ? delivery : build;
   },
   description:
-    "Build this app in the build workspace, then validate it for review. When the user asks to prepare a planned private build for review, draft the implementation files in the tool input and submit this call to present the normal Build approval. Preparing that input does not write to the workspace. Wait for the approval decision before any implementation write. For a retry of the same proposal, send only repaired files. Omitted paths retain their staged contents, and supplied paths replace them. A new proposal starts a fresh submission. When the plan selects privateCompute, send its exact profile ID so the user can approve the compute footprint before resizing the private execution session. This does not publish, deploy, provision application resources, or change the user's repository.",
+    "Build this app in the build workspace, then validate it for review. When the user asks to prepare a planned private build for review, draft the implementation files in the tool input and submit this call to present the normal Build approval. Preparing that input does not write to the workspace. Wait for the approval decision before any implementation write. For a retry of the same proposal, send only repaired files. Omitted paths retain their staged contents, and supplied paths replace them. A new proposal starts a fresh submission. When the plan selects privateCompute, send its exact profile ID so the user can approve the compute footprint before resizing the private execution session. If the user explicitly requested direct Production on Arrusted, obtain the current directProduction subject from release-app-production, supplying the storageKind read hint if the drafted scaffold CUE changes storage. Pass the subject unchanged with the exact implementation files to show one combined Build and Production approval. A default Build authorizes only the private app.",
   // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Keep exact current proposal, internal correction, approval, workspace and implementation scope checks ordered at the effect boundary.
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
@@ -114,6 +132,14 @@ export default defineTool({
         workflowPhase: current.phase,
       };
     }
+    if (input.directProduction !== undefined) {
+      recordDirectProductionGrant(ctx, {
+        callId: ctx.callId,
+        implementationFiles: input.implementationFiles,
+        toolName: "apply_app_creation",
+        subject: input.directProduction,
+      });
+    }
     recordApprovedPrivateApply(scope, ctx.callId);
     if (current.proposal.target.privateCompute !== undefined) {
       await applyApprovedPrivateComputeProfile({
@@ -151,13 +177,11 @@ export default defineTool({
     // Existing app submissions are deltas; repository checks own validation.
     let architectureDiagnostics: string[] = [];
     if (!("operation" in current.proposal.target)) {
-      const schemaKind = implementationFiles.some(
-        (file) =>
-          file.operation !== "delete" &&
-          file.path === `.config/app-specs/${current.appSpec.appId}.cue`,
-      )
-        ? "kernel"
-        : current.proposal.target.plan.source.schema.kind;
+      const schemaKind = newAppImplementationSchemaKind(
+        current.appSpec.appId,
+        current.proposal.target.plan.source.schema.kind,
+        implementationFiles,
+      );
       architectureDiagnostics = implementationArchitectureDiagnostics(
         implementationFiles,
         schemaKind,
@@ -309,6 +333,7 @@ export default defineTool({
     };
   },
   inputSchema: z.object({
+    directProduction: directProductionSubjectSchema.optional(),
     implementationFiles: implementationFilesSchema.default([]),
     productSummary: z.string().trim().optional(),
     privateCompute: z.literal(PRIVATE_COMPUTE_PROFILE_ID).optional(),

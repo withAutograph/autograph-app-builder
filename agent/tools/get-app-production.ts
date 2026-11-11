@@ -1,5 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
+import { currentDirectProductionGrant } from "../../lib/agent/direct-production-state";
+import { nextProductionDeliveryCall } from "../../lib/agent/prepare-app-production-step";
 
 export default defineTool({
   availableInSubagents: false,
@@ -10,6 +12,9 @@ export default defineTool({
     const { repositoryProductionClientForContext } =
       await import("../../lib/agent/repository-production-client");
     const client = await repositoryProductionClientForContext(ctx);
-    return await client.status(input.appId);
+    const status = await client.status(input.appId);
+    return status.state === "ready" && currentDirectProductionGrant(ctx, input) !== undefined
+      ? { ...status, nextCall: nextProductionDeliveryCall }
+      : status;
   },
 });

@@ -28,6 +28,10 @@ import { z } from "zod";
 import { publicApprovalDescription } from "../agent/approval-receipt";
 import { repositoryProductionPrepareInputSchema } from "../provisioning/repository-production-approval";
 import { describeAppAccessIntent } from "../agent/app-access-intent";
+import {
+  describeDirectProductionSubject,
+  directProductionSubjectSchema,
+} from "../agent/direct-production-authorization";
 import { continuityStatusSchema } from "../provisioning/hosted-operator-continuity-contract";
 import { repositoryProductionNativeStatusSchema } from "../provisioning/repository-production-native-status-contract";
 import {
@@ -1310,6 +1314,7 @@ const inputRequest = (request: {
     "publish-github-draft-pr": "Publish the reviewed changes?",
     publish_github_draft_pr: "Publish the reviewed changes?",
     reconcile_github_draft_pr: "Update the draft pull request?",
+    "release-app-production": "Release this app to Production?",
     "run-app-continuity-tests": "Run this app continuity suite?",
     update_github_draft_pr: "Update the draft pull request?",
   } as const;
@@ -1321,11 +1326,21 @@ const inputRequest = (request: {
   ) {
     return undefined;
   }
-  const title =
+  const directProduction =
+    request.kind === toolApprovalKind &&
+    (toolName === "apply_app_creation" || toolName === "release-app-production")
+      ? z
+          .object({ directProduction: directProductionSubjectSchema })
+          .safeParse(request.action?.input).data?.directProduction
+      : undefined;
+  let title =
     request.kind === toolApprovalKind && toolName !== undefined && toolName in approvalTitles
       ? // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         approvalTitles[toolName as keyof typeof approvalTitles]
       : request.prompt;
+  if (directProduction !== undefined && toolName === "apply_app_creation") {
+    title = "Build and release to Production?";
+  }
   let description: string | undefined;
   if (request.kind === toolApprovalKind && toolName === prepareAppProductionTool) {
     const setup = repositoryProductionPrepareInputSchema.safeParse(request.action?.input);
@@ -1347,13 +1362,20 @@ const inputRequest = (request: {
           : `Use ${review.creatorEmail} for your app account and verify it through secure sign-in.`;
       description = `Set up ${appId} in ${review.repositoryFullName}. ${review.storageKind === "postgres" ? "Builder prepares the app’s database and keeps it for future updates. " : "This app does not need a database. "}${account} ${describeAppAccessIntent(appId, review.access)}`;
     }
+  } else if (directProduction !== undefined && toolName === "release-app-production") {
+    description = describeDirectProductionSubject(directProduction);
   } else if (request.kind === toolApprovalKind && toolName === "apply_app_creation") {
     // Use the standard card copy when the optional summary does not fit the card.
     description =
       z
         .object({ productSummary: z.string().trim().min(1).max(600) })
         .safeParse(request.action?.input).data?.productSummary ??
-      "Build and validate the app shown above in your private workspace. This does not publish or deploy it.";
+      (directProduction === undefined
+        ? "Build and validate the app shown above in your private workspace. This does not publish or deploy it."
+        : "Build and validate the app shown above.");
+    if (directProduction !== undefined) {
+      description = `${description} ${describeDirectProductionSubject(directProduction)}`;
+    }
     if (
       z
         .object({ privateCompute: z.literal(PRIVATE_COMPUTE_PROFILE_ID) })
@@ -1615,6 +1637,13 @@ export const projectInstalledEveEvent = (
     }
     case "action.partial": {
       const { result, turnId, sequence } = event.data;
+      if (
+        result.kind === toolResultKind &&
+        result.toolName === prepareAppProductionTool &&
+        result.isError !== true
+      ) {
+        return productionIdentityEvents(result, index, turnId);
+      }
       if (
         result.kind === toolResultKind &&
         result.toolName === finishGitHubDeliveryTool &&

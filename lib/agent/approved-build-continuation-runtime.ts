@@ -1,3 +1,4 @@
+import { currentDirectProductionGrant } from "./direct-production-state";
 import {
   currentGitHubPrDeliveryAuthorityProjection,
   markGitHubPrDeliveryAuthorityProjected,
@@ -30,10 +31,20 @@ export const approvedBuildReviewProgress = defineState<{
   stage: "prepared" | "assessed";
 } | null>("autograph-app-builder.approved-build-review-progress.v1", () => null);
 
+const directProductionStages = ["draft", "setup", "live", "activation-unavailable"] as const;
+export const directProductionProgressState = defineState<{
+  grantDigest: string;
+  stage: (typeof directProductionStages)[number];
+} | null>("autograph-app-builder.direct-production-progress.v1", () => null);
+
 export const currentApprovedBuildProgress = (): string => {
   const build = approvedBuildProgress(appBuilderWorkflowState.get());
   const review = approvedBuildReviewProgress.get();
-  return review?.buildProgress === build ? `${build}:${review.stage}` : build;
+  const reviewProgress = review?.buildProgress === build ? `${build}:${review.stage}` : build;
+  const delivery = directProductionProgressState.get();
+  return delivery === null
+    ? reviewProgress
+    : `${reviewProgress}:${delivery.grantDigest}:${delivery.stage}`;
 };
 
 /** Structural evaluations retain their actual private Eve projection without claiming a public hosted session. */
@@ -111,7 +122,15 @@ export const recordApprovedBuildDecision = async (
   decision: ApprovedBuildDecision,
 ): Promise<void> => {
   const projection = currentGitHubPrDeliveryAuthorityProjection();
-  const parsed = approvedBuildDecisionSchema.parse({ ...decision, githubDelivery: projection });
+  const directProduction =
+    decision.currentSpec === undefined
+      ? undefined
+      : currentDirectProductionGrant(ctx, decision.currentSpec);
+  const parsed = approvedBuildDecisionSchema.parse({
+    ...decision,
+    directProduction,
+    githubDelivery: projection,
+  });
   if (hasTestCapability("simulated-target")) {
     diagnosticBuildDecisionState.update(() => parsed);
     markGitHubPrDeliveryAuthorityProjected(projection);

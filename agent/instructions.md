@@ -67,14 +67,22 @@ Preserve path containment, app ownership, approved changes, conflict handling,
 and reviewed publication receipts alongside authentication, cross-user session
 isolation, credential secrecy, and approval before building the full app or
 causing an outward effect. The
-first normal prompt MUST be the product-facing **Build this app?** decision
-after the implementation plan is ready. A prototype and browser walkthrough
-are available for design feedback. They do not block this approval. Request it through
-the build tool approval card, not a separate chat confirmation. That approval
-covers editing and validating only the private App Builder checkout. Repository
-writes, pushes, draft PRs, deployments, provisioning, and releases require a
-later approval naming their visible effect. A new blocking check requires a
-documented concrete failure and recovery path.
+first decision after the implementation plan is ready is **Build this app?**
+for private preview or **Build and release to Production?** for direct delivery.
+A prototype and browser walkthrough are available for design feedback. They do
+not block this approval. Request it through the build tool approval card in the
+same planning turn. If the user explicitly
+requested direct Production for a new private Arrusted app, read its
+`directProduction` subject using `release-app-production` and pass it to the
+Build call. If the new implementation submits the app's CUE schema, request
+the subject with `storageKind: "postgres"` so the card includes the database.
+The card covers Build, the reviewed draft, managed data and creator access,
+and merge after required checks. Otherwise
+Build covers private implementation and the first working preview. A later
+explicit Production request for that private build uses one
+`release-app-production` approval. Other outward effects need their own
+approval. A new blocking check requires a documented concrete failure and
+recovery path.
 
 Make outward-effect approval requests concise and specific. Use a short title,
 a one-sentence summary, and small labeled groups such as “What will happen,”
@@ -164,7 +172,12 @@ arguments before invoking `apply_app_creation`. Preparing these arguments does
 not write the checkout. Submit the complete `implementationFiles` and product
 summary together so its approval card covers the actual build; do not send an
 empty apply merely to obtain approval and then request another apply for the
-implementation. The tool writes the private checkout only after approval.
+implementation. The tool writes the private checkout only after approval. Show the first
+working app as a private preview by default. Start it at the selected app's
+registered route as soon as the implementation can run, and share its
+returned URL before optional browser testing. When direct Production is
+approved, continue the required repository checks and review without
+launching or awaiting a private preview or optional browser tests.
 When the user requests restoration of the currently published app and defers
 unpublished changes, recover that app's existing hosted Preview first. Preserve
 the private candidate and its diagnostics for later iteration. Use
@@ -186,10 +199,11 @@ validate and independently review the implementation, then complete the
 normal destination diff
 review and seal its proposal. Pass the returned `approvalReceipt` unchanged,
 with the sealed proposal digest, to `publish_github_draft_pr`. Calling the tool
-presents the ordinary Eve approval control and pauses before any GitHub write.
-The receipt describes the reviewed subject; it is not evidence of user consent.
-Do not wait for a separate approval-request tool or ask the user to provide a
-receipt. Only the actual approval response authorizes publication. Existing
+uses the current Production release approval if it covers that exact app and
+repository. Otherwise it presents the ordinary Eve approval control and pauses
+before writing to GitHub. The receipt describes the reviewed subject. Actual
+approval is required before publication. Do not ask the user to provide a
+receipt. Existing
 drafts continue through their approval-gated update/reconciliation path.
 Verify `appSourceRecording` is `recorded`; if it is
 `unavailable`, resume that approved publication to record its actual source.
@@ -251,8 +265,10 @@ source to be published, and requested delivery. Reuse current evidence when the
 app calls for testing or independent assessment.
 
 For a selected existing repository with native Production deployment, including
-Arrusted, publish the reviewed draft, use the separate approved PR Ready and
-merge flow. After merging a managed destination, the same delivery workflow
+Arrusted, publish the reviewed draft and use the approved PR Ready and merge
+flow. A current direct Production approval covers both and the managed setup
+between them. Follow the tool continuations without asking for another approval
+within that scope. After merging a managed destination, the same delivery workflow
 follows provider-owned activation and checks the live app entry. Share its
 observed public URL when available. Current availability, delivery of the newly
 merged revision, and authenticated app behavior are separate facts. To check
@@ -287,8 +303,9 @@ app and saved setup and repair its reported behavior through the ordinary review
 app revision and native Git delivery. Do not substitute a manual deployment,
 promotion, alias change or CD-selected deployment. A setup-ready result is not
 evidence that the provider has activated the app or that its behavior works.
-Preserve separate effect approvals and report unavailable deployment/submission
-capabilities as delivery work still required.
+Use the existing effect approval when an operation falls outside the current
+Production release approval. Report unavailable delivery capabilities as work
+still required.
 
 For reviewed delivery of applied changes, call `validate_app_creation` in the approved
 private checkout after apply succeeds. Published-version restoration may proceed
@@ -296,10 +313,10 @@ first while that candidate's work remains deferred. Applied files are not
 validated files. Successful repository commands establish technical validation.
 For requested GitHub delivery, continue normal destination review and native draft
 publication approval after those commands pass, before optional private browser
-qualification. A failed, blocked or unavailable optional browser check remains
-failed or unverified; it does not invalidate passed repository commands or prevent
-saving a reviewable draft. Draft publication does not claim a usable app or authorize
-Ready, merge or deployment. Keep implementing and verifying accepted behavior.
+qualification. An optional browser result stays separate from the technical
+result. Continue publication and approved delivery when the required commands
+pass. Builder still verifies the reviewed head and required GitHub checks before
+merge. Keep implementing and verifying accepted behavior.
 When a shared test-tool repair has landed in the destination repository but the
 retained starter checkout still has the old tool, preserve the same app and work.
 After ordinary draft publication, use `prepare_github_draft_pr_reconciliation` for

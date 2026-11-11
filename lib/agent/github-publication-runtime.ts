@@ -525,6 +525,7 @@ export interface GitHubPublicationRuntime {
     review: ReviewedChangeSetReceipt;
     contentSource: GitHubDraftPullRequestContentSource;
     approvedByCallId: string;
+    assertEffectCurrent?: () => void;
   }) => Promise<DraftPullRequestSuccessReceipt>;
   sealExistingDraftUpdate: (input: {
     githubSource: ImmutableGitHubSourceReceipt;
@@ -1545,14 +1546,18 @@ export function composeGitHubPublicationRuntime(input: {
         subjectDigest: proposal.digest,
         target: approvalTargetFromDraftProposal(proposal),
       });
-      return await publishApprovedDraftPullRequest({
+      const publication: Parameters<typeof publishApprovedDraftPullRequest>[0] = {
         adapter,
         approvedByCallId: request.approvedByCallId,
         contentSource: request.contentSource,
         proposal,
         review: request.review,
         store: receipts,
-      });
+      };
+      if (request.assertEffectCurrent !== undefined) {
+        publication.assertEffectCurrent = request.assertEffectCurrent;
+      }
+      return await publishApprovedDraftPullRequest(publication);
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async resolveImmutableSource(request) {
