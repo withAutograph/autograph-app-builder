@@ -20,6 +20,8 @@ import type {
   RepositoryProductionDeliveryStatus,
   RepositoryProductionDeliveryTarget,
 } from "./repository-production-delivery";
+import { repositoryProductionNativeStatusSchema } from "./repository-production-native-status-contract";
+import type { RepositoryProductionNativeStatus } from "./repository-production-native-status-contract";
 import type {
   RepositoryProductionIntent,
   RepositoryProductionScope,
@@ -84,6 +86,7 @@ export const repositoryProductionRequestSchema = z.discriminatedUnion("action", 
       .optional(),
   }),
   z.strictObject({ ...ownerFields, action: z.literal("setup-status") }),
+  z.strictObject({ ...ownerFields, action: z.literal("native-status") }),
   z.strictObject({
     ...ownerFields,
     ...repositoryProductionDeliveryTargetSchema.shape,
@@ -120,6 +123,9 @@ export interface RepositoryProductionHandlerDependencies {
     creatorEmail?: string,
   ) => Promise<{ scope: RepositoryProductionScope; intent: RepositoryProductionIntent }>;
   readSetup: (owner: RepositoryProductionRequestOwner) => Promise<RepositoryProductionSetupResult>;
+  readNativeStatus?: (
+    owner: RepositoryProductionRequestOwner,
+  ) => Promise<RepositoryProductionNativeStatus>;
   readDeliveryStatus: (
     owner: RepositoryProductionRequestOwner,
     target: RepositoryProductionDeliveryTarget,
@@ -206,6 +212,18 @@ export const createRepositoryProductionHandler =
         sessionId: body.sessionId,
         ownerContext: body.ownerContext,
       };
+      if (body.action === "native-status") {
+        if (deps.readNativeStatus === undefined) {
+          return reply({ code: "native_status_unavailable" }, 503);
+        }
+        const result = repositoryProductionNativeStatusSchema.parse(
+          await deps.readNativeStatus(owner),
+        );
+        if (result.appId !== owner.appId) {
+          return reply({ code: "app_access_denied" }, 403);
+        }
+        return reply(result);
+      }
       if (body.action === "plan") {
         const plan = await deps.resolvePlan(owner, body.creatorEmail);
         return reply({

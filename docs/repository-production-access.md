@@ -386,6 +386,16 @@ immediately before its GitHub merge effect, retaining exact revision, native
 approval, required-check and ready-cycle protections. A passing Check alone
 cannot merge an app whose required runtime binding is still absent.
 
+After a managed merge, the read-only `native-status` action observes the
+current Production app through the saved owner, app and repository binding.
+It checks the provider’s current Production deployment and public domain,
+then checks the app’s registered route and entry on the Gateway. The result
+describes current availability and may include the app’s public entry URL.
+The delivery of the requested revision remains unassessed. The completed merge
+is independent of these observations. The owner can check the same saved app
+again through `observe-app-production`, including when no current build is
+running.
+
 An authoritative configured-service response may classify an unrelated repository
 as unmanaged. A GitHub-only deployment with no managed operator capability keeps
 its generic flow; authorization/transport/unknown failures never mean unmanaged.

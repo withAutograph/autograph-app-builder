@@ -702,7 +702,13 @@ hook retires that turn's calls durably, including local Stop/resume; an unrelate
 failed or blocked step does not retire approval. Missing previously
 managed setup remains blocked by the existing Production check. One approved
 workflow covers Ready, waiting for Check and merge, including a PR already Ready.
-Old finished calls are not migrated or resurrected by this recovery.
+After a confirmed managed merge, the workflow follows native Production
+availability with a read of the same owned app and destination. The merge
+approval ends at merge. Provider activation proceeds independently, and a
+currently available app can be opened while delivery of the latest update
+remains unconfirmed. A saved session can check its app again through
+`observe-app-production` using current owner access. Old finished calls are not
+migrated or resurrected by this recovery.
 
 An owned open PR that has already become Ready can be corrected through the same
 private preparation, validation, review and approved update flow. Builder proves

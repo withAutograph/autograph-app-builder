@@ -7,6 +7,7 @@ import {
 import { isDeepStrictEqual } from "node:util";
 import type { WorkflowStepToolContext } from "eve/tools";
 import type { GitHubPrDeliveryApproval } from "./github-pr-delivery-approval";
+import type { AppProductionDeliveryTarget } from "./app-production-observation";
 
 import type { GitHubPrDeliveryObservation } from "../repository/github-pr-delivery";
 import type { GitHubPrEffectReceipt } from "../repository/github-pr-effect-journal";
@@ -22,12 +23,12 @@ const startReadyCycle = async (input: {
   const { approvedReadyAt, observed } = input;
   if (approvedReadyAt !== undefined) {
     return !observed.draft && observed.readyAt === approvedReadyAt
-      ? { status: WAITING_FOR_CHECKS satisfies typeof WAITING_FOR_CHECKS, readyAt: approvedReadyAt }
-      : { status: READY_CYCLE_CHANGED satisfies typeof READY_CYCLE_CHANGED };
+      ? ({ status: WAITING_FOR_CHECKS, readyAt: approvedReadyAt } as const)
+      : ({ status: READY_CYCLE_CHANGED } as const);
   }
   const result = await input.runReady(!observed.draft);
   if (result === undefined) {
-    return { status: READY_CYCLE_CHANGED satisfies typeof READY_CYCLE_CHANGED };
+    return { status: READY_CYCLE_CHANGED } as const;
   }
   if (result.status === "failed") {
     return { status: "ready-rejected" as const, reason: result.code };
@@ -36,19 +37,36 @@ const startReadyCycle = async (input: {
     return { status: "ready-unconfirmed" as const };
   }
   return {
-    status: WAITING_FOR_CHECKS satisfies typeof WAITING_FOR_CHECKS,
+    status: WAITING_FOR_CHECKS,
     readyAt: result.evidence.readyAt,
-  };
+  } as const;
 };
 
-const mergeResult = (result: GitHubPrEffectReceipt | undefined) => {
+interface MergedGitHubPrDelivery {
+  status: "merged";
+  mergeCommitSha: string;
+  nativeProductionTarget?: AppProductionDeliveryTarget;
+}
+
+const mergedDelivery = (
+  mergeCommitSha: string,
+  nativeProductionTarget?: AppProductionDeliveryTarget,
+): MergedGitHubPrDelivery => {
+  const result = { status: "merged" as const, mergeCommitSha };
+  return nativeProductionTarget === undefined ? result : { ...result, nativeProductionTarget };
+};
+
+const mergeResult = (
+  result: GitHubPrEffectReceipt | undefined,
+  nativeProductionTarget?: AppProductionDeliveryTarget,
+) => {
   if (result?.status === "failed") {
     return { status: "merge-rejected" as const, reason: result.code };
   }
   if (result?.status !== "succeeded" || result.evidence.kind !== "pr-merge") {
     return { status: "merge-unconfirmed" as const };
   }
-  return { status: "merged" as const, mergeCommitSha: result.evidence.mergeCommitSha };
+  return mergedDelivery(result.evidence.mergeCommitSha, nativeProductionTarget);
 };
 
 type GitHubDeliveryRuntime = Pick<
@@ -114,11 +132,22 @@ export const continueGitHubPrDeliveryWithPorts = async (
     effect.reconciledHeadSha = reviewedTarget.headSha;
   }
   const activeEffect = { ...effect, abortSignal: ctx.abortSignal };
+  const productionTarget = {
+    appId: authority.subject.appId,
+    repositoryId: reviewedTarget.repositoryId,
+    repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
+  };
   if (observed.state === "merged" && observed.mergeCommitSha !== undefined) {
     if (readyAt !== undefined && observed.readyAt === readyAt) {
       await run({ ...effect, kind: "pr-merge", readyAt, reconcileOnly: true });
     }
-    return { status: "merged" as const, mergeCommitSha: observed.mergeCommitSha };
+    const managed = authority.requirements.some(
+      (requirement) =>
+        requirement.appId === productionTarget.appId &&
+        requirement.repositoryId === productionTarget.repositoryId &&
+        requirement.repositoryFullName === productionTarget.repositoryFullName,
+    );
+    return mergedDelivery(observed.mergeCommitSha, managed ? productionTarget : undefined);
   }
   if (observed.state !== "open") {
     return { status: "closed" as const };
@@ -140,21 +169,17 @@ export const continueGitHubPrDeliveryWithPorts = async (
     });
   }
   if (observed.draft || observed.readyAt !== readyAt) {
-    return { status: READY_CYCLE_CHANGED satisfies typeof READY_CYCLE_CHANGED };
+    return { status: READY_CYCLE_CHANGED } as const;
   }
   if (observed.checks === "failed") {
     return { status: "checks-failed" as const };
   }
   if (observed.checks !== "passed") {
-    return { status: WAITING_FOR_CHECKS satisfies typeof WAITING_FOR_CHECKS, readyAt };
+    return { status: WAITING_FOR_CHECKS, readyAt } as const;
   }
 
   const productionSetup = await (ports.readProduction ?? readGitHubProductionDeliveryReadiness)(
-    {
-      appId: authority.subject.appId,
-      repositoryId: reviewedTarget.repositoryId,
-      repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
-    },
+    productionTarget,
     ctx,
     {
       requirements: authority.requirements,
@@ -178,5 +203,5 @@ export const continueGitHubPrDeliveryWithPorts = async (
   ctx.abortSignal.throwIfAborted();
   await readAuthority(approval, ctx);
   const result = await run({ ...activeEffect, kind: "pr-merge", readyAt });
-  return mergeResult(result);
+  return mergeResult(result, productionSetup.applicable ? productionTarget : undefined);
 };

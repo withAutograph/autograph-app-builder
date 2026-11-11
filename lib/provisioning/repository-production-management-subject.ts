@@ -15,6 +15,11 @@ import {
 } from "./repository-production-contract";
 import { repositoryProductionApprovalDigest } from "./repository-production-approval";
 import { RepositoryProductionDestinationRequiredError } from "./repository-production-destination";
+import { HostedOperatorError } from "./hosted-operator-contract";
+import { isExistingRepositoryDestination } from "./builder-session-destination-contract";
+import type { BuilderSessionDestination } from "./builder-session-destination-contract";
+import type { EveSessionStatus } from "../mcp/contracts";
+import type { HostedPrincipal } from "../eve/hosted-auth";
 
 export interface ManagementProfile {
   workspaceId: string;
@@ -24,6 +29,189 @@ export interface ManagementProfile {
   organization: { id: string; name: string };
   publicOrigin: string;
 }
+
+/** Canonical identity metadata only; observation does not consume a Build or setup grant. */
+export interface RepositoryProductionObservationSession {
+  adapterSessionId: string;
+  adapterGeneration: number;
+  appId?: string;
+  builderDestination?: BuilderSessionDestination;
+  cancellationRevision?: number;
+  resumedCancellationRevision?: number;
+  status: EveSessionStatus;
+}
+export interface RepositoryProductionObservationSubject {
+  scope: RepositoryProductionScope;
+  entryPath?: string;
+  assertCurrentOwner: () => Promise<void>;
+}
+
+interface CanonicalObservationSession extends RepositoryProductionObservationSession {
+  principal: HostedPrincipal;
+  sourceHandoffId?: string;
+  nativeRecoveryBinding?: { logicalSessionId: string };
+}
+const sameObservationPrincipal = (left: HostedPrincipal, right: HostedPrincipal) =>
+  (["issuer", "audience", "workspaceId", "ownerUserId"] as const).every(
+    (field) => left[field] === right[field],
+  ) &&
+  isDeepStrictEqual([...new Set(left.scopes)].toSorted(), [...new Set(right.scopes)].toSorted());
+
+const assertObservationSession = (
+  session: RepositoryProductionObservationSession,
+  owner: RepositoryProductionRequestOwner,
+) => {
+  const cancellationRevision = session.cancellationRevision ?? 0;
+  const resumedCancellationRevision = session.resumedCancellationRevision ?? 0;
+  if (
+    session.appId !== owner.appId ||
+    session.status === "cancelled" ||
+    cancellationRevision !== resumedCancellationRevision
+  ) {
+    throw new HostedOperatorError("authorization_required");
+  }
+};
+
+/** Preserve canonical app authority while reading the current physical owner's actual Stop epoch. */
+export const readRepositoryProductionObservationSession = async (
+  owner: RepositoryProductionRequestOwner,
+  ports: {
+    readCanonical: (
+      owner: RepositoryProductionRequestOwner,
+    ) => Promise<CanonicalObservationSession>;
+    readCurrent: (
+      owner: RepositoryProductionRequestOwner,
+      logicalSessionId: string,
+    ) => Promise<CanonicalObservationSession>;
+  },
+): Promise<RepositoryProductionObservationSession> => {
+  const canonical = await ports.readCanonical(owner);
+  if (canonical.appId !== undefined && canonical.appId !== owner.appId) {
+    throw new HostedOperatorError("authorization_required");
+  }
+  const current = await ports.readCurrent(
+    owner,
+    canonical.nativeRecoveryBinding?.logicalSessionId ?? canonical.adapterSessionId,
+  );
+  const sameAdapter =
+    current.adapterSessionId === canonical.adapterSessionId &&
+    current.adapterGeneration === canonical.adapterGeneration;
+  if (
+    !sameAdapter ||
+    current.appId !== canonical.appId ||
+    current.sourceHandoffId !== canonical.sourceHandoffId ||
+    !sameObservationPrincipal(current.principal, canonical.principal)
+  ) {
+    throw new HostedOperatorError("authorization_required");
+  }
+  // The canonical reader may prove a legacy handoff's app through its saved intent.
+  const projected = {
+    adapterSessionId: current.adapterSessionId,
+    adapterGeneration: current.adapterGeneration,
+    appId: current.appId ?? owner.appId,
+    builderDestination: current.builderDestination ?? canonical.builderDestination,
+    cancellationRevision: current.cancellationRevision,
+    resumedCancellationRevision: current.resumedCancellationRevision,
+    status: current.status,
+  };
+  assertObservationSession(projected, owner);
+  return projected;
+};
+
+const observationRepository = (session: RepositoryProductionObservationSession) => {
+  const destination = session.builderDestination;
+  return destination !== undefined && isExistingRepositoryDestination(destination)
+    ? {
+        appId: destination.appId,
+        repositoryId: destination.repository.repositoryId,
+        repositoryFullName: `${destination.repository.owner}/${destination.repository.name}`,
+      }
+    : undefined;
+};
+const observationOwnerEpoch = (session: RepositoryProductionObservationSession) => ({
+  adapterSessionId: session.adapterSessionId,
+  adapterGeneration: session.adapterGeneration,
+  cancellationRevision: session.cancellationRevision ?? 0,
+  repository: observationRepository(session),
+});
+
+/** Resolve saved owned destinations without loading captures, executing setup, or inspecting source. */
+export const createRepositoryProductionObservationResolver =
+  (deps: {
+    repositories: readonly ManagementProfile[];
+    readSession: (
+      owner: RepositoryProductionRequestOwner,
+    ) => Promise<RepositoryProductionObservationSession>;
+    store: Pick<RepositoryProductionStore, "read">;
+  }) =>
+  async (
+    owner: RepositoryProductionRequestOwner,
+  ): Promise<RepositoryProductionObservationSubject | undefined> => {
+    const initial = await deps.readSession(owner);
+    assertObservationSession(initial, owner);
+    const epoch = observationOwnerEpoch(initial);
+    const selected = observationRepository(initial);
+    if (selected !== undefined && selected.appId !== owner.appId) {
+      throw new HostedOperatorError("authorization_required");
+    }
+    const assertCurrentOwner = async () => {
+      const current = await deps.readSession(owner);
+      assertObservationSession(current, owner);
+      if (!isDeepStrictEqual(observationOwnerEpoch(current), epoch)) {
+        throw new HostedOperatorError("authorization_required");
+      }
+    };
+    const profiles = deps.repositories.filter(
+      (profile) =>
+        profile.workspaceId === owner.ownerContext.authority.workspaceId &&
+        (selected === undefined ||
+          (profile.repositoryId === selected.repositoryId &&
+            profile.repositoryFullName === selected.repositoryFullName)),
+    );
+    const saved = await Promise.all(
+      profiles.map(async (profile) => {
+        const scope = repositoryProductionScopeSchema.parse({
+          authority: owner.ownerContext.authority,
+          appId: owner.appId,
+          repositoryId: profile.repositoryId,
+          repositoryFullName: profile.repositoryFullName,
+          projectId: profile.projectId,
+          organizationId: profile.organization.id,
+          publicOrigin: profile.publicOrigin,
+          environment: "production",
+        });
+        const row = await deps.store.read(scope);
+        await assertCurrentOwner();
+        if (row !== undefined) {
+          const savedOwner = row.record.ownerContext;
+          const savedOwnerMatches =
+            savedOwner === undefined ||
+            (savedOwner.sessionId === owner.sessionId &&
+              isDeepStrictEqual(savedOwner.authority, owner.ownerContext.authority));
+          if (
+            !isDeepStrictEqual(row.record.scope, scope) ||
+            row.record.intent.sessionId !== owner.sessionId ||
+            !savedOwnerMatches
+          ) {
+            throw new HostedOperatorError("authorization_required");
+          }
+        }
+        return { row, scope };
+      }),
+    );
+    const candidates = saved.filter(({ row }) => row !== undefined);
+    const eligible = candidates.length === 0 && selected !== undefined ? saved : candidates;
+    await assertCurrentOwner();
+    if (eligible.length !== 1) {
+      return undefined;
+    }
+    const [{ row, scope }] = eligible;
+    const subject: RepositoryProductionObservationSubject = { scope, assertCurrentOwner };
+    if (row?.record.intent.entryPath !== undefined) {
+      subject.entryPath = row.record.intent.entryPath;
+    }
+    return subject;
+  };
 export type RepositoryProductionCapture = Awaited<
   ReturnType<ReturnType<typeof createOperatorArtifactPublication>["readGeneratedRelease"]>
 >;

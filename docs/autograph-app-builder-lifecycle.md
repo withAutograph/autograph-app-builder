@@ -251,6 +251,13 @@ approved destination and delivers the reviewed revision through native Git
 delivery. The owner starts with authorized access to the live app. Invitations
 and role changes update access to that same URL, deployment and data.
 
+After the approved merge into a managed existing repository, Builder checks
+the app’s current Production availability and reports when its entry can be
+opened. Builder can check the saved destination again when the owner returns to
+the same session. For an update to an app that is already live, the existing app
+may be available while delivery of the new revision is still unverified.
+Authenticated use and business behavior have their own evidence.
+
 Hosted Preview and synthetic acceptance runs are optional engineering tools.
 Neither is a prerequisite for initial release. Release preparation verifies
 the actual target and provisions its required database, schema, restricted

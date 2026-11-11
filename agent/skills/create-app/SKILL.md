@@ -527,8 +527,13 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
 ## Production delivery
 
 For an existing repository with native deployment, including Arrusted, use the
-selected repository's reviewed PR delivery. After the approved merge, report
-the native Production deployment outcome when available. A separate Preview,
+selected repository's reviewed PR delivery. After the approved merge,
+`finish-github-pr-delivery` follows the managed destination's provider-owned
+activation. Share the observed public app URL when available and state what
+that observation establishes. A live app may already be available while delivery
+of the newly merged revision remains unconfirmed. Use `observe-app-production`
+to check the same saved app again after a service interruption or return to the
+session. A separate Preview,
 synthetic storage, private browser run, or managed public-release plan is not a
 step in this route. If the app actually needs new runtime bindings, use the
 repository's protected Production setup for those bindings and keep the same
