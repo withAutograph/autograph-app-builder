@@ -96,6 +96,7 @@ import { PhysicalResourceLeaseBusyError } from "./postgres-physical-resource-lea
 import { createRepositoryProductionWorkers } from "./repository-production-workers";
 import {
   createRepositoryProductionSetup,
+  hasPendingRepositoryProductionSchemaRevision,
   repositoryProductionSetupComplete,
   repositoryProductionSchemaEffectsMatch,
   retainedRepositoryProductionSchemaPredecessor,
@@ -166,6 +167,10 @@ export const assertNoConflictingProductionSetup = (input: {
   command?: AppAccessCommand;
   pendingCommandIds: readonly string[];
 }) => {
+  // Reject before People can journal a command that cannot resume this approved workflow.
+  if (hasPendingRepositoryProductionSchemaRevision(input.row)) {
+    throw new AppAccessError("app_access_unknown");
+  }
   const effects = input.row?.record.effects;
   if (
     effects?.["creator-access"].state !== "pending" &&

@@ -311,6 +311,40 @@ describe("Production setup approval and lease composition", () => {
     expect(f.applied).not.toContain("creator-access");
   });
 
+  it("blocks People recovery before a guarded schema install can create an access command", () => {
+    const f = fixture();
+    const row = f.row();
+    row.record.workerCheckpoints.push({
+      kind: "repository-production-schema-predecessor-v1",
+      grantDigest: "current-grant",
+      resourceId: row.record.resource?.resourceId ?? "missing",
+      prior: { sessionId: oldIntent.sessionId, storage: oldIntent.storage },
+      candidate: revised.storage,
+    });
+    row.record.intent = revised;
+    const clientRequestId = randomUUID();
+    const commands = [
+      { action: "retry-setup", clientRequestId },
+      { action: "renew-sign-in", clientRequestId },
+      { action: "choose-creator-account", clientRequestId, email: "creator@example.test" },
+    ] as const;
+    for (const state of ["idle", "pending"] as const) {
+      row.record.effects["install-schema"] =
+        state === "idle" ? { state } : { state, attemptId: randomUUID() };
+      for (const command of commands) {
+        expect(() => {
+          assertNoConflictingProductionSetup({ row, command, pendingCommandIds: [] });
+        }).toThrow();
+      }
+    }
+    row.record.effects["install-schema"] = { state: "applied" };
+    for (const command of commands) {
+      expect(() => {
+        assertNoConflictingProductionSetup({ row, command, pendingCommandIds: [] });
+      }).not.toThrow();
+    }
+  });
+
   it.each(["creator-access", "install-schema"] as const)(
     "allows recovery and an existing journaled command while %s is pending",
     async (effect) => {

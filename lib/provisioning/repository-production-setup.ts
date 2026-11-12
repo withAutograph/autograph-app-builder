@@ -93,6 +93,7 @@ const schemaRevisionProof = z.strictObject({
   kind: z.literal("repository-production-schema-predecessor-v1"),
   grantDigest: z.string(),
   resourceId: z.string(),
+  candidate: repositoryProductionIntentSchema.shape.storage,
   prior: repositoryProductionIntentSchema.pick({ sessionId: true, storage: true }),
 });
 const schemaRevisionUnverified = () =>
@@ -159,17 +160,30 @@ export const retainedRepositoryProductionSchemaPredecessor = (
 ) => {
   for (const entry of row.record.workerCheckpoints.toReversed()) {
     const proof = schemaRevisionProof.safeParse(entry);
+    if (!proof.success) {
+      continue;
+    }
+    const { data } = proof;
+    const sameCandidate = isDeepStrictEqual(data.candidate, row.record.intent.storage);
     if (
-      proof.success &&
-      (grantDigest === undefined || proof.data.grantDigest === grantDigest) &&
-      proof.data.resourceId === row.record.resource?.resourceId
+      sameCandidate &&
+      (grantDigest === undefined || data.grantDigest === grantDigest) &&
+      data.resourceId === row.record.resource?.resourceId
     ) {
-      return proof.data;
+      return data;
     }
   }
   // oxlint-disable-next-line unicorn/no-useless-undefined -- The explicit optional lookup result is part of the guard.
   return undefined;
 };
+
+/** Only the workflow that authorized the current candidate may resume its pending install. */
+export const hasPendingRepositoryProductionSchemaRevision = (
+  row: RepositoryProductionRow | undefined,
+): boolean =>
+  row !== undefined &&
+  row.record.effects[INSTALL_SCHEMA_EFFECT].state !== "applied" &&
+  retainedRepositoryProductionSchemaPredecessor(row) !== undefined;
 
 /** Journal only the approved schema install, preserving the owned allocation and every access effect. */
 const prepareExistingSchemaRevision = async (input: {
@@ -242,6 +256,7 @@ const prepareExistingSchemaRevision = async (input: {
       kind: "repository-production-schema-predecessor-v1",
       grantDigest: revision.grantDigest,
       resourceId: resource.resourceId,
+      candidate: intent.storage,
       prior: { sessionId: saved.sessionId, storage: saved.storage },
     });
     row = await save({
@@ -312,10 +327,7 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
       if (ports.schemaRevision !== undefined) {
         return await prepareExistingSchemaRevision({ ports, row, intent, assertCurrent, save });
       }
-      if (
-        row.record.effects[INSTALL_SCHEMA_EFFECT].state !== "applied" &&
-        retainedRepositoryProductionSchemaPredecessor(row) !== undefined
-      ) {
+      if (hasPendingRepositoryProductionSchemaRevision(row)) {
         throw schemaRevisionUnverified();
       }
       if (!sameRepositoryProductionSetupEffects(row.record.intent, intent)) {

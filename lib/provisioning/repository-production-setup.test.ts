@@ -210,6 +210,37 @@ describe("Approved existing Production schema revision", () => {
     expect(saved?.effects["signup-policy"]).toEqual(before?.effects["signup-policy"]);
   });
 
+  it("allows an ordinary setup retry after a later release replaces the guarded candidate", async () => {
+    const f = fixture();
+    const next = revisedSchemaIntent();
+    await f.service.prepare(scope, intent);
+    f.ports.schemaRevision = {
+      grantDigest: "new-grant",
+      verify: async () => {},
+      assertActive: async () => {},
+    };
+    f.actual.delete("install-schema");
+    await f.service.prepare(scope, next);
+    delete f.ports.schemaRevision;
+
+    const saved = f.read();
+    if (!saved || next.storage.kind !== "postgres") {
+      throw new Error("Fixture must have a completed schema revision");
+    }
+    const ordinary: RepositoryProductionIntent = {
+      ...next,
+      storage: { ...next.storage, artifactRef: "later-artifact", manifestSha256: "e".repeat(64) },
+    };
+    saved.record.intent = ordinary;
+    saved.record.effects["install-schema"] = { state: "idle" };
+    f.actual.delete("install-schema");
+    f.calls.length = 0;
+
+    await expect(f.service.prepare(scope, ordinary)).resolves.toMatchObject({ state: "ready" });
+    expect(f.calls).toEqual(["install-schema"]);
+    expect(f.read()?.record.resource).toEqual(saved.record.resource);
+  });
+
   it("checks active deployment before DDL and refuses changed access or an absent database", async () => {
     const f = fixture();
     const next = revisedSchemaIntent();
