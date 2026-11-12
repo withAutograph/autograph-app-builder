@@ -864,3 +864,9 @@ non-app index is bound into the existing reconciliation scope. Generic candidate
 editors still cannot write arbitrary shared or root files. The corrected diff
 requires normal review, exact update approval and provider readback; a changed
 revision cannot reuse an old approval.
+
+Draft validation runs the selected repository build and declared app tests.
+Prepare the candidate's local Preview runtime only when a selected browser
+check needs it. A direct Production repair does not require Preview setup,
+and an unselected Preview step from an earlier attempt does not block the
+required checks.
