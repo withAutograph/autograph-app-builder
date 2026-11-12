@@ -72,9 +72,12 @@ for private preview or **Build and release to Production?** for direct delivery.
 A prototype and browser walkthrough are available for design feedback. They do
 not block this approval. Request it through the build tool approval card in the
 same planning turn. If the user explicitly
-requested direct Production for a new private Arrusted app, read its
+requested direct Production for a new private Arrusted app, resolve the named
+repository's default branch before acquiring a starter, then read its
 `directProduction` subject using `release-app-production` and pass it to the
-Build call. If the new implementation submits the app's CUE schema, request
+Build call. If a starter plan is already present, keep that plan and include
+the named destination when reading the release subject. A working Preview and
+design prototype are optional. If the new implementation submits the app's CUE schema, request
 the subject with `storageKind: "postgres"` so the card includes the database.
 The card covers Build, the reviewed draft, managed data and creator access,
 and merge after required checks. Otherwise

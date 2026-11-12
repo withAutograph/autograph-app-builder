@@ -800,6 +800,46 @@ export const recoveredBuildDecision = (
         adapterSessionId: child.adapterSessionId,
       });
 
+/** Bind the accepted app before a session has any UI preview or repository destination. */
+export const recordBuildDecisionForSession = (
+  current: DurableHostedSessionRecord,
+  decision: ApprovedBuildDecision,
+  authority: DurableHostedSessionRecord,
+): { current: DurableHostedSessionRecord; authority?: DurableHostedSessionRecord } | undefined => {
+  if ((current.privateBuildDecision?.turnSequence ?? -1) > decision.turnSequence) {
+    return undefined;
+  }
+  const updated = {
+    ...current,
+    privateBuildDecision: recoveredBuildDecision(decision, current),
+  };
+  const spec = decision.currentSpec;
+  let boundAuthority: DurableHostedSessionRecord | undefined;
+  const unresumedCancellation =
+    (current.cancellationRevision ?? 0) !== (current.resumedCancellationRevision ?? 0);
+  if (spec !== undefined && current.status !== "cancelled" && !unresumedCancellation) {
+    const boundAppIds = [
+      current.appId,
+      current.builderDestination?.appId,
+      authority.appId,
+      authority.builderDestination?.appId,
+    ];
+    const appChanged = boundAppIds.some((appId) => appId !== undefined && appId !== spec.appId);
+    if (
+      spec.sessionId !== decision.adapterSessionId ||
+      current.sourceHandoffId !== authority.sourceHandoffId ||
+      appChanged
+    ) {
+      throw new Error("The accepted app does not match this Builder session.");
+    }
+    updated.appId = spec.appId;
+    if (authority.sessionId !== current.sessionId && authority.appId === undefined) {
+      boundAuthority = durableHostedSessionRecordSchema.parse({ ...authority, appId: spec.appId });
+    }
+  }
+  return { current: durableHostedSessionRecordSchema.parse(updated), authority: boundAuthority };
+};
+
 const latestContinuationDecision = <T extends { turnSequence: number }>(
   source: T | undefined,
   authority: T | undefined,
@@ -818,7 +858,8 @@ export const inheritRecoveryBuildDecision = (
   child: HostedSessionRecord,
 ): HostedSessionRecord => {
   const sourceDecision = toDurableHostedSessionRecord(source).privateBuildDecision;
-  const authorityDecision = toDurableHostedSessionRecord(authority).privateBuildDecision;
+  const authorityRecord = toDurableHostedSessionRecord(authority);
+  const authorityDecision = authorityRecord.privateBuildDecision;
   const sourceIsCurrentChild = source.version === 2 && source.nativeRecoveryBinding !== undefined;
   const latestDecision = latestContinuationDecision(
     sourceDecision,
@@ -841,6 +882,12 @@ export const inheritRecoveryBuildDecision = (
   const recovered = { ...toDurableHostedSessionRecord(child) };
   if (latestDecision !== undefined) {
     recovered.privateBuildDecision = recoveredBuildDecision(latestDecision, child);
+    if (
+      authorityRecord.appId !== undefined &&
+      authorityRecord.appId === latestDecision.currentSpec?.appId
+    ) {
+      recovered.appId ??= authorityRecord.appId;
+    }
   }
   if (latestAuthoring !== undefined) {
     recovered.privateAuthoringDecision = recoveredAuthoringDecision(latestAuthoring, child);
@@ -1586,11 +1633,11 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   private readonly sendCancellationRevisions = new Map<string, number>();
   private readonly sessions = new Map<string, HostedSessionRecord>();
 
-  private currentBuildSession(
+  private currentBuildSessions(
     principal: HostedPrincipal,
     authoritySessionId: string,
     logicalSessionId: string,
-  ): DurableHostedSessionRecord {
+  ) {
     const authority = this.sessions.get(
       InMemoryHostedEveStore.sessionKey(principal, authoritySessionId),
     );
@@ -1634,7 +1681,19 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     if (leaves.length === 0 && current.adapterSessionId !== logicalSessionId) {
       throw new Error(SESSION_NOT_FOUND);
     }
-    return toDurableHostedSessionRecord(current);
+    const authorityRecord = toDurableHostedSessionRecord(authority);
+    return {
+      authority: authorityRecord,
+      current: current === authority ? authorityRecord : toDurableHostedSessionRecord(current),
+    };
+  }
+
+  private currentBuildSession(
+    principal: HostedPrincipal,
+    authoritySessionId: string,
+    logicalSessionId: string,
+  ): DurableHostedSessionRecord {
+    return this.currentBuildSessions(principal, authoritySessionId, logicalSessionId).current;
   }
 
   // oxlint-disable-next-line eslint/require-await -- preserve asynchronous store failures
@@ -2264,23 +2323,23 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     decision: ApprovedBuildDecision;
   }): Promise<void> {
     const decision = approvedBuildDecisionSchema.parse(input.decision);
-    const current = this.currentBuildSession(
+    const { authority, current } = this.currentBuildSessions(
       input.principal,
       input.sessionId,
       decision.adapterSessionId,
     );
-    const key = InMemoryHostedEveStore.sessionKey(input.principal, current.sessionId);
-    const boundDecision = recoveredBuildDecision(decision, current);
-    if (boundDecision === undefined) {
-      throw new Error(SESSION_NOT_FOUND);
+    const updated = recordBuildDecisionForSession(current, decision, authority);
+    if (updated !== undefined) {
+      const key = InMemoryHostedEveStore.sessionKey(input.principal, current.sessionId);
+      if (updated.authority !== undefined) {
+        const authorityKey = InMemoryHostedEveStore.sessionKey(
+          input.principal,
+          authority.sessionId,
+        );
+        this.sessions.set(authorityKey, updated.authority);
+      }
+      this.sessions.set(key, updated.current);
     }
-    if ((current.privateBuildDecision?.turnSequence ?? -1) > decision.turnSequence) {
-      return;
-    }
-    this.sessions.set(
-      key,
-      durableHostedSessionRecordSchema.parse({ ...current, privateBuildDecision: boundDecision }),
-    );
   }
   // oxlint-disable-next-line eslint/require-await -- The in-memory implementation preserves the asynchronous canonical store contract.
   async claimInternalBuildMessage(input: {

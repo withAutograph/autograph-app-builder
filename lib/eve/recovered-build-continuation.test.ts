@@ -159,7 +159,7 @@ describe("recovered approved build continuation", () => {
 
     // Native activation may run this hook before the public child row is settled.
     await persistHostedBuildDecision({
-      decision: projected,
+      decision: directProduction ? { ...projected, currentSpec: decision.scope } : projected,
       ownerSessionId: authoritySessionId,
       principal,
       store,
@@ -192,14 +192,20 @@ describe("recovered approved build continuation", () => {
     });
     const firstSavedChild = await savedSession(childSessionId);
     expect(firstSavedChild.privateBuildDecision?.adapterSessionId).toBe(physicalOwnerRunId);
+    expect(firstSavedChild.appId).toBe(directProduction ? decision.scope.appId : undefined);
 
     await persistHostedBuildDecision({
-      decision: { ...projected, turnSequence: 15 },
+      decision: { ...projected, currentSpec: decision.scope, turnSequence: 15 },
       ownerSessionId: authoritySessionId,
       principal,
       store,
     });
-    const savedChild = await savedSession(childSessionId);
+    const [savedChild, savedOriginal] = await Promise.all([
+      savedSession(childSessionId),
+      savedSession(authoritySessionId),
+    ]);
+    expect(savedChild.appId).toBe(decision.scope.appId);
+    expect(savedOriginal.appId).toBe(decision.scope.appId);
     expect(savedChild.privateBuildDecision).toMatchObject({
       adapterSessionId: physicalOwnerRunId,
       turnSequence: 15,

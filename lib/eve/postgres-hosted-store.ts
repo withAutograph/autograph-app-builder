@@ -27,7 +27,7 @@ import {
   assertNativeRecoverySourceBinding,
   assertNativeRecoverySessionReceipt,
   assertRecoveredBuildContinuationChild,
-  recoveredBuildDecision,
+  recordBuildDecisionForSession,
   recoveredAuthoringDecision,
   inheritRecoveryBuildDecision,
   matchesNativeExecutionTransferCheckpoint,
@@ -377,7 +377,7 @@ export const readCommittedRecoveryReceipt = async (
 
 /** Resolve only a tenant-owned recovered child with its exact committed native receipt. */
 // oxlint-disable-next-line eslint/func-style -- Keep the tenant-scoped transactional lookup adjacent to other store lookups.
-async function currentBuildSession(
+async function currentBuildSessions(
   transaction: Transaction,
   principal: HostedPrincipal,
   authoritySessionId: string,
@@ -434,7 +434,29 @@ async function currentBuildSession(
   if (leaves.length === 0 && current.adapterSessionId !== logicalSessionId) {
     throw new Error(SESSION_NOT_FOUND);
   }
-  return toDurableHostedSessionRecord(current);
+  const authorityRecord = toDurableHostedSessionRecord(authority);
+  return {
+    authority: authorityRecord,
+    current: current === authority ? authorityRecord : toDurableHostedSessionRecord(current),
+  };
+}
+
+// oxlint-disable-next-line eslint/func-style -- Keep the read beside its tenant-scoped lookup.
+async function currentBuildSession(
+  transaction: Transaction,
+  principal: HostedPrincipal,
+  authoritySessionId: string,
+  logicalSessionId: string,
+  lockRows = true,
+) {
+  const { current } = await currentBuildSessions(
+    transaction,
+    principal,
+    authoritySessionId,
+    logicalSessionId,
+    lockRows,
+  );
+  return current;
 }
 
 /** Carry a decision written during parked-child activation into the atomic child creation. */
@@ -1094,34 +1116,34 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       const principal = hostedPrincipalSchema.parse(input.principal);
       await database.transaction(async (transaction) => {
         const decision = approvedBuildDecisionSchema.parse(input.decision);
-        const current = await currentBuildSession(
+        const { authority, current } = await currentBuildSessions(
           transaction,
           principal,
           input.sessionId,
           decision.adapterSessionId,
         );
-        const boundDecision = recoveredBuildDecision(decision, current);
-        if (boundDecision === undefined) {
-          throw new Error(SESSION_NOT_FOUND);
-        }
-        if ((current.privateBuildDecision?.turnSequence ?? -1) > decision.turnSequence) {
+        const updated = recordBuildDecisionForSession(current, decision, authority);
+        if (updated === undefined) {
           return;
         }
-        const updated = durableHostedSessionRecordSchema.parse({
-          ...current,
-          privateBuildDecision: boundDecision,
-        });
-        const rows = await transaction
-          .update(agentSessions)
-          .set(sessionValues(updated))
-          .where(
-            and(sessionTenantPredicate(principal), eq(agentSessions.sessionId, current.sessionId)),
-          )
-          .returning();
-        if (rows.length !== 1) {
-          throw new Error("Private build decision was not durable.");
+        const records = [updated.authority, updated.current];
+        for (const record of records) {
+          if (record === undefined) {
+            continue;
+          }
+          // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Both writes use the same locked transaction connection.
+          const rows = await transaction
+            .update(agentSessions)
+            .set(sessionValues(record))
+            .where(
+              and(sessionTenantPredicate(principal), eq(agentSessions.sessionId, record.sessionId)),
+            )
+            .returning();
+          if (rows.length !== 1) {
+            throw new Error("Private build decision was not durable.");
+          }
+          parseHostedSessionRow(rows[0]);
         }
-        parseHostedSessionRow(rows[0]);
       });
     },
     async recordPreapprovalAuthoringDecision(input) {

@@ -3,6 +3,7 @@
 import type { ToolContext } from "eve/tools";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { ImmutableGitHubSourceReceipt } from "../repository/github-publication";
+import { ARRUSTED_PRODUCTION_REPOSITORY } from "./direct-production-authorization";
 import { recordRepositoryAccessReceipt } from "./repository-access-state";
 import { resolvePublicationTargetForTool } from "./github-publication-destination";
 import {
@@ -45,12 +46,12 @@ const source: ImmutableGitHubSourceReceipt = {
   resolvedByCallId: "acquire",
   digest: "e".repeat(64),
 };
-const access = (installationId: string) => ({
+const access = (installationId: string, target = repository) => ({
   kind: "ready" as const,
   access: {
     status: "ready" as const,
     accessDigest: "f".repeat(64),
-    repository: { ...repository, archived: false as const, repositoryVariableNames: [] },
+    repository: { ...target, archived: false as const, repositoryVariableNames: [] },
     scope: { accountLogin: "owner", accountType: "Organization" as const, installationId },
   },
   receipt: recordRepositoryAccessReceipt({
@@ -61,7 +62,7 @@ const access = (installationId: string) => ({
     access: {
       status: "ready",
       accessDigest: "f".repeat(64),
-      repository: { ...repository, archived: false, repositoryVariableNames: [] },
+      repository: { ...target, archived: false, repositoryVariableNames: [] },
       scope: { accountLogin: "owner", accountType: "Organization", installationId },
     },
   }),
@@ -160,5 +161,78 @@ it("keeps the explicit existing-repository selector for a fresh app with no save
     ctx,
     "app",
     access("456").receipt,
+    undefined,
   );
+});
+
+const approvedProduction = {
+  repositoryFullName: ARRUSTED_PRODUCTION_REPOSITORY,
+  repositoryId: "789",
+  installationId: "456",
+  baseBranch: "main",
+} as const;
+const approvedRepository = {
+  ...repository,
+  repositoryId: approvedProduction.repositoryId,
+  owner: "withAutograph",
+  name: "arrusted-development",
+};
+const directReview = {
+  ctx,
+  appId: "app",
+  sourceKind: "fresh-template",
+  approvedProduction,
+} as const;
+
+it("persists the exact approved destination during ordinary starter app review", async () => {
+  vi.mocked(readBuilderPublicationDestinationForTool).mockResolvedValue({
+    publicSessionId: "public-saved",
+  });
+  const readback = access(approvedProduction.installationId, approvedRepository);
+  vi.mocked(resolveRepositoryAccessForTool).mockResolvedValue(readback);
+  expect(await resolvePublicationTargetForTool(directReview)).toMatchObject({
+    kind: "ready",
+    target: { destination: { repositoryId: approvedProduction.repositoryId } },
+  });
+  expect(resolveRepositoryAccessForTool).toHaveBeenCalledWith(
+    {
+      repository: approvedProduction.repositoryFullName,
+      selectedInstallationId: approvedProduction.installationId,
+    },
+    ctx,
+    undefined,
+  );
+  expect(recordBuilderPublicationDestinationForTool).toHaveBeenCalledWith(
+    ctx,
+    directReview.appId,
+    readback.receipt,
+    { requireExactReadback: true },
+  );
+});
+
+it("rejects a different saved or caller destination before review can request repository access", async () => {
+  await expect(resolvePublicationTargetForTool(directReview)).rejects.toThrow(
+    "repository and GitHub account approved for Production",
+  );
+  vi.mocked(readBuilderPublicationDestinationForTool).mockResolvedValue({
+    publicSessionId: "public-saved",
+  });
+  await expect(
+    resolvePublicationTargetForTool({ ...directReview, destination: owned }),
+  ).rejects.toThrow("repository and GitHub account approved for Production");
+  expect(resolveRepositoryAccessForTool).not.toHaveBeenCalled();
+  expect(recordBuilderPublicationDestinationForTool).not.toHaveBeenCalled();
+});
+
+it("rejects a changed default branch at readback before persisting the destination", async () => {
+  vi.mocked(readBuilderPublicationDestinationForTool).mockResolvedValue({
+    publicSessionId: "public-saved",
+  });
+  vi.mocked(resolveRepositoryAccessForTool).mockResolvedValue(
+    access(approvedProduction.installationId, { ...approvedRepository, defaultBranch: "other" }),
+  );
+  await expect(resolvePublicationTargetForTool(directReview)).rejects.toThrow(
+    "verified GitHub destination changed",
+  );
+  expect(recordBuilderPublicationDestinationForTool).not.toHaveBeenCalled();
 });

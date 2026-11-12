@@ -627,6 +627,15 @@ storage. A private Build that later receives a Production request uses one
 release approval with the same scope. A private-only Build grants no outward
 authority.
 
+For an existing starter-backed plan, `release-app-production` accepts the
+creator's chosen Arrusted repository as `destination`. Builder verifies the
+connected GitHub account through the same repository-access flow and records
+the selection against the current private plan. The starter checkout and
+accepted app stay in the same session. The ordinary draft review rechecks and
+persists that exact repository, installation and default branch as the app's
+destination before publication. Protected setup then checks that saved
+destination and the reviewed source against the original owner approval.
+
 Each effect retains its own exact current reviewed inputs and operation
 journal. The draft writer checks the sealed candidate, the protected operator
 verifies the original approval and current setup plan, and the merge workflow

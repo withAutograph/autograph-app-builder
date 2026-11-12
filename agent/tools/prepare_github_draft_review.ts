@@ -23,6 +23,7 @@ import { inspectApplyOverlay, reviewedOverlayTreeDigest } from "@/lib/repository
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { checkedNativeToolResult } from "@/lib/eve/payload-envelope";
+import { currentDirectProductionGrant } from "@/lib/agent/direct-production-state";
 import { resolvePublicationTargetForTool } from "@/lib/agent/github-publication-destination";
 import { repositoryAccessRuntimeForSession } from "@/lib/agent/deployment-repository-access-runtime";
 import { prepareWithVerifiedGitHubFetchRecovery } from "@/lib/agent/verified-github-fetch-recovery";
@@ -126,9 +127,14 @@ export default defineTool({
     );
     const updatingExistingDraft =
       state.phase === "reviewed" && state.existingDraftUpdate !== undefined;
+    const approvedProduction =
+      state.sourceReceipt.sourceKind === "fresh-template" && state.githubSource === undefined
+        ? currentDirectProductionGrant(ctx, state.appSpec)?.subject
+        : undefined;
     const resolved = await resolvePublicationTargetForTool({
       ctx,
       appId: state.appSpec.appId,
+      approvedProduction,
       destination:
         input.destination === undefined
           ? undefined
