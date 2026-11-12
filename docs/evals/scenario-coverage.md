@@ -6,6 +6,9 @@ The [scenario inventory](../../evals/scenario-inventory.json) selects 39 determi
 
 Run `mise run test:agent` for all deterministic cases and the existing product unit/browser checks. The required general, fresh-bootstrap, and product-quality CI lanes use this same inventory. Mock-model success establishes only those scenario contracts.
 
+The required fresh-bootstrap job gives its six isolated scenarios up to 20
+minutes, matching the Ubuntu canary. The same six-scenario suite must pass.
+
 Run the opt-in integration group with an existing Arrusted checkout:
 
 ```sh
