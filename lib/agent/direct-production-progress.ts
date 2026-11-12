@@ -1,6 +1,11 @@
 import { defineState } from "eve/context";
 
-type DirectProductionStage = "draft" | "setup" | "live" | "activation-unavailable";
+type DirectProductionStage =
+  | "draft"
+  | "setup"
+  | "live"
+  | "activation-unavailable"
+  | "schema-update-pending";
 
 export const directProductionProgressState = defineState<{
   grantDigest: string;
@@ -12,7 +17,9 @@ export const recordDirectProductionProgress = (
   stage: DirectProductionStage,
 ): void => {
   directProductionProgressState.update((current) =>
-    current?.grantDigest === grantDigest && current.stage === "live"
+    current?.grantDigest === grantDigest &&
+    current.stage === "live" &&
+    stage !== "schema-update-pending"
       ? current
       : { grantDigest, stage },
   );

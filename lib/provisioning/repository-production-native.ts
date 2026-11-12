@@ -23,6 +23,7 @@ import { createPostgresAppAccessOperationStore } from "../app-access/postgres-st
 import { AppAccessError } from "../app-access/errors";
 import type { AppAccessCommand } from "../app-access/contracts";
 import type { ManagedAppAccess } from "../app-access/management";
+import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
 import type { DirectProductionGrant } from "../agent/direct-production-authorization";
 import {
   assertDirectRepositoryProductionApproval,
@@ -66,6 +67,7 @@ import {
   readRepositoryProductionManagementRecord,
 } from "./repository-production-management-subject";
 import { createRepositoryProductionNativeStatus } from "./repository-production-native-status";
+import type { RepositoryProductionNativeStatus } from "./repository-production-native-status-contract";
 import {
   createRepositoryProductionCompletionStatus,
   completeRepositoryProductionFromStatus,
@@ -129,6 +131,51 @@ const defined = <T>(value: T | undefined): T => {
     throw new Error("repository_production_state_unavailable");
   }
   return value;
+};
+
+const currentRepositoryProductionSchemaGrant = (decision: ApprovedBuildDecision | undefined) => {
+  const grant = decision?.directProduction;
+  const spec = decision?.currentSpec;
+  const { subject } = grant ?? {};
+  const current = [
+    decision?.workflowPhase === "reviewed",
+    subject?.revision?.schemaChange !== undefined,
+    subject?.appId === spec?.appId,
+    subject?.appSpecDigest === spec?.appSpecDigest,
+    subject?.proposalDigest === spec?.proposalDigest,
+    subject?.sessionId === spec?.sessionId,
+  ].every(Boolean);
+  return current ? grant : undefined;
+};
+
+/** Keep the app's availability and the candidate's completed data setup separate. */
+export const projectRepositoryProductionSchemaNativeStatus = async (
+  observed: RepositoryProductionNativeStatus,
+  includeActivationProof: true | undefined,
+  isSchemaReady: () => Promise<boolean>,
+): Promise<RepositoryProductionNativeStatus> => {
+  if (includeActivationProof === true || observed.requestedRevision !== "live") {
+    return observed;
+  }
+  return (await isSchemaReady())
+    ? observed
+    : { ...observed, requestedRevision: "awaiting-activation" };
+};
+
+/** The schema-only approval leaves the saved creator selection as-is. */
+export const resolveRepositoryProductionPlanRecipient = async (input: {
+  approvedSchemaRevision: boolean;
+  creatorEmail?: string;
+  readRetainedRecipient: () => Promise<string | undefined>;
+}): Promise<string | undefined> => {
+  if (input.approvedSchemaRevision) {
+    if (input.creatorEmail !== undefined) {
+      throw new RepositoryProductionCreatorRecipientLockedError();
+    }
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- No recipient is inferred from the linked account for schema-only setup.
+    return undefined;
+  }
+  return input.creatorEmail ?? (await input.readRetainedRecipient());
 };
 
 /** Creator identity and membership remain fresh protected reads for each projection. */
@@ -441,6 +488,7 @@ export const createRepositoryProductionNativeHandler =
           intent.creatorEmail = existing.record.intent.creatorEmail;
         }
         const result = {
+          approvedSchemaRevision: currentRepositoryProductionSchemaGrant(decision) !== undefined,
           assertCurrentOwner,
           capture,
           description,
@@ -1304,7 +1352,31 @@ export const createRepositoryProductionNativeHandler =
             ? await setup(found.scope).status(found.scope, row.record.intent)
             : { operationRef: key(found.scope), state: "setting-up-data" };
         },
-        readNativeStatus,
+        readNativeStatus: async (owner, expectedMergeSha, includeActivationProof) => {
+          const observed = await readNativeStatus(owner, expectedMergeSha, includeActivationProof);
+          return await projectRepositoryProductionSchemaNativeStatus(
+            observed,
+            includeActivationProof,
+            async () => {
+              const session = await readSession(owner);
+              const grant = currentRepositoryProductionSchemaGrant(session.privateBuildDecision);
+              if (grant === undefined) {
+                return true;
+              }
+              const found = await resolve(owner);
+              const row = await store.read(found.scope);
+              await found.assertCurrentOwner();
+              return (
+                row !== undefined &&
+                isDeepStrictEqual(row.record.scope, found.scope) &&
+                row.record.intent.sessionId === found.intent.sessionId &&
+                isDeepStrictEqual(row.record.intent.storage, found.intent.storage) &&
+                row.record.effects["install-schema"].state === "applied" &&
+                retainedRepositoryProductionSchemaPredecessor(row, grant.digest) !== undefined
+              );
+            },
+          );
+        },
         readDeliveryStatus: async (owner, target) => {
           const status = await readDeliveryStatus(owner, target);
           const session = await readSession(owner);
@@ -1351,8 +1423,14 @@ export const createRepositoryProductionNativeHandler =
         },
         resolvePlan: async (owner, creatorEmail) => {
           const found = await resolve(owner);
-          const saved = await store.read(found.scope);
-          const selected = creatorEmail ?? (saved ? await creator.readRecipient(saved) : undefined);
+          const selected = await resolveRepositoryProductionPlanRecipient({
+            approvedSchemaRevision: found.approvedSchemaRevision,
+            creatorEmail,
+            readRetainedRecipient: async () => {
+              const saved = await store.read(found.scope);
+              return saved ? await creator.readRecipient(saved) : undefined;
+            },
+          });
           await selectCreatorEmail(found, selected);
           return { scope: found.scope, intent: found.intent };
         },
@@ -1508,7 +1586,9 @@ export const createRepositoryProductionNativeHandler =
               requireExisting: schemaRevision,
               assertAuthorized: async (scope, intent) => {
                 const canonical = await resolve(owner);
-                await selectCreatorEmail(canonical, found.intent.creatorEmail);
+                if (!schemaRevision) {
+                  await selectCreatorEmail(canonical, found.intent.creatorEmail);
+                }
                 await assertDirectApproval();
                 if (
                   !isDeepStrictEqual(canonical.scope, scope) ||

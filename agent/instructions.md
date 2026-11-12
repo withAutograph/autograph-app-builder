@@ -93,7 +93,9 @@ publication, use `read_github_pr_delivery` and `finish-github-pr-delivery` to
 verify its existing setup and release the revision. For a schema addition, compile
 the selected schema after Build. The reviewed delivery verifies the checked
 addition before merge and applies it after native activation under the same
-approval. Preserve existing fields, records, and access.
+approval. Preserve existing fields, records, and access. When the user wants
+to enter or see the new field in the app, freeze the form, save and display
+changes with the schema in the same proposal before requesting the Build card.
 
 Private Build covers private implementation and the first working preview. A later
 explicit Production request for that private build uses one

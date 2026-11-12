@@ -147,6 +147,31 @@ it("uses the original Production grant only for the exact current reviewed GitHu
   expect(mocks.run).not.toHaveBeenCalled();
 });
 
+it("reuses the combined approval only for the exact already-merged schema revision", async () => {
+  const installationId = "10";
+  const input = { ...approval, installationId, readyAt };
+  mocks.getState.mockReturnValue({
+    ...mocks.getState(),
+    githubDestinationReview: { installation: { installationId } },
+  });
+  mocks.inspect.mockResolvedValue(observe({ state: "merged", mergeCommitSha }));
+  const digest = "7".repeat(64);
+  mocks.readGrant.mockReturnValue({
+    digest,
+    subject: { revision: { schemaChange: { kind: "add-optional-text-field" } } },
+  });
+  await expect(approve(input)).resolves.toBe("approved");
+  expect(mocks.captureAuthority).toHaveBeenCalledWith(input, expect.anything(), {
+    directProductionGrantDigest: digest,
+  });
+  await expect(approve({ ...input, headSha: "f".repeat(40) })).resolves.toMatchObject({
+    type: "denied",
+  });
+  mocks.readGrant.mockReturnValue({ digest, subject: { revision: {} } });
+  await expect(approve(input)).resolves.toMatchObject({ type: "denied" });
+  expect(mocks.run).not.toHaveBeenCalled();
+});
+
 it("requires provider proof of the retained reconciliation before approving its exact head", async () => {
   const reconciliation = { digest: "e".repeat(64) };
   const reconciled = { ...approval, reconciliationDigest: reconciliation.digest };
