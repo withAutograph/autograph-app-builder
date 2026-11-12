@@ -12,6 +12,7 @@ import type { ImplementationFile } from "./apply-implementation-files";
 import {
   ARRUSTED_PRODUCTION_REPOSITORY,
   createDirectProductionGrant,
+  directProductionSchemaChangeSchema,
   directProductionSubjectSchema,
 } from "./direct-production-authorization";
 import type {
@@ -34,7 +35,7 @@ import {
   newAppImplementationSchemaKind,
   previewStagedImplementationFiles,
 } from "./staged-implementation";
-import { appBuilderWorkflowState } from "./workflow-state";
+import { appBuilderWorkflowState, sha256 } from "./workflow-state";
 import type { AppBuilderWorkflowState, PreparedAppCreation } from "./workflow-state";
 
 type OwnerContext = Pick<ToolContext, "session">;
@@ -223,10 +224,66 @@ const isExistingPresentationEdit = (change: TargetIterationChange, appPath: stri
   );
 };
 
-const hasEligibleRevisionChanges = (
+type RevisionScope = Pick<NonNullable<DirectProductionSubject["revision"]>, "schemaChange">;
+
+/** The schema compiler and protected installer independently verify the effect of these exact bytes. */
+const schemaRevisionScope = (
+  changes: readonly TargetIterationChange[],
+  appPath: string,
+  cuePath: string,
+): RevisionScope | undefined => {
+  const cueChanges = changes.filter(({ path }) => path === cuePath);
+  const [cue] = cueChanges;
+  if (cue === undefined || cueChanges.length !== 1) {
+    return undefined;
+  }
+  const { before: priorCue, after: candidateCue } = cue;
+  if (priorCue === undefined || candidateCue === undefined || priorCue.mode !== candidateCue.mode) {
+    return undefined;
+  }
+  if (
+    priorCue.digest === candidateCue.digest ||
+    candidateCue.digest !== sha256(candidateCue.content)
+  ) {
+    return undefined;
+  }
+  const applicationEdit = ({ path, before, after }: TargetIterationChange) => {
+    if (after === undefined || (before?.mode ?? "644") !== after.mode) {
+      return false;
+    }
+    const relative = path.slice(appPath.length + 1);
+    const appSource =
+      path.startsWith(`${appPath}/`) &&
+      /^(?:src\/)?(?:app|components|lib)\/.+\.(?:[jt]sx?|css)$/u.test(relative) &&
+      !relative.split("/").some((part) => part.startsWith(".") || part === "schema");
+    const routeFile = /(?:^|\/)(?:layout|route|middleware|proxy)\.[jt]sx?$/u.test(relative);
+    const newEntry =
+      before === undefined &&
+      /(?:^|\/)(?:page|template|loading|not-found|error|global-error|default)\.[jt]sx?$/u.test(
+        relative,
+      );
+    return appSource && !routeFile && !newEntry;
+  };
+  if (
+    !changes.every(
+      (change) =>
+        change === cue || isExistingPresentationEdit(change, appPath) || applicationEdit(change),
+    )
+  ) {
+    return undefined;
+  }
+  const schemaChange = directProductionSchemaChangeSchema.safeParse({
+    kind: "add-optional-text-field",
+    priorCueSha256: priorCue.digest,
+    candidateCueSha256: candidateCue.digest,
+  });
+  return schemaChange.success ? { schemaChange: schemaChange.data } : undefined;
+};
+
+const eligibleRevisionScope = (
   state: ProposedWorkflow,
   implementationFiles: readonly ImplementationFile[],
-): boolean => {
+): RevisionScope | undefined => {
   const { appSpec, proposal } = state;
   const { target } = proposal;
   if (
@@ -234,23 +291,29 @@ const hasEligibleRevisionChanges = (
     target.frameworkUpgrade !== undefined ||
     target.applicationSourceImport !== undefined
   ) {
-    return false;
+    return undefined;
   }
   const appPath = `apps/${appSpec.appId}`;
   const { changes } = target.iteration;
-  if (
-    target.plan.source.workspacePath !== appPath ||
-    changes.length === 0 ||
-    !changes.every((change) => isExistingPresentationEdit(change, appPath))
-  ) {
-    return false;
+  if (target.plan.source.workspacePath !== appPath || changes.length === 0) {
+    return undefined;
   }
   const stagedFiles = previewStagedImplementationFiles({
     appSpecDigest: appSpec.digest,
     files: implementationFiles,
     proposalDigest: proposal.digest,
   });
-  return stagedFiles.length === 0;
+  if (stagedFiles.length > 0) {
+    return undefined;
+  }
+  if (changes.every((change) => isExistingPresentationEdit(change, appPath))) {
+    return {};
+  }
+  const { schema } = target.plan.source;
+  const cuePath = `${appPath}/schema/${appSpec.appId}.cue`;
+  return schema.kind === "kernel" && schema.path === cuePath
+    ? schemaRevisionScope(changes, appPath, cuePath)
+    : undefined;
 };
 
 const matchesRevisionPredecessor = (
@@ -280,7 +343,9 @@ const subjectForProposal = (
   if ((appSpec.access?.mode ?? "private") !== "private") {
     return undefined;
   }
-  if ("operation" in target && priorGrant === undefined) {
+  const scope =
+    priorGrant === undefined ? undefined : eligibleRevisionScope(state, implementationFiles);
+  if ("operation" in target && scope === undefined) {
     return undefined;
   }
   const destination = productionDestinationForPlan(ctx, state, priorGrant);
@@ -298,6 +363,7 @@ const subjectForProposal = (
           revision: {
             priorGrantDigest: priorGrant.digest,
             priorProposalDigest: priorGrant.subject.proposalDigest,
+            ...scope,
           },
         };
   const subject = directProductionSubjectSchema.safeParse({
@@ -329,9 +395,8 @@ export const directProductionSubjectForPlan = (
   if (!("proposal" in state)) {
     return undefined;
   }
-  const predecessor = hasEligibleRevisionChanges(state, implementationFiles)
-    ? revisionPredecessor(state.proposal.digest)
-    : undefined;
+  const predecessor =
+    "operation" in state.proposal.target ? revisionPredecessor(state.proposal.digest) : undefined;
   return subjectForProposal(ctx, state, implementationFiles, predecessor);
 };
 
@@ -388,7 +453,7 @@ export const restoreDirectProductionRevisionPredecessor = async (
 ): Promise<void> => {
   ctx.abortSignal.throwIfAborted();
   const state = appBuilderWorkflowState.get();
-  if (state.phase !== "planned" || !hasEligibleRevisionChanges(state, [])) {
+  if (state.phase !== "planned" || eligibleRevisionScope(state, []) === undefined) {
     return;
   }
   const { grant } = authorization.get();

@@ -27,7 +27,8 @@ const mocks = vi.hoisted(() => ({
   sleep: vi.fn(),
 }));
 vi.mock("workflow", () => ({ sleep: mocks.sleep }));
-vi.mock("./github-pr-delivery-step", () => ({
+vi.mock(import("./github-pr-delivery-step"), async (importOriginal) => ({
+  ...(await importOriginal()),
   approveGitHubPrDelivery: vi.fn(),
   continueGitHubPrDelivery: mocks.continueDelivery,
 }));
@@ -149,6 +150,53 @@ beforeEach(() => {
     mergeCommitSha,
     nativeProductionTarget,
   });
+});
+
+it("installs the approved addition only after the provider activates the exact merged revision", async () => {
+  const approvalReference = { appId, operationRef: "same-existing-app-setup" };
+  const mergeIntentDigest = "d".repeat(64);
+  mocks.continueDelivery.mockResolvedValue({
+    status: "merged",
+    mergeCommitSha,
+    nativeProductionTarget,
+    schemaActivation: { deliveryCallId: "approved-merge-call", mergeIntentDigest },
+  });
+  mocks.readAuthority.mockResolvedValue({
+    subject: { appId },
+    requirements: [],
+    productionSchemaApprovalCallId: "single-build-approval",
+  });
+  const nativeStatus = vi
+    .fn()
+    // A signed-out response can appear live before the protected provider proof is available.
+    .mockResolvedValueOnce(observed("available", "live"))
+    .mockResolvedValueOnce({
+      ...observed("pending", "awaiting-activation"),
+      deployment: { state: "active", requestedRevisionActive: true },
+    })
+    .mockResolvedValueOnce(observed("available", "live"));
+  const plan = vi.fn().mockResolvedValue({ approvalReference });
+  const prepare = vi.fn().mockResolvedValue({ setup: { state: "ready" } });
+  mocks.clientForContext.mockResolvedValue({ nativeStatus, plan, prepare });
+  mocks.sleep.mockImplementationOnce(async () => {
+    expect(prepare).not.toHaveBeenCalled();
+    await Promise.resolve();
+  });
+
+  await expect(finish()).resolves.toMatchObject({
+    status: "merged",
+    nativeProduction: { requestedRevision: "live", app: { url: appUrl } },
+  });
+  expect(nativeStatus).toHaveBeenNthCalledWith(1, appId, mergeCommitSha, true);
+  expect(nativeStatus).toHaveBeenNthCalledWith(2, appId, mergeCommitSha, true);
+  expect(prepare).toHaveBeenCalledExactlyOnceWith(approvalReference, "single-build-approval", {
+    deliveryCallId: "approved-merge-call",
+    mergeIntentDigest,
+    mergeSha: mergeCommitSha,
+    reviewedHeadSha: approval.headSha,
+  });
+  expect(nativeStatus).toHaveBeenNthCalledWith(3, appId, mergeCommitSha);
+  expect(mocks.continueDelivery).toHaveBeenCalledTimes(1);
 });
 
 it("continues an actual merged workflow through protected native reads without merging again", async () => {

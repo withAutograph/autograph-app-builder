@@ -54,13 +54,17 @@ export const observeAppProduction = async (
   appId: string,
   ctx: WorkflowStepToolContext,
   expectedMergeSha?: string,
+  includeActivationProof?: true,
 ): Promise<AppProductionObservation> => {
   ctx.abortSignal.throwIfAborted();
   let clientResolved = false;
   try {
     const client = await repositoryProductionClientForContext(ctx);
     clientResolved = true;
-    const observed = await client.nativeStatus(appId, expectedMergeSha);
+    const observed =
+      includeActivationProof === true
+        ? await client.nativeStatus(appId, expectedMergeSha, includeActivationProof)
+        : await client.nativeStatus(appId, expectedMergeSha);
     ctx.abortSignal.throwIfAborted();
     return observed;
   } catch (error) {
@@ -81,9 +85,15 @@ export const observeMergedAppProduction = async (
   target: AppProductionDeliveryTarget,
   ctx: WorkflowStepToolContext,
   expectedMergeSha?: string,
+  includeActivationProof?: true,
 ): Promise<AppProductionObservation> => {
   ctx.abortSignal.throwIfAborted();
-  const observed = await observeAppProduction(target.appId, ctx, expectedMergeSha);
+  const observed = await observeAppProduction(
+    target.appId,
+    ctx,
+    expectedMergeSha,
+    includeActivationProof,
+  );
   if (observed.status === monitoringStoppedStatus) {
     return observed;
   }

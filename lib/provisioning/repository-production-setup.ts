@@ -3,9 +3,10 @@ import { sameRepositoryProductionSetupEffects } from "./repository-production-in
 /* oxlint-disable eslint/no-await-in-loop, eslint/no-loop-func, eslint/complexity -- Ordered effects share one fenced row; every awaited callback completes before advancing the journal. */
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import type { z } from "zod";
+import { z } from "zod";
 import {
   initialRepositoryProductionRecord,
+  repositoryProductionIntentSchema,
   repositoryProductionOperationRef,
   repositoryProductionRecordSchema,
 } from "./repository-production-contract";
@@ -68,6 +69,15 @@ export interface RepositoryProductionSetupPorts {
     context: RepositoryProductionEffectContext,
   ) => Promise<RepositoryProductionObservation>;
   apply: (context: RepositoryProductionEffectContext) => Promise<void>;
+  schemaRevision?: {
+    grantDigest: string;
+    assertActive: () => Promise<void>;
+    /** Read and verify the exact active predecessor and candidate on the retained database. */
+    verify: (
+      prior: RepositoryProductionEffectContext,
+      candidate: RepositoryProductionIntent,
+    ) => Promise<void>;
+  };
 }
 export interface RepositoryProductionSetupResult {
   operationRef: string;
@@ -77,6 +87,16 @@ export interface RepositoryProductionSetupResult {
 }
 const CREATOR_ACCESS_EFFECT = "creator-access";
 const BIND_RUNTIME_EFFECT = "bind-runtime";
+const INSTALL_SCHEMA_EFFECT = "install-schema";
+const ALLOCATE_STORAGE_EFFECT = "allocate-storage";
+const schemaRevisionProof = z.strictObject({
+  kind: z.literal("repository-production-schema-predecessor-v1"),
+  grantDigest: z.string(),
+  resourceId: z.string(),
+  prior: repositoryProductionIntentSchema.pick({ sessionId: true, storage: true }),
+});
+const schemaRevisionUnverified = () =>
+  new Error("repository_production_schema_revision_unverified");
 
 const unfinished = (record: RepositoryProductionRecord) =>
   record.appAccessUpgrade?.state === "pending" ||
@@ -85,8 +105,13 @@ const unfinished = (record: RepositoryProductionRecord) =>
 const selectedEffects = (record: RepositoryProductionRecord): RepositoryProductionEffect[] => {
   const effects: RepositoryProductionEffect[] =
     record.intent.storage.kind === "none"
-      ? ["creator-access"]
-      : ["allocate-storage", "install-schema", CREATOR_ACCESS_EFFECT, BIND_RUNTIME_EFFECT];
+      ? [CREATOR_ACCESS_EFFECT]
+      : [
+          ALLOCATE_STORAGE_EFFECT,
+          INSTALL_SCHEMA_EFFECT,
+          CREATOR_ACCESS_EFFECT,
+          BIND_RUNTIME_EFFECT,
+        ];
   if (
     record.intent.access?.mode === "self-signup" ||
     record.effects["signup-policy"].receipt !== undefined
@@ -101,6 +126,156 @@ export const repositoryProductionSetupComplete = (record: RepositoryProductionRe
   !unfinished(record) &&
   selectedEffects(record).every((effect) => record.effects[effect].state === "applied");
 
+export const repositoryProductionSchemaEffectsMatch = (
+  row: RepositoryProductionRow,
+  intent: RepositoryProductionIntent,
+): boolean => {
+  const { record } = row;
+  const { resource, intent: saved } = record;
+  return [
+    resource !== undefined,
+    record.privateState !== undefined,
+    record.creatorActorId !== undefined,
+    saved.storage.kind === "postgres",
+    intent.storage.kind === "postgres",
+    saved.storage.kind === "postgres" &&
+      intent.storage.kind === "postgres" &&
+      saved.storage.databaseEnvironment === intent.storage.databaseEnvironment,
+    saved.entryPath === intent.entryPath,
+    saved.creatorEmail === intent.creatorEmail,
+    record.appAccessUpgrade?.state !== "pending",
+    record.creatorRoleUpdate?.state !== "pending",
+    record.effects[ALLOCATE_STORAGE_EFFECT].state === "applied",
+    record.effects[CREATOR_ACCESS_EFFECT].state === "applied",
+    record.effects[BIND_RUNTIME_EFFECT].state === "applied",
+    record.effects["signup-policy"].state !== "pending",
+    sameRepositoryProductionSetupEffects({ ...saved, storage: intent.storage }, intent),
+  ].every(Boolean);
+};
+
+export const retainedRepositoryProductionSchemaPredecessor = (
+  row: RepositoryProductionRow,
+  grantDigest?: string,
+) => {
+  for (const entry of row.record.workerCheckpoints.toReversed()) {
+    const proof = schemaRevisionProof.safeParse(entry);
+    if (
+      proof.success &&
+      (grantDigest === undefined || proof.data.grantDigest === grantDigest) &&
+      proof.data.resourceId === row.record.resource?.resourceId
+    ) {
+      return proof.data;
+    }
+  }
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- The explicit optional lookup result is part of the guard.
+  return undefined;
+};
+
+/** Journal only the approved schema install, preserving the owned allocation and every access effect. */
+const prepareExistingSchemaRevision = async (input: {
+  ports: RepositoryProductionSetupPorts;
+  row: RepositoryProductionRow;
+  intent: RepositoryProductionIntent;
+  assertCurrent: () => Promise<void>;
+  save: (record: RepositoryProductionRecord) => Promise<RepositoryProductionRow>;
+}): Promise<RepositoryProductionSetupResult> => {
+  const { ports, intent, assertCurrent, save } = input;
+  const revision = ports.schemaRevision;
+  let { row } = input;
+  const { record } = row;
+  const { resource, intent: saved } = record;
+  if (
+    revision === undefined ||
+    resource === undefined ||
+    ports.isRuntimeBindingReady?.(row) === false ||
+    !repositoryProductionSchemaEffectsMatch(row, intent)
+  ) {
+    throw schemaRevisionUnverified();
+  }
+  const ready = { operationRef: row.operationRef, state: "ready" } as const;
+  const reconciling = { operationRef: row.operationRef, state: "reconciling" } as const;
+  const context = (selected: RepositoryProductionRow): RepositoryProductionEffectContext => ({
+    row: selected,
+    effect: INSTALL_SCHEMA_EFFECT,
+    assertCurrent,
+    async checkpoint(value) {
+      row = await save({
+        ...row.record,
+        workerCheckpoints: [...row.record.workerCheckpoints, value],
+      });
+    },
+  });
+  if (isDeepStrictEqual(saved.storage, intent.storage)) {
+    const proof = retainedRepositoryProductionSchemaPredecessor(row, revision.grantDigest);
+    if (proof === undefined) {
+      throw schemaRevisionUnverified();
+    }
+    if (repositoryProductionSetupComplete(record)) {
+      return ready;
+    }
+    if (record.effects[INSTALL_SCHEMA_EFFECT].state === "pending") {
+      const observed = await ports.reconcile(context(row));
+      if (observed.state === "unknown") {
+        return reconciling;
+      }
+      if (observed.state === "applied") {
+        await save({
+          ...row.record,
+          effects: {
+            ...row.record.effects,
+            [INSTALL_SCHEMA_EFFECT]: { state: "applied", receipt: observed.receipt },
+          },
+        });
+        return ready;
+      }
+    }
+    await revision.verify(
+      context({ ...row, record: { ...row.record, intent: { ...saved, ...proof.prior } } }),
+      intent,
+    );
+  } else {
+    if (!repositoryProductionSetupComplete(record)) {
+      throw schemaRevisionUnverified();
+    }
+    await revision.verify(context(row), intent);
+    const proof = schemaRevisionProof.parse({
+      kind: "repository-production-schema-predecessor-v1",
+      grantDigest: revision.grantDigest,
+      resourceId: resource.resourceId,
+      prior: { sessionId: saved.sessionId, storage: saved.storage },
+    });
+    row = await save({
+      ...row.record,
+      intent,
+      effects: { ...row.record.effects, [INSTALL_SCHEMA_EFFECT]: { state: "idle" } },
+      workerCheckpoints: [...row.record.workerCheckpoints, proof],
+    });
+  }
+  row = await save({
+    ...row.record,
+    effects: {
+      ...row.record.effects,
+      [INSTALL_SCHEMA_EFFECT]: { state: "pending", attemptId: randomUUID() },
+    },
+  });
+  await revision.assertActive();
+  await assertCurrent();
+  await ports.apply(context(row));
+  await assertCurrent();
+  const observed = await ports.reconcile(context(row));
+  if (observed.state !== "applied") {
+    return reconciling;
+  }
+  await save({
+    ...row.record,
+    effects: {
+      ...row.record.effects,
+      [INSTALL_SCHEMA_EFFECT]: { state: "applied", receipt: observed.receipt },
+    },
+  });
+  return ready;
+};
+
 /** Same-app delivery continuation; no Preview prerequisite, deployment mutation or product-test gate. */
 export const createRepositoryProductionSetup = (ports: RepositoryProductionSetupPorts) => ({
   async prepare(
@@ -109,9 +284,12 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
   ): Promise<RepositoryProductionSetupResult> {
     await ports.assertAuthorized(scope, intent);
     return await ports.withLease(scope, async (assertFence) => {
+      const saved = await ports.store.read(scope);
+      if (ports.schemaRevision !== undefined && saved === undefined) {
+        throw schemaRevisionUnverified();
+      }
       let row: RepositoryProductionRow =
-        (await ports.store.read(scope)) ??
-        (await ports.store.reserve(initialRepositoryProductionRecord(scope, intent)));
+        saved ?? (await ports.store.reserve(initialRepositoryProductionRecord(scope, intent)));
       if (!isDeepStrictEqual(row.record.scope, scope)) {
         throw new Error("repository_production_destination_changed");
       }
@@ -129,7 +307,17 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
           throw new Error("repository_production_conflict");
         }
         row = next;
+        return row;
       };
+      if (ports.schemaRevision !== undefined) {
+        return await prepareExistingSchemaRevision({ ports, row, intent, assertCurrent, save });
+      }
+      if (
+        row.record.effects[INSTALL_SCHEMA_EFFECT].state !== "applied" &&
+        retainedRepositoryProductionSchemaPredecessor(row) !== undefined
+      ) {
+        throw schemaRevisionUnverified();
+      }
       if (!sameRepositoryProductionSetupEffects(row.record.intent, intent)) {
         if (unfinished(row.record)) {
           return { operationRef: row.operationRef, state: "reconciling" };
@@ -142,7 +330,7 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
         if (row.record.privateState !== undefined) {
           next.privateState = row.record.privateState;
         }
-        next.effects["allocate-storage"] = row.record.effects["allocate-storage"];
+        next.effects[ALLOCATE_STORAGE_EFFECT] = row.record.effects[ALLOCATE_STORAGE_EFFECT];
         next.effects["creator-access"] = row.record.effects["creator-access"];
         const previousPolicy = row.record.effects["signup-policy"];
         if (

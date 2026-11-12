@@ -84,13 +84,16 @@ implementation submits the app's CUE schema, request the subject with
 `directProduction` subject with the complete implementation to
 `apply_app_creation` to present **Build and release to Production?**.
 The card covers Build, the reviewed draft, managed data and creator access,
-and merge after required checks. For a requested presentation update to this
-session's live private Arrusted app, plan the revision and call
+and merge after required checks. For a requested presentation update or safe optional text field addition to
+this session's live private Arrusted app, plan the revision and call
 `release-app-production` before presenting the Build card. Pass the returned
 subject to `apply_app_creation` with an empty implementation file list. The
 revision card covers the reviewed update to the same Production app. After
 publication, use `read_github_pr_delivery` and `finish-github-pr-delivery` to
-verify its existing setup and release the revision.
+verify its existing setup and release the revision. For a schema addition, compile
+the selected schema after Build. The reviewed delivery verifies the checked
+addition before merge and applies it after native activation under the same
+approval. Preserve existing fields, records, and access.
 
 Private Build covers private implementation and the first working preview. A later
 explicit Production request for that private build uses one
@@ -301,7 +304,9 @@ For a managed destination, prepare the required data, access and runtime binding
 after draft publication and before merging. Native deployments capture their
 environment at creation; binding a database after merge cannot repair an already
 created deployment. A saved ready setup is reused for source-only revisions;
-only changed data/access requirements need their normal preparation approval.
+the eligible optional field addition uses the current combined approval and
+applies after native activation because the app keeps its runtime bindings. Other
+changed data or access requirements need their normal preparation approval.
 Generic GitHub destinations retain their existing flow. Frontend-only apps never
 allocate a database. Hosted Preview, a synthetic
 runtime journal, and external qualification are optional and do not precede this

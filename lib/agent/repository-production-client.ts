@@ -21,7 +21,10 @@ import {
   repositoryProductionDeliveryStatusSchema,
   repositoryProductionDeliveryTargetSchema,
 } from "../provisioning/repository-production-delivery";
-import type { RepositoryProductionDeliveryTarget } from "../provisioning/repository-production-delivery";
+import type {
+  RepositoryProductionDeliveryTarget,
+  RepositoryProductionSchemaActivation,
+} from "../provisioning/repository-production-delivery";
 import { retainManagedProductionDeliveryRequirement } from "./production-delivery-requirement";
 import {
   repositoryProductionExpectedMergeShaSchema,
@@ -64,6 +67,8 @@ interface RepositoryProductionRequestExtras {
   repositoryFullName?: string;
   reviewedHeadSha?: string;
   expectedMergeSha?: string;
+  includeActivationProof?: true;
+  schemaActivation?: RepositoryProductionSchemaActivation;
   approvalReference?: RepositoryProductionApprovalReference;
 }
 
@@ -211,7 +216,11 @@ export const createRepositoryProductionClient = (input: {
         accessSummary: describeAppAccessIntent(result.plan.scope.appId, result.plan.intent.access),
       };
     },
-    prepare: async (value: RepositoryProductionPrepareInput, directProductionCallId?: string) => {
+    prepare: async (
+      value: RepositoryProductionPrepareInput,
+      directProductionCallId?: string,
+      schemaActivation?: RepositoryProductionSchemaActivation,
+    ) => {
       const plan = repositoryProductionPrepareInputSchema.parse(value);
       if (
         "scope" in plan &&
@@ -238,6 +247,9 @@ export const createRepositoryProductionClient = (input: {
       if ("version" in plan) {
         extra.approvalReference = plan;
       }
+      if (schemaActivation !== undefined) {
+        extra.schemaActivation = schemaActivation;
+      }
       const result = await send(
         appId,
         "prepare",
@@ -261,13 +273,18 @@ export const createRepositoryProductionClient = (input: {
     },
     status: async (appId: string) =>
       await send(appId, "setup-status", setupSchema.extend({ version: z.literal(1) })),
-    nativeStatus: async (appId: string, expectedMergeSha?: string) => {
-      const extra =
-        expectedMergeSha === undefined
-          ? {}
-          : {
-              expectedMergeSha: repositoryProductionExpectedMergeShaSchema.parse(expectedMergeSha),
-            };
+    nativeStatus: async (
+      appId: string,
+      expectedMergeSha?: string,
+      includeActivationProof?: true,
+    ) => {
+      const extra: RepositoryProductionRequestExtras = {};
+      if (expectedMergeSha !== undefined) {
+        extra.expectedMergeSha = repositoryProductionExpectedMergeShaSchema.parse(expectedMergeSha);
+        if (includeActivationProof === true) {
+          extra.includeActivationProof = includeActivationProof;
+        }
+      }
       const result = await send(
         appId,
         nativeStatusAction,

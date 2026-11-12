@@ -196,9 +196,9 @@ it("reports draft checks as deferred using only the session's reviewed publicati
   expect(compareAndSet).not.toHaveBeenCalled();
 });
 
-it.each([false, true])(
-  "handles missing managed setup before delivery (revision: %s)",
-  async (revision) => {
+it.each(["new-app", "presentation", "unchecked-schema", "checked-schema"])(
+  "handles missing managed setup before delivery (%s)",
+  async (releaseKind) => {
     const { proposal, reviewedTarget, runtime } = fixture();
     const mutate = vi.fn();
     mocks.getState.mockReturnValue({
@@ -210,10 +210,20 @@ it.each([false, true])(
       ...runtime,
       runPublishedPullRequestEffect: mutate,
     });
-    if (revision) {
-      mocks.directGrant.mockReturnValue({ subject: { revision: {} } });
+    if (releaseKind !== "new-app") {
+      const revision =
+        releaseKind === "presentation"
+          ? {}
+          : {
+              schemaChange: {
+                kind: "add-optional-text-field",
+                priorCueSha256: "1".repeat(64),
+                candidateCueSha256: "2".repeat(64),
+              },
+            };
+      mocks.directGrant.mockReturnValue({ subject: { revision } });
     }
-    mocks.production.mockResolvedValue({
+    const status: RepositoryProductionDeliveryStatus = {
       version: 1,
       appId: "demo",
       repositoryId: reviewedTarget.repositoryId,
@@ -222,20 +232,32 @@ it.each([false, true])(
       operationRef: "11111111-1111-4111-8111-111111111111",
       state: "setting-up-data",
       preparationRequired: true,
-    });
+    };
+    if (releaseKind === "checked-schema") {
+      status.schemaTransitionVerified = true;
+    }
+    mocks.production.mockResolvedValue(status);
     // SAFETY: Runtime and prerequisite reads are controlled; the real tool owns approval construction.
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Fixture supplies only the fields used through these injected boundaries.
     const result = await readDelivery.execute({}, { session: { auth: {} } } as never);
-    if (revision) {
-      expect(result).toMatchObject({ status: "production-revision-setup-changed" });
-      expect(result).not.toHaveProperty("nextCall");
-    } else {
+    if (releaseKind === "checked-schema") {
+      expect(result).toMatchObject({
+        checks: "deferred",
+        nextCall: { tool: "finish-github-pr-delivery" },
+        approval: { headSha: reviewedTarget.headSha },
+      });
+    } else if (releaseKind === "new-app") {
       expect(result).toMatchObject({
         checks: "deferred",
         nextCall: { tool: "plan-app-production", input: { appId: "demo" } },
       });
+    } else {
+      expect(result).toMatchObject({ status: "production-revision-setup-changed" });
+      expect(result).not.toHaveProperty("nextCall");
     }
-    expect(result).not.toHaveProperty("approval");
+    if (releaseKind !== "checked-schema") {
+      expect(result).not.toHaveProperty("approval");
+    }
     expect(mocks.production).toHaveBeenCalledExactlyOnceWith(
       {
         appId: "demo",

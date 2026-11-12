@@ -236,6 +236,68 @@ it.each([false, true])(
   },
 );
 
+it("verifies an additive transition before GitHub writes and carries the exact merge receipt to activation", async () => {
+  mocks.readAuthority.mockResolvedValue({
+    subject: { appId: "example-app" },
+    requirements: [],
+    directProduction: true,
+    productionSchemaApprovalCallId: "approved-build",
+  });
+  const setup = {
+    version: 1,
+    appId: "example-app",
+    repositoryId: reviewedTarget.repositoryId,
+    repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
+    applicable: true,
+    operationRef: "11111111-1111-4111-8111-111111111111",
+    state: "reconciling",
+    preparationRequired: true,
+  };
+  mocks.production.mockResolvedValue(setup);
+  mocks.inspect.mockResolvedValue(observe({ draft: true }));
+  await expect(step(approval)).resolves.toMatchObject({
+    status: "production-revision-setup-changed",
+  });
+  expect(mocks.run).not.toHaveBeenCalled();
+
+  mocks.production.mockResolvedValue({ ...setup, schemaTransitionVerified: true });
+  mocks.run.mockResolvedValue({ evidence: { kind: "pr-ready", readyAt }, status: "succeeded" });
+  await expect(step(approval)).resolves.toEqual({ status: "waiting-for-checks", readyAt });
+
+  mocks.inspect.mockResolvedValue(observe({ checks: "passed" }));
+  mocks.production.mockResolvedValue(setup);
+  await expect(step(approval, readyAt)).resolves.toMatchObject({
+    status: "production-revision-setup-changed",
+  });
+  expect(mocks.run).toHaveBeenCalledTimes(1);
+
+  const intentDigest = "d".repeat(64);
+  mocks.production.mockResolvedValue({ ...setup, schemaTransitionVerified: true });
+  mocks.run.mockResolvedValue({
+    status: "succeeded",
+    approvedByCallId: callId,
+    evidence: { kind: "pr-merge", mergeCommitSha },
+    intentDigest,
+  });
+  const expected = {
+    status: "merged",
+    mergeCommitSha,
+    schemaActivation: { deliveryCallId: callId, mergeIntentDigest: intentDigest },
+  };
+  await expect(step(approval, readyAt)).resolves.toMatchObject(expected);
+  expect(mocks.run).toHaveBeenLastCalledWith(
+    expect.objectContaining({ kind: "pr-merge", readyAt }),
+  );
+
+  mocks.inspect.mockResolvedValue(observe({ state: "merged", mergeCommitSha }));
+  await expect(step(approval, readyAt)).resolves.toMatchObject(expected);
+  expect(mocks.run).toHaveBeenLastCalledWith(
+    expect.objectContaining({ kind: "pr-merge", reconcileOnly: true }),
+  );
+  mocks.run.mockReset();
+  await expect(step(approval, readyAt)).resolves.toEqual({ status: "merge-unconfirmed" });
+});
+
 it("waits for managed setup and the current required check in a delegated Production delivery", async () => {
   mocks.readAuthority.mockResolvedValue({
     subject: { appId: "example-app" },

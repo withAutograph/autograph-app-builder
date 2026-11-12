@@ -5,6 +5,7 @@ import { githubPrDeliveryApprovalSchema } from "../../lib/agent/github-pr-delive
 import {
   approveGitHubPrDelivery,
   continueGitHubPrDelivery,
+  continueGitHubProductionSchema,
 } from "../../lib/agent/github-pr-delivery-step";
 import { observeMergedAppProductionStep } from "../../lib/agent/observe-app-production-step";
 
@@ -16,7 +17,7 @@ export default defineWorkflowTool({
   approval: approveGitHubPrDelivery,
   availableInSubagents: false,
   description:
-    "After managed Production setup, mark the reviewed pull request ready and merge that exact revision once required checks pass. A matching Production release approval covers these effects. Otherwise ask for the ordinary approval. Pass the approval returned by read_github_pr_delivery. Before merge, Builder independently checks required setup for this exact app and repository; follow production-setup-required through its existing normal setup tools. After merge, observe whether the provider activates this merge commit at the owned native app entry. Existing app availability is reported separately while the update activates. Native activation and authenticated behavior have separate results.",
+    "After managed Production setup, mark the reviewed pull request ready and merge that exact revision once required checks pass. A matching Production release approval covers these effects. Otherwise ask for the ordinary approval. Pass the approval returned by read_github_pr_delivery. Before merge, Builder verifies required setup or an eligible optional schema addition for the exact reviewed app. Follow production-setup-required through its normal setup tools. Builder applies an approved optional field to the existing database after provider activation. After merge, observe whether the provider activates this merge commit at the owned native app entry. Existing app availability is reported separately while the update activates. Native activation and authenticated behavior have separate results.",
   inputSchema: githubPrDeliveryApprovalSchema,
   async *execute(input, ctx) {
     "use workflow";
@@ -30,16 +31,20 @@ export default defineWorkflowTool({
     if (result.status !== "merged") {
       return result;
     }
-    const { nativeProductionTarget, ...merged } = result;
+    const { nativeProductionTarget, schemaActivation, ...merged } = result;
     if (nativeProductionTarget === undefined) {
       return merged;
     }
     yield merged;
-    let nativeProduction = await observeMergedAppProductionStep(
-      nativeProductionTarget,
-      ctx,
-      merged.mergeCommitSha,
-    );
+    const observe = async () =>
+      schemaActivation === undefined
+        ? await observeMergedAppProductionStep(nativeProductionTarget, ctx, merged.mergeCommitSha)
+        : await continueGitHubProductionSchema(input, ctx, {
+            ...schemaActivation,
+            mergeSha: merged.mergeCommitSha,
+            reviewedHeadSha: input.headSha,
+          });
+    let nativeProduction = await observe();
     let availableUrl =
       nativeProduction.status === "available" ? nativeProduction.app.url : undefined;
     for (
@@ -53,11 +58,7 @@ export default defineWorkflowTool({
       // oxlint-disable-next-line eslint/no-await-in-loop -- Provider-owned activation is observed after merge without holding compute.
       await sleep("15s");
       // oxlint-disable-next-line eslint/no-await-in-loop -- Recheck the same captured app/destination after each wait.
-      nativeProduction = await observeMergedAppProductionStep(
-        nativeProductionTarget,
-        ctx,
-        merged.mergeCommitSha,
-      );
+      nativeProduction = await observe();
       if (nativeProduction.status === "available") {
         availableUrl = nativeProduction.app.url ?? availableUrl;
       }

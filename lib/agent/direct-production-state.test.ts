@@ -24,6 +24,7 @@ import {
 } from "../eve/private-repository-production-approval";
 import { observePrivateApplyDenials } from "../eve/private-apply-denial-evidence";
 import { tenantKeyFor } from "../eve/hosted-auth";
+import { projectInstalledEveEvent, toPublicEvent } from "../eve/public-events";
 import {
   GITHUB_PUBLICATION_VERSION,
   REPOSITORY_RELEASE_GATE,
@@ -35,6 +36,7 @@ import {
 } from "../provisioning/repository-production-approval";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- The partial repository mock retains the full module contract.
 import type * as targetApply from "../repository/target-apply";
+import type { TargetIterationChange } from "../repository/target-planning";
 import {
   createRealmContinuationServiceAuth,
   mintRealmContinuationAuthority,
@@ -252,26 +254,30 @@ const installPriorProduction = (stage: "live" | "setup" = "live") => {
 };
 
 const revisionPage = `apps/${appId}/app/page.tsx`;
-const installHeadingRevision = (path = revisionPage) => {
+const beforeNotesCue =
+  'manifest: { version: "1", fields: [{id: "label", type: "text", required: true}] }';
+const afterNotesCue =
+  'manifest: { version: "2", fields: [{id: "label", type: "text", required: true}, {id: "notes", type: "text"}] }';
+const revisionEdit = (path: string, before: string, after: string) => ({
+  after: { content: after, digest: sha256(after), mode: "644" },
+  before: { digest: sha256(before), mode: "644" },
+  path,
+});
+const installRevision = (
+  changes: TargetIterationChange[],
+  revisionIntent: string,
+  schemaPath?: string,
+) => {
   const state = appBuilderWorkflowState.get();
   if (state.phase !== "planned") {
     throw new Error("The revision fixture requires the existing app plan.");
   }
   const appSpec = {
     ...state.appSpec,
-    digest: sha256("Use Socket Labels as the heading"),
-    artifactRevision: sha256("heading specification"),
-    acceptedByCallId: "accept-heading",
+    digest: sha256(revisionIntent),
+    artifactRevision: sha256(`specification: ${revisionIntent}`),
+    acceptedByCallId: "accept-revision",
   };
-  const before = "export default function Page() { return <h1>Socket Label Log</h1>; }";
-  const content = "export default function Page() { return <h1>Socket Labels</h1>; }";
-  const changes = [
-    {
-      after: { content, digest: sha256(content), mode: "644" },
-      before: { digest: sha256(before), mode: "644" },
-      path,
-    },
-  ];
   const contract = {
     appId,
     appSpec: { path: appSpec.artifactPath, sha256: appSpec.digest },
@@ -284,7 +290,14 @@ const installHeadingRevision = (path = revisionPage) => {
     iteration: { changes, digest: sha256(JSON.stringify(changes)) },
     plan: {
       ...state.proposal.target.plan,
-      source: { ...state.proposal.target.plan.source, workspacePath: `apps/${appId}` },
+      source: {
+        ...state.proposal.target.plan.source,
+        workspacePath: `apps/${appId}`,
+        schema:
+          schemaPath === undefined
+            ? state.proposal.target.plan.source.schema
+            : { kind: "kernel" as const, path: schemaPath },
+      },
     },
   } as const;
   const { digest: originalDigest, ...original } = state.proposal;
@@ -293,7 +306,7 @@ const installHeadingRevision = (path = revisionPage) => {
     appSpecDigest: appSpec.digest,
     artifactRevision: appSpec.artifactRevision,
     contractDigest: sha256(JSON.stringify(contract)),
-    plannedByCallId: "plan-heading",
+    plannedByCallId: "plan-revision",
     target,
   };
   const revision = {
@@ -304,11 +317,44 @@ const installHeadingRevision = (path = revisionPage) => {
   expect(revision.proposal.digest).not.toBe(originalDigest);
   updateExactWorkflow({
     expected: state,
-    operation: "record an app heading revision",
+    operation: "record an app revision",
     transition: () => revision,
   });
   return revision;
 };
+const installHeadingRevision = (path = revisionPage) =>
+  installRevision(
+    [
+      revisionEdit(
+        path,
+        "export default function Page() { return <h1>Socket Label Log</h1>; }",
+        "export default function Page() { return <h1>Socket Labels</h1>; }",
+      ),
+    ],
+    "Use Socket Labels as the heading",
+  );
+const installNotesRevision = () =>
+  installRevision(
+    [
+      revisionEdit(appliedCuePath, beforeNotesCue, afterNotesCue),
+      revisionEdit(`apps/${appId}/app/actions.ts`, "create({ label })", "create({ label, notes })"),
+      {
+        path: `apps/${appId}/app/notes-field.tsx`,
+        after: {
+          content: '<textarea name="notes" />',
+          digest: sha256('<textarea name="notes" />'),
+          mode: "644",
+        },
+      },
+    ],
+    "Add optional saved notes to socket labels",
+    appliedCuePath,
+  );
+const notesSchemaChange = {
+  kind: "add-optional-text-field",
+  priorCueSha256: sha256(beforeNotesCue),
+  candidateCueSha256: sha256(afterNotesCue),
+} as const;
 
 const authoringDecision = () =>
   currentAuthoringDecision(releaseContext, {
@@ -834,13 +880,20 @@ describe("direct Production Build authority", () => {
     });
   });
 
-  it("uses one fresh Eve Build approval for a heading revision of the same live private app", async () => {
+  it.each([
+    { label: "heading", install: installHeadingRevision, scope: {} },
+    {
+      label: "optional notes",
+      install: installNotesRevision,
+      scope: { schemaChange: notesSchemaChange },
+    },
+  ])("binds $label to one fresh Build approval", async ({ label, install, scope }) => {
     const container = new ContextContainer();
     const { session } = releaseContext;
     container.set(SessionKey, { auth: session.auth, sessionId, turn: session.turn });
     await contextStorage.run(container, async () => {
       const previous = installPriorProduction();
-      const revision = installHeadingRevision();
+      const revision = install();
       const subject = requiredSubject(directProductionSubjectForPlan(releaseContext));
       expect(subject).toEqual({
         ...previous.subject,
@@ -849,12 +902,38 @@ describe("direct Production Build authority", () => {
         revision: {
           priorGrantDigest: previous.digest,
           priorProposalDigest: previous.subject.proposalDigest,
+          ...scope,
         },
       });
-      expect(await releaseAppProduction.execute({}, releaseContext)).toMatchObject({
+      const review = await releaseAppProduction.execute({}, releaseContext);
+      expect(review).toMatchObject({
         status: "review-production-release",
         directProduction: subject,
       });
+      const approvedRevision = subject.revision;
+      if (approvedRevision?.schemaChange !== undefined) {
+        const { schemaChange } = approvedRevision;
+        expect("description" in review && review.description).toContain(
+          "adds one optional text field before updating your existing database",
+        );
+        expect(() =>
+          requestDirectProductionGrant(releaseContext, {
+            callId: "forged-schema-candidate",
+            implementationFiles: [],
+            toolName: "apply_app_creation",
+            subject: {
+              ...subject,
+              revision: {
+                ...approvedRevision,
+                schemaChange: {
+                  ...schemaChange,
+                  candidateCueSha256: sha256("different CUE source"),
+                },
+              },
+            },
+          }),
+        ).toThrow("Review the current app and Arrusted destination");
+      }
       expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
       expect(() =>
         requestDirectProductionGrant(releaseContext, {
@@ -879,13 +958,25 @@ describe("direct Production Build authority", () => {
       });
       const input = { directProduction: subject, implementationFiles: [] };
       const { events, initial, run } = originalBuildHarness(input);
-      const pending = await run(initial, { message: "Release this heading update to Production." });
+      const pending = await run(initial, {
+        message: `Release this ${label} update to Production.`,
+      });
       const requested = events.find((event) => event.type === "input.requested");
       const request = requested?.data.requests.find((value) => value.kind === "tool-approval");
-      if (request === undefined) {
+      if (request === undefined || requested === undefined) {
         throw new Error("Expected the revision to request a new Build approval.");
       }
       expect(request.action).toMatchObject({ input, toolName: buildTool, callId: buildCallId });
+      const publicApproval = projectInstalledEveEvent(requested, 0)
+        .map(toPublicEvent)
+        .find((event) => event?.type === "input_required");
+      expect(publicApproval?.request.title).toBe("Build and release to Production?");
+      if (approvedRevision?.schemaChange !== undefined) {
+        expect(publicApproval?.request.description).toContain("adds one optional text field");
+        expect(publicApproval?.request.description).not.toContain(
+          approvedRevision.schemaChange.candidateCueSha256,
+        );
+      }
       expect(repositoryCommand).not.toHaveBeenCalled();
       expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
       expect(readPrivateApplyAuthority().grant?.proposalDigest).toBe(proposalDigest);
@@ -995,16 +1086,17 @@ describe("direct Production Build authority", () => {
     });
   });
 
-  it.each([appliedCuePath, `apps/${appId}/package.json`, "apps/another-app/app/page.tsx"])(
-    "keeps revision changes to %s outside the combined approval",
-    (path) => {
-      contextStorage.run(new ContextContainer(), () => {
-        installPriorProduction();
-        installHeadingRevision(path);
-        expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
-      });
-    },
-  );
+  it.each([
+    `apps/${appId}/schema/unselected.cue`,
+    `apps/${appId}/package.json`,
+    "apps/another-app/app/page.tsx",
+  ])("keeps revision changes to %s outside the combined approval", (path) => {
+    contextStorage.run(new ContextContainer(), () => {
+      installPriorProduction();
+      installHeadingRevision(path);
+      expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
+    });
+  });
 
   it("refuses extra implementation files outside the frozen heading revision", () => {
     contextStorage.run(new ContextContainer(), () => {
