@@ -7,6 +7,7 @@ import {
   HostedSessionAuthorityError,
 } from "../hosted/session-authority";
 import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
+import type { TargetIterationChange } from "../repository/target-planning";
 import type { ImplementationFile } from "./apply-implementation-files";
 import {
   ARRUSTED_PRODUCTION_REPOSITORY,
@@ -17,6 +18,15 @@ import type {
   DirectProductionGrant,
   DirectProductionSubject,
 } from "./direct-production-authorization";
+import { githubPublicationRuntimeForSession } from "./deployment-github-publication-runtime";
+import { observeMergedAppProduction } from "./app-production-observation";
+import type { GitHubPublicationRuntime } from "./github-publication-runtime";
+import { ownedDraftPublicationHistory } from "./github-draft-publication-lineage";
+import { currentGitHubPrDeliveryAuthorityProjection } from "./github-pr-delivery-authority-state";
+import {
+  directProductionProgressState,
+  recordDirectProductionProgress,
+} from "./direct-production-progress";
 import { readPrivateApplyAuthority } from "./private-apply-authority";
 import { repositoryAccessReceiptState } from "./repository-access-state";
 import type { RepositoryAccessReceipt } from "./repository-access-state";
@@ -47,15 +57,20 @@ type ProductionDestination = Pick<
   "repositoryId" | "repositoryFullName" | "installationId" | "baseBranch"
 >;
 
+type ProposedWorkflow = Extract<AppBuilderWorkflowState, { proposal: PreparedAppCreation }>;
+
+const freshTemplateSourceKind = "fresh-template";
+
 const authorization = defineState<{
   freshDestination?: FreshTemplateProductionPlan & ProductionDestination;
   authoringPlan?: DirectProductionSubject;
   grant?: DirectProductionGrant;
+  revisionAnchor?: { proposalDigest: string; priorGrant: DirectProductionGrant };
   pending: Record<string, DirectProductionGrant>;
 }>("autograph-app-builder.direct-production-authorization.v1", () => ({ pending: {} }));
 
 const storageKindForWorkflow = (
-  state: Extract<AppBuilderWorkflowState, { proposal: PreparedAppCreation }>,
+  state: ProposedWorkflow,
   sourceKind: "kernel" | "none",
   implementationFiles: readonly ImplementationFile[],
 ): DirectProductionSubject["storageKind"] => {
@@ -106,7 +121,7 @@ export const freshTemplateProductionPlan = (
   ctx: OwnerContext,
 ): FreshTemplateProductionPlan | undefined => {
   const state = appBuilderWorkflowState.get();
-  if (!("proposal" in state) || state.sourceReceipt.sourceKind !== "fresh-template") {
+  if (!("proposal" in state) || state.sourceReceipt.sourceKind !== freshTemplateSourceKind) {
     return undefined;
   }
   if (
@@ -143,14 +158,19 @@ export const recordFreshTemplateProductionDestination = (
 
 const productionDestinationForPlan = (
   ctx: OwnerContext,
-  githubSource: Extract<AppBuilderWorkflowState, { proposal: PreparedAppCreation }>["githubSource"],
+  state: ProposedWorkflow,
+  priorGrant?: DirectProductionGrant,
 ): ProductionDestination | undefined => {
+  const { githubSource } = state;
   const access = repositoryAccessReceiptState.get();
   const destination = verifiedArrustedDestination(access, ctx.session.id);
   if (destination === undefined) {
     return undefined;
   }
   if (githubSource === undefined) {
+    if (priorGrant !== undefined) {
+      return state.sourceReceipt.sourceKind === freshTemplateSourceKind ? destination : undefined;
+    }
     const plan = freshTemplateProductionPlan(ctx);
     return plan !== undefined &&
       isDeepStrictEqual(authorization.get().freshDestination, { ...plan, ...destination })
@@ -167,21 +187,103 @@ const productionDestinationForPlan = (
   return matches ? destination : undefined;
 };
 
-/** Derive the reviewable scope from the owner's accepted private plan and verified repository. */
-export const directProductionSubjectForPlan = (
-  ctx: OwnerContext,
-  implementationFiles: readonly ImplementationFile[] = [],
-): DirectProductionSubject | undefined => {
-  const state = appBuilderWorkflowState.get();
-  if (!("proposal" in state)) {
+/** A retained predecessor keeps this revision bound after its new grant replaces the live grant. */
+const revisionPredecessor = (proposalDigest: string): DirectProductionGrant | undefined => {
+  const { grant, revisionAnchor } = authorization.get();
+  if (grant === undefined) {
     return undefined;
   }
-  const { githubSource, appSpec, proposal, workspace } = state;
+  if (grant.subject.proposalDigest === proposalDigest) {
+    const { revision } = grant.subject;
+    return revisionAnchor?.proposalDigest === proposalDigest &&
+      revision?.priorGrantDigest === revisionAnchor.priorGrant.digest &&
+      revision.priorProposalDigest === revisionAnchor.priorGrant.subject.proposalDigest
+      ? revisionAnchor.priorGrant
+      : undefined;
+  }
+  const progress = directProductionProgressState.get();
+  return progress?.stage === "live" && progress.grantDigest === grant.digest ? grant : undefined;
+};
+
+const isExistingPresentationEdit = (change: TargetIterationChange, appPath: string): boolean => {
+  const { before, after, path } = change;
+  if (
+    before === undefined ||
+    after === undefined ||
+    before.mode !== after.mode ||
+    !path.startsWith(`${appPath}/`)
+  ) {
+    return false;
+  }
+  const relative = path.slice(appPath.length + 1);
+  return (
+    !relative.split("/").some((part) => part.startsWith(".") || part === "schema") &&
+    /\.(?:[jt]sx|css)$/u.test(relative) &&
+    !/(?:^|\/)(?:layout|route|middleware|proxy)\.[jt]sx$/u.test(relative)
+  );
+};
+
+const hasEligibleRevisionChanges = (
+  state: ProposedWorkflow,
+  implementationFiles: readonly ImplementationFile[],
+): boolean => {
+  const { appSpec, proposal } = state;
   const { target } = proposal;
-  if ("operation" in target || (appSpec.access?.mode ?? "private") !== "private") {
+  if (
+    !("operation" in target) ||
+    target.frameworkUpgrade !== undefined ||
+    target.applicationSourceImport !== undefined
+  ) {
+    return false;
+  }
+  const appPath = `apps/${appSpec.appId}`;
+  const { changes } = target.iteration;
+  if (
+    target.plan.source.workspacePath !== appPath ||
+    changes.length === 0 ||
+    !changes.every((change) => isExistingPresentationEdit(change, appPath))
+  ) {
+    return false;
+  }
+  const stagedFiles = previewStagedImplementationFiles({
+    appSpecDigest: appSpec.digest,
+    files: implementationFiles,
+    proposalDigest: proposal.digest,
+  });
+  return stagedFiles.length === 0;
+};
+
+const matchesRevisionPredecessor = (
+  subject: DirectProductionSubject,
+  prior: DirectProductionSubject,
+): boolean =>
+  [
+    subject.appId === prior.appId,
+    subject.sessionId === prior.sessionId,
+    subject.buildWorkspaceId === prior.buildWorkspaceId,
+    isDeepStrictEqual(subject.authority, prior.authority),
+    subject.repositoryId === prior.repositoryId,
+    subject.repositoryFullName === prior.repositoryFullName,
+    subject.installationId === prior.installationId,
+    subject.baseBranch === prior.baseBranch,
+    subject.storageKind === prior.storageKind,
+  ].every(Boolean);
+
+const subjectForProposal = (
+  ctx: OwnerContext,
+  state: ProposedWorkflow,
+  implementationFiles: readonly ImplementationFile[],
+  priorGrant?: DirectProductionGrant,
+): DirectProductionSubject | undefined => {
+  const { appSpec, proposal, workspace } = state;
+  const { target } = proposal;
+  if ((appSpec.access?.mode ?? "private") !== "private") {
     return undefined;
   }
-  const destination = productionDestinationForPlan(ctx, githubSource);
+  if ("operation" in target && priorGrant === undefined) {
+    return undefined;
+  }
+  const destination = productionDestinationForPlan(ctx, state, priorGrant);
   if (destination === undefined) {
     return undefined;
   }
@@ -189,6 +291,15 @@ export const directProductionSubjectForPlan = (
   const identity = exactForwardedSessionAuthority(ctx.session.auth, {
     realmContinuation: { adapterSessionId: execution.ownerAnchorRunId ?? ctx.session.id },
   });
+  const revision =
+    priorGrant === undefined
+      ? {}
+      : {
+          revision: {
+            priorGrantDigest: priorGrant.digest,
+            priorProposalDigest: priorGrant.subject.proposalDigest,
+          },
+        };
   const subject = directProductionSubjectSchema.safeParse({
     version: 1,
     appId: appSpec.appId,
@@ -199,12 +310,167 @@ export const directProductionSubjectForPlan = (
     authority: identity.authority,
     ...destination,
     storageKind: storageKindForWorkflow(state, target.plan.source.schema.kind, implementationFiles),
+    ...revision,
   });
-  return subject.success ? subject.data : undefined;
+  if (!subject.success) {
+    return undefined;
+  }
+  return priorGrant === undefined || matchesRevisionPredecessor(subject.data, priorGrant.subject)
+    ? subject.data
+    : undefined;
+};
+
+/** Derive the reviewable scope from the owner's accepted private plan and verified repository. */
+export const directProductionSubjectForPlan = (
+  ctx: OwnerContext,
+  implementationFiles: readonly ImplementationFile[] = [],
+): DirectProductionSubject | undefined => {
+  const state = appBuilderWorkflowState.get();
+  if (!("proposal" in state)) {
+    return undefined;
+  }
+  const predecessor = hasEligibleRevisionChanges(state, implementationFiles)
+    ? revisionPredecessor(state.proposal.digest)
+    : undefined;
+  return subjectForProposal(ctx, state, implementationFiles, predecessor);
 };
 
 const sameSubject = (first: DirectProductionSubject | undefined, second: DirectProductionSubject) =>
   isDeepStrictEqual(first, second);
+
+interface RevisionObservationPorts {
+  publication?: (
+    auth: ToolContext["session"]["auth"],
+    options: { selectedInstallationId: string },
+  ) => Promise<Pick<GitHubPublicationRuntime, "inspectPublishedPullRequest">>;
+  observeProduction?: typeof observeMergedAppProduction;
+}
+
+const priorRevisionDelivery = (state: ProposedWorkflow, priorGrant: DirectProductionGrant) => {
+  const prior = priorGrant.subject;
+  const [owner = "", name = ""] = prior.repositoryFullName.split("/");
+  const history = ownedDraftPublicationHistory({
+    sessionId: prior.sessionId,
+    appId: prior.appId,
+    repositoryId: prior.repositoryId,
+    owner,
+    name,
+  });
+  const priorDraft = state.publishedGitHubDraftProposalDigest;
+  const knownProposals = new Set<string>();
+  for (const { installationId, proposal } of history) {
+    if (installationId === prior.installationId && proposal.baseBranch === prior.baseBranch) {
+      knownProposals.add(proposal.digest);
+    }
+  }
+  if (state.sourceReceipt.sourceKind === freshTemplateSourceKind && priorDraft !== undefined) {
+    knownProposals.add(priorDraft);
+  }
+  const { calls } = currentGitHubPrDeliveryAuthorityProjection();
+  const delivery = calls.findLast((call) =>
+    [
+      call.cancelled !== true,
+      call.directProductionGrantDigest === priorGrant.digest,
+      call.subject.appId === prior.appId,
+      call.subject.appSpecDigest === prior.appSpecDigest,
+      call.subject.installationId === prior.installationId,
+      call.subject.reconciliationDigest === undefined,
+      knownProposals.has(call.subject.proposalDigest),
+    ].every(Boolean),
+  );
+  return delivery === undefined ? undefined : { delivery, owner, name };
+};
+
+/** Restore a lost live observation through the original approved delivery and current provider readback. */
+export const restoreDirectProductionRevisionPredecessor = async (
+  ctx: ToolContext,
+  ports: RevisionObservationPorts = {},
+): Promise<void> => {
+  ctx.abortSignal.throwIfAborted();
+  const state = appBuilderWorkflowState.get();
+  if (state.phase !== "planned" || !hasEligibleRevisionChanges(state, [])) {
+    return;
+  }
+  const { grant } = authorization.get();
+  if (
+    grant === undefined ||
+    grant.subject.proposalDigest === state.proposal.digest ||
+    revisionPredecessor(state.proposal.digest) !== undefined
+  ) {
+    return;
+  }
+  const subject = subjectForProposal(ctx, state, [], grant);
+  const priorDelivery = subject === undefined ? undefined : priorRevisionDelivery(state, grant);
+  if (subject === undefined || priorDelivery === undefined) {
+    return;
+  }
+  const isCurrent = () => {
+    ctx.abortSignal.throwIfAborted();
+    return (
+      isDeepStrictEqual(appBuilderWorkflowState.get(), state) &&
+      isDeepStrictEqual(authorization.get().grant, grant) &&
+      isDeepStrictEqual(priorRevisionDelivery(state, grant), priorDelivery) &&
+      sameSubject(subjectForProposal(ctx, state, [], grant), subject)
+    );
+  };
+  const { delivery, owner, name } = priorDelivery;
+  try {
+    const runtime = await (ports.publication ?? githubPublicationRuntimeForSession)(
+      ctx.session.auth,
+      {
+        selectedInstallationId: subject.installationId,
+      },
+    );
+    if (!isCurrent()) {
+      return;
+    }
+    const observed = await runtime.inspectPublishedPullRequest?.(delivery.subject.proposalDigest);
+    if (
+      !isCurrent() ||
+      observed?.state !== "merged" ||
+      observed.mergeCommitSha === undefined ||
+      !observed.reviewedRevision
+    ) {
+      return;
+    }
+    const target = observed.reviewedTarget;
+    if (
+      ![
+        target.repositoryId === subject.repositoryId,
+        target.owner === owner,
+        target.name === name,
+        target.baseBranch === subject.baseBranch,
+      ].every(Boolean)
+    ) {
+      return;
+    }
+    const live = await (ports.observeProduction ?? observeMergedAppProduction)(
+      {
+        appId: subject.appId,
+        repositoryId: subject.repositoryId,
+        repositoryFullName: subject.repositoryFullName,
+      },
+      ctx,
+      observed.mergeCommitSha,
+    );
+    if (!isCurrent() || live.status !== "available") {
+      return;
+    }
+    if (
+      [
+        live.requestedRevision === "live",
+        live.appId === subject.appId,
+        live.destination?.repositoryId === subject.repositoryId,
+        live.destination?.repositoryFullName === subject.repositoryFullName,
+      ].every(Boolean)
+    ) {
+      recordDirectProductionProgress(grant.digest, "live");
+    }
+  } catch {
+    // Missing provider evidence cannot restore the previous live grant.
+    ctx.abortSignal.throwIfAborted();
+  }
+};
 
 /** A successful preflight permits drafting to continue for the exact plan, without granting Build. */
 export const recordPlannedDirectProductionAuthoring = (subject: DirectProductionSubject): void => {
@@ -310,6 +576,20 @@ export const recordDirectProductionGrant = (
   const remaining = Object.fromEntries(
     Object.entries(state.pending).filter(([id]) => id !== callId),
   );
-  authorization.update((current) => ({ ...current, grant: pending, pending: remaining }));
+  const priorGrant =
+    subject.revision === undefined ? undefined : revisionPredecessor(subject.proposalDigest);
+  if (subject.revision !== undefined && priorGrant?.digest !== subject.revision.priorGrantDigest) {
+    throw new Error(
+      "The revision no longer belongs to the app’s previously confirmed Production release.",
+    );
+  }
+  const revisionAnchor =
+    priorGrant === undefined ? undefined : { proposalDigest: subject.proposalDigest, priorGrant };
+  authorization.update((current) => ({
+    ...current,
+    grant: pending,
+    pending: remaining,
+    revisionAnchor,
+  }));
   return pending;
 };

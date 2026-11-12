@@ -242,6 +242,23 @@ describe("direct Production setup consent", () => {
       assertDirectRepositoryProductionApproval(authority);
     }).not.toThrow();
   });
+  it("does not use a combined revision approval to change Production setup", () => {
+    const revision = createDirectProductionGrant({
+      callId,
+      toolName: grant.toolName,
+      subject: {
+        ...subject,
+        revision: { priorGrantDigest: "b".repeat(64), priorProposalDigest: "c".repeat(64) },
+      },
+    });
+    expect(() => {
+      assertDirectRepositoryProductionApproval({
+        ...authority,
+        grant: revision,
+        decision: { ...decision, directProduction: revision },
+      });
+    }).toThrow("repository_production_approval_required");
+  });
   it.each([
     { name: "unpublished source", change: { publishedDescription: false } },
     { name: "different logical session", change: { logicalSessionId: "different-session" } },

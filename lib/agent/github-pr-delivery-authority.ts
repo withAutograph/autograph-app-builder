@@ -204,9 +204,13 @@ export const readGitHubPrDeliveryAuthority = async (
     (entry) => entry.appId === subject.appId && entry.repositoryId === approval.repositoryId,
   );
   const authority = { subject, requirements };
-  return call.directProductionGrantDigest === undefined
-    ? authority
-    : { ...authority, directProduction: true as const };
+  if (call.directProductionGrantDigest === undefined) {
+    return authority;
+  }
+  const direct = { ...authority, directProduction: true as const };
+  return decision.directProduction?.subject.revision === undefined
+    ? direct
+    : { ...direct, productionRevision: true as const };
 };
 
 /** Capture scope facts in the parent; this is not a human approval receipt. */

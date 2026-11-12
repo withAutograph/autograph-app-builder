@@ -241,7 +241,8 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    for complete contents and `{path, operation: "delete"}` for removal. Rename
    by deleting the old path and adding the new path in the same proposal.
    Preserve unrelated files; do not leave retired backend/demo modules behind.
-   For an explicit direct Production request for a new private Arrusted app,
+   For an explicit direct Production request for an eligible private Arrusted app
+   or presentation revision,
    read the `directProduction` subject with `release-app-production` and include
    it with those implementation files. This presents **Build and release to
    Production?**. For private preview, the card is **Build this app?**. Do not
@@ -573,6 +574,12 @@ existing starter plan, supply the named Arrusted destination and keep the
 starter source. Request `storageKind: "postgres"` if the new implementation
 submits a CUE schema. Pass the subject unchanged with the complete
 `implementationFiles` to `apply_app_creation` for the combined approval.
+For an explicitly requested Production update to this session's already live
+private Arrusted app, prepare the presentation revision and call
+`release-app-production` before Build. Use the returned revision subject and
+empty `implementationFiles` with `apply_app_creation`. After publication,
+`finish-github-pr-delivery` verifies existing data and access before Ready and
+merge. Use the same app and destination for the native activation observation.
 If the user asks to release after private Build, use that subject with
 `release-app-production` to show one release approval. Follow the exact sealed
 publication, protected setup and reviewed merge continuations under that approval.

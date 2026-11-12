@@ -6,6 +6,7 @@ import { z } from "zod";
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { currentDirectProductionGrant } from "@/lib/agent/direct-production-state";
 import { resolveGitHubPrDeliverySubject } from "@/lib/agent/github-pr-delivery-subject";
 import {
   readGitHubProductionDeliveryReadiness,
@@ -14,7 +15,7 @@ import {
 
 export default defineTool({
   description:
-    "Read this session's reviewed pull request and required checks. For a managed Production destination, finish its normal data, access and runtime binding setup after draft publication and before Ready/merge. Follow returned nextCall for setup or reviewed delivery using the current release approval; no database details or app-test gate. A draft defers checks until Ready. Passing checks or setup do not claim native activation or hosted behavior.",
+    "Read this session's reviewed pull request and required checks. For a first managed Production release, finish data and access setup after draft publication. For an approved revision, verify the existing setup. Follow the returned nextCall for setup or reviewed delivery using the current release approval. A draft defers checks until Ready. Passing checks or setup do not claim native activation or hosted behavior.",
   async execute(_input, ctx) {
     const subject = resolveGitHubPrDeliverySubject(
       appBuilderWorkflowState.get(),
@@ -46,15 +47,28 @@ export default defineTool({
       observation.reviewedRevision &&
       reconciliationIsReady
     ) {
+      const targetScope = {
+        appId: subject.appId,
+        repositoryId: observation.reviewedTarget.repositoryId,
+        repositoryFullName: `${observation.reviewedTarget.owner}/${observation.reviewedTarget.name}`,
+      };
       const productionSetup = await readGitHubProductionDeliveryReadiness(
-        {
-          appId: subject.appId,
-          repositoryId: observation.reviewedTarget.repositoryId,
-          repositoryFullName: `${observation.reviewedTarget.owner}/${observation.reviewedTarget.name}`,
-          reviewedHeadSha: observation.reviewedTarget.headSha,
-        },
+        { ...targetScope, reviewedHeadSha: observation.reviewedTarget.headSha },
         ctx,
       );
+      const revision = currentDirectProductionGrant(ctx, targetScope)?.subject.revision;
+      if (
+        revision !== undefined &&
+        (!productionSetup.applicable ||
+          productionSetup.state !== "ready" ||
+          productionSetup.preparationRequired)
+      ) {
+        return {
+          ...result,
+          status: "production-revision-setup-changed" as const,
+          productionSetup,
+        };
+      }
       if (
         productionSetup.applicable &&
         (productionSetup.state !== "ready" || productionSetup.preparationRequired)

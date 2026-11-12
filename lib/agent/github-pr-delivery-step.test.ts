@@ -209,6 +209,33 @@ it("marks the approved draft ready and returns the observed cycle without mergin
   });
 });
 
+it.each([false, true])(
+  "keeps an approved revision from replacing Production setup (after Ready: %s)",
+  async (afterReady) => {
+    mocks.readAuthority.mockResolvedValue({
+      subject: { appId: "example-app" },
+      requirements: [],
+      directProduction: true,
+      productionRevision: true,
+    });
+    mocks.inspect.mockResolvedValue(observe({ draft: !afterReady, checks: "passed" }));
+    mocks.production.mockResolvedValue({
+      version: 1,
+      appId: "example-app",
+      repositoryId: reviewedTarget.repositoryId,
+      repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
+      applicable: true,
+      operationRef: "11111111-1111-4111-8111-111111111111",
+      state: "reconciling",
+      preparationRequired: true,
+    });
+    const result = await step(approval, afterReady ? readyAt : undefined);
+    expect(result).toMatchObject({ status: "production-revision-setup-changed" });
+    expect(result).not.toHaveProperty("nextCall");
+    expect(mocks.run).not.toHaveBeenCalled();
+  },
+);
+
 it("waits for managed setup and the current required check in a delegated Production delivery", async () => {
   mocks.readAuthority.mockResolvedValue({
     subject: { appId: "example-app" },

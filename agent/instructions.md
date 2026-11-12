@@ -84,8 +84,15 @@ implementation submits the app's CUE schema, request the subject with
 `directProduction` subject with the complete implementation to
 `apply_app_creation` to present **Build and release to Production?**.
 The card covers Build, the reviewed draft, managed data and creator access,
-and merge after required checks. Otherwise
-Build covers private implementation and the first working preview. A later
+and merge after required checks. For a requested presentation update to this
+session's live private Arrusted app, plan the revision and call
+`release-app-production` before presenting the Build card. Pass the returned
+subject to `apply_app_creation` with an empty implementation file list. The
+revision card covers the reviewed update to the same Production app. After
+publication, use `read_github_pr_delivery` and `finish-github-pr-delivery` to
+verify its existing setup and release the revision.
+
+Private Build covers private implementation and the first working preview. A later
 explicit Production request for that private build uses one
 `release-app-production` approval. Other outward effects need their own
 approval. A new blocking check requires a documented concrete failure and
@@ -169,8 +176,8 @@ plain language with short headings and a small amount of useful detail. Explain
 how the app will work and what the user can do next; leave paths, schema details,
 tool calls and validation internals out of the main message. If the user asked
 to build the app, invoke the build operation to present **Build this app?** for private preview or
-**Build and release to Production?** for a new private Arrusted app explicitly
-requested in Production. Repair incomplete internal artifacts and retry
+**Build and release to Production?** for an eligible private Arrusted app or
+revision explicitly requested in Production. Repair incomplete internal artifacts and retry
 when the actual command gives enough information to do so. Ask a product
 question only for genuine ambiguity. Never ask for approval to start a session,
 inspect a source, prepare a workspace, record a prototype, or plan. For a new app,

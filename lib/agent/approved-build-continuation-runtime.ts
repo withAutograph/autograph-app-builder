@@ -1,4 +1,5 @@
 import { currentDirectProductionGrant } from "./direct-production-state";
+import { directProductionProgressState } from "./direct-production-progress";
 import {
   currentGitHubPrDeliveryAuthorityProjection,
   markGitHubPrDeliveryAuthorityProjected,
@@ -30,12 +31,6 @@ export const approvedBuildReviewProgress = defineState<{
   buildProgress: string;
   stage: "prepared" | "assessed";
 } | null>("autograph-app-builder.approved-build-review-progress.v1", () => null);
-
-const directProductionStages = ["draft", "setup", "live", "activation-unavailable"] as const;
-export const directProductionProgressState = defineState<{
-  grantDigest: string;
-  stage: (typeof directProductionStages)[number];
-} | null>("autograph-app-builder.direct-production-progress.v1", () => null);
 
 export const currentApprovedBuildProgress = (): string => {
   const build = approvedBuildProgress(appBuilderWorkflowState.get());
