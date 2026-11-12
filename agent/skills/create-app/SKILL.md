@@ -49,11 +49,19 @@ app-owned files and reuse the same component-backed preview flow.
    for target planning; never construct or guess a repository script path.
 
 3. Select the source before any hosted sandbox inspection or preview. For a new
-   app, call `source_status` with `sourceKind: "fresh-template"` to acquire the
-   canonical starter. A repository named for the new app is its delivery
-   destination. Carry it into `prepare_github_draft_review`. Use
-   `resolve_github_source` when the brief asks to revise an app already in
-   GitHub. Then prepare a writable Builder workspace automatically. Source
+   private app explicitly requested in Production in a selected existing
+   Arrusted repository, use `resolve_github_source` for that repository's
+   default branch before planning. The verified repository is both the source
+   and delivery destination. Use the same tool for an existing GitHub app
+   revision, following the requested source selection. For other new apps,
+   acquire the canonical starter through `source_status` with
+   `sourceKind: "fresh-template"`. Carry a named publication repository into
+   `prepare_github_draft_review` without replacing an occupied checkout. If an
+   unbuilt starter plan already exists and the user requests direct Production,
+   read the release subject using `release-app-production` with that named
+   destination and the planned storage; let Builder verify the repository and
+   retain the same app and plan. Then prepare a writable Builder workspace
+   automatically. Source
    discovery and repository commands provide context for the build. Do not
    require separate inspection or source-acquisition
    questions, and do not ask the user for internal paths or setup details. Use

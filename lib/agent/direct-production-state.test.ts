@@ -47,7 +47,12 @@ import {
 import { stageImplementationFiles } from "./staged-implementation";
 import { appBuilderWorkflowState, updateExactWorkflow } from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
-import { directProductionSubjectSchema } from "./direct-production-authorization";
+import {
+  ARRUSTED_PRODUCTION_REPOSITORY,
+  directProductionSubjectSchema,
+} from "./direct-production-authorization";
+import type { ReadyRepositoryAccess } from "../integrations/repository-access";
+import type { ExistingRepositoryDestination } from "../provisioning/builder-session-destination-contract";
 import { implementationFilesSchema } from "./apply-implementation-files";
 import { approvePrepareAppProduction } from "./prepare-app-production-step";
 import {
@@ -64,7 +69,14 @@ const cuePath = `.config/app-specs/${appId}.cue`;
 const appliedCuePath = `apps/${appId}/schema/${appId}.cue`;
 const cue = { content: "package fixture_app", path: cuePath };
 const planned = { phase: "planned" } as const;
-const repositoryCommand = vi.hoisted(() => vi.fn());
+const { repositoryCommand, classifyAccess } = vi.hoisted(() => ({
+  repositoryCommand: vi.fn(),
+  classifyAccess: vi.fn(),
+}));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- The release tool uses its real access flow and receipt checks with a controlled GitHub response.
+vi.mock("./deployment-repository-access-runtime", () => ({
+  repositoryAccessRuntimeForSession: () => ({ classify: classifyAccess }),
+}));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the actual Build tool, approval policy and Eve state while supplying a local repository command outcome.
 vi.mock("../repository/target-apply", async (original) => ({
   ...(await original<typeof targetApply>()),
@@ -81,6 +93,17 @@ const repo = {
   name: "arrusted-development",
   owner: "withAutograph",
   repositoryId: "21",
+};
+const readyAccess: ReadyRepositoryAccess = {
+  accessDigest: "e".repeat(64),
+  status: "ready",
+  repository: {
+    ...repo,
+    archived: false,
+    repositoryVariableNames: [],
+    visibility: "private",
+  },
+  scope: { accountLogin: repo.owner, accountType: "Organization", installationId: "31" },
 };
 const user = (subject = "creator") => ({
   attributes: {
@@ -112,6 +135,7 @@ const installPlan = (
         appliedPaths: readonly string[];
         appBackendKind: "generated-postgres" | "static";
       } = planned,
+  sourceKind: "existing-repository" | "fresh-template" = "existing-repository",
 ) => {
   const observed =
     evidence.phase === "planned"
@@ -120,38 +144,31 @@ const installPlan = (
           ...evidence,
           applyReceipt: { postTree: evidence.appliedPaths.map((path) => ({ path })) },
         };
-  // SAFETY: The authorizer consumes only these scope fields and the applied source paths.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The fixture omits unrelated workflow receipts.
   const workflow = {
     ...observed,
     appSpec: { appId, digest: specDigest },
     dependencyReceipt: {},
     identityReceipt: { identity: { schemaCuePath: appliedCuePath } },
-    sourceReceipt: { sourceKind: "existing-repository" },
+    sourceReceipt: { sourceKind },
     proposal: {
       digest: proposalDigest,
       target: { contract: { appId }, plan: { source: { schema: { kind: storageKind } } } },
     },
     workspace: { workspaceId: buildWorkspaceId },
-    githubSource: { repository: repo, resolvedRef: "refs/heads/main" },
-  } as AppBuilderWorkflowState;
-  appBuilderWorkflowState.update(() => workflow);
+  };
+  if (sourceKind === "existing-repository") {
+    Object.assign(workflow, { githubSource: { repository: repo, resolvedRef: "refs/heads/main" } });
+  }
+  // SAFETY: The authorizer consumes only these scope fields and the applied source paths.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The fixture omits unrelated workflow receipts.
+  const state = workflow as AppBuilderWorkflowState;
+  appBuilderWorkflowState.update(() => state);
   repositoryAccessReceiptState.update((current) =>
     recordRepositoryAccessReceipt({
       current,
       sessionId,
       confirmedByCallId: "verified-access",
-      access: {
-        accessDigest: "e".repeat(64),
-        status: "ready",
-        repository: {
-          ...repo,
-          archived: false,
-          repositoryVariableNames: [],
-          visibility: "private",
-        },
-        scope: { accountLogin: repo.owner, accountType: "Organization", installationId: "31" },
-      },
+      access: readyAccess,
     }),
   );
 };
@@ -305,20 +322,43 @@ const markReviewed = () => {
 };
 
 describe("direct Production Build authority", () => {
-  it.each(["approve", "cancel"] as const)(
-    "honors the original Eve Build decision at protected Production setup (%s)",
-    async (decision) => {
+  it.each([
+    { decision: "approve", sourceKind: "existing-repository" },
+    { decision: "cancel", sourceKind: "existing-repository" },
+    { decision: "approve", sourceKind: "fresh-template" },
+  ] as const)(
+    "honors the original Eve Build decision at protected Production setup ($decision, $sourceKind)",
+    async ({ decision, sourceKind }) => {
       const container = new ContextContainer();
       const { session } = releaseContext;
       container.set(SessionKey, { auth: session.auth, sessionId, turn: session.turn });
       await contextStorage.run(container, async () => {
-        installPlan("none");
+        installPlan("none", planned, sourceKind);
+        classifyAccess.mockReset().mockResolvedValue(readyAccess);
+        const starterDestination =
+          sourceKind === "fresh-template"
+            ? { destination: { repository: ARRUSTED_PRODUCTION_REPOSITORY } }
+            : {};
+        if (sourceKind === "fresh-template") {
+          expect(await releaseAppProduction.execute({}, releaseContext)).toMatchObject({
+            status: "production-destination-required",
+          });
+          expect(
+            await releaseAppProduction.execute(
+              {
+                destination: { repository: "other/repository" },
+              },
+              releaseContext,
+            ),
+          ).toMatchObject({ status: "managed-release-unavailable" });
+          expect(classifyAccess).not.toHaveBeenCalled();
+        }
         repositoryCommand.mockReset().mockResolvedValue({
           ok: true,
           receipt: { changes: [], postTree: [{ path: appliedCuePath }] },
         });
         const preflight = await releaseAppProduction.execute(
-          { storageKind: "postgres" },
+          { storageKind: "postgres", ...starterDestination },
           releaseContext,
         );
         if (!("status" in preflight) || preflight.status !== "review-production-release") {
@@ -409,16 +449,45 @@ describe("direct Production Build authority", () => {
             toolInput: repositoryProductionApprovalReference(plan),
           }),
         ).toBe("approved");
-        assertDirectRepositoryProductionApproval({
+        const approval = {
           plan,
           grant,
           decision: projected,
-          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Exercise the canonical existing-repository source without a separate destination record.
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Exercise absent canonical destination before it is persisted.
           destination: undefined,
           logicalSessionId: sessionId,
           publishedDescription: true,
           owner,
-        });
+        };
+        if (sourceKind === "fresh-template") {
+          expect(projected.existingRepositorySource).toBeUndefined();
+          expect(() => {
+            assertDirectRepositoryProductionApproval(approval);
+          }).toThrow("repository_production_approval_required");
+          const destination: ExistingRepositoryDestination = {
+            kind: "existing-repository",
+            version: 1,
+            appId,
+            repository: {
+              repositoryId: repo.repositoryId,
+              owner: repo.owner,
+              name: repo.name,
+              defaultBranch: repo.defaultBranch,
+            },
+            installationId: subject.installationId,
+            confirmedByCallId: "review-verified-access",
+          };
+          assertDirectRepositoryProductionApproval({ ...approval, destination });
+          expect(() => {
+            assertDirectRepositoryProductionApproval({
+              ...approval,
+              destination: { ...destination, installationId: "999" },
+            });
+          }).toThrow("repository_production_approval_required");
+          expect(appBuilderWorkflowState.get().phase).toBe("reviewed");
+        } else {
+          assertDirectRepositoryProductionApproval(approval);
+        }
         await expect(
           readRepositoryProductionApproval({
             plan,
@@ -625,9 +694,9 @@ describe("direct Production Build authority", () => {
       expect(
         await releaseAppProduction.execute({ storageKind: "none" }, releaseContext),
       ).toMatchObject({ directProduction: subject });
-      expect(() => {
-        void releaseAppProduction.execute(toolInput, releaseContext);
-      }).toThrow("no matching Production approval");
+      await expect(releaseAppProduction.execute(toolInput, releaseContext)).rejects.toThrow(
+        "no matching Production approval",
+      );
       expect(await authoredReleaseApproval()({ ...releaseContext, toolInput })).toBe(
         "user-approval",
       );

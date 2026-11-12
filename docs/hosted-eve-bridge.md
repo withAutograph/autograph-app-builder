@@ -264,6 +264,13 @@ an orphaned or changed session therefore cannot produce a false success.
 public contract currently has no client request ID for cancellation. Neither
 operation weakens tenant ownership checks.
 
+The owner-verified Build decision records the accepted app ID even when a
+session has no UI preview. The same write preserves any existing app and
+repository binding and checks the current cancellation revision. With native
+recovery, the original authority and committed current child keep the same app
+ID. This identity supports repository selection before Build approval. Repository
+access and release effects still require their own verified authority.
+
 ## Implemented proof and remaining external work
 
 Unit conformance tests cover strict Bearer parsing, cryptographic JWKS token

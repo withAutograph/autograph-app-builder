@@ -134,7 +134,11 @@ failed startup with its diagnosis and keep optional browser results separate
 from preview readiness.
 
 An explicit request to go directly to Production on a new private Arrusted app
-can be approved on the Build card. The release uses required repository
+can be approved on the Build card. Resolve the selected existing repository's
+default branch before planning a new direct delivery. If a starter plan is
+already present, verify and bind the named repository as its destination while
+preserving the saved app and plan. The approved Build records the app identity
+even if the creator has not asked for a design prototype. The release uses required repository
 validation, destination review, draft publication, managed data and access,
 Ready and checked merge, then watches native activation. A private preview or
 optional browser check never delays this path. For an already approved private

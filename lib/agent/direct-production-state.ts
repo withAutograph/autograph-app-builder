@@ -6,6 +6,7 @@ import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import type { ImplementationFile } from "./apply-implementation-files";
 import {
+  ARRUSTED_PRODUCTION_REPOSITORY,
   createDirectProductionGrant,
   directProductionSubjectSchema,
 } from "./direct-production-authorization";
@@ -14,6 +15,7 @@ import type {
   DirectProductionSubject,
 } from "./direct-production-authorization";
 import { repositoryAccessReceiptState } from "./repository-access-state";
+import type { RepositoryAccessReceipt } from "./repository-access-state";
 import {
   newAppImplementationSchemaKind,
   previewStagedImplementationFiles,
@@ -32,7 +34,17 @@ type SubjectMatch = Pick<DirectProductionSubject, "appId"> &
     repositoryFullName?: string;
   };
 
+type FreshTemplateProductionPlan = Pick<
+  DirectProductionSubject,
+  "appId" | "appSpecDigest" | "proposalDigest" | "sessionId" | "buildWorkspaceId"
+>;
+type ProductionDestination = Pick<
+  DirectProductionSubject,
+  "repositoryId" | "repositoryFullName" | "installationId" | "baseBranch"
+>;
+
 const authorization = defineState<{
+  freshDestination?: FreshTemplateProductionPlan & ProductionDestination;
   grant?: DirectProductionGrant;
   pending: Record<string, DirectProductionGrant>;
 }>("autograph-app-builder.direct-production-authorization.v1", () => ({ pending: {} }));
@@ -66,6 +78,90 @@ const storageKindForWorkflow = (
     : "none";
 };
 
+const verifiedArrustedDestination = (
+  access: RepositoryAccessReceipt | undefined,
+  sessionId: string,
+): ProductionDestination | undefined => {
+  if (
+    access?.sessionId !== sessionId ||
+    `${access.repository.owner}/${access.repository.name}` !== ARRUSTED_PRODUCTION_REPOSITORY
+  ) {
+    return undefined;
+  }
+  return {
+    repositoryId: access.repository.repositoryId,
+    repositoryFullName: ARRUSTED_PRODUCTION_REPOSITORY,
+    installationId: access.scope.installationId,
+    baseBranch: access.repository.defaultBranch,
+  };
+};
+
+/** Capture the exact private starter plan before obtaining external destination readback. */
+export const freshTemplateProductionPlan = (
+  ctx: OwnerContext,
+): FreshTemplateProductionPlan | undefined => {
+  const state = appBuilderWorkflowState.get();
+  if (!("proposal" in state) || state.sourceReceipt.sourceKind !== "fresh-template") {
+    return undefined;
+  }
+  if (
+    state.githubSource !== undefined ||
+    "operation" in state.proposal.target ||
+    (state.appSpec.access?.mode ?? "private") !== "private"
+  ) {
+    return undefined;
+  }
+  return {
+    appId: state.appSpec.appId,
+    appSpecDigest: state.appSpec.digest,
+    proposalDigest: state.proposal.digest,
+    sessionId: ctx.session.id,
+    buildWorkspaceId: state.workspace.workspaceId,
+  };
+};
+
+export const recordFreshTemplateProductionDestination = (
+  ctx: OwnerContext,
+  plan: FreshTemplateProductionPlan,
+  access: RepositoryAccessReceipt,
+): void => {
+  const destination = verifiedArrustedDestination(access, ctx.session.id);
+  if (destination === undefined || !isDeepStrictEqual(freshTemplateProductionPlan(ctx), plan)) {
+    throw new Error("The app or verified Arrusted destination changed during release preparation.");
+  }
+  const selected = { ...plan, ...destination };
+  authorization.update((state) => ({
+    ...state,
+    freshDestination: selected,
+  }));
+};
+
+const productionDestinationForPlan = (
+  ctx: OwnerContext,
+  githubSource: Extract<AppBuilderWorkflowState, { proposal: PreparedAppCreation }>["githubSource"],
+): ProductionDestination | undefined => {
+  const access = repositoryAccessReceiptState.get();
+  const destination = verifiedArrustedDestination(access, ctx.session.id);
+  if (destination === undefined) {
+    return undefined;
+  }
+  if (githubSource === undefined) {
+    const plan = freshTemplateProductionPlan(ctx);
+    return plan !== undefined &&
+      isDeepStrictEqual(authorization.get().freshDestination, { ...plan, ...destination })
+      ? destination
+      : undefined;
+  }
+  const { repository } = githubSource;
+  const matches = [
+    repository.repositoryId === destination.repositoryId,
+    repository.defaultBranch === destination.baseBranch,
+    `${repository.owner}/${repository.name}` === destination.repositoryFullName,
+    githubSource.resolvedRef === `refs/heads/${repository.defaultBranch}`,
+  ].every(Boolean);
+  return matches ? destination : undefined;
+};
+
 /** Derive the reviewable scope from the owner's accepted private plan and verified repository. */
 export const directProductionSubjectForPlan = (
   ctx: OwnerContext,
@@ -77,25 +173,11 @@ export const directProductionSubjectForPlan = (
   }
   const { githubSource, appSpec, proposal, workspace } = state;
   const { target } = proposal;
-  if ("operation" in target) {
+  if ("operation" in target || (appSpec.access?.mode ?? "private") !== "private") {
     return undefined;
   }
-  const access = repositoryAccessReceiptState.get();
-  if (githubSource === undefined || access === undefined) {
-    return undefined;
-  }
-  if (access.sessionId !== ctx.session.id || (appSpec.access?.mode ?? "private") !== "private") {
-    return undefined;
-  }
-  const { repository } = githubSource;
-  const sameRepositoryName =
-    repository.owner === access.repository.owner && repository.name === access.repository.name;
-  if (
-    repository.repositoryId !== access.repository.repositoryId ||
-    repository.defaultBranch !== access.repository.defaultBranch ||
-    !sameRepositoryName ||
-    githubSource.resolvedRef !== `refs/heads/${repository.defaultBranch}`
-  ) {
+  const destination = productionDestinationForPlan(ctx, githubSource);
+  if (destination === undefined) {
     return undefined;
   }
   const execution = hostedOperatorCallbackExecution(ctx.session);
@@ -110,10 +192,7 @@ export const directProductionSubjectForPlan = (
     sessionId: ctx.session.id,
     buildWorkspaceId: workspace.workspaceId,
     authority: identity.authority,
-    repositoryId: repository.repositoryId,
-    repositoryFullName: `${repository.owner}/${repository.name}`,
-    installationId: access.scope.installationId,
-    baseBranch: repository.defaultBranch,
+    ...destination,
     storageKind: storageKindForWorkflow(state, target.plan.source.schema.kind, implementationFiles),
   });
   return subject.success ? subject.data : undefined;
@@ -186,6 +265,6 @@ export const recordDirectProductionGrant = (
   const remaining = Object.fromEntries(
     Object.entries(state.pending).filter(([id]) => id !== callId),
   );
-  authorization.update(() => ({ grant: pending, pending: remaining }));
+  authorization.update((current) => ({ ...current, grant: pending, pending: remaining }));
   return pending;
 };

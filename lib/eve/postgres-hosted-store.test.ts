@@ -138,10 +138,18 @@ const cancelledSendFixture = () => {
     });
   };
   const updates = vi.fn();
+  const dialect = new PgDialect();
   const selectTable = (table: PgTable) => {
     // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const limit = () => selected(table);
-    const where = () => ({ limit });
+    const where = (predicate: SQL) => ({
+      limit,
+      // oxlint-disable-next-line eslint/require-await -- There are no native-recovery children in this fixture.
+      for: async () => {
+        expect(dialect.sqlToQuery(predicate).sql).toContain("nativeRecoveryBinding");
+        return [];
+      },
+    });
     return { where };
   };
   const updateValues = (values: typeof row) => {
@@ -215,6 +223,38 @@ const cancelledSendFixture = () => {
 };
 
 describe("PostgreSQL explicit SEND cancellation authority", () => {
+  it("persists the accepted app with its build decision only after the owner resumes", async () => {
+    const f = cancelledSendFixture();
+    if (f.store.recordPrivateBuildDecision === undefined) {
+      throw new Error("Expected the PostgreSQL private build decision writer");
+    }
+    const decision = {
+      adapterSessionId: f.record.adapterSessionId,
+      currentSpec: {
+        appId: "direct-production-app",
+        appSpecDigest: "a".repeat(64),
+        sessionId: f.record.adapterSessionId,
+        workspaceId: "build-workspace",
+      },
+      decision: "working" as const,
+      turnId: "accepted-app",
+      turnSequence: 1,
+      version: 1 as const,
+      workflowPhase: "app_spec_accepted",
+    };
+    const input = { principal, sessionId: f.record.sessionId, decision };
+    await f.store.recordPrivateBuildDecision(input);
+    expect(f.row().record).not.toHaveProperty("appId");
+    await f.observe();
+    const resumedDecision = { ...decision, turnId: "resumed-turn", turnSequence: 2 };
+    await f.store.recordPrivateBuildDecision({ ...input, decision: resumedDecision });
+    expect(f.row().record).toMatchObject({
+      appId: decision.currentSpec.appId,
+      privateBuildDecision: resumedDecision,
+      resumedCancellationRevision: 1,
+    });
+  });
+
   it("records every later Stop even while cancelled without replacing its checkpoint or identity", async () => {
     const f = cancelledSendFixture();
     if (f.store.recordCancellationIntent === undefined) {

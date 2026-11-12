@@ -4,6 +4,7 @@ import {
 } from "./builder-publication-destination";
 import { withBuilderDestinationGuidance } from "../provisioning/builder-destination-guidance";
 
+import type { DirectProductionSubject } from "./direct-production-authorization";
 import type { GitHubPublicationDestinationIdentity } from "./github-publication-runtime";
 import { repositoryAccessReceiptSchema } from "./repository-access-state";
 import type { RepositoryAccessReceipt } from "./repository-access-state";
@@ -20,6 +21,11 @@ export interface PublicationDestinationSelector {
   repository: string;
   selectedInstallationId?: string | null;
 }
+
+type ApprovedProductionDestination = Pick<
+  DirectProductionSubject,
+  "repositoryFullName" | "repositoryId" | "installationId" | "baseBranch"
+>;
 
 type PublicationTarget =
   | { githubSource: ImmutableGitHubSourceReceipt; destination?: never }
@@ -67,6 +73,7 @@ interface PublicationResolverPorts<Context> {
     ctx: Context,
     appId: string,
     receipt: RepositoryAccessReceipt,
+    options?: { requireExactReadback: boolean },
   ) => Promise<void>;
   resolveAccess: (
     destination: PublicationDestinationSelector,
@@ -127,6 +134,35 @@ const missingDestinationGuidance = (publicSessionId?: string) => {
     : withBuilderDestinationGuidance(blocked, publicSessionId);
 };
 
+const assertApprovedProductionSelection = (
+  approved: ApprovedProductionDestination,
+  selected: PublicationDestinationSelector,
+) => {
+  const installationId = selected.selectedInstallationId ?? approved.installationId;
+  if (
+    selected.repository.toLowerCase() !== approved.repositoryFullName.toLowerCase() ||
+    installationId !== approved.installationId
+  ) {
+    throw new Error(
+      "Publication must use the repository and GitHub account approved for Production.",
+    );
+  }
+};
+
+const assertVerifiedProductionDestination = (
+  approved: ApprovedProductionDestination,
+  selected: GitHubPublicationDestinationIdentity,
+) => {
+  if (
+    `${selected.owner}/${selected.name}` !== approved.repositoryFullName ||
+    selected.repositoryId !== approved.repositoryId ||
+    selected.installationId !== approved.installationId ||
+    selected.defaultBranch !== approved.baseBranch
+  ) {
+    throw new Error("The verified GitHub destination changed after Production approval.");
+  }
+};
+
 export const createPublicationTargetResolver =
   <Context extends { session: { id: string } }>(ports: PublicationResolverPorts<Context>) =>
   async (input: {
@@ -134,6 +170,7 @@ export const createPublicationTargetResolver =
     destination?: PublicationDestinationSelector;
     githubSource?: ImmutableGitHubSourceReceipt;
     sourceKind: SourceKind;
+    approvedProduction?: ApprovedProductionDestination;
     destinationReview?: GitHubDestinationReviewBinding;
     appId: string;
   }): Promise<
@@ -143,6 +180,15 @@ export const createPublicationTargetResolver =
   > => {
     const ownedSelection = await ports.readOwnedDestination(input.ctx, input.appId);
     const ownedDestination = ownedSelection.destination;
+    const { approvedProduction } = input;
+    if (approvedProduction !== undefined) {
+      if (input.destination !== undefined) {
+        assertApprovedProductionSelection(approvedProduction, input.destination);
+      }
+      if (ownedDestination !== undefined) {
+        assertApprovedProductionSelection(approvedProduction, ownedDestination);
+      }
+    }
     assertPublicationDestinationConstraints(input, ownedDestination);
     if (input.githubSource !== undefined && ownedDestination === undefined) {
       return { kind: "ready", target: { githubSource: input.githubSource } };
@@ -156,9 +202,16 @@ export const createPublicationTargetResolver =
       input.destinationReview === undefined
         ? undefined
         : publicationDestinationFromReview(input.destinationReview);
+    const approvedSelector =
+      approvedProduction === undefined
+        ? input.destination
+        : {
+            repository: approvedProduction.repositoryFullName,
+            selectedInstallationId: approvedProduction.installationId,
+          };
     const destination =
       ownedDestination ??
-      input.destination ??
+      approvedSelector ??
       (retained === undefined
         ? undefined
         : {
@@ -176,6 +229,9 @@ export const createPublicationTargetResolver =
       return { kind: "selection", access: access.access };
     }
     const selected = publicationDestinationFromAccess(access.receipt, input.ctx.session.id);
+    if (approvedProduction !== undefined) {
+      assertVerifiedProductionDestination(approvedProduction, selected);
+    }
     if (ownedDestination !== undefined) {
       const current = await ports.readOwnedDestination(input.ctx, input.appId);
       if (
@@ -186,7 +242,12 @@ export const createPublicationTargetResolver =
         throw new Error("The saved Builder app destination changed during publication review.");
       }
     }
-    await ports.persistDestination?.(input.ctx, input.appId, access.receipt);
+    await ports.persistDestination?.(
+      input.ctx,
+      input.appId,
+      access.receipt,
+      approvedProduction === undefined ? undefined : { requireExactReadback: true },
+    );
     return { kind: "ready", target: { destination: selected } };
   };
 

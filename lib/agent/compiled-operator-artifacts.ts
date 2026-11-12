@@ -472,10 +472,40 @@ export const readExactCompiledOperatorReleaseForSession = async (
   });
 };
 
+const openCapturedAppDescriptions = async (
+  binding: Awaited<ReturnType<typeof resolveCompiledArtifactSession>>,
+) => {
+  const { createCapturedAppDescriptionStore } =
+    await import("../provisioning/captured-app-description");
+  database ??= openArtifactDatabase();
+  return createCapturedAppDescriptionStore({
+    assertCurrentOwner: binding.assertCurrentOwner,
+    database: await database,
+  });
+};
+
+/** Check whether the exact owner-scoped static description already exists. */
+export const hasCapturedStaticDescriptionForSession = async (
+  input: CompiledOperatorArtifactSessionInput,
+): Promise<boolean> => {
+  input.signal?.throwIfAborted();
+  const binding = await resolveCompiledArtifactSession(input);
+  if (binding.localAuthority !== undefined) {
+    return false;
+  }
+  const descriptions = await openCapturedAppDescriptions(binding);
+  const description = await descriptions.read(binding.context, input.appSpecDigest);
+  input.signal?.throwIfAborted();
+  return description?.backend.kind === "static";
+};
+
 /** Closed workflow hook. Public tool input cannot provide SQL, release paths, hashes or owner facts. */
 export const publishCompiledOperatorArtifactsForSession = async (
   input: CompiledOperatorArtifactSessionInput & {
     sandbox: Pick<SandboxSession, "run" | "readBinaryFile">;
+    expectedBackendKind?: AppDescription["backend"]["kind"];
+    /** Before recovering a static description, confirm the reviewed source remains current. */
+    assertStaticRecoverySource?: () => Promise<void>;
     onCaptured?: (
       captured: Pick<
         CompiledOperatorReleaseSelection,
@@ -517,12 +547,19 @@ export const publishCompiledOperatorArtifactsForSession = async (
     checkStopped();
     observe({ outcome: "completed", stage: "authority" });
     observe({ outcome: "started", stage: "description" });
+    await input.assertStaticRecoverySource?.();
     const description = await describeSelectedApp({
       appId: input.appId,
       root: input.root,
       sandbox: input.sandbox,
       signal: input.signal,
     });
+    const expectedBackendKind =
+      input.assertStaticRecoverySource === undefined ? input.expectedBackendKind : "static";
+    if (expectedBackendKind !== undefined && description.backend.kind !== expectedBackendKind) {
+      throw operatorArtifactUnavailable();
+    }
+    await input.assertStaticRecoverySource?.();
     await assertCurrentOwner(context);
     checkStopped();
     observe({ outcome: "completed", stage: "description" });
@@ -530,13 +567,7 @@ export const publishCompiledOperatorArtifactsForSession = async (
       // Hosted frontend-only apps need an authoritative description too; there
       // is deliberately no compiled SQL release or database allocation.
       if (binding.localAuthority === undefined) {
-        const { createCapturedAppDescriptionStore } =
-          await import("../provisioning/captured-app-description");
-        database ??= openArtifactDatabase();
-        const descriptions = createCapturedAppDescriptionStore({
-          assertCurrentOwner,
-          database: await database,
-        });
+        const descriptions = await openCapturedAppDescriptions(binding);
         await descriptions.record(context, input.appSpecDigest, input.callId, description);
       }
       return {

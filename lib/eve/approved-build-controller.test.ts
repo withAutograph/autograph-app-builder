@@ -48,7 +48,7 @@ const decision = {
   version: 1 as const,
   workflowPhase: "validation_failed",
 };
-const fixture = async () => {
+const fixture = async (recordPriorDecision = true) => {
   const store = new InMemoryHostedEveStore();
   const start = {
     clientRequestId: "original-start",
@@ -78,7 +78,9 @@ const fixture = async () => {
       version: 1,
     },
   });
-  await store.recordPrivateBuildDecision({ decision, principal, sessionId: result.sessionId });
+  if (recordPriorDecision) {
+    await store.recordPrivateBuildDecision({ decision, principal, sessionId: result.sessionId });
+  }
   const sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(async () => {
     await Promise.resolve();
   });
@@ -98,6 +100,143 @@ const fixture = async () => {
     transport,
   };
 };
+const acceptedApp = {
+  adapterSessionId: decision.adapterSessionId,
+  currentSpec: {
+    appId: decision.scope.appId,
+    appSpecDigest: decision.scope.appSpecDigest,
+    sessionId: decision.adapterSessionId,
+    workspaceId: decision.scope.workspaceId,
+  },
+  decision: "working" as const,
+  turnId: "accept-app-spec",
+  turnSequence: decision.turnSequence + 1,
+  version: 1 as const,
+  workflowPhase: "app_spec_accepted",
+};
+
+describe("canonical app identity from accepted build design", () => {
+  it("allows repository selection before Build with no UI preview or Build approval", async () => {
+    const f = await fixture(false);
+    await f.store.recordPrivateBuildDecision({
+      principal,
+      sessionId: f.sessionId,
+      decision: acceptedApp,
+    });
+    const saved = await f.store.readCurrentBuildSession({
+      authoritySessionId: f.sessionId,
+      logicalSessionId: acceptedApp.adapterSessionId,
+      principal,
+    });
+    expect(saved).toMatchObject({
+      appId: acceptedApp.currentSpec.appId,
+      privateBuildDecision: acceptedApp,
+    });
+    expect(saved.checkpoint?.uiPreview).toBeUndefined();
+    const destination = {
+      kind: "existing-repository" as const,
+      version: 1 as const,
+      appId: acceptedApp.currentSpec.appId,
+      repository: { repositoryId: "123", owner: "team", name: "apps", defaultBranch: "main" },
+      installationId: "456",
+      confirmedByCallId: "verified-access",
+    };
+    await expect(
+      f.store.attachBuilderDestination({
+        principal,
+        sessionId: f.sessionId,
+        destination,
+        expected: {
+          adapterSessionId: saved.adapterSessionId,
+          adapterGeneration: saved.adapterGeneration,
+          cancellationRevision: 0,
+        },
+        nowEpochMs: 3,
+      }),
+    ).resolves.toMatchObject({
+      appId: acceptedApp.currentSpec.appId,
+      builderDestination: destination,
+    });
+  });
+
+  it("preserves the canonical app and decision if the accepted spec names another app", async () => {
+    const f = await fixture();
+    await f.store.recordPrivateBuildDecision({
+      principal,
+      sessionId: f.sessionId,
+      decision: acceptedApp,
+    });
+    await expect(
+      f.store.recordPrivateBuildDecision({
+        principal,
+        sessionId: f.sessionId,
+        decision: {
+          ...acceptedApp,
+          currentSpec: { ...acceptedApp.currentSpec, appId: "other-app" },
+        },
+      }),
+    ).rejects.toThrow("does not match");
+    expect(await f.store.getSession(principal, f.sessionId)).toMatchObject({
+      appId: acceptedApp.currentSpec.appId,
+      privateBuildDecision: acceptedApp,
+    });
+  });
+
+  it.each([
+    {
+      actor: "another owner",
+      principal: { ...principal, ownerUserId: "other-owner" },
+      specSession: acceptedApp.adapterSessionId,
+    },
+    {
+      actor: "another workspace",
+      principal: { ...principal, workspaceId: "other-workspace" },
+      specSession: acceptedApp.adapterSessionId,
+    },
+    { actor: "a spec from another session", principal, specSession: "other-adapter-session" },
+  ])("rejects an app identity from $actor", async (candidate) => {
+    const f = await fixture();
+    await expect(
+      f.store.recordPrivateBuildDecision({
+        principal: candidate.principal,
+        sessionId: f.sessionId,
+        decision: {
+          ...acceptedApp,
+          currentSpec: { ...acceptedApp.currentSpec, sessionId: candidate.specSession },
+        },
+      }),
+    ).rejects.toThrow();
+    const saved = await f.store.getSession(principal, f.sessionId);
+    expect(saved).toMatchObject({ privateBuildDecision: decision });
+    expect(saved).not.toHaveProperty("appId");
+  });
+
+  it("does not bind an app identity after Stop", async () => {
+    const f = await fixture();
+    await f.store.recordCancellationIntent({ principal, sessionId: f.sessionId, nowEpochMs: 3 });
+    await f.store.recordPrivateBuildDecision({
+      principal,
+      sessionId: f.sessionId,
+      decision: acceptedApp,
+    });
+    const stopped = await f.store.getSession(principal, f.sessionId);
+    expect(stopped).toMatchObject({ cancellationRevision: 1 });
+    expect(stopped).not.toHaveProperty("appId");
+  });
+
+  it("ignores a stale accepted spec before it can bind an app identity", async () => {
+    const f = await fixture();
+    await f.store.recordPrivateBuildDecision({
+      principal,
+      sessionId: f.sessionId,
+      decision: { ...acceptedApp, turnSequence: decision.turnSequence - 1 },
+    });
+    const saved = await f.store.getSession(principal, f.sessionId);
+    expect(saved).toMatchObject({ privateBuildDecision: decision });
+    expect(saved).not.toHaveProperty("appId");
+  });
+});
+
 describe("canonical approved private build continuation", () => {
   it("saves the same repository during its claimed automatic Build turn before operation settlement", async () => {
     const f = await fixture();

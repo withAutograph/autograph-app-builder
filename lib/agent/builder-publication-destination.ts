@@ -163,6 +163,7 @@ export const recordBuilderPublicationDestinationForTool = async (
   ctx: ToolContext,
   appId: string,
   receipt: RepositoryAccessReceipt,
+  options?: { requireExactReadback: boolean },
 ): Promise<void> => {
   if (process.env.EVE_HOSTED_ADAPTER !== "1") {
     return;
@@ -213,6 +214,9 @@ export const recordBuilderPublicationDestinationForTool = async (
     session.builderDestination !== undefined &&
     !isExistingRepositoryDestination(session.builderDestination)
   ) {
+    if (options?.requireExactReadback === true) {
+      throw new Error(DESTINATION_UNAVAILABLE);
+    }
     return;
   }
   const { repository } = receipt;
@@ -243,5 +247,23 @@ export const recordBuilderPublicationDestinationForTool = async (
     },
     nowEpochMs: Date.now(),
   });
-  await readHostedOperatorCallbackSessions({ store: sessions, owner, execution });
+  const { currentSession } = await readHostedOperatorCallbackSessions({
+    store: sessions,
+    owner,
+    execution,
+  });
+  if (options?.requireExactReadback === true) {
+    const saved = currentSession.builderDestination;
+    const matches =
+      saved !== undefined &&
+      isExistingRepositoryDestination(saved) &&
+      saved.appId === destination.appId &&
+      saved.installationId === destination.installationId &&
+      isDeepStrictEqual(saved.repository, destination.repository);
+    if (!matches) {
+      throw new Error(
+        "The saved Builder app destination differs from its approved Production release.",
+      );
+    }
+  }
 };

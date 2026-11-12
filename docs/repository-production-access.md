@@ -164,7 +164,14 @@ promotes it. Both stores decide whether the receipt is historical inside their
 serialized marker write, including concurrent first recording.
 Acquired frontend-only apps also retain their existing repository path.
 
-App descriptions and compiled releases come from owner-scoped captured artifacts. The normal plan
+App descriptions and compiled releases come from owner-scoped captured artifacts.
+After repository checks pass, Builder records the repository's frontend
+description without compiling SQL or allocating app storage. A capture
+interruption leaves technical validation and Preview available. If Production
+planning encounters an older published frontend with missing metadata, Builder
+can restore the description from the unchanged reviewed checkout and verify
+the same open PR's exact head before retrying. It keeps the existing review and
+requires no GitHub write or new approval for that recovery. The normal plan
 operation returns the app's resource and access intent; preparation reads the
 actual approval from Builder's private history. A caller-supplied approval ID
 alone is insufficient. Source hashes remain diagnostics; the reviewed resource,

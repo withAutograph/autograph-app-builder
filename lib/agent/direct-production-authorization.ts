@@ -6,6 +6,8 @@ import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 
+export const ARRUSTED_PRODUCTION_REPOSITORY = "withAutograph/arrusted-development";
+
 export const directProductionSubjectSchema = z.strictObject({
   version: z.literal(1),
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
@@ -15,7 +17,7 @@ export const directProductionSubjectSchema = z.strictObject({
   buildWorkspaceId: id,
   authority: hostedTenantAuthoritySchema,
   repositoryId: id,
-  repositoryFullName: z.literal("withAutograph/arrusted-development"),
+  repositoryFullName: z.literal(ARRUSTED_PRODUCTION_REPOSITORY),
   installationId: id,
   baseBranch: id,
   storageKind: z.enum(["none", "postgres"]),

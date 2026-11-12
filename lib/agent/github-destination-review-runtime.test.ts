@@ -116,6 +116,10 @@ vi.mock("./existing-app-repair-planning", async (original) => ({
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: () => toolPorts.runtime,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Ordinary review fixtures do not hold a native direct Production approval.
+vi.mock("./direct-production-state", () => ({
+  currentDirectProductionGrant: vi.fn(),
+}));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./github-publication-destination dependency used by this test.
 vi.mock("./github-publication-destination", () => ({
   resolvePublicationTargetForTool: () => ({ kind: "ready", target: toolPorts.target }),

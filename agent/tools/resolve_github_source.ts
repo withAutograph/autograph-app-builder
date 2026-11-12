@@ -211,7 +211,7 @@ export const inputSchema = z
 export default defineTool({
   approval: never(),
   description:
-    "Resolve and prepare an existing connected GitHub repository. In a new Builder session, select a branch or any open PR using pullRequestNumber; draftPullRequestNumber remains a legacy input. Builder uses its current branch as the private source and never replaces an occupied source. Pass selectedInstallationId=null for the single verified installation. For an initial appBaseline, prepare that same-repository historical app version before exposing app source while retaining the selected platform branch. This operation never pushes, branches, opens a PR, or grants publication approval.",
+    "Resolve and prepare an existing connected GitHub repository. Use its default branch for a new private app requested directly in Production in that Arrusted repository. For an existing app, select a branch or any open PR in a new Builder session using pullRequestNumber; draftPullRequestNumber remains a legacy input. Builder uses its current branch as the private source and never replaces an occupied source. Pass selectedInstallationId=null for the single verified installation. For an initial appBaseline, prepare that same-repository historical app version before exposing app source while retaining the selected platform branch. This operation never pushes, branches, opens a PR, or grants publication approval.",
   // oxlint-disable-next-line eslint/complexity -- Source selection and legacy recovery retain their ordered authority boundaries.
   async execute(input, ctx) {
     const pullRequestNumber = input.pullRequestNumber ?? input.draftPullRequestNumber;

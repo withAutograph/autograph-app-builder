@@ -72,9 +72,12 @@ for private preview or **Build and release to Production?** for direct delivery.
 A prototype and browser walkthrough are available for design feedback. They do
 not block this approval. Request it through the build tool approval card in the
 same planning turn. If the user explicitly
-requested direct Production for a new private Arrusted app, read its
+requested direct Production for a new private Arrusted app, resolve the named
+repository's default branch before acquiring a starter, then read its
 `directProduction` subject using `release-app-production` and pass it to the
-Build call. If the new implementation submits the app's CUE schema, request
+Build call. If a starter plan is already present, keep that plan and include
+the named destination when reading the release subject. A working Preview and
+design prototype are optional. If the new implementation submits the app's CUE schema, request
 the subject with `storageKind: "postgres"` so the card includes the database.
 The card covers Build, the reviewed draft, managed data and creator access,
 and merge after required checks. Otherwise
@@ -278,6 +281,10 @@ current read of the same app, including a retry after a service issue. A pending
 result returns immediately. Continue the reviewed PR delivery before merge
 even if a live availability check returns pending.
 Before requesting Ready/merge, read the draft's delivery status and follow its normal Production setup continuation.
+If the saved setup read fails for an already published frontend-only draft,
+try `plan-app-production` for the same reviewed app. It can restore missing
+app metadata from the approved source without another GitHub write or database
+setup. Keep the existing draft and release approval scope.
 For a managed destination, prepare the required data, access and runtime bindings
 after draft publication and before merging. Native deployments capture their
 environment at creation; binding a database after merge cannot repair an already
