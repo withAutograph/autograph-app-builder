@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
   compiledArtifactSandboxRelativePath,
+  hasCapturedStaticDescriptionForSession,
   publishCompiledOperatorArtifactsForSession,
   recordPublishedOperatorSourceForSession,
   readPublishedOperatorSourceForSession,
@@ -58,6 +59,22 @@ const mocks = vi.hoisted(() => ({
   associationAvailable: true,
   candidate: null as Record<string, unknown> | null,
   completion: null as DraftReconciliationCompletion | null,
+  readDescription:
+    vi.fn<
+      (
+        context: OperatorArtifactContext,
+        appSpecDigest: string,
+      ) => Promise<AppDescription | undefined>
+    >(),
+  recordDescription:
+    vi.fn<
+      (
+        context: OperatorArtifactContext,
+        appSpecDigest: string,
+        callId: string,
+        description: AppDescription,
+      ) => Promise<AppDescription>
+    >(),
   readExact: vi.fn(),
   onRead: vi.fn<(index: number) => void | Promise<void>>(),
   owner: null as Record<string, unknown> | null,
@@ -93,6 +110,27 @@ vi.mock("../auth/preview-oauth-runtime", () => ({
   readPreviewOAuthRuntimeConfig: () => ({ databaseUrl: "private-fixture" }),
 }));
 vi.mock("../mcp/hosted-route", () => ({ openHostedPostgresDatabase: () => ({}) }));
+vi.mock("../provisioning/captured-app-description", () => ({
+  createCapturedAppDescriptionStore: ({
+    assertCurrentOwner,
+  }: {
+    assertCurrentOwner: (context: OperatorArtifactContext) => Promise<void>;
+  }) => ({
+    record: async (
+      context: OperatorArtifactContext,
+      appSpecDigest: string,
+      callId: string,
+      description: AppDescription,
+    ) => {
+      await assertCurrentOwner(context);
+      return await mocks.recordDescription(context, appSpecDigest, callId, description);
+    },
+    read: async (context: OperatorArtifactContext, appSpecDigest: string) => {
+      await assertCurrentOwner(context);
+      return await mocks.readDescription(context, appSpecDigest);
+    },
+  }),
+}));
 vi.mock("../provisioning/hosted-operator-artifact-store", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   createPostgresOperatorArtifactStore: ({
@@ -204,6 +242,10 @@ describe("owned compiled artifact workflow hook", () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     mocks.rows.clear();
     mocks.readSelection.mockReset();
+    mocks.readDescription.mockReset();
+    mocks.recordDescription
+      .mockReset()
+      .mockImplementation(async (_context, _appSpecDigest, _callId, description) => description);
     mocks.associationAvailable = true;
     mocks.associate.mockReset().mockImplementation(async (_context, input) => ({
       status: "recorded",
@@ -705,6 +747,49 @@ describe("owned compiled artifact workflow hook", () => {
     );
     expect(mocks.rows.size).toBeGreaterThan(1);
   });
+  it("captures the frontend description under the original owner without reading SQL", async () => {
+    const input = frame();
+    const description: AppDescription = {
+      version: 1,
+      app: { id: input.appId, routes: [], workspacePath: "apps/spend-review" },
+      backend: { kind: "static" },
+      validation: { browser: null, check: { task: "check" }, test: { shards: 1, task: "test" } },
+    };
+    input.sandbox.run.mockResolvedValue({
+      exitCode: 0,
+      stderr: "",
+      stdout: JSON.stringify(description),
+    });
+    await expect(hasCapturedStaticDescriptionForSession(input)).resolves.toBe(false);
+    await expect(publishCompiledOperatorArtifactsForSession(input)).resolves.toMatchObject({
+      status: "not-required",
+    });
+    mocks.readDescription.mockResolvedValue(description);
+    await expect(hasCapturedStaticDescriptionForSession(input)).resolves.toBe(true);
+    const owner = { authority, target: { appId: input.appId, sessionId: "durable-original" } };
+    expect(mocks.recordDescription).toHaveBeenCalledWith(owner, digest, input.callId, description);
+    expect(mocks.readDescription).toHaveBeenCalledWith(owner, digest);
+    expect(input.sandbox.readBinaryFile).not.toHaveBeenCalled();
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+
+  it("checks reviewed recovery bytes before the description command and refuses any SQL backend", async () => {
+    const input = frame();
+    const assertStaticRecoverySource = vi.fn().mockRejectedValueOnce(new Error("source drift"));
+    await expect(
+      publishCompiledOperatorArtifactsForSession({ ...input, assertStaticRecoverySource }),
+    ).rejects.toThrow("source drift");
+    expect(input.sandbox.run).not.toHaveBeenCalled();
+
+    await expect(
+      publishCompiledOperatorArtifactsForSession({ ...input, assertStaticRecoverySource }),
+    ).rejects.toThrow();
+    expect(input.sandbox.run).toHaveBeenCalledOnce();
+    expect(input.sandbox.readBinaryFile).not.toHaveBeenCalled();
+    expect(mocks.recordDescription).not.toHaveBeenCalled();
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+
   it("maps a reviewed candidate root rather than reading repository bytes", async () => {
     mocks.state = {
       appSpec: { appId: "spend-review", digest },

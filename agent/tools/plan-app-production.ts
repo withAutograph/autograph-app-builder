@@ -16,7 +16,18 @@ export default defineTool({
     const { repositoryProductionClientForContext } =
       await import("../../lib/agent/repository-production-client");
     const client = await repositoryProductionClientForContext(ctx);
-    const result = await client.plan(input.appId, input.creatorEmail);
+    let result;
+    try {
+      result = await client.plan(input.appId, input.creatorEmail);
+    } catch (error) {
+      ctx.abortSignal.throwIfAborted();
+      const { restoreReviewedStaticProduction } =
+        await import("../../lib/agent/restore-reviewed-static-production");
+      if (!(await restoreReviewedStaticProduction(input.appId, ctx))) {
+        throw error;
+      }
+      result = await client.plan(input.appId, input.creatorEmail);
+    }
     return {
       version: result.version,
       approvalReference: result.approvalReference,

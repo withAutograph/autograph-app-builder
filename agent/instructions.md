@@ -281,6 +281,10 @@ current read of the same app, including a retry after a service issue. A pending
 result returns immediately. Continue the reviewed PR delivery before merge
 even if a live availability check returns pending.
 Before requesting Ready/merge, read the draft's delivery status and follow its normal Production setup continuation.
+If the saved setup read fails for an already published frontend-only draft,
+try `plan-app-production` for the same reviewed app. It can restore missing
+app metadata from the approved source without another GitHub write or database
+setup. Keep the existing draft and release approval scope.
 For a managed destination, prepare the required data, access and runtime bindings
 after draft publication and before merging. Native deployments capture their
 environment at creation; binding a database after merge cannot repair an already

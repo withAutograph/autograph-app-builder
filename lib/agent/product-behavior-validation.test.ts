@@ -361,7 +361,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     }
   });
 
-  it("reports skipped persistent validation as unassessed and capture as requiring no repair", async () => {
+  it("captures the technically validated frontend without preparing a persistent runtime", async () => {
     mocks.state.current = workflow("validated");
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies a partial tool context fixture.
@@ -385,12 +385,41 @@ describe("behavior evidence invalidation during validation repair", () => {
       event: "app_builder.validation_phase",
       phase: "validated_release_capture_finished",
     });
-    expect(mocks.publish).not.toHaveBeenCalled();
+    expect(mocks.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adapterSessionId: "private-session",
+        appId: "app",
+        appSpecDigest: "a",
+        expectedBackendKind: "static",
+        root: "/workspace/repository",
+      }),
+    );
+    expect(mocks.execute).toHaveBeenCalledBefore(mocks.publish);
+    expect(mocks.runtime).not.toHaveBeenCalled();
     expect(mocks.browser).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       backendValidation: { status: "unassessed" },
       status: "validated",
     });
+  });
+
+  it("retains frontend validation and draft review if setup metadata is temporarily unavailable", async () => {
+    mocks.state.current = workflow("validated");
+    mocks.publish.mockRejectedValueOnce(new Error("private storage failure"));
+    // SAFETY: This fixture supplies only the session and sandbox ports used by validation.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Other tool context ports are not used.
+    const result = await validateAppCreation.execute({ implementationFiles: [] }, {
+      callId: "frontend_capture_unavailable",
+      getSandbox: vi.fn().mockResolvedValue({ id: "private-sandbox" }),
+      session: { auth: {}, id: "private-session" },
+    } as never);
+    expect(result).toMatchObject({
+      status: "validated",
+      technicalStatus: "passed",
+      draftReview: { status: "available" },
+    });
+    expect(mocks.state.current).toMatchObject({ phase: "validated", appBackendKind: "static" });
+    expect(mocks.browser).not.toHaveBeenCalled();
   });
 
   it.each([

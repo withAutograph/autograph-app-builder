@@ -101,11 +101,14 @@ const captureValidatedRelease = async (
   description: Awaited<ReturnType<typeof describeSelectedApp>> | undefined,
   input: Parameters<typeof publishCompiledOperatorArtifactsForSession>[0],
 ) => {
-  if (description?.backend.kind !== GENERATED_BACKEND) {
+  if (description === undefined) {
     return null;
   }
   try {
-    await publishCompiledOperatorArtifactsForSession(input);
+    await publishCompiledOperatorArtifactsForSession({
+      ...input,
+      expectedBackendKind: description.backend.kind,
+    });
     return null;
   } catch {
     input.signal?.throwIfAborted();
@@ -643,7 +646,7 @@ export const createAppValidationTool = (
         "validated_release_capture_finished",
         captureFailure === null ? "no_repair_required" : "needs_repair",
       );
-      if (captureFailure !== null) {
+      if (captureFailure !== null && description?.backend.kind === GENERATED_BACKEND) {
         return {
           ...captureFailure,
           attemptDigest: result.receipt.attemptDigest,
