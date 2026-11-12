@@ -95,6 +95,8 @@ const fixture = vi.hoisted(() => {
     state: initial(),
     seal: vi.fn(),
     publish: vi.fn(),
+    readPublished: vi.fn(),
+    recordSource: vi.fn(),
     readGrant: vi.fn(),
   };
 });
@@ -116,6 +118,7 @@ vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: () =>
     Promise.resolve({
       publishDraftPullRequest: fixture.publish,
+      readSucceededDraftPublication: fixture.readPublished,
       sealDraftPullRequestProposal: fixture.seal,
     }),
 }));
@@ -132,8 +135,7 @@ vi.mock("./github-publication-content-source", () => ({
   publicationContentSourceForReviewedWorkflow: () => Promise.resolve({}),
 }));
 vi.mock("./published-app-source", () => ({
-  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
-  recordPublishedAppSourceForSession: () => Promise.resolve({ status: "recorded" }),
+  recordPublishedAppSourceForSession: fixture.recordSource,
 }));
 
 const context = {
@@ -145,8 +147,18 @@ const context = {
 // SAFETY: Only the trusted saved-session identity and provider-free sandbox port are consumed by these authored tools.
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The runtime context has unrelated members outside this publication fixture.
 const toolContext = context as never;
+const sealInSession = async (input: Parameters<typeof sealTool.execute>[0]) =>
+  await contextStorage.run(
+    new ContextContainer(),
+    async () => await sealTool.execute(input, toolContext),
+  );
 
 type PublicationInput = Parameters<typeof publishTool.execute>[0];
+const publicationInputFixture = z.object({
+  approvalReceipt: approvalReceiptSchema,
+  expectedProposalDigest: z.string(),
+  recoverAppliedPublication: z.literal(true).optional(),
+});
 const setup = (input: PublicationInput) => {
   const { inputSchema } = publishTool;
   const { approval } = publishTool;
@@ -206,12 +218,7 @@ const setup = (input: PublicationInput) => {
         approval: (approvalContext) =>
           approval({
             ...approvalContext,
-            toolInput: z
-              .object({
-                approvalReceipt: approvalReceiptSchema,
-                expectedProposalDigest: z.string(),
-              })
-              .parse(approvalContext.toolInput),
+            toolInput: publicationInputFixture.parse(approvalContext.toolInput),
           }),
         description: publishTool.description,
         // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
@@ -264,6 +271,8 @@ beforeEach(() => {
   fixture.state = fixture.initial();
   context.getSandbox.mockClear();
   fixture.readGrant.mockReset();
+  fixture.readPublished.mockReset();
+  fixture.recordSource.mockReset().mockResolvedValue({ status: "recorded" });
   fixture.seal.mockReset().mockResolvedValue(fixture.proposal);
   fixture.publish
     .mockReset()
@@ -271,6 +280,66 @@ beforeEach(() => {
 });
 
 describe("native draft publication approval", () => {
+  it("retries only source association after the reviewed GitHub publication succeeded", async () => {
+    fixture.readGrant.mockReturnValue({ digest: "9".repeat(64) });
+    const input = {
+      expectedProposalDigest: fixture.proposal.digest,
+      approvalReceipt: approvalReceiptForDraftProposal(fixture.proposal),
+    };
+    const publication = {
+      status: "succeeded",
+      proposalDigest: input.expectedProposalDigest,
+      repositoryId: fixture.proposal.repositoryId,
+    };
+    fixture.publish.mockResolvedValue(publication);
+    fixture.recordSource.mockRejectedValueOnce(new Error("source storage unavailable"));
+    fixture.readPublished.mockResolvedValue(publication);
+    const first = setup(input);
+    await first.run(first.initial, { message: "Publish the reviewed app." });
+    const firstResult = first.events.find((event) => event.type === "action.result")?.data.result;
+    const output = z
+      .object({
+        status: z.literal("succeeded"),
+        appSourceRecording: z.object({ status: z.literal("unavailable") }),
+        nextCall: z.object({ input: publicationInputFixture }),
+      })
+      .parse(firstResult?.kind === "tool-result" ? firstResult.output : null);
+    expect(output.nextCall.input.recoverAppliedPublication).toBe(true);
+    expect(fixture.publish).toHaveBeenCalledOnce();
+
+    fixture.readGrant.mockReset();
+    const resumed = setup(output.nextCall.input);
+    await resumed.run(resumed.initial, { message: "Continue the same publication." });
+    expect(resumed.events.some((event) => event.type === "input.requested")).toBe(false);
+    const observed = resumed.events.find((event) => event.type === "action.result")?.data.result;
+    expect(observed).toMatchObject({
+      output: {
+        status: "succeeded",
+        appSourceRecording: { status: "recorded" },
+        nextCall: { tool: "read_github_pr_delivery", input: {} },
+      },
+    });
+    expect(fixture.readPublished).toHaveBeenCalledExactlyOnceWith(input.expectedProposalDigest);
+    expect(fixture.publish).toHaveBeenCalledOnce();
+    expect(context.getSandbox).toHaveBeenCalledOnce();
+  });
+
+  it("does not dispatch or associate an unconfirmed Git write in source recovery mode", async () => {
+    fixture.readPublished.mockRejectedValue(new Error("No successful journal receipt"));
+    const harness = setup({
+      expectedProposalDigest: fixture.proposal.digest,
+      approvalReceipt: approvalReceiptForDraftProposal(fixture.proposal),
+      recoverAppliedPublication: true,
+    });
+    await harness.run(harness.initial, { message: "Check the previous publication." });
+    expect(
+      harness.events.find((event) => event.type === "action.result")?.data.result,
+    ).toMatchObject({ isError: true });
+    expect(fixture.publish).not.toHaveBeenCalled();
+    expect(fixture.recordSource).not.toHaveBeenCalled();
+    expect(context.getSandbox).not.toHaveBeenCalled();
+  });
+
   it("uses the current Production approval for the exact reviewed draft without opening another approval", async () => {
     fixture.readGrant.mockReturnValue({ digest: "9".repeat(64) });
     fixture.publish.mockResolvedValue({
@@ -337,14 +406,14 @@ describe("native draft publication approval", () => {
       const proposal = z
         .object({ approvalReceipt: approvalReceiptSchema, digest: z.string() })
         .parse(
-          await sealTool.execute(
-            {
-              expectedGitHubSourceDigest: "f".repeat(64),
-              expectedReviewDigest: fixture.proposal.reviewDigest,
-              title: "Add Requests",
+          await sealInSession({
+            reviewReference: {
+              kind: "current-session-reviewed-change-set",
+              sessionId: context.session.id,
+              digest: fixture.proposal.reviewDigest,
             },
-            toolContext,
-          ),
+            title: "Add Requests",
+          }),
         );
       expect(proposal.approvalReceipt).toEqual(approvalReceiptForDraftProposal(fixture.proposal));
       expect(fixture.publish).not.toHaveBeenCalled();
@@ -403,14 +472,11 @@ describe("retained draft publication subject recovery", () => {
       const sealed =
         kind === "current"
           ? z.object({ approvalReceipt: approvalReceiptSchema }).parse(
-              await sealTool.execute(
-                {
-                  expectedGitHubSourceDigest: fixture.state.githubSource.digest,
-                  expectedReviewDigest: fixture.state.reviewReceipt.digest,
-                  title: "Add Requests",
-                },
-                toolContext,
-              ),
+              await sealInSession({
+                expectedGitHubSourceDigest: fixture.state.githubSource.digest,
+                expectedReviewDigest: fixture.state.reviewReceipt.digest,
+                title: "Add Requests",
+              }),
             )
           : undefined;
       fixture.seal.mockClear();

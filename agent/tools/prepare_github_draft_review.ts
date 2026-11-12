@@ -33,6 +33,7 @@ import {
   priorOwnedAppDraftPublication,
 } from "@/lib/agent/existing-app-repair-planning";
 import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
+import { ownedDraftPublicationHistory } from "@/lib/agent/github-draft-publication-lineage";
 import { OwnedOpenDraftReviewRequiredError } from "@/lib/agent/github-publication-runtime";
 import type {
   GitHubPublicationRuntime,
@@ -125,15 +126,6 @@ export default defineTool({
     );
     const updatingExistingDraft =
       state.phase === "reviewed" && state.existingDraftUpdate !== undefined;
-    if (
-      updatingExistingDraft &&
-      state.publishedGitHubDraftProposalDigest === undefined &&
-      retainedPublication === undefined
-    ) {
-      throw new Error(
-        "Use the existing draft update or reconciliation workflow for an existing PR.",
-      );
-    }
     const resolved = await resolvePublicationTargetForTool({
       ctx,
       appId: state.appSpec.appId,
@@ -168,11 +160,33 @@ export default defineTool({
     if (retainedPublication !== undefined && runtime.inspectPriorAppPublication === undefined) {
       throw new Error("The GitHub runtime cannot inspect this app's prior publication.");
     }
-    const prior =
+    let prior =
       retainedPublication !== undefined &&
       (await runtime.inspectPriorAppPublication?.(retainedPublication.proposal)) === "recorded"
         ? retainedPublication
         : undefined;
+    if (
+      prior === undefined &&
+      state.publishedGitHubDraftProposalDigest === undefined &&
+      target.githubSource !== undefined
+    ) {
+      const history = ownedDraftPublicationHistory({
+        ...target.githubSource.repository,
+        sessionId: ctx.session.id,
+        appId: state.appSpec.appId,
+      });
+      for (const seal of history) {
+        if (runtime.inspectPriorAppPublication === undefined) {
+          throw new Error("The GitHub runtime cannot inspect this app's prior publication.");
+        }
+        ctx.abortSignal?.throwIfAborted();
+        // oxlint-disable-next-line eslint/no-await-in-loop -- The newest recorded publication is the one to reconcile; later seals may not have been submitted.
+        if ((await runtime.inspectPriorAppPublication(seal.proposal)) === "recorded") {
+          prior = seal;
+          break;
+        }
+      }
+    }
     ctx.abortSignal?.throwIfAborted();
     assertExactWorkflowState(appBuilderWorkflowState.get(), state, "publication lookup");
     if (
@@ -247,10 +261,13 @@ export default defineTool({
     let destination: Awaited<
       ReturnType<NonNullable<GitHubPublicationRuntime["inspectDraftDestination"]>>
     >;
+    const currentProposal =
+      state.phase === "reviewed" ? state.githubDraftProposal?.proposal : undefined;
     try {
       destination = await runtime.inspectDraftDestination({
         existingProposal:
-          (state.phase === "reviewed" ? state.githubDraftProposal?.proposal : undefined) ??
+          prior?.proposal ??
+          currentProposal ??
           retainedPublication?.proposal ??
           priorResumedBuildDraftProposal(state, ctx.session.id),
         // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve conditional fields and evaluation order.
@@ -320,18 +337,18 @@ export default defineTool({
         input: { pullRequestNumber: subject.pullRequestNumber },
       };
       const currentReviewMatches =
-        state.phase === "reviewed" && state.reviewReceipt.changeSetDigest === changeSet.digest;
-      if (
+        state.phase === "reviewed" &&
+        state.githubDestinationReview === undefined &&
+        state.reviewReceipt.changeSetDigest === changeSet.digest;
+      const refreshReview =
         !currentReviewMatches &&
-        (state.phase === "reviewed" ||
-          state.githubDestinationReview !== undefined ||
-          state.publishedGitHubDraftProposalDigest !== subject.proposalDigest)
-      ) {
+        (state.phase === "reviewed" || state.githubDestinationReview !== undefined);
+      if (refreshReview || state.publishedGitHubDraftProposalDigest !== subject.proposalDigest) {
         updateExactWorkflow({
           expected: state,
-          operation: "retiring the initial review for this owned draft",
+          operation: "recovering the current review for this owned draft",
           transition: () => ({
-            ...invalidateGitHubDestinationReview(state),
+            ...(refreshReview ? invalidateGitHubDestinationReview(state) : state),
             publishedGitHubDraftProposalDigest: subject.proposalDigest,
           }),
         });
@@ -489,6 +506,7 @@ export default defineTool({
         originalSourceSha: state.githubSource?.resolvedSha ?? state.sourceReceipt.sourceSha,
         repository: `${binding.repository.owner}/${binding.repository.name}`,
         status: "destination-review-required",
+        nextCall: { tool: "accept_change_set" as const, input: {} },
       },
       { callId: ctx.callId, toolName: "prepare_github_draft_review", turnId: ctx.session.turn.id },
     );

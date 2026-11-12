@@ -48,6 +48,9 @@ const currentDraftReleaseGrant = (
 export default defineTool({
   approval(ctx) {
     const { toolInput: input } = ctx;
+    if (input?.recoverAppliedPublication === true) {
+      return "approved";
+    }
     const state = appBuilderWorkflowState.get();
     const grant = currentDraftReleaseGrant(state, ctx);
     if (input === undefined || state.phase !== "reviewed" || grant === undefined) {
@@ -83,7 +86,7 @@ export default defineTool({
     return "approved";
   },
   description:
-    "Invoke this tool with the canonical approvalReceipt and proposal digest returned by seal_github_draft_pr_proposal to publish under the current Production release approval or request the ordinary Eve approval control. The receipt describes the reviewed subject; it is not prior user consent. Do not wait for a separate approval-request tool or ask the user to supply a receipt. After a reviewed-path-changed rejection, refresh and review the changes, reseal the proposal, and obtain fresh publication approval; this operation verifies branch and pull-request absence before recovering the rejected attempt. GitHub decides whether the account can write the repository and reports any real conflict or permission error. Approval is required only for this outward effect.",
+    "Invoke this tool with the canonical approvalReceipt and proposal digest returned by seal_github_draft_pr_proposal to publish under the current Production release approval or request the ordinary Eve approval control. The receipt describes the reviewed subject and grants no consent. If GitHub already accepted this exact publication but Builder could not record its source, follow the returned recoverAppliedPublication continuation. It reads the successful journal receipt and only retries source recording. After a reviewed-path-changed rejection, refresh and review the changes, reseal the proposal, and obtain fresh publication approval.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "reviewed" || state.githubDraftProposal === undefined) {
@@ -146,27 +149,52 @@ export default defineTool({
       assertEffectCurrent();
       selectedInstallationId = state.githubDestinationReview?.installation.installationId;
     }
-    const sandbox = await ctx.getSandbox();
-    const contentSource = publicationContentSourceForReviewedWorkflow({
-      sandbox,
-      state,
-    });
     const runtime =
       selectedInstallationId === undefined
         ? await githubPublicationRuntimeForSession(ctx.session.auth)
         : await githubPublicationRuntimeForSession(ctx.session.auth, { selectedInstallationId });
-    const request: Parameters<typeof runtime.publishDraftPullRequest>[0] = {
-      approvalReceipt: input.approvalReceipt,
-      approvedByCallId: ctx.callId,
-      contentSource,
-      expectedProposalDigest: state.githubDraftProposal.proposal.digest,
-      review: state.reviewReceipt,
-    };
-    if (directCall !== undefined) {
-      assertEffectCurrent();
-      request.assertEffectCurrent = assertEffectCurrent;
+    const recoverApplied = input.recoverAppliedPublication === true;
+    let publication;
+    if (recoverApplied) {
+      assertCurrentGitHubDraftProposal({
+        binding: state.githubDraftProposal,
+        changeSetDigest: state.reviewReceipt.changeSetDigest,
+        destinationReview: state.githubDestinationReview,
+        expectedProposalDigest: input.expectedProposalDigest,
+        githubSource: state.githubSource,
+        reviewDigest: state.reviewReceipt.digest,
+        sourceReceiptDigest: state.sourceReceipt.digest,
+      });
+      if (runtime.readSucceededDraftPublication === undefined) {
+        throw new Error("The successful GitHub publication cannot be read for source recovery.");
+      }
+      publication = await runtime.readSucceededDraftPublication(input.expectedProposalDigest);
+      if (
+        publication.status !== "succeeded" ||
+        publication.proposalDigest !== input.expectedProposalDigest
+      ) {
+        throw new Error("The publication journal does not confirm this exact draft.");
+      }
+      ctx.abortSignal?.throwIfAborted();
+      assertExactWorkflowState(appBuilderWorkflowState.get(), state, "draft publication recovery");
+    } else {
+      const sandbox = await ctx.getSandbox();
+      const request: Parameters<typeof runtime.publishDraftPullRequest>[0] = {
+        approvalReceipt: input.approvalReceipt,
+        approvedByCallId: ctx.callId,
+        contentSource: publicationContentSourceForReviewedWorkflow({ sandbox, state }),
+        expectedProposalDigest: state.githubDraftProposal.proposal.digest,
+        review: state.reviewReceipt,
+      };
+      if (directCall !== undefined) {
+        assertEffectCurrent();
+        request.assertEffectCurrent = assertEffectCurrent;
+      }
+      publication = await runtime.publishDraftPullRequest(request);
     }
-    const publication = await runtime.publishDraftPullRequest(request);
+    const verifiedPublication =
+      publication.status === "succeeded" &&
+      publication.proposalDigest === input.expectedProposalDigest;
     try {
       const recording = await recordPublishedAppSourceForSession({
         appId: state.appSpec.appId,
@@ -180,10 +208,7 @@ export default defineTool({
         review: state.reviewReceipt,
         publication,
       });
-      if (
-        publication.status === "succeeded" &&
-        publication.proposalDigest === state.githubDraftProposal.proposal.digest
-      ) {
+      if (verifiedPublication) {
         ctx.abortSignal?.throwIfAborted();
         updateExactWorkflow({
           expected: state,
@@ -195,19 +220,40 @@ export default defineTool({
         });
       }
       const result = { ...publication, appSourceRecording: { status: recording.status } };
-      return directCall !== undefined &&
-        publication.status === "succeeded" &&
-        recording.status === "recorded"
+      const continuesDelivery = directCall !== undefined || recoverApplied;
+      return continuesDelivery && verifiedPublication && recording.status === "recorded"
         ? { ...result, nextCall: { tool: "read_github_pr_delivery" as const, input: {} } }
         : result;
     } catch {
-      return {
+      const result = {
         ...publication,
         appSourceRecording: {
           status: "unavailable" as const,
           recoveryRequired: true,
           nextAction:
-            "Resume this approved publication to record its source for Preview; the GitHub publication already succeeded. Preview source preparation remains unavailable until recording succeeds.",
+            "GitHub accepted this draft. Recover its saved source association before continuing managed delivery.",
+        },
+      };
+      if (recoverApplied || !verifiedPublication || ctx.abortSignal?.aborted) {
+        return result;
+      }
+      try {
+        assertExactWorkflowState(
+          appBuilderWorkflowState.get(),
+          state,
+          "draft publication recovery",
+        );
+        if (directCall !== undefined) {
+          assertEffectCurrent();
+        }
+      } catch {
+        return result;
+      }
+      return {
+        ...result,
+        nextCall: {
+          tool: "publish_github_draft_pr" as const,
+          input: { ...input, recoverAppliedPublication: true as const },
         },
       };
     }
@@ -215,5 +261,6 @@ export default defineTool({
   inputSchema: z.strictObject({
     approvalReceipt: approvalReceiptSchema,
     expectedProposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+    recoverAppliedPublication: z.literal(true).optional(),
   }),
 });

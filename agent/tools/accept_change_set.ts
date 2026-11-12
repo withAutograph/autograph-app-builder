@@ -117,12 +117,19 @@ export const createChangeSetAcceptanceTool = (
       };
       const nextDeliveryStep = () => {
         const grant = runtime.readDirectProductionGrant?.(ctx, { appId: state.appSpec.appId });
-        if (grant === undefined) {
+        const current = appBuilderWorkflowState.get();
+        if (
+          grant === undefined &&
+          (current.phase !== "reviewed" ||
+            (current.githubDestinationReview === undefined &&
+              current.existingDraftUpdate === undefined))
+        ) {
           return {};
         }
         const draftReview = draftReviewAfterTechnicalValidation(
-          appBuilderWorkflowState.get(),
-          true,
+          current,
+          grant !== undefined,
+          ctx.session.id,
         );
         return draftReview === undefined ? {} : { nextCall: draftReview.nextCall };
       };

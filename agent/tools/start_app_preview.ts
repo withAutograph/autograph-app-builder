@@ -18,7 +18,7 @@ import { previewWorkingDirectorySchema } from "@/lib/agent/preview-working-direc
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { priorValidatedPrivateArtifact } from "@/lib/agent/prior-validated-private-artifact";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
-import { resolvePreviewLaunch, resolvePreviewLaunchPort } from "@/lib/agent/preview-launch";
+import { finalizePreviewLaunch, resolvePreviewLaunch } from "@/lib/agent/preview-launch";
 import { ensureCheckoutDependencies } from "@/lib/agent/checkout-dependencies";
 import { nativeWorkingPreview } from "@/lib/agent/native-working-preview";
 import {
@@ -131,7 +131,7 @@ export const createStartAppPreview = ({
 }: { nativePreview?: typeof nativeWorkingPreview } = {}) =>
   defineTool({
     description:
-      "Open the selected existing app or applied new app and return a working browser URL. An approved protected runtime publishes its verified native Gateway app route; other apps start a private Sandbox preview. Omit command to run the app's development script in its repository-owned app workspace and open its registered route. For a prepared existing GitHub checkout, supply appId. Supply command, workingDirectory and port for a custom development server. Use artifact=prior-validated to preview the exact last validated local artifact while a newer plan remains unapplied. A reachable page is not proof of backend product behavior.",
+      "Open the selected existing app or applied new app and return a working browser URL. An approved protected runtime publishes its verified native Gateway app route; other apps start a private Sandbox preview. Omit command to run the app's development script in its repository-owned app workspace and open its registered route. The standard generated Next script falls back to a private sandbox port when its port discovery fails. For a prepared existing GitHub checkout, supply appId. Supply command, workingDirectory and port for a custom development server. Use artifact=prior-validated to preview the exact last validated local artifact while a newer plan remains unapplied. A reachable page is not proof of backend product behavior.",
     async execute(input, ctx) {
       let current = appBuilderWorkflowState.get();
       const native =
@@ -336,7 +336,7 @@ export const createStartAppPreview = ({
         environmentPath = localRuntimeEnvironmentPath(selected.root, appId);
       }
       await prior?.verifyCurrent();
-      const port = await resolvePreviewLaunchPort(launch, sandbox, ctx.abortSignal);
+      const runnableLaunch = await finalizePreviewLaunch(launch, sandbox, ctx.abortSignal);
       assertCurrentDependencies();
       invalidateProductBehaviorPreview("preview-replaced");
       workingPreviewState.update(() => null);
@@ -369,10 +369,10 @@ export const createStartAppPreview = ({
       }
       const preview = await startWorkingPreview({
         appId: selected.appId,
-        command: launch.command,
-        cwd: launch.cwd,
-        landingPath: launch.landingPath,
-        port,
+        command: runnableLaunch.command,
+        cwd: runnableLaunch.cwd,
+        landingPath: runnableLaunch.landingPath,
+        port: runnableLaunch.port,
         environmentPath,
         onAttempt: (attempt) => {
           workingPreviewAttemptState.update((currentAttempt) => {
@@ -396,7 +396,7 @@ export const createStartAppPreview = ({
       );
       bindProductBehaviorPreview(preview.commandId, evidenceGeneration);
       return {
-        commandAdjustment: launch.adjustment,
+        commandAdjustment: runnableLaunch.adjustment,
         dependencies,
         installationProof: runtime?.installationProof,
         workingPreview: preview.receipt,

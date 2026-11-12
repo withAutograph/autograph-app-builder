@@ -39,14 +39,28 @@ export const stageImplementationFiles = (input: StagedImplementation): Implement
   return merged;
 };
 
-/** The creation executor applies this exact scaffold input before running the repository task. */
+/** The app-local schema is the compiled source when both supported paths were submitted. */
+export const newAppImplementationSchema = (
+  appId: string,
+  files: readonly ImplementationFile[],
+  workspacePath = `apps/${appId}`,
+) => {
+  const cueSourcePath = `.config/app-specs/${appId}.cue`;
+  const schemaCuePath = `${workspacePath}/schema/${appId}.cue`;
+  const sourceCue = files.find((file) => file.path === cueSourcePath);
+  const appCue = files.find((file) => file.path === schemaCuePath);
+  return { cueSourcePath, schemaCuePath, sourceCue, appCue };
+};
+
+/** The creation executor uses the same input before running the repository task. */
 export const newAppImplementationSchemaKind = (
   appId: string,
   sourceKind: "kernel" | "none",
   files: readonly ImplementationFile[],
+  workspacePath?: string,
 ) => {
-  const cuePath = `.config/app-specs/${appId}.cue`;
-  const cue = files.find((file) => file.path === cuePath);
+  const { sourceCue, appCue } = newAppImplementationSchema(appId, files, workspacePath);
+  const cue = appCue ?? sourceCue;
   if (cue === undefined) {
     return sourceKind;
   }

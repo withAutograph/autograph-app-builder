@@ -6,6 +6,7 @@ import type {
 } from "../sandbox/working-preview-runtime";
 import type { hasLiveWorkingPreview } from "./working-preview-state";
 import { createStartAppPreview } from "../../agent/tools/start_app_preview";
+import { finalizePreviewLaunch, resolvePreviewLaunch } from "./preview-launch";
 import {
   previewWorkingDirectorySchema,
   resolvePreviewWorkingDirectory,
@@ -122,9 +123,39 @@ vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
 const startAppPreview = createStartAppPreview({ nativePreview: mocks.nativePreview });
 
 const parseDirectory = (value?: string) => previewWorkingDirectorySchema.parse(value);
+const generatedDevScript = "next dev --hostname 0.0.0.0 --port $(microfrontends port)";
+const generatedNextCommand = {
+  executable: "bun",
+  args: ["x", "--no-install", "next", "dev", "--hostname", "0.0.0.0", "--port", "3000"],
+};
+
+const portCases = [
+  {
+    discovery: "returns the repository port",
+    exitCode: 0,
+    stdout: "4703\n",
+    command: { args: ["run", "dev"], executable: "bun" },
+    port: 4703,
+  },
+  {
+    discovery: "returns no port",
+    exitCode: 0,
+    stdout: "",
+    command: generatedNextCommand,
+    port: 3000,
+  },
+  {
+    discovery: "fails with a nonzero exit",
+    exitCode: 1,
+    stdout: "",
+    command: generatedNextCommand,
+    port: 3000,
+  },
+];
 
 describe("preview command working directory", () => {
-  it("opens the registered app on its repository-assigned port and reuses it after validation", async () => {
+  it.each(portCases)("reuses the app preview when discovery $discovery", async (scenario) => {
+    const { exitCode, stdout, command, port } = scenario;
     const saved = mocks.workflowState;
     mocks.workflowState = {
       appSpec: { appId: "app" },
@@ -161,7 +192,7 @@ describe("preview command working directory", () => {
       });
       return { commandId: "preview-command", receipt };
     });
-    const run = vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "4703\n" });
+    const run = vi.fn().mockResolvedValue({ exitCode, stderr: "", stdout });
     const sandbox = {
       id: "sandbox",
       readTextFile: vi.fn(({ path }: { path: string }) => {
@@ -170,7 +201,7 @@ describe("preview command working directory", () => {
         }
         if (path === "/workspace/repository/apps/app/package.json") {
           return JSON.stringify({
-            scripts: { dev: "next dev --port $(microfrontends port)" },
+            scripts: { dev: generatedDevScript },
           });
         }
         return null;
@@ -204,10 +235,10 @@ describe("preview command working directory", () => {
       );
       expect(mocks.start).toHaveBeenCalledWith(
         expect.objectContaining({
-          command: { args: ["run", "dev"], executable: "bun" },
+          command,
           cwd: "/workspace/repository/apps/app",
           landingPath: "/app",
-          port: 4703,
+          port,
         }),
       );
       mocks.workflowState = {
@@ -223,6 +254,39 @@ describe("preview command working directory", () => {
       mocks.workflowState = saved;
     }
   });
+  it.each([false, true])(
+    "does not substitute another command after custom discovery failure or cancellation (cancelled %s)",
+    async (cancelled) => {
+      const controller = new AbortController();
+      const reason = new Error("The preview was cancelled");
+      const sandbox = {
+        readTextFile: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            packageManager: "bun@1.3.0",
+            scripts: {
+              dev: cancelled ? generatedDevScript : `${generatedDevScript} --turbopack`,
+            },
+          }),
+        ),
+        run: vi.fn().mockResolvedValue({ exitCode: 1, stderr: "", stdout: "" }),
+      };
+      const launch = await resolvePreviewLaunch({
+        appId: "app",
+        identity: { routes: ["/app"], workspacePath: "apps/app" },
+        request: { workingDirectory: "." },
+        root: "/workspace/repository",
+        sandbox,
+      });
+      const pending = finalizePreviewLaunch(launch, sandbox, controller.signal);
+      if (cancelled) {
+        controller.abort(reason);
+      }
+      await expect(pending).rejects.toThrow(
+        cancelled ? reason : "The repository's microfrontends port command did not return a port",
+      );
+      expect(sandbox.run).toHaveBeenCalledOnce();
+    },
+  );
   it("restores approved hosted persistence and updates the private gateway origin without local setup", async () => {
     const prepareAuthenticatedOrigin = vi.fn();
     mocks.runtime.mockResolvedValueOnce({

@@ -1,6 +1,19 @@
 import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
+import { z } from "zod";
 import type { productAcceptanceObligations } from "./product-acceptance";
 import type { ProductSourceAssessment } from "./product-source-review";
+
+export const reviewedChangeSetReferenceSchema = z.strictObject({
+  digest: z.string().regex(/^[a-f0-9]{64}$/u),
+  kind: z.literal("current-session-reviewed-change-set"),
+  sessionId: z.string().min(1),
+});
+
+export const reviewedChangeSetReference = (digest: string, sessionId: string) => ({
+  digest,
+  kind: "current-session-reviewed-change-set" as const,
+  sessionId,
+});
 
 export interface ReviewedChangeSetSummaryInput {
   receipt: ReviewedChangeSetReceipt;
@@ -36,11 +49,7 @@ export const reviewedChangeSetSummary = ({
     walkthroughPresent: productAcceptance.walkthrough.length > 0,
   },
   reused,
-  reviewReference: {
-    digest: receipt.digest,
-    kind: "current-session-reviewed-change-set" as const,
-    sessionId,
-  },
+  reviewReference: reviewedChangeSetReference(receipt.digest, sessionId),
   sourceAssessment: {
     bindingDigest: sourceAssessment.bindingDigest,
     ...(sourceAssessment.reviewCompleted

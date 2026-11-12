@@ -54,6 +54,15 @@ It diagnoses startup failures and repairs the same app. Technical validation
 and independent review establish a reviewed result separately from startup. When GitHub storage is selected, the repository can be public
 or private according to the user's selection. Builder asks before taking an action that needs separate authorization.
 
+For a new CUE-backed app, Builder makes the approved schema available before the
+repository generator runs. It accepts the scaffold input and the app-local
+schema path. When both are supplied, the app-local schema supplies the compiled
+foundation. Builder restores any temporary scaffold input after the generator
+runs. The generated protected request proxy, server data boundary and Next
+runtime tracing remain in place while Builder applies the app's product code.
+Static apps, existing-app revisions and repositories without that protected
+foundation retain their ordinary file behavior.
+
 Validation runs against the selected applied checkout. Ordinary changes in the
 separate host source become input to the next plan. When planning observes no
 source change, keep the current workspace without loading native transport
@@ -116,9 +125,13 @@ requirement.
 The default Build presents a working private preview as the first app handoff.
 The default preview command uses the selected app's repository development
 script, workspace, port, and catalog entry route. The launch verifies that
-route before offering its authenticated link. Reuse a live launch for the same
-source and settings across validation. Report a failed startup with its
-diagnosis and keep optional browser results separate from preview readiness.
+route before offering its authenticated link. If the standard generated Next
+script cannot discover its Microfrontends port, Builder starts the installed
+Next CLI on the private sandbox port with the same app workspace, environment
+and route. Custom development scripts retain their own launch behavior. Reuse
+a live launch for the same source and settings across validation. Report a
+failed startup with its diagnosis and keep optional browser results separate
+from preview readiness.
 
 An explicit request to go directly to Production on a new private Arrusted app
 can be approved on the Build card. The release uses required repository

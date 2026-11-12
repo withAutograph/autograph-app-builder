@@ -419,6 +419,10 @@ export class OwnedOpenDraftReviewRequiredError extends Error {
 }
 
 export interface GitHubPublicationRuntime {
+  /** Read an existing exact successful journal receipt without any provider mutation. */
+  readSucceededDraftPublication?: (
+    proposalDigest: string,
+  ) => Promise<DraftPullRequestSuccessReceipt>;
   /** Classify retained lookup context without granting publication or merged authority. */
   inspectPriorAppPublication?: (
     proposal: DraftPullRequestProposal,
@@ -875,6 +879,10 @@ export function composeGitHubPublicationRuntime(input: {
   };
   // oxlint-disable-next-line eslint/sort-keys -- Keep runtime methods grouped by their original publication flow.
   return {
+    async readSucceededDraftPublication(proposalDigest) {
+      const { receipt } = await readPublishedDeliveryTarget(proposalDigest);
+      return receipt;
+    },
     async inspectPriorAppPublication(proposal) {
       const canonical = await proposals.read(proposal.digest);
       if (

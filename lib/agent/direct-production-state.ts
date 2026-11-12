@@ -56,7 +56,12 @@ const storageKindForWorkflow = (
     files: implementationFiles,
     proposalDigest: proposal.digest,
   });
-  return newAppImplementationSchemaKind(appSpec.appId, sourceKind, files) === "kernel"
+  return newAppImplementationSchemaKind(
+    appSpec.appId,
+    sourceKind,
+    files,
+    proposal.target.plan.source.workspacePath,
+  ) === "kernel"
     ? "postgres"
     : "none";
 };

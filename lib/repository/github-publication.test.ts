@@ -2,6 +2,12 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
 import { runSequentially } from "../async-sequential";
+import { approvalReceiptForDraftProposal } from "../agent/approval-receipt";
+import {
+  composeGitHubPublicationRuntime,
+  OwnedOpenDraftReviewRequiredError,
+} from "../agent/github-publication-runtime";
+import { publicDraftRecovery } from "../eve/test-support/public-draft-recovery";
 import { compareOverlayPaths, overlayChanges } from "./target-apply";
 
 import {
@@ -46,6 +52,7 @@ import { GitHubPublicationTestStore as Store } from "./github-publication-test-s
 import { parseGitHubPublicationProposalRow } from "./postgres-github-publication-store";
 import { sealExistingDraftUpdate, updateExistingDraft } from "./github-draft-update";
 import type { ExistingDraftObservation, ExistingDraftUpdateAdapter } from "./github-draft-update";
+import { createGitHubPrDeliveryProvider } from "./github-pr-delivery";
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -1632,6 +1639,218 @@ describe("closed GitHub publication contract", () => {
     expect(adapter.draftCalls).toBe(1);
     expect(recoveryReads).toBe(0);
   });
+
+  it.each(["source recording", "journal completion"])(
+    "resumes public publication after interrupted %s without another provider write",
+    async (interruption) => {
+      const adapter = new Adapter();
+      const proposal = draftProposal(adapter);
+      const receipts = new Store();
+      const journalInterrupted = interruption === "journal completion";
+      const sourceError = new Error("Private artifact store interruption");
+      const record = vi
+        .fn<(receipt: DraftPullRequestSuccessReceipt) => Promise<void>>()
+        .mockResolvedValue();
+      if (!journalInterrupted) {
+        record.mockRejectedValueOnce(sourceError);
+      }
+      receipts.rejectTerminal = journalInterrupted;
+      let providerHead = branchSha;
+      const readPull = vi.fn();
+      const prDelivery = createGitHubPrDeliveryProvider(async (ref, operation) => {
+        expect(operation).toBe("read");
+        readPull(ref);
+        return await Promise.resolve(async ({ path, method }) => {
+          expect(method).toBeUndefined();
+          expect(path).toBe(`/repos/${proposal.owner}/${proposal.name}/pulls/7`);
+          return await Promise.resolve({
+            base: { ref: proposal.baseBranch, repo: { id: Number(proposal.repositoryId) } },
+            draft: true,
+            head: {
+              ref: proposal.branchName,
+              repo: { id: Number(proposal.repositoryId) },
+              sha: providerHead,
+            },
+            merged: false,
+            merge_commit_sha: null,
+            node_id: "original-draft",
+            number: 7,
+            state: "open",
+          });
+        });
+      });
+      const runtime = composeGitHubPublicationRuntime({
+        adapter: Object.assign(adapter, {
+          inspectDestinationFiles: vi.fn().mockResolvedValue([]),
+          prDelivery,
+        }),
+        enabled: true,
+        proposals: {
+          read: vi
+            .fn()
+            .mockImplementation(
+              async (digest: string) =>
+                await Promise.resolve(digest === proposal.digest ? proposal : undefined),
+            ),
+          save: vi.fn().mockResolvedValue(proposal),
+        },
+        receipts,
+      });
+      const { inspectPriorAppPublication, inspectDraftDestination, inspectPublishedPullRequest } =
+        runtime;
+      if (!inspectPriorAppPublication || !inspectDraftDestination || !inspectPublishedPullRequest) {
+        throw new Error("Expected the configured publication recovery runtime.");
+      }
+      const destination = {
+        defaultBranch: proposal.baseBranch,
+        installationId: adapter.identities.publish.installationId,
+        name: proposal.name,
+        owner: proposal.owner,
+        repositoryId: proposal.repositoryId,
+      };
+      const reviewInput = {
+        destination,
+        existingProposal: proposal,
+        ownedAppRevision: { appId: "demo", proposalDigest: proposal.digest },
+        paths: proposal.approvedPaths,
+      };
+      const harness = publicDraftRecovery({
+        approve: async (operationId) => {
+          try {
+            const published = await runtime.publishDraftPullRequest({
+              approvalReceipt: approvalReceiptForDraftProposal(proposal),
+              approvedByCallId: operationId,
+              contentSource: publicationContentSource(),
+              expectedProposalDigest: proposal.digest,
+              review: review(),
+            });
+            await record(published);
+            throw new Error("Expected the controlled publication interruption.");
+          } catch (error) {
+            if (error !== sourceError && !(error instanceof GitHubOutcomeUnknownError)) {
+              throw error;
+            }
+            return "Builder paused while recording publication. Resume this app to check its draft.";
+          }
+        },
+        resume: async () => {
+          expect(await inspectPriorAppPublication(proposal)).toBe("recorded");
+          try {
+            await inspectDraftDestination(reviewInput);
+            throw new Error("Expected the original open draft to remain selected.");
+          } catch (error) {
+            if (error instanceof GitHubOutcomeUnknownError) {
+              return "Builder is still checking the original draft.";
+            }
+            if (!(error instanceof OwnedOpenDraftReviewRequiredError)) {
+              throw error;
+            }
+            expect(error.subject).toMatchObject({
+              appId: "demo",
+              proposalDigest: proposal.digest,
+              pullRequestNumber: 7,
+              repositoryId: proposal.repositoryId,
+            });
+          }
+          const observed = await inspectPublishedPullRequest(proposal.digest);
+          if (!observed.reviewedRevision) {
+            return "Pull request #7 moved. Review its current changes before continuing.";
+          }
+          const receipt = await receipts.read(proposal.digest);
+          if (receipt?.kind !== "draft-pull-request" || receipt.status !== "succeeded") {
+            throw new Error("The exact draft publication was not recovered.");
+          }
+          await record(receipt);
+          return `Resumed pull request #${observed.reviewedTarget.pullRequestNumber} at ${observed.headSha}.`;
+        },
+      });
+      const started = await harness.call("autograph_start", {
+        clientRequestId: "start-app",
+        prompt: "Build a frontend app.",
+      });
+      const { sessionId } = started;
+      const approval = started.inputRequests?.[0];
+      if (approval?.kind !== "approval") {
+        throw new Error("Expected Builder's publication approval.");
+      }
+      expect(adapter.draftCalls).toBe(0);
+      const respond = {
+        clientRequestId: "approve-publication",
+        responses: [{ requestId: approval.requestId, response: { kind: "approve" as const } }],
+        sessionId,
+      };
+      await harness.call("autograph_respond", respond);
+      await harness.call("autograph_respond", respond);
+      expect(harness.respond).toHaveBeenCalledOnce();
+      expect(adapter.draftCalls).toBe(1);
+      expect(await receipts.read(proposal.digest)).toMatchObject({
+        status: journalInterrupted ? "pending" : "succeeded",
+      });
+      if (journalInterrupted) {
+        receipts.rejectTerminal = false;
+        adapter.throwDraftReadBack = true;
+        const unavailable = await harness.call("autograph_send", {
+          clientRequestId: "check-draft",
+          message: "Continue with my app.",
+          sessionId,
+        });
+        expect(unavailable.events).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ text: "Builder is still checking the original draft." }),
+          ]),
+        );
+        expect(await receipts.read(proposal.digest)).toMatchObject({ status: "pending" });
+        expect(adapter.draftCalls).toBe(1);
+        adapter.throwDraftReadBack = false;
+      }
+      const resume = {
+        clientRequestId: "resume-publication",
+        message: "Continue with my app.",
+        sessionId,
+      };
+      await harness.call("autograph_send", resume);
+      await harness.call("autograph_send", resume);
+      expect(harness.send).toHaveBeenCalledTimes(journalInterrupted ? 2 : 1);
+      const saved = await harness.call("autograph_get", { sessionId });
+      expect(saved.sessionId).toBe(sessionId);
+      expect(saved.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ text: `Resumed pull request #7 at ${branchSha}.` }),
+        ]),
+      );
+      expect(harness.start).toHaveBeenCalledOnce();
+      expect(await receipts.read(proposal.digest)).toMatchObject({
+        branchSha,
+        pullRequestNumber: 7,
+        recoveredFromPending: journalInterrupted,
+        status: "succeeded",
+      });
+      expect(readPull).toHaveBeenCalledWith(
+        expect.objectContaining({ headSha: branchSha, pullRequestNumber: 7 }),
+      );
+      expect(record).toHaveBeenCalledTimes(journalInterrupted ? 1 : 2);
+      providerHead = "9".repeat(40);
+      const moved = await harness.call("autograph_send", {
+        ...resume,
+        clientRequestId: "read-moved-draft",
+      });
+      expect(moved.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            text: "Pull request #7 moved. Review its current changes before continuing.",
+          }),
+        ]),
+      );
+      await expect(
+        inspectDraftDestination({
+          ...reviewInput,
+          ownedAppRevision: { ...reviewInput.ownedAppRevision, appId: "another-app" },
+        }),
+      ).rejects.toThrow("belongs to another app or destination");
+      expect(adapter.draftCalls).toBe(1);
+      expect(record).toHaveBeenCalledTimes(journalInterrupted ? 1 : 2);
+    },
+  );
 
   it("rejects corrupted or cross-proposal journals before provider calls", async () => {
     const adapter = new Adapter();

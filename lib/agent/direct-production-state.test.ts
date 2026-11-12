@@ -325,7 +325,10 @@ describe("direct Production Build authority", () => {
           throw new Error("The planned app must have a reviewable Arrusted release.");
         }
         const subject = preflight.directProduction;
-        const input = { directProduction: subject, implementationFiles: [cue] };
+        const input = {
+          directProduction: subject,
+          implementationFiles: [{ ...cue, path: appliedCuePath }],
+        };
         const { events, initial, run } = originalBuildHarness(input);
         const pending = await run(initial, {
           message: "Build and release this app to Arrusted Production.",
