@@ -181,6 +181,7 @@ export default defineTool({
         current.appSpec.appId,
         current.proposal.target.plan.source.schema.kind,
         implementationFiles,
+        current.proposal.target.plan.source.workspacePath,
       );
       architectureDiagnostics = implementationArchitectureDiagnostics(
         implementationFiles,

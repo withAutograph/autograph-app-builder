@@ -357,9 +357,24 @@ source and historical-baseline provenance remain intact. The complete resulting
 diff exposes both destination before content and validated after content;
 binary artifacts have explicit metadata and content omissions. Read each side's
 content with `change_set_status` as needed, then accept the fresh change set.
+Follow the accepted review's `nextCall` to seal its current-session review
+reference. Builder resolves the source and destination from that same saved
+review and rechecks the exact candidate. Follow the seal's returned publication
+call through the existing approval flow.
 Preparation invalidates the previous review and sealed proposal while retaining
-its mutation journal. A pending or potentially partial prior publication must
-be recovered before another destination review.
+its mutation journal. For an acquired existing repository, Builder also retains
+the sealed lookup context in the original logical session, independently of the
+current review or compiled-source association. After a re-plan, Builder uses it
+to verify the canonical publication journal and GitHub. An open PR continues in
+the same draft. An owned merge into the current default branch supports a new
+app-only revision. A pending or potentially partial prior publication must be
+recovered before another destination review. A seal alone grants no authority.
+
+If GitHub accepted a draft but Builder could not record its source association,
+follow the returned `recoverAppliedPublication` call. It reads the exact
+successful journal receipt and retries only the association. It cannot dispatch
+a GitHub write or use a different app, session or revision. Managed Production
+setup still verifies the published source before applying its effects.
 A starter-created app's first destination review includes its complete
 app-owned source even when its latest repair diff contains only a few files.
 Builder includes the retained registration and dependency changes against the

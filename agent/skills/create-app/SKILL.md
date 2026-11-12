@@ -149,6 +149,11 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    Use the Arrusted CUE/PostgreSQL data boundary for owned durable data: derive
    the CUE model and policies from the accepted product decisions, compile the
    checked release, and implement the authenticated server reads and actions.
+   For new CUE-backed Arrusted apps, build product features on the generator's
+   protected request proxy, server-only data context, and Next release tracing.
+   Put feature-specific reads and mutations in separate modules; do not author
+   replacements for the scaffold's `proxy.ts`, `next.config.ts`,
+   `app/data/protected-config.ts`, or `app/data/context.ts`.
    The user supplies product meaning, not schema source or backend code.
    When accepted access requirements name application roles, declare the CUE
    `authorization.roles` and matching model/operation/field/row `grants` in the
@@ -160,6 +165,16 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    does not declare a schema grant. Repair missing compiled roles and grants
    through ordinary app implementation only when the accepted requirements
    actually name those roles, then regenerate the checked release.
+   For each screen backed by generated data, use the smallest explicit, typed
+   `select` on server-side reads. For example, a list showing a title can use
+   `record.list({ select: ["id", "title"] as const })` through the authenticated
+   app DAL. Match that projection, filters, and sort fields to the screen's
+   intended role and row policy. Omitting `select` can request metadata or other
+   fields the reader cannot access, even if the UI never shows them. Request a
+   field such as `$version` only where the behavior needs it and the checked
+   policy grants it. When exercising data behavior, use the actual page read
+   under the intended app actor after a save, including the list or detail page
+   after reload. Fix an overbroad read before considering a policy change.
    An authenticated app may intentionally have no business roles. Preserve its
    accepted authentication and access design, including an empty role list.
    If local setup rejects that list, treat it as a platform/local runtime setup

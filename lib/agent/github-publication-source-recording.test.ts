@@ -200,11 +200,6 @@ vi.mock("./compiled-operator-artifacts", () => ({
   assertReconciliationCompletionOwnerForSession: hooks.assertOwner,
 }));
 
-const tools = [
-  { name: "initial publication", publish: hooks.publish, tool: publishTool },
-  { name: "existing draft update", publish: hooks.update, tool: updateTool },
-  { name: "draft reconciliation", publish: hooks.reconcile, tool: reconcileTool },
-];
 const input = {
   expectedProposalDigest: "a".repeat(64),
   approvalReceipt: {
@@ -218,6 +213,30 @@ const input = {
     subjectDigest: "a".repeat(64),
   },
 };
+type PublicationContext = Parameters<typeof publishTool.execute>[1];
+const tools = [
+  {
+    name: "initial publication",
+    publish: hooks.publish,
+    tool: publishTool,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the tool's existing execution return contract.
+    execute: (context: PublicationContext) => publishTool.execute(input, context),
+  },
+  {
+    name: "existing draft update",
+    publish: hooks.update,
+    tool: updateTool,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the tool's existing execution return contract.
+    execute: (context: PublicationContext) => updateTool.execute(input, context),
+  },
+  {
+    name: "draft reconciliation",
+    publish: hooks.reconcile,
+    tool: reconcileTool,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the tool's existing execution return contract.
+    execute: (context: PublicationContext) => reconcileTool.execute(input, context),
+  },
+];
 const ctx = {
   callId: "approved-publication-call",
   session: { id: "adapter-session", auth: { principal: "original-owner" } },
@@ -368,7 +387,7 @@ describe("publication records actual source for its compiled app release", () =>
         // SAFETY: The mocked Eve/publication ports consume only the supplied session, call ID and sandbox fields.
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Framework fixture supplies precisely the production execute path's consumed context.
         const result = await executeInPublicationSession(
-          async () => await entry.tool.execute(input, ctx as never),
+          async () => await entry.execute(ctx as never),
         );
         expect(result).toMatchObject({ ...publication, appSourceRecording: { status } });
         expect(hooks.record).toHaveBeenCalledWith(
@@ -407,7 +426,7 @@ describe("publication records actual source for its compiled app release", () =>
       // SAFETY: The mocked Eve/publication ports consume only the supplied session, call ID and sandbox fields.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Framework fixture supplies precisely the production execute path's consumed context.
       const result = await executeInPublicationSession(
-        async () => await entry.tool.execute(input, ctx as never),
+        async () => await entry.execute(ctx as never),
       );
       expect(result).toMatchObject({
         ...publication,
@@ -423,7 +442,7 @@ describe("publication records actual source for its compiled app release", () =>
       // SAFETY: The mocked Eve/publication ports consume only the supplied session, call ID and sandbox fields.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Framework fixture supplies precisely the production execute path's consumed context.
       await expect(
-        executeInPublicationSession(async () => await entry.tool.execute(input, ctx as never)),
+        executeInPublicationSession(async () => await entry.execute(ctx as never)),
       ).rejects.toThrow("publication outcome unknown");
       expect(hooks.record).not.toHaveBeenCalled();
       expect(hooks.candidate).toEqual(candidateBefore);
@@ -436,7 +455,7 @@ describe("publication records actual source for its compiled app release", () =>
       // SAFETY: The mocked Eve/publication ports consume only the supplied session, call ID and sandbox fields.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Framework fixture supplies precisely the production execute path's consumed context.
       await expect(
-        executeInPublicationSession(async () => await entry.tool.execute(input, ctx as never)),
+        executeInPublicationSession(async () => await entry.execute(ctx as never)),
       ).rejects.toThrow("approval mismatch");
       expect(entry.publish).not.toHaveBeenCalled();
       expect(hooks.record).not.toHaveBeenCalled();

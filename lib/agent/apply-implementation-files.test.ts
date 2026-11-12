@@ -1,6 +1,7 @@
 /* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 import { describe, expect, it, vi } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
+import type { ApplyCommandExecutor } from "../repository/target-apply";
 
 import {
   assertExistingAppImplementationFiles,
@@ -27,7 +28,228 @@ const sandboxWithWriter = (writeTextFile: SandboxSession["writeTextFile"]): Sand
   resolvePath: unexpectedSandboxOperation,
 });
 
+const scaffoldAppId = "example";
+const scaffoldWorkspace = `apps/${scaffoldAppId}`;
+const scaffoldCue = `.config/app-specs/${scaffoldAppId}.cue`;
+const appCue = `${scaffoldWorkspace}/schema/${scaffoldAppId}.cue`;
+const manifest = `${scaffoldWorkspace}/package.json`;
+const nextConfig = `${scaffoldWorkspace}/next.config.ts`;
+const nextJavaScriptConfig = `${scaffoldWorkspace}/next.config.js`;
+const nextModuleConfig = `${scaffoldWorkspace}/next.config.mjs`;
+const proxy = `${scaffoldWorkspace}/proxy.ts`;
+const protectedConfig = `${scaffoldWorkspace}/app/data/protected-config.ts`;
+const protectedContext = `${scaffoldWorkspace}/app/data/context.ts`;
+const queries = `${scaffoldWorkspace}/app/data/queries.ts`;
+const appPage = `${scaffoldWorkspace}/app/page.tsx`;
+const appSpec = { path: "prototype/example/app-spec.md", sha256: "a".repeat(64) };
+const commandSucceeded = { exitCode: 0, stderr: "", stdout: "scaffold receipt" };
+const scaffoldProposal: Parameters<ApplyCommandExecutor>[0]["proposal"] = {
+  blockers: [],
+  contract: { appId: scaffoldAppId, appSpec, version: 1 },
+  mutations: [],
+  plan: {
+    product: { appSpec },
+    source: {
+      packageName: "@autograph/example",
+      runtime: "nextjs",
+      schema: { kind: "none" },
+      workspacePath: scaffoldWorkspace,
+    },
+    topology: {
+      configPath: "microfrontends.json",
+      packageName: "@autograph/example",
+      projectName: "apps-example",
+      routes: ["/example", "/example/:path*"],
+    },
+  },
+};
+
+const scaffoldSandbox = () => {
+  const files = new Map<string, string>();
+  const read = (path: string) => files.get(`repository/${path}`);
+  const write = (path: string, content: string) => files.set(`repository/${path}`, content);
+  const sandbox: SandboxSession = {
+    ...sandboxWithWriter(async ({ path, content }) => {
+      files.set(path, content);
+      await Promise.resolve();
+    }),
+    readBinaryFile: async ({ path }) => {
+      const content = files.get(path);
+      return await Promise.resolve(content === undefined ? null : Buffer.from(content));
+    },
+    readTextFile: async ({ path }) => await Promise.resolve(files.get(path) ?? null),
+    writeBinaryFile: async ({ path, content }) => {
+      files.set(path, Buffer.from(content).toString("utf-8"));
+      await Promise.resolve();
+    },
+    removePath: async ({ path }) => {
+      files.delete(path);
+      await Promise.resolve();
+    },
+    run: vi.fn<SandboxSession["run"]>().mockResolvedValue(commandSucceeded),
+  };
+  const apply = async (
+    executor: ApplyCommandExecutor,
+    changes: Parameters<typeof withImplementationFiles>[1],
+  ) =>
+    await withImplementationFiles(executor, changes, { reconcileNewWorkspace: true })({
+      appId: scaffoldAppId,
+      applyRoot: "/workspace/repository",
+      proposal: scaffoldProposal,
+      sandbox,
+    });
+  return { apply, read, write };
+};
+
 describe("approval-bound implementation files", () => {
+  it.each(["app-local", "scaffold"] as const)(
+    "generates and retains protected runtime files before product apply from a %s CUE",
+    async (form) => {
+      const fixture = scaffoldSandbox();
+      const source = form === "app-local" ? appCue : scaffoldCue;
+      const submittedCue = "package inventory\n";
+      const generatedCue = "package inventory\n\n";
+      const generatedProxy = "export const proxy = createProtectedNextProxy(verification);";
+      const generatedTracing = "export default nextAppConfig({ outputFileTracingIncludes });";
+      const generatedBoundary = "export function readProtectedAppBoundary() {}";
+      const generatedContext = "export const context = readVerifiedNextAppSession();";
+      const runGenerator: ApplyCommandExecutor = async () => {
+        expect(fixture.read(scaffoldCue)).toBe(submittedCue);
+        expect(fixture.read(appCue)).toBeUndefined();
+        fixture.write(appCue, generatedCue);
+        fixture.write(proxy, generatedProxy);
+        fixture.write(nextConfig, generatedTracing);
+        fixture.write(protectedConfig, generatedBoundary);
+        fixture.write(protectedContext, generatedContext);
+        fixture.write(
+          manifest,
+          JSON.stringify({
+            dependencies: {
+              "@autograph/generated-app-runtime": "workspace:*",
+              "@autograph/platform-microfrontends": "workspace:*",
+            },
+            devDependencies: { "@autograph/next-config": "workspace:*" },
+          }),
+        );
+        return await Promise.resolve(commandSucceeded);
+      };
+      await expect(
+        fixture.apply(runGenerator, [
+          { path: source, content: submittedCue },
+          { path: proxy, operation: "delete" },
+          { path: nextConfig, content: "export default nextAppConfig();" },
+          { path: nextJavaScriptConfig, content: "module.exports = {};" },
+          { path: nextModuleConfig, content: "export default {};" },
+          { path: protectedConfig, content: "export const bypass = true;" },
+          { path: protectedContext, operation: "delete" },
+          { path: queries, content: "export const readInventory = async () => [];" },
+          { path: appPage, content: "export default function Page() { return 'Inventory'; }" },
+          { path: manifest, content: '{"dependencies":{"server-only":"catalog:"}}' },
+        ]),
+      ).resolves.toEqual(commandSucceeded);
+      expect(fixture.read(scaffoldCue)).toBe(form === "app-local" ? undefined : submittedCue);
+      expect(fixture.read(appCue)).toBe(generatedCue);
+      expect(fixture.read(proxy)).toBe(generatedProxy);
+      expect(fixture.read(nextConfig)).toBe(generatedTracing);
+      expect(fixture.read(nextJavaScriptConfig)).toBeUndefined();
+      expect(fixture.read(nextModuleConfig)).toBeUndefined();
+      expect(fixture.read(protectedConfig)).toBe(generatedBoundary);
+      expect(fixture.read(protectedContext)).toBe(generatedContext);
+      expect(fixture.read(queries)).toContain("readInventory");
+      expect(fixture.read(appPage)).toContain("Inventory");
+      expect(JSON.parse(fixture.read(manifest) ?? "{}")).toMatchObject({
+        dependencies: {
+          "@autograph/generated-app-runtime": "workspace:*",
+          "@autograph/platform-microfrontends": "workspace:*",
+          "server-only": "catalog:",
+        },
+        devDependencies: { "@autograph/next-config": "workspace:*" },
+      });
+    },
+  );
+
+  it("restores the existing scaffold CUE when the generator fails", async () => {
+    const fixture = scaffoldSandbox();
+    fixture.write(scaffoldCue, "package previous\n");
+    const failure = { exitCode: 1, stderr: "invalid CUE", stdout: "" };
+    const runGenerator: ApplyCommandExecutor = async () => {
+      expect(fixture.read(scaffoldCue)).toBe("package invalid\n");
+      return await Promise.resolve(failure);
+    };
+    await expect(
+      fixture.apply(runGenerator, [
+        { path: appCue, content: "package invalid\n" },
+        { path: appPage, content: "Unapplied product page" },
+      ]),
+    ).resolves.toEqual(failure);
+    expect(fixture.read(scaffoldCue)).toBe("package previous\n");
+    expect(fixture.read(appCue)).toBeUndefined();
+    expect(fixture.read(appPage)).toBeUndefined();
+  });
+
+  it("compiles the app-local schema when both forms are supplied and retains the authored root file", async () => {
+    const fixture = scaffoldSandbox();
+    const localCue = "package app_local\n";
+    const rootCue = "package authored_root\n";
+    const runGenerator: ApplyCommandExecutor = async () => {
+      expect(fixture.read(scaffoldCue)).toBe(localCue);
+      return await Promise.resolve(commandSucceeded);
+    };
+    await expect(
+      fixture.apply(runGenerator, [
+        { path: scaffoldCue, content: rootCue },
+        { path: appCue, content: localCue },
+      ]),
+    ).resolves.toEqual(commandSucceeded);
+    expect(fixture.read(scaffoldCue)).toBe(rootCue);
+    expect(fixture.read(appCue)).toBe(localCue);
+  });
+
+  it.each(["static", "custom"] as const)(
+    "keeps authored config and proxy for a %s generator without the protected foundation",
+    async (kind) => {
+      const fixture = scaffoldSandbox();
+      const runGenerator: ApplyCommandExecutor = async () => {
+        fixture.write(nextConfig, "generated config");
+        fixture.write(proxy, "generated proxy");
+        if (kind === "custom") {
+          fixture.write(appCue, "package custom_generator\n");
+        }
+        return await Promise.resolve(commandSucceeded);
+      };
+      const changes: Parameters<typeof withImplementationFiles>[1][number][] = [
+        { path: nextConfig, content: "authored config" },
+        { path: nextModuleConfig, content: "authored module config" },
+        { path: proxy, content: "authored proxy" },
+      ];
+      if (kind === "custom") {
+        changes.push({ path: appCue, content: "package custom\n" });
+      }
+      await expect(fixture.apply(runGenerator, changes)).resolves.toEqual(commandSucceeded);
+      expect(fixture.read(nextConfig)).toBe("authored config");
+      expect(fixture.read(nextModuleConfig)).toBe("authored module config");
+      expect(fixture.read(proxy)).toBe("authored proxy");
+      if (kind === "custom") {
+        expect(fixture.read(appCue)).toBe("package custom\n");
+      }
+    },
+  );
+
+  it("retains a JavaScript config when a protected generator emitted no TypeScript config", async () => {
+    const fixture = scaffoldSandbox();
+    const runGenerator: ApplyCommandExecutor = async () => {
+      fixture.write(protectedConfig, "export function readProtectedAppBoundary() {} ");
+      return await Promise.resolve(commandSucceeded);
+    };
+    await expect(
+      fixture.apply(runGenerator, [
+        { path: scaffoldCue, content: "package custom\n" },
+        { path: nextJavaScriptConfig, content: "module.exports = { custom: true };" },
+      ]),
+    ).resolves.toEqual(commandSucceeded);
+    expect(fixture.read(nextJavaScriptConfig)).toBe("module.exports = { custom: true };");
+  });
+
   it("writes validated files into the successful apply overlay only", async () => {
     const files = implementationFilesSchema.parse([
       {
@@ -43,6 +265,8 @@ describe("approval-bound implementation files", () => {
         content: "CREATE TABLE drafts (id text PRIMARY KEY);",
         path: "apps/stock-exceptions/db/migrations/001.sql",
       },
+      { content: "export const proxy = customIngress;", path: "apps/stock-exceptions/proxy.ts" },
+      { content: "export default {};", path: "apps/stock-exceptions/next.config.mjs" },
     ]);
     // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const writeTextFile = vi.fn(() => Promise.resolve());

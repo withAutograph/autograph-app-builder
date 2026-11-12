@@ -94,6 +94,16 @@ to repair in the shared workflow, not work for the evaluator to do privately.
   database authority on the server. Browser inputs cannot supply trusted actor,
   tenant or reviewer identities. Server Actions own workflows, input validation,
   safe errors and business authorization beyond schema policy.
+- On generated-data reads, select the fields the page actually uses with an
+  explicit typed projection, for example
+  `record.list({ select: ["id", "title"] as const })`. The generated API
+  authorizes the complete projection. A default projection can include business
+  fields and metadata that the page's role cannot read. Check the projection,
+  filter and sort fields against the compiled policy for the intended reader.
+  Add metadata such as `$version` only when the product uses it and the policy
+  grants it. Exercise the same page read as that actor after a write and reload
+  when checking persistence; an administrator's read proves neither the page
+  behavior nor the reader's access.
 - Use repository-owned authenticated disposable database tooling for tests.
   Synthetic fixture records are test data, not a demo fallback in the product.
   Do not add host/environment gates that bypass normal authentication.

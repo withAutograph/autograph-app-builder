@@ -21,6 +21,13 @@ const portCommands: Record<PackageManager, string> = {
   npm: "npm exec --no -- microfrontends port",
   yarn: "yarn run microfrontends port",
 };
+const generatedNextDev = "next dev --hostname 0.0.0.0 --port $(microfrontends port)";
+const nextCommands: Record<PackageManager, readonly string[]> = {
+  bun: ["x", "--no-install", "next"],
+  pnpm: ["exec", "next"],
+  npm: ["exec", "--no", "--", "next"],
+  yarn: ["exec", "next"],
+};
 export interface PreviewLaunchRequest {
   command?: { executable: string; args: string[] };
   landingPath?: string;
@@ -35,6 +42,7 @@ interface ResolvedPreviewLaunch {
   landingPath: string;
   port: number;
   portCommand?: string;
+  portDiscoveryFallback?: ResolvedPreviewLaunch["command"];
 }
 
 /** Prefer the app's repository-owned launch settings. Explicit commands remain available. */
@@ -86,18 +94,25 @@ export const resolvePreviewLaunch = async (input: {
   };
   if (request.port === undefined && /\bmicrofrontends\s+port\b/u.test(devScript)) {
     launch.portCommand = portCommands[manager];
+    if (devScript === generatedNextDev) {
+      launch.portDiscoveryFallback = {
+        executable: manager,
+        args: [...nextCommands[manager], "dev", "--hostname", "0.0.0.0", "--port", String(port)],
+      };
+    }
   }
   return launch;
 };
 
 /** Run the same port lookup used by the app script after workspace dependencies are present. */
-export const resolvePreviewLaunchPort = async (
-  launch: { cwd: string; port: number; portCommand?: string },
+export const finalizePreviewLaunch = async (
+  launch: ResolvedPreviewLaunch,
   sandbox: Pick<SandboxSession, "run">,
   signal: AbortSignal,
-): Promise<number> => {
+): Promise<ResolvedPreviewLaunch> => {
+  signal.throwIfAborted();
   if (launch.portCommand === undefined) {
-    return launch.port;
+    return launch;
   }
   const result = await sandbox.run({
     command: launch.portCommand,
@@ -106,10 +121,18 @@ export const resolvePreviewLaunchPort = async (
   });
   signal.throwIfAborted();
   const port = previewPort.safeParse(Number(result.stdout.trim()));
-  if (result.exitCode !== 0 || !port.success) {
-    throw new Error(
-      "The repository's microfrontends port command did not return a port for this app. Check its local app registration before restarting preview.",
-    );
+  if (result.exitCode === 0 && port.success) {
+    return { ...launch, port: port.data };
   }
-  return port.data;
+  if (launch.portDiscoveryFallback !== undefined) {
+    return {
+      ...launch,
+      command: launch.portDiscoveryFallback,
+      adjustment:
+        "Started the generated Next app on a private sandbox port after port discovery failed.",
+    };
+  }
+  throw new Error(
+    "The repository's microfrontends port command did not return a port for this app. Check its local app registration before restarting preview.",
+  );
 };

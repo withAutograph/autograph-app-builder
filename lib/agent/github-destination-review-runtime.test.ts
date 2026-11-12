@@ -1,7 +1,12 @@
 /* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing test fixtures and asserted runtime boundaries. */
 /* oxlint-disable sonarjs/no-wildcard-import -- Type-only namespaces preserve the complete vi.importOriginal module contracts. */
+/* oxlint-disable sonarjs/no-internal-api-use -- Execute real durable publication state in a test Eve session. */
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import {
+  ContextContainer,
+  contextStorage,
+} from "../../node_modules/eve/dist/src/context/container.js";
 
 import { composeGitHubPublicationRuntime } from "./github-publication-runtime";
 import {
@@ -27,13 +32,17 @@ import type {
   GitHubPublicationReceiptStore,
   ImmutableGitHubSourceReceipt,
   GitHubMutationPendingReceipt,
+  GitHubMutationReceipt,
 } from "../repository/github-publication";
 import type { GitHubPublicationProposal } from "../repository/postgres-github-publication-store";
 import { createReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
 import type { NormalizedChangeSet } from "../repository/reviewed-change-set";
 import type * as FirstAppCompositionModule from "../repository/first-app-publication-composition";
 import type { SourceReceiptEvidence } from "../repository/source-receipt";
-import { LEGACY_SOURCE_RECEIPT_VERSION } from "../repository/source-receipt";
+import {
+  inspectExistingRepositorySnapshotReceipt,
+  LEGACY_SOURCE_RECEIPT_VERSION,
+} from "../repository/source-receipt";
 import { SUPPORTED_TEMPLATE_ADAPTER } from "../repository/supported-template";
 import prepareDraftReview from "../../agent/tools/prepare_github_draft_review";
 import sealDraftProposal from "../../agent/tools/seal_github_draft_pr_proposal";
@@ -53,15 +62,17 @@ interface DestinationReviewToolPorts {
   runtime?: GitHubPublicationRuntime;
   observed?: { files: { path: string; digest: string; mode: string }[]; treeDigest: string };
   changeSet?: NormalizedChangeSet;
-  target?: {
-    destination: {
-      owner: string;
-      name: string;
-      repositoryId: string;
-      installationId: string;
-      defaultBranch: string;
-    };
-  };
+  target?:
+    | { githubSource: ImmutableGitHubSourceReceipt }
+    | {
+        destination: {
+          owner: string;
+          name: string;
+          repositoryId: string;
+          installationId: string;
+          defaultBranch: string;
+        };
+      };
 }
 const toolPorts = vi.hoisted((): DestinationReviewToolPorts => ({}));
 const firstAppComposition = vi.hoisted(() => ({
@@ -84,14 +95,14 @@ vi.mock("./workflow-state", async (original) => {
     updateExactWorkflow: (input: {
       expected: AppBuilderWorkflowState;
       operation: string;
-      transition: () => typeof toolPorts.state;
+      transition: (current: AppBuilderWorkflowState) => typeof toolPorts.state;
     }) => {
       const current = toolPorts.state;
       if (current === undefined) {
         throw new Error("Missing tool workflow fixture");
       }
       actual.assertExactWorkflowState(current, input.expected, input.operation);
-      toolPorts.state = input.transition();
+      toolPorts.state = input.transition(current);
     },
   };
 });
@@ -122,6 +133,7 @@ vi.mock("../../agent/tools/change_set_status", async (original) => ({
     changeSet: toolPorts.changeSet,
     observed: toolPorts.observed,
   }),
+  exactNormalizedChangeSet: () => toolPorts.changeSet,
 }));
 
 const hash = (
@@ -535,6 +547,161 @@ describe("saved first publication destination review", () => {
 });
 
 describe("same-session post-merge destination review", () => {
+  it.each([
+    { status: "merged", reviewMode: "reset" },
+    { status: "open", reviewMode: "reset" },
+    { status: "open", reviewMode: "initial-review" },
+    { status: "open", reviewMode: "app-review" },
+    { status: "open", reviewMode: "older-pending" },
+  ] as const)(
+    "recovers the $status draft with $reviewMode after its source association fails",
+    async ({ status, reviewMode }) => {
+      const f = await ownedRevisionTool(false, false);
+      delete toolPorts.prior;
+      toolPorts.target = { githubSource: source };
+      const sourceReceipt = inspectExistingRepositorySnapshotReceipt({
+        sourcePath: "/retained",
+        sourceSha: source.resolvedSha,
+        sourceTree: source.resolvedTree,
+        dirtyPaths: [],
+        contents: {},
+        contract: [],
+      });
+      const revision = {
+        ...unsigned,
+        sourceReceiptDigest: sourceReceipt.digest,
+        eligibilityDigest: sourceReceipt.eligibilityDigest,
+        contractDigest: sourceReceipt.contractDigest,
+      };
+      const changeSet = { ...revision, digest: hash(revision) };
+      const currentReview = createReviewedChangeSetReceipt(changeSet, "review-current-app");
+      toolPorts.state = {
+        ...f.state,
+        sourceReceipt,
+        githubSource: source,
+        githubDestinationReview: destination,
+        reviewReceipt: currentReview,
+      };
+      toolPorts.changeSet = changeSet;
+      await contextStorage.run(new ContextContainer(), async () => {
+        const sealed = await sealDraftProposal.execute(
+          {
+            reviewReference: {
+              kind: "current-session-reviewed-change-set",
+              sessionId: f.context.session.id,
+              digest: currentReview.digest,
+            },
+            title: "Update reviewed schema",
+          },
+          f.context,
+        );
+        const latest = readToolState();
+        if (latest?.phase !== "reviewed" || latest.githubDraftProposal === undefined) {
+          throw new Error("Expected the app's sealed publication");
+        }
+        const { proposal } = latest.githubDraftProposal;
+        expect(sealed).toMatchObject({
+          nextCall: { input: { expectedProposalDigest: proposal.digest } },
+        });
+        const receipt = publishedReceipt(proposal);
+        f.readProposal.mockResolvedValue(proposal);
+        f.readReceipt.mockResolvedValue(receipt);
+        f.inspectPr.mockResolvedValue({
+          state: status,
+          draft: status === "open",
+          checks: "passed",
+          headSha: receipt.branchSha,
+          baseBranch: receipt.baseBranch,
+          mergeCommitSha: "9".repeat(40),
+        });
+        if (reviewMode === "older-pending") {
+          const newReview = createReviewedChangeSetReceipt(changeSet, "newer-unsubmitted-review");
+          toolPorts.state = { ...latest, reviewReceipt: newReview };
+          await sealDraftProposal.execute(
+            {
+              reviewReference: {
+                kind: "current-session-reviewed-change-set",
+                sessionId: f.context.session.id,
+                digest: newReview.digest,
+              },
+              title: "New review that has not been published",
+            },
+            f.context,
+          );
+          const current = readToolState();
+          const newer =
+            current?.phase === "reviewed" ? current.githubDraftProposal?.proposal : undefined;
+          expect(newer?.digest).not.toBe(proposal.digest);
+          const pending = pendingReceipt(proposal);
+          const receipts = new Map<string, GitHubMutationReceipt>([[proposal.digest, pending]]);
+          f.readProposal.mockImplementation(
+            async (digest: string) =>
+              await Promise.resolve(digest === proposal.digest ? proposal : newer),
+          );
+          f.readReceipt.mockImplementation(
+            async (digest: string) => await Promise.resolve(receipts.get(digest)),
+          );
+          f.compareAndSet.mockImplementation(async (digest, _expected, updated) => {
+            receipts.set(digest, updated);
+            return await Promise.resolve(true);
+          });
+          // oxlint-disable-next-line eslint/no-use-before-define -- The test runs after the shared provider-readback fixture is initialized.
+          f.inspectDraftPublication.mockResolvedValue(draftReadBack(proposal, "exact"));
+        } else if (reviewMode === "reset") {
+          // An ordinary re-plan retains the app and repository but drops the review and its seal.
+          const reset = { ...latest, phase: "validated" as const };
+          Reflect.deleteProperty(reset, "githubDraftProposal");
+          Reflect.deleteProperty(reset, "githubDestinationReview");
+          Reflect.deleteProperty(reset, "reviewReceipt");
+          toolPorts.state = reset;
+        } else if (reviewMode === "app-review") {
+          const current = { ...latest };
+          Reflect.deleteProperty(current, "githubDraftProposal");
+          Reflect.deleteProperty(current, "githubDestinationReview");
+          toolPorts.state = current;
+        }
+        const result = await prepareDraftReview.execute({}, f.context);
+        if (status === "open") {
+          const afterReview = {
+            tool: "prepare_github_draft_pr_reconciliation",
+            input: { pullRequestNumber: receipt.pullRequestNumber },
+          };
+          expect(result).toMatchObject({
+            status: "existing-draft-review-required",
+            pullRequestNumber: receipt.pullRequestNumber,
+            nextCall:
+              reviewMode === "app-review" ? afterReview : { tool: "accept_change_set", input: {} },
+            afterReview,
+          });
+          const continuation = readToolState();
+          expect(continuation?.publishedGitHubDraftProposalDigest).toBe(proposal.digest);
+          expect(continuation?.phase).toBe(reviewMode === "app-review" ? "reviewed" : "validated");
+          expect(continuation).not.toHaveProperty("githubDestinationReview");
+          expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+        } else {
+          expect(result).toMatchObject({
+            status: "destination-review-required",
+            nextCall: { tool: "accept_change_set", input: {} },
+          });
+          expect(readToolState()?.githubDestinationReview?.candidatePaths).toEqual(
+            ["apps/example/package.json", path].toSorted(),
+          );
+        }
+        expect(f.unexpected).not.toHaveBeenCalled();
+        if (reviewMode === "older-pending") {
+          expect(f.inspectDraftPublication).toHaveBeenCalledExactlyOnceWith(proposal);
+          expect(f.compareAndSet).toHaveBeenCalledExactlyOnceWith(
+            proposal.digest,
+            pendingReceipt(proposal).digest,
+            expect.objectContaining({ status: "succeeded", recoveredFromPending: true }),
+          );
+        } else {
+          expect(f.compareAndSet).not.toHaveBeenCalled();
+        }
+      });
+    },
+  );
+
   it.each([
     { phase: "validated", draft: true },
     { phase: "reviewed", draft: true },
@@ -967,6 +1134,16 @@ describe("same-session post-merge destination review", () => {
     expect(accepted).toMatchObject({
       validationDigest: f.state.validationReceipt.digest,
       productAcceptance: { productStatus: "unassessed" },
+      nextCall: {
+        tool: "seal_github_draft_pr_proposal",
+        input: {
+          reviewReference: {
+            kind: "current-session-reviewed-change-set",
+            sessionId: f.context.session.id,
+            digest: acceptedState.reviewReceipt.digest,
+          },
+        },
+      },
     });
     expect(f.unexpected).not.toHaveBeenCalled();
   });

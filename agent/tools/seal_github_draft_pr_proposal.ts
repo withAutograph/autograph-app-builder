@@ -11,13 +11,15 @@ import { firstAppRegistrationPaths } from "@/lib/repository/github-destination-r
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 import { exactNormalizedChangeSet } from "./change_set_status";
 import { publicationDestinationFromReview } from "@/lib/agent/github-publication-destination";
-import { currentDirectProductionGrant } from "@/lib/agent/direct-production-state";
+import { reviewedChangeSetReferenceSchema } from "@/lib/agent/review-result-summaries";
+import { retainOwnedDraftPublicationSeal } from "@/lib/agent/github-draft-publication-lineage";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
+const title = z.string().trim().min(1).max(120);
 
 export default defineTool({
   description:
-    "After prepare_github_draft_review and accept_change_set, seal the initial draft pull-request proposal against that same immutable destination snapshot with freshly verified publication permissions. For a fresh-template app use expectedDestinationReviewDigest; an acquired GitHub source uses expectedGitHubSourceDigest. Returns the canonical approvalReceipt for the reviewed subject. Pass it unchanged with expectedProposalDigest to publish_github_draft_pr to present the ordinary approval control; the receipt itself is not user consent. This performs no branch, push, pull-request, release-gate, or repository mutation.",
+    "After prepare_github_draft_review and accept_change_set, follow the review's nextCall with its current-session review reference to seal the draft against the same immutable destination. The server resolves source and destination from that review. Follow the returned nextCall to request the normal publication approval. Sealing does not publish or grant approval.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "reviewed") {
@@ -33,7 +35,16 @@ export default defineTool({
         ? state.sourceReceipt.sourceKind === "fresh-template" &&
           state.githubDestinationReview.digest === input.expectedDestinationReviewDigest
         : state.githubSource.digest === input.expectedGitHubSourceDigest;
-    if (!sourceMatches || state.reviewReceipt.digest !== input.expectedReviewDigest) {
+    const { reviewReference } = input;
+    const reviewMatches =
+      reviewReference === undefined
+        ? sourceMatches && state.reviewReceipt.digest === input.expectedReviewDigest
+        : reviewReference.sessionId === ctx.session.id &&
+          reviewReference.digest === state.reviewReceipt.digest;
+    if (
+      !reviewMatches ||
+      (state.githubSource === undefined && state.sourceReceipt.sourceKind !== "fresh-template")
+    ) {
       throw new Error(
         "The proposal request is not bound to the exact source or destination and review receipts.",
       );
@@ -99,14 +110,18 @@ export default defineTool({
         };
       },
     });
-    const approvalReceipt = approvalReceiptForDraftProposal(proposal);
-    const release = currentDirectProductionGrant(ctx, { appId: state.appSpec.appId });
-    const reviewedProposal = { ...proposal, approvalReceipt };
-    if (release === undefined) {
-      return reviewedProposal;
+    if (state.githubSource !== undefined) {
+      retainOwnedDraftPublicationSeal({
+        appId: state.appSpec.appId,
+        sessionId: ctx.session.id,
+        installationId: state.githubDestinationReview.installation.installationId,
+        proposal,
+      });
     }
+    const approvalReceipt = approvalReceiptForDraftProposal(proposal);
     return {
-      ...reviewedProposal,
+      ...proposal,
+      approvalReceipt,
       nextCall: {
         tool: "publish_github_draft_pr" as const,
         input: { approvalReceipt, expectedProposalDigest: proposal.digest },
@@ -117,13 +132,17 @@ export default defineTool({
     .strictObject({
       expectedGitHubSourceDigest: digest.optional(),
       expectedDestinationReviewDigest: digest.optional(),
-      expectedReviewDigest: digest,
-      title: z.string().trim().min(1).max(120),
+      expectedReviewDigest: digest.optional(),
+      reviewReference: reviewedChangeSetReferenceSchema.optional(),
+      title,
     })
-    .refine(
-      (input) =>
-        (input.expectedGitHubSourceDigest === undefined) !==
-        (input.expectedDestinationReviewDigest === undefined),
-      "Supply the GitHub source digest for an acquired repository, or the destination review digest for a fresh-template app.",
-    ),
+    .refine((input) => {
+      const sourceCount = [
+        input.expectedGitHubSourceDigest,
+        input.expectedDestinationReviewDigest,
+      ].filter((value) => value !== undefined).length;
+      return input.reviewReference === undefined
+        ? input.expectedReviewDigest !== undefined && sourceCount === 1
+        : input.expectedReviewDigest === undefined && sourceCount === 0;
+    }, "Use the current-session review reference returned by Builder."),
 });
