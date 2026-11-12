@@ -11,7 +11,12 @@ The intended complete-app journey has four business phases:
 1. **Initial version and approval.** Turn the product brief into an implementation plan. Use a visual prototype
    when it helps refine the design. Present **Build this app?** through
    the existing approval card. Infer safe defaults and ask only material product
-   questions.
+   questions. A newly frozen build-ready plan keeps drafting active until the
+   card is presented or the workflow encounters a question, failure, or
+   cancellation. If the first turn ends with the plan ready and no card,
+   Builder continues in the same session. Direct Production preflight does not
+   have to precede this continuation. Explicit design-only and planning-only
+   briefs stay in draft. The card still binds the exact requested effects.
 2. **Build.** Implement the approved app, including its authenticated backend and
    persistence. Keep the private checkout and accepted session; repair concrete
    failures through supported tools. Start the applied app as soon as it can run

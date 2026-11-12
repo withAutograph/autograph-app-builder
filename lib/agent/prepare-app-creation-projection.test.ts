@@ -9,6 +9,7 @@ import {
   contextStorage,
 } from "../../node_modules/eve/dist/src/context/container.js";
 import { prepareAppCreation } from "./prepare-app-creation";
+import { currentInitialBuildAuthoring } from "./initial-build-authoring";
 import prepareAppCreationTool from "../../agent/tools/prepare_app_creation";
 import {
   requestPrivateApplyApproval,
@@ -237,6 +238,10 @@ describe("implementation routing handoff", () => {
         if (phase === "planned") {
           expect(after).toBe(current);
           expect(ports.execute).not.toHaveBeenCalled();
+          expect(currentInitialBuildAuthoring(context.session.id)).toBeUndefined();
+        } else {
+          expect(currentInitialBuildAuthoring(context.session.id)).toBe(after.proposal.digest);
+          expect(currentInitialBuildAuthoring("different-session")).toBeUndefined();
         }
       });
     },

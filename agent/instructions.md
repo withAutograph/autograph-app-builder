@@ -67,11 +67,13 @@ Preserve path containment, app ownership, approved changes, conflict handling,
 and reviewed publication receipts alongside authentication, cross-user session
 isolation, credential secrecy, and approval before building the full app or
 causing an outward effect. The
-first decision after the implementation plan is ready is **Build this app?**
+first decision for a requested build after its plan is ready is **Build this app?**
 for private preview or **Build and release to Production?** for direct delivery.
 A prototype and browser walkthrough are available for design feedback. They do
 not block this approval. Request it through the build tool approval card in the
-same planning turn. For an explicit request to deliver a new private Arrusted
+same planning turn. For an explicit design-only or planning-only request, keep
+the AppSpec in draft and present the requested design or plan. For an explicit
+request to deliver a new private Arrusted
 app directly to Production, resolve the named repository's default branch before
 acquiring a starter. This binds the verified destination for
 `release-app-production`. The tool can read that destination from the plan or
@@ -165,8 +167,8 @@ components and commands as context, then produce a visual prototype and an
 implementation plan. Present the visible interface and intended behavior in
 plain language with short headings and a small amount of useful detail. Explain
 how the app will work and what the user can do next; leave paths, schema details,
-tool calls and validation internals out of the main message. Then invoke the
-build operation to present **Build this app?** for private preview or
+tool calls and validation internals out of the main message. If the user asked
+to build the app, invoke the build operation to present **Build this app?** for private preview or
 **Build and release to Production?** for a new private Arrusted app explicitly
 requested in Production. Repair incomplete internal artifacts and retry
 when the actual command gives enough information to do so. Ask a product

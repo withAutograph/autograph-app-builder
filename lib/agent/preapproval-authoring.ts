@@ -62,7 +62,7 @@ const marker =
   /\n\[autograph-preapproval-authoring:(?<operationId>[a-z0-9_:-]+):(?<nonce>[a-f0-9]{64})\]$/u;
 export const readInternalAuthoringMarker = (message: string) => marker.exec(message)?.groups;
 export const internalAuthoringMessage = (operationId: string, nonce: string) =>
-  "Continue drafting the accepted app's complete implementation and tests through supported planning tools. Inspect the actual current draft when needed. Do not stop at an inspection summary or list of app-owned work. When correcting a declined current draft, freeze a successor proposal; do not retry the unchanged declined Build. Present the structured Build approval through the build tool before any implementation write. For an explicit direct Production request on an eligible private Arrusted app, include the current Production subject on that Build card. This is drafting continuation only: it grants no Build, publication, provider or release approval and changes no product requirements." +
+  "Continue drafting the accepted app's complete implementation and tests from the creator's brief. Inspect the actual current draft when needed. When correcting a declined current draft, freeze a successor proposal; do not retry the unchanged declined Build. For a build request, call apply_app_creation with the drafted files to display the structured Build card in this turn. A message saying the card is next does not display it. For an explicit direct Production request on an eligible private Arrusted app, obtain the current subject with release-app-production and include it on that same Build card. Respect an explicit request to stop at design or planning. This continuation grants no Build, publication, provider or release approval." +
   `\n[autograph-preapproval-authoring:${operationId}:${nonce}]`;
 
 const authoringPhases = new Set([
@@ -82,6 +82,7 @@ export const decidePreapprovalAuthoring = (input: {
   blocked: boolean;
   sourcePrerequisite: boolean;
   correction?: PlannedAuthoringCorrection;
+  initialBuildProposalDigest?: string;
   directProductionProposalDigest?: string;
 }): PreapprovalAuthoringDecision => {
   const base = {
@@ -103,12 +104,15 @@ export const decidePreapprovalAuthoring = (input: {
   }
   const correcting =
     current.phase === "planned" && input.correction?.proposalDigest === current.proposal.digest;
+  const draftingInitial =
+    current.phase === "planned" && input.initialBuildProposalDigest === current.proposal.digest;
   const draftingProduction =
     current.phase === "planned" && input.directProductionProposalDigest === current.proposal.digest;
-  if ("proposal" in current && !correcting && !draftingProduction) {
+  const draftingBuild = draftingInitial || draftingProduction;
+  if ("proposal" in current && !correcting && !draftingBuild) {
     return { ...base, decision: "planned" };
   }
-  if (!authoringPhases.has(current.phase) && !correcting && !draftingProduction) {
+  if (!authoringPhases.has(current.phase) && !correcting && !draftingBuild) {
     return { ...base, decision: "blocked" };
   }
   // Legacy inline AppSpecs and current durable artifact references are already
@@ -151,7 +155,10 @@ export const decidePreapprovalAuthoring = (input: {
           phase: current.phase,
           dependencyReceipt: "dependencyReceipt" in current ? current.dependencyReceipt : undefined,
           identityReceipt: "identityReceipt" in current ? current.identityReceipt : undefined,
+          // A verified Production preflight advances drafting even before the card opens.
           directProductionProposalDigest: draftingProduction ? current.proposal.digest : undefined,
+          initialBuildProposalDigest:
+            draftingInitial && !draftingProduction ? current.proposal.digest : undefined,
         }),
       )
       .digest("hex"),

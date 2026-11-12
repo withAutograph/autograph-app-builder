@@ -4,7 +4,11 @@ import { ExistingApplicationChangesRequiredError } from "@/lib/repository/existi
 export const continuePrototypePlanning = async (plan: () => Promise<void>) => {
   try {
     await plan();
-    return { implementationPlanReady: true as const };
+    return {
+      implementationPlanReady: true as const,
+      nextAction:
+        "For a build request, draft the app files and call apply_app_creation to present the Build approval before ending the turn. If the creator asked for direct Arrusted Production, obtain the current subject from release-app-production and include it in that call. For an explicit design-only or planning-only request, show the requested design or plan.",
+    };
   } catch (error) {
     if (!(error instanceof ExistingApplicationChangesRequiredError)) {
       throw error;

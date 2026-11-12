@@ -134,6 +134,8 @@ after the complete AppSpec is internally validated from stated decisions and
 safe revisable defaults. Omit the marker or use `status: "draft"` while a
 materially product-changing choice remains unresolved. Other metadata is
 ignored by readiness recognition and cannot supply execution authority.
+Use draft status for explicit design-only or planning-only requests. Build-ready
+starts the handoff to the Build approval for a requested implementation.
 
 Repository creation derives identity and default routes from the app ID. The
 AppSpec is an optional product-intent snapshot; a convention CUE input selects
@@ -169,7 +171,7 @@ Mark build-ready only when:
   non-goals; and
 - the walkthrough is complete enough for product review.
 
-After those conditions pass, record explicit readiness with status
+For a requested build, after those conditions pass, record explicit readiness with status
 `build-ready`. When the design changes, update the internal specification and
 plan silently. Do not turn internal recording or preparation into another user
 approval.

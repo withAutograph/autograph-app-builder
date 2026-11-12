@@ -72,12 +72,23 @@ describe("preapproval drafting intent", () => {
   it("records a running turn as working, never dispatchable", () => {
     expect(decidePreapprovalAuthoring({ ...input(), completed: false }).decision).toBe("working");
   });
-  it("stops at a planned proposal without a current Production preflight", () => {
+  it("stops at a planned proposal without a current Build handoff", () => {
     expect(decidePreapprovalAuthoring(input(planned())).decision).toBe("planned");
     expect(
       decidePreapprovalAuthoring({ ...input(planned()), directProductionProposalDigest: hash("f") })
         .decision,
     ).toBe("planned");
+  });
+  it("recognizes verified Production preflight as progress on the same first plan", () => {
+    const firstPlan = { ...input(planned()), initialBuildProposalDigest: hash("e") };
+    const drafting = decidePreapprovalAuthoring(firstPlan);
+    const readyForProduction = decidePreapprovalAuthoring({
+      ...firstPlan,
+      directProductionProposalDigest: hash("e"),
+    });
+    expect(drafting.decision).toBe("runnable");
+    expect(readyForProduction.decision).toBe("runnable");
+    expect(readyForProduction.scopeDigest).not.toBe(drafting.scopeDigest);
   });
   it("continues drafting for the planned proposal with a matching Production preflight", () => {
     const ready = decidePreapprovalAuthoring({
