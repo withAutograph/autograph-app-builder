@@ -1,10 +1,11 @@
 /* oxlint-disable eslint/no-nested-ternary, sonarjs/no-nested-conditional -- The fixture directly models unknown, applied and absent readback states. */
 /* oxlint-disable promise/avoid-new -- The fixture models a real serialized lease so concurrent resumes exercise ordering. */
 /* oxlint-disable eslint/require-await, unicorn/no-await-expression-member -- Async fixture ports retain rejection semantics; assertions inspect their awaited outcomes directly. */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createRepositoryProductionSetup } from "./repository-production-setup";
 import type {
   RepositoryProductionSetupPorts,
+  RepositoryProductionEffectContext,
   RepositoryProductionObservation,
 } from "./repository-production-setup";
 import type {
@@ -150,6 +151,127 @@ const fixture = () => {
     },
   };
 };
+const revisedSchemaIntent = (): RepositoryProductionIntent => {
+  if (intent.storage.kind !== "postgres") {
+    throw new Error("Fixture must have an existing database");
+  }
+  return {
+    ...intent,
+    sourceSha: "c".repeat(40),
+    storage: {
+      ...intent.storage,
+      artifactRef: "next-artifact",
+      manifestSha256: "d".repeat(64),
+      releaseId: "next-release",
+    },
+  };
+};
+
+describe("Approved existing Production schema revision", () => {
+  it("uses the original resource and only installs schema, reconciling a lost acknowledgment", async () => {
+    const f = fixture();
+    const next = revisedSchemaIntent();
+    await f.service.prepare(scope, intent);
+    const before = structuredClone(f.read()?.record);
+    const verify = vi.fn(
+      async (prior: RepositoryProductionEffectContext, candidate: RepositoryProductionIntent) => {
+        expect(prior.row.record.intent.storage).toEqual(intent.storage);
+        expect(prior.row.record.resource).toEqual(before?.resource);
+        expect(candidate).toEqual(next);
+      },
+    );
+    const assertActive = vi.fn(async () => {});
+    f.ports.schemaRevision = { grantDigest: "new-grant", verify, assertActive };
+    f.calls.length = 0;
+    f.actual.delete("install-schema");
+    f.interrupt();
+
+    await expect(f.service.prepare(scope, next)).rejects.toThrow("connection lost");
+    const { schemaRevision } = f.ports;
+    delete f.ports.schemaRevision;
+    await expect(f.service.prepare(scope, next)).rejects.toThrow(
+      "repository_production_schema_revision_unverified",
+    );
+    f.ports.schemaRevision = schemaRevision;
+    await expect(f.service.prepare(scope, next)).resolves.toMatchObject({ state: "ready" });
+
+    expect(f.calls).toEqual(["install-schema"]);
+    expect(verify).toHaveBeenCalledOnce();
+    expect(assertActive).toHaveBeenCalledOnce();
+    const saved = f.read()?.record;
+    expect(saved?.intent).toEqual(next);
+    expect(saved?.resource).toEqual(before?.resource);
+    expect(saved?.privateState).toEqual(before?.privateState);
+    expect(saved?.creatorActorId).toBe(before?.creatorActorId);
+    expect(saved?.effects["install-schema"].state).toBe("applied");
+    expect(saved?.effects["allocate-storage"]).toEqual(before?.effects["allocate-storage"]);
+    expect(saved?.effects["bind-runtime"]).toEqual(before?.effects["bind-runtime"]);
+    expect(saved?.effects["creator-access"]).toEqual(before?.effects["creator-access"]);
+    expect(saved?.effects["signup-policy"]).toEqual(before?.effects["signup-policy"]);
+  });
+
+  it("allows an ordinary setup retry after a later release replaces the guarded candidate", async () => {
+    const f = fixture();
+    const next = revisedSchemaIntent();
+    await f.service.prepare(scope, intent);
+    f.ports.schemaRevision = {
+      grantDigest: "new-grant",
+      verify: async () => {},
+      assertActive: async () => {},
+    };
+    f.actual.delete("install-schema");
+    await f.service.prepare(scope, next);
+    delete f.ports.schemaRevision;
+
+    const saved = f.read();
+    if (!saved || next.storage.kind !== "postgres") {
+      throw new Error("Fixture must have a completed schema revision");
+    }
+    const ordinary: RepositoryProductionIntent = {
+      ...next,
+      storage: { ...next.storage, artifactRef: "later-artifact", manifestSha256: "e".repeat(64) },
+    };
+    saved.record.intent = ordinary;
+    saved.record.effects["install-schema"] = { state: "idle" };
+    f.actual.delete("install-schema");
+    f.calls.length = 0;
+
+    await expect(f.service.prepare(scope, ordinary)).resolves.toMatchObject({ state: "ready" });
+    expect(f.calls).toEqual(["install-schema"]);
+    expect(f.read()?.record.resource).toEqual(saved.record.resource);
+  });
+
+  it("checks active deployment before DDL and refuses changed access or an absent database", async () => {
+    const f = fixture();
+    const next = revisedSchemaIntent();
+    const verify = vi.fn(async () => {});
+    const assertActive = vi.fn(async () => {
+      throw new Error("deployment moved");
+    });
+    const schemaRevision = { grantDigest: "new-grant", verify, assertActive };
+    f.ports.schemaRevision = schemaRevision;
+    await expect(f.service.prepare(scope, next)).rejects.toThrow(
+      "repository_production_schema_revision_unverified",
+    );
+    expect(f.read()).toBeUndefined();
+
+    delete f.ports.schemaRevision;
+    await f.service.prepare(scope, intent);
+    const before = structuredClone(f.read()?.record);
+    f.calls.length = 0;
+    f.ports.schemaRevision = schemaRevision;
+    await expect(
+      f.service.prepare(scope, { ...next, creatorRoles: ["another-role"] }),
+    ).rejects.toThrow("repository_production_schema_revision_unverified");
+    expect(f.read()?.record).toEqual(before);
+    expect(verify).not.toHaveBeenCalled();
+    await expect(f.service.prepare(scope, next)).rejects.toThrow("deployment moved");
+    expect(verify).toHaveBeenCalledOnce();
+    expect(f.calls).toEqual([]);
+    expect(f.read()?.record.resource).toEqual(before?.resource);
+  });
+});
+
 describe("Builder-owned Production setup", () => {
   it("backfills missing runtime metadata without replaying completed resources or restoring removed access", async () => {
     const f = fixture();

@@ -124,7 +124,7 @@ export const matchesDirectProductionSetupReference = (
   reference: RepositoryProductionApprovalReference,
 ): boolean =>
   [
-    subject.revision === undefined,
+    subject.revision === undefined || subject.revision.schemaChange !== undefined,
     reference.appId === subject.appId,
     reference.repositoryId === subject.repositoryId,
     reference.review.repositoryFullName === subject.repositoryFullName,

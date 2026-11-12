@@ -26,9 +26,16 @@ export const repositoryProductionNativeStatusSchema = z
         repositoryFullName: z.string().regex(/^[^/\s]+\/[^/\s]+$/u),
       })
       .optional(),
-    deployment: z.strictObject({
-      state: z.enum(["active", "not-observed", unavailable]),
-    }),
+    deployment: z
+      .strictObject({
+        state: z.enum(["active", "not-observed", unavailable]),
+        requestedRevisionActive: z.literal(true).optional(),
+      })
+      .refine(
+        ({ state, requestedRevisionActive }) =>
+          requestedRevisionActive !== true || state === "active",
+        "Activation proof requires an active Production deployment.",
+      ),
     app: z.strictObject({
       state: z.enum(["responding", "sign-in-required", "registered", "not-observed", unavailable]),
       url: publicAppUrl.optional(),

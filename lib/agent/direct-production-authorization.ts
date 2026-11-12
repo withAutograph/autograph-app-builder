@@ -8,21 +8,39 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 
 export const ARRUSTED_PRODUCTION_REPOSITORY = "withAutograph/arrusted-development";
 
-export const directProductionSubjectSchema = z.strictObject({
-  version: z.literal(1),
-  appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-  appSpecDigest: digest,
-  proposalDigest: digest,
-  sessionId: id,
-  buildWorkspaceId: id,
-  authority: hostedTenantAuthoritySchema,
-  repositoryId: id,
-  repositoryFullName: z.literal(ARRUSTED_PRODUCTION_REPOSITORY),
-  installationId: id,
-  baseBranch: id,
-  storageKind: z.enum(["none", "postgres"]),
-  revision: z.strictObject({ priorGrantDigest: digest, priorProposalDigest: digest }).optional(),
+export const directProductionSchemaChangeSchema = z.strictObject({
+  kind: z.literal("add-optional-text-field"),
+  priorCueSha256: digest,
+  candidateCueSha256: digest,
 });
+
+export const directProductionSubjectSchema = z
+  .strictObject({
+    version: z.literal(1),
+    appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+    appSpecDigest: digest,
+    proposalDigest: digest,
+    sessionId: id,
+    buildWorkspaceId: id,
+    authority: hostedTenantAuthoritySchema,
+    repositoryId: id,
+    repositoryFullName: z.literal(ARRUSTED_PRODUCTION_REPOSITORY),
+    installationId: id,
+    baseBranch: id,
+    storageKind: z.enum(["none", "postgres"]),
+    revision: z
+      .strictObject({
+        priorGrantDigest: digest,
+        priorProposalDigest: digest,
+        schemaChange: directProductionSchemaChangeSchema.optional(),
+      })
+      .optional(),
+  })
+  .refine(
+    ({ revision, storageKind }) =>
+      revision?.schemaChange === undefined || storageKind === "postgres",
+    "A schema revision requires the app's existing PostgreSQL database.",
+  );
 
 export type DirectProductionSubject = z.infer<typeof directProductionSubjectSchema>;
 
@@ -53,6 +71,13 @@ export const createDirectProductionGrant = (
   directProductionGrantSchema.parse({ ...input, digest: grantDigest(input) });
 
 export const describeDirectProductionSubject = (subject: DirectProductionSubject) => {
+  if (subject.revision?.schemaChange !== undefined) {
+    return [
+      `Release this update to ${subject.appId} in ${subject.repositoryFullName}.`,
+      "Builder will verify that the checked schema adds one optional text field before updating your existing database. Your saved records, private access, and Production URL are retained.",
+      "Builder opens the reviewed pull request and merges it after required checks pass. The repository’s native deployment then makes the update available.",
+    ].join(" ");
+  }
   if (subject.revision !== undefined) {
     const storage = subject.storageKind === "postgres" ? " and database" : "";
     return [

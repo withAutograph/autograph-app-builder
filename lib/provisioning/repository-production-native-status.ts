@@ -205,6 +205,7 @@ export const createRepositoryProductionNativeStatus =
   async (
     owner: RepositoryProductionRequestOwner,
     expectedMergeSha?: string,
+    includeActivationProof?: true,
   ): Promise<RepositoryProductionNativeStatus> => {
     deps.signal.throwIfAborted();
     const requestedMerge = repositoryProductionExpectedMergeShaSchema
@@ -470,11 +471,19 @@ export const createRepositoryProductionNativeStatus =
     const available =
       result.deployment.state === "active" &&
       ["responding", "sign-in-required"].includes(result.app.state);
+    const exactRevisionActive =
+      result.deployment.state === "active" &&
+      requestedMerge !== undefined &&
+      revisionSource?.sha === requestedMerge;
+    if (includeActivationProof === true && exactRevisionActive) {
+      // The provider proof survives an unavailable app or Gateway response.
+      result.deployment.requestedRevisionActive = true;
+    }
     if (result.serviceIssue === undefined) {
       result.status = available ? "available" : "pending";
       if (requestedMerge !== undefined) {
         result.requestedRevision =
-          available && revisionSource?.sha === requestedMerge ? "live" : "awaiting-activation";
+          available && exactRevisionActive ? "live" : "awaiting-activation";
       }
     } else {
       result.status = unavailable;

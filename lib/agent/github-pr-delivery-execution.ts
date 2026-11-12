@@ -11,8 +11,11 @@ import type { AppProductionDeliveryTarget } from "./app-production-observation";
 
 import type { GitHubPrDeliveryObservation } from "../repository/github-pr-delivery";
 import type { GitHubPrEffectReceipt } from "../repository/github-pr-effect-journal";
+import type { RepositoryProductionDeliveryStatus } from "../provisioning/repository-production-delivery";
 
 const WAITING_FOR_CHECKS = "waiting-for-checks";
+const canApplySchema = (setup: RepositoryProductionDeliveryStatus) =>
+  setup.applicable && setup.schemaTransitionVerified === true;
 const READY_CYCLE_CHANGED = "ready-cycle-changed";
 
 const startReadyCycle = async (input: {
@@ -46,19 +49,28 @@ interface MergedGitHubPrDelivery {
   status: "merged";
   mergeCommitSha: string;
   nativeProductionTarget?: AppProductionDeliveryTarget;
+  schemaActivation?: { deliveryCallId: string; mergeIntentDigest: string };
 }
 
 const mergedDelivery = (
   mergeCommitSha: string,
   nativeProductionTarget?: AppProductionDeliveryTarget,
+  schemaActivation?: MergedGitHubPrDelivery["schemaActivation"],
 ): MergedGitHubPrDelivery => {
-  const result = { status: "merged" as const, mergeCommitSha };
-  return nativeProductionTarget === undefined ? result : { ...result, nativeProductionTarget };
+  const result: MergedGitHubPrDelivery = { status: "merged", mergeCommitSha };
+  if (nativeProductionTarget !== undefined) {
+    result.nativeProductionTarget = nativeProductionTarget;
+    if (schemaActivation !== undefined) {
+      result.schemaActivation = schemaActivation;
+    }
+  }
+  return result;
 };
 
 const mergeResult = (
   result: GitHubPrEffectReceipt | undefined,
   nativeProductionTarget?: AppProductionDeliveryTarget,
+  activateSchema?: true,
 ) => {
   if (result?.status === "failed") {
     return { status: "merge-rejected" as const, reason: result.code };
@@ -66,7 +78,11 @@ const mergeResult = (
   if (result?.status !== "succeeded" || result.evidence.kind !== "pr-merge") {
     return { status: "merge-unconfirmed" as const };
   }
-  return mergedDelivery(result.evidence.mergeCommitSha, nativeProductionTarget);
+  const schemaActivation =
+    activateSchema === true
+      ? { deliveryCallId: result.approvedByCallId, mergeIntentDigest: result.intentDigest }
+      : undefined;
+  return mergedDelivery(result.evidence.mergeCommitSha, nativeProductionTarget, schemaActivation);
 };
 
 type GitHubDeliveryRuntime = Pick<
@@ -89,6 +105,8 @@ export const continueGitHubPrDeliveryWithPorts = async (
   const authority = await readAuthority(approval, ctx);
   const directProduction = "directProduction" in authority;
   const productionRevision = "productionRevision" in authority;
+  const schemaRevision = "productionSchemaApprovalCallId" in authority;
+  const activateSchema = schemaRevision ? true : undefined;
   const revisionSetupChanged = {
     status: "production-revision-setup-changed" as const,
     guidance:
@@ -145,6 +163,18 @@ export const continueGitHubPrDeliveryWithPorts = async (
     repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
   };
   if (observed.state === "merged" && observed.mergeCommitSha !== undefined) {
+    if (schemaRevision) {
+      const approvedCycle = readyAt ?? observed.readyAt;
+      const reconciled =
+        approvedCycle !== undefined && observed.readyAt === approvedCycle
+          ? await run({ ...effect, kind: "pr-merge", readyAt: approvedCycle, reconcileOnly: true })
+          : undefined;
+      const exactMerge =
+        reconciled?.status === "succeeded" &&
+        reconciled.evidence.kind === "pr-merge" &&
+        reconciled.evidence.mergeCommitSha === observed.mergeCommitSha;
+      return mergeResult(exactMerge ? reconciled : undefined, productionTarget, true);
+    }
     if (readyAt !== undefined && observed.readyAt === readyAt) {
       await run({ ...effect, kind: "pr-merge", readyAt, reconcileOnly: true });
     }
@@ -182,7 +212,11 @@ export const continueGitHubPrDeliveryWithPorts = async (
   if (readyAt === undefined) {
     if (directProduction) {
       const productionSetup = await readProductionSetup();
+      if (schemaRevision && !canApplySchema(productionSetup)) {
+        return revisionSetupChanged;
+      }
       if (
+        !schemaRevision &&
         productionSetup.applicable &&
         (productionSetup.state !== "ready" || productionSetup.preparationRequired)
       ) {
@@ -221,7 +255,11 @@ export const continueGitHubPrDeliveryWithPorts = async (
   }
 
   const productionSetup = await readProductionSetup();
+  if (schemaRevision && !canApplySchema(productionSetup)) {
+    return revisionSetupChanged;
+  }
   if (
+    !schemaRevision &&
     productionSetup.applicable &&
     (productionSetup.state !== "ready" || productionSetup.preparationRequired)
   ) {
@@ -239,5 +277,9 @@ export const continueGitHubPrDeliveryWithPorts = async (
   ctx.abortSignal.throwIfAborted();
   await readAuthority(approval, ctx);
   const result = await run({ ...activeEffect, kind: "pr-merge", readyAt });
-  return mergeResult(result, productionSetup.applicable ? productionTarget : undefined);
+  return mergeResult(
+    result,
+    productionSetup.applicable ? productionTarget : undefined,
+    activateSchema,
+  );
 };

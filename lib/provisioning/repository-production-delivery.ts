@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { repositoryProductionExpectedMergeShaSchema } from "./repository-production-native-status-contract";
 
 const repositoryFields = {
   repositoryId: z.string().regex(/^[1-9][0-9]*$/u),
@@ -15,6 +16,17 @@ export const repositoryProductionDeliveryTargetSchema = z.strictObject({
 });
 export type RepositoryProductionDeliveryTarget = z.infer<
   typeof repositoryProductionDeliveryTargetSchema
+>;
+
+/** Protected workflow proof for an approved schema update after native activation. */
+export const repositoryProductionSchemaActivationSchema = z.strictObject({
+  deliveryCallId: z.string().min(1),
+  mergeSha: repositoryProductionExpectedMergeShaSchema,
+  mergeIntentDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  reviewedHeadSha: repositoryProductionExpectedMergeShaSchema,
+});
+export type RepositoryProductionSchemaActivation = z.infer<
+  typeof repositoryProductionSchemaActivationSchema
 >;
 
 const fields = {
@@ -37,6 +49,7 @@ export const repositoryProductionDeliveryStatusSchema = z.discriminatedUnion("ap
       "reconciling",
     ]),
     preparationRequired: z.boolean(),
+    schemaTransitionVerified: z.literal(true).optional(),
   }),
 ]);
 export type RepositoryProductionDeliveryStatus = z.infer<

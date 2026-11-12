@@ -20,6 +20,7 @@ export const retainRepositoryProductionApproval = async (input: {
   ownerContext: OperatorOwnerContext;
   approval: NonNullable<RepositoryProductionRecord["approval"]>;
   store: RepositoryProductionStore;
+  requireExisting?: boolean;
   /** Authorizes the newly observed human approval while retaining the ordinary physical app lease. */
   withLease: RepositoryProductionSetupPorts["withLease"];
   assertNoPendingAccess: (
@@ -32,8 +33,12 @@ export const retainRepositoryProductionApproval = async (input: {
   }
   await input.withLease(input.scope, async (assertCurrent) => {
     await assertCurrent();
+    const existing = await input.store.read(input.scope);
+    if (input.requireExisting === true && existing === undefined) {
+      throw new Error("repository_production_schema_revision_unverified");
+    }
     const row =
-      (await input.store.read(input.scope)) ??
+      existing ??
       (await input.store.reserve(initialRepositoryProductionRecord(input.scope, input.intent)));
     if (!isDeepStrictEqual(row.record.scope, input.scope)) {
       throw new Error("repository_production_scope_denied");

@@ -119,6 +119,7 @@ export const createRepositoryProductionLease = (input: {
   intent: RepositoryProductionIntent;
   assertAuthorized: RepositoryProductionSetupPorts["assertAuthorized"];
   tryAcquire?: boolean;
+  requireExisting?: boolean;
 }): RepositoryProductionSetupPorts["withLease"] => {
   const physical = createPostgresPhysicalResourceLease({
     openLockClient: (onclose) =>
@@ -137,8 +138,12 @@ export const createRepositoryProductionLease = (input: {
         tryAcquire: input.tryAcquire,
         initializeUnderLock: async () => {
           await input.assertAuthorized(scope, input.intent);
+          const existing = await input.store.read(scope);
+          if (input.requireExisting === true && existing === undefined) {
+            throw new Error("repository_production_schema_revision_unverified");
+          }
           const row =
-            (await input.store.read(scope)) ??
+            existing ??
             (await input.store.reserve(initialRepositoryProductionRecord(scope, input.intent)));
           const saved = await input.store.compareAndSet(row, {
             ...row.record,

@@ -57,22 +57,21 @@ export default defineTool({
         ctx,
       );
       const revision = currentDirectProductionGrant(ctx, targetScope)?.subject.revision;
-      if (
-        revision !== undefined &&
-        (!productionSetup.applicable ||
-          productionSetup.state !== "ready" ||
-          productionSetup.preparationRequired)
-      ) {
+      const schemaRevision = revision?.schemaChange !== undefined;
+      const setupChanged =
+        !productionSetup.applicable ||
+        productionSetup.state !== "ready" ||
+        productionSetup.preparationRequired;
+      const schemaVerified =
+        productionSetup.applicable && productionSetup.schemaTransitionVerified === true;
+      if (schemaRevision ? !schemaVerified : revision !== undefined && setupChanged) {
         return {
           ...result,
           status: "production-revision-setup-changed" as const,
           productionSetup,
         };
       }
-      if (
-        productionSetup.applicable &&
-        (productionSetup.state !== "ready" || productionSetup.preparationRequired)
-      ) {
+      if (!schemaRevision && productionSetup.applicable && setupChanged) {
         return {
           ...result,
           productionSetup,

@@ -253,49 +253,68 @@ const delivery = (snapshot: GitHubPrDeliveryOwnerSnapshot, alreadyReady = false)
 };
 
 describe("GitHub delivery authority across workflow child contexts", () => {
-  it("rechecks the retained Production grant before a delegated delivery workflow wakes", async () => {
-    const input = { ...approval, owner: "withAutograph", name: "arrusted-development" };
-    const original = createDirectProductionGrant({
-      callId: "original-approved-build",
-      toolName: "apply_app_creation",
-      subject: {
-        version: 1,
-        appId,
-        appSpecDigest,
-        proposalDigest: "9".repeat(64),
-        sessionId,
-        buildWorkspaceId: "owned-sandbox",
-        authority: {
-          issuer: "https://builder.example/api/auth",
-          audience: "https://builder.example/mcp",
-          workspaceId: "tenant-workspace",
-          ownerUserId: "owner",
+  it.each(["first", "presentation", "additive"] as const)(
+    "rechecks the retained %s Production grant before a delegated delivery workflow wakes",
+    async (releaseKind) => {
+      const input = { ...approval, owner: "withAutograph", name: "arrusted-development" };
+      const predecessor = {
+        priorGrantDigest: "a".repeat(64),
+        priorProposalDigest: "b".repeat(64),
+      };
+      const revision =
+        releaseKind === "additive"
+          ? {
+              ...predecessor,
+              schemaChange: {
+                kind: "add-optional-text-field" as const,
+                priorCueSha256: "c".repeat(64),
+                candidateCueSha256: "d".repeat(64),
+              },
+            }
+          : predecessor;
+      const original = createDirectProductionGrant({
+        callId: "original-approved-build",
+        toolName: "apply_app_creation",
+        subject: {
+          version: 1,
+          appId,
+          appSpecDigest,
+          proposalDigest: "9".repeat(64),
+          sessionId,
+          buildWorkspaceId: "owned-sandbox",
+          authority: {
+            issuer: "https://builder.example/api/auth",
+            audience: "https://builder.example/mcp",
+            workspaceId: "tenant-workspace",
+            ownerUserId: "owner",
+          },
+          repositoryId: input.repositoryId,
+          repositoryFullName: "withAutograph/arrusted-development",
+          installationId: "10",
+          baseBranch: input.baseBranch,
+          storageKind: "postgres",
+          revision: releaseKind === "first" ? undefined : revision,
         },
-        repositoryId: input.repositoryId,
-        repositoryFullName: "withAutograph/arrusted-development",
-        installationId: "10",
-        baseBranch: input.baseBranch,
-        storageKind: "postgres",
-      },
-    });
-    const { ctx, snapshot } = capturedParent(input, false, original);
-    const readOwner = async () => await Promise.resolve(snapshot);
-    await expect(readGitHubPrDeliveryAuthority(input, ctx, readOwner)).resolves.toMatchObject({
-      subject: { appId },
-    });
-    snapshot.decision.directProduction = createDirectProductionGrant({
-      callId: "another-approval",
-      toolName: original.toolName,
-      subject: original.subject,
-    });
-    await expect(readGitHubPrDeliveryAuthority(input, ctx, readOwner)).rejects.toMatchObject({
-      reason: "captured-call-mismatch",
-    });
-    delete snapshot.decision.directProduction;
-    await expect(readGitHubPrDeliveryAuthority(input, ctx, readOwner)).rejects.toMatchObject({
-      reason: "captured-call-mismatch",
-    });
-  });
+      });
+      const { ctx, snapshot } = capturedParent(input, false, original);
+      const readOwner = async () => await Promise.resolve(snapshot);
+      const authority = await readGitHubPrDeliveryAuthority(input, ctx, readOwner);
+      expect(authority).toMatchObject({ subject: { appId }, directProduction: true });
+      expect("productionRevision" in authority).toBe(releaseKind === "presentation");
+      snapshot.decision.directProduction = createDirectProductionGrant({
+        callId: "another-approval",
+        toolName: original.toolName,
+        subject: original.subject,
+      });
+      await expect(readGitHubPrDeliveryAuthority(input, ctx, readOwner)).rejects.toMatchObject({
+        reason: "captured-call-mismatch",
+      });
+      delete snapshot.decision.directProduction;
+      await expect(readGitHubPrDeliveryAuthority(input, ctx, readOwner)).rejects.toMatchObject({
+        reason: "captured-call-mismatch",
+      });
+    },
+  );
 
   it.each(["missing", "stale-adapter"] as const)(
     "captures a first Ready call from the actual approved Build with a %s prior projection",

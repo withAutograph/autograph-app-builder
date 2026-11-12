@@ -427,6 +427,24 @@ describe("read-only native Production observation", () => {
     ).toEqual(["true", "true"]);
   });
 
+  it("projects opted-in activation proof while the exact revision's app route is unavailable", async () => {
+    const f = fixture();
+    f.setProjectLink(linkedRepository);
+    f.setActivation({ source: "git", gitSource: currentGitSource });
+    f.setRoute({ status: 500 });
+    const standard = await f.read(f.owner, mergeSha);
+    const activation = await f.read(f.owner, mergeSha, true);
+    expect(standard.deployment).toEqual({ state: "active" });
+    expect(activation).toMatchObject({
+      status: "service-unavailable",
+      serviceIssue: "gateway-read",
+      requestedRevision: "unassessed",
+      deployment: { state: "active", requestedRevisionActive: true },
+    });
+    const withoutMerge = await f.read(f.owner, undefined, true);
+    expect(withoutMerge.deployment.requestedRevisionActive).toBeUndefined();
+  });
+
   it("verifies reduced Vercel Git provenance against the linked repository", async () => {
     const f = fixture();
     f.setProjectLink(linkedRepository);
@@ -458,10 +476,12 @@ describe("read-only native Production observation", () => {
       const f = fixture();
       f.setProjectLink(linkedRepository);
       f.setActivation(activation);
-      expect(await f.read(f.owner, mergeSha)).toMatchObject({
+      const result = await f.read(f.owner, mergeSha, true);
+      expect(result).toMatchObject({
         status: "available",
         requestedRevision: "awaiting-activation",
       });
+      expect(result.deployment.requestedRevisionActive).toBeUndefined();
     },
   );
 
@@ -470,15 +490,18 @@ describe("read-only native Production observation", () => {
     f.setProjectLink(linkedRepository);
     f.setActivation({ source: "git", gitSource: currentGitSource, aliasAssigned: false });
     f.setAlias({ deploymentId: "previous-production" });
-    expect(await f.read(f.owner, mergeSha)).toMatchObject({
+    const awaitingAlias = await f.read(f.owner, mergeSha, true);
+    expect(awaitingAlias).toMatchObject({
       status: "pending",
       requestedRevision: "awaiting-activation",
     });
+    expect(awaitingAlias.deployment.requestedRevisionActive).toBeUndefined();
     f.setAlias({});
     f.setRegistered(false);
-    expect(await f.read(f.owner, mergeSha)).toMatchObject({
+    expect(await f.read(f.owner, mergeSha, true)).toMatchObject({
       status: "pending",
       requestedRevision: "awaiting-activation",
+      deployment: { state: "active", requestedRevisionActive: true },
     });
     f.setRegistered(true);
     f.duringRead((url) => {
@@ -486,10 +509,12 @@ describe("read-only native Production observation", () => {
         f.changeActivation();
       }
     });
-    expect(await f.read(f.owner, mergeSha)).toMatchObject({
+    const movedAlias = await f.read(f.owner, mergeSha, true);
+    expect(movedAlias).toMatchObject({
       status: "pending",
       requestedRevision: "awaiting-activation",
     });
+    expect(movedAlias.deployment.requestedRevisionActive).toBeUndefined();
   });
 
   it("does not confirm reduced metadata after the project link changes during the public read", async () => {
@@ -501,10 +526,12 @@ describe("read-only native Production observation", () => {
         f.setProjectLink({ ...linkedRepository, repoId: 456 });
       }
     });
-    expect(await f.read(f.owner, mergeSha)).toMatchObject({
+    const movedLink = await f.read(f.owner, mergeSha, true);
+    expect(movedLink).toMatchObject({
       status: "available",
       requestedRevision: "awaiting-activation",
     });
+    expect(movedLink.deployment.requestedRevisionActive).toBeUndefined();
   });
 
   it("rejects a live revision without a verified available app", async () => {
@@ -520,6 +547,17 @@ describe("read-only native Production observation", () => {
       repositoryProductionNativeStatusSchema.safeParse({
         ...live,
         app: { state: "registered", url: live.app.url },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects proof on a deployment that was not observed active", async () => {
+    const f = fixture();
+    const result = await f.read(f.owner);
+    expect(
+      repositoryProductionNativeStatusSchema.safeParse({
+        ...result,
+        deployment: { state: "not-observed", requestedRevisionActive: true },
       }).success,
     ).toBe(false);
   });

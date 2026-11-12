@@ -15,10 +15,12 @@ import type { OperatorOwnerContext } from "./hosted-operator-contract";
 import {
   repositoryProductionDeliveryStatusSchema,
   repositoryProductionDeliveryTargetSchema,
+  repositoryProductionSchemaActivationSchema,
 } from "./repository-production-delivery";
 import type {
   RepositoryProductionDeliveryStatus,
   RepositoryProductionDeliveryTarget,
+  RepositoryProductionSchemaActivation,
 } from "./repository-production-delivery";
 import {
   repositoryProductionExpectedMergeShaSchema,
@@ -93,6 +95,7 @@ export const repositoryProductionRequestSchema = z.discriminatedUnion("action", 
     ...ownerFields,
     action: z.literal("native-status"),
     expectedMergeSha: repositoryProductionExpectedMergeShaSchema.optional(),
+    includeActivationProof: z.literal(true).optional(),
   }),
   z.strictObject({
     ...ownerFields,
@@ -114,6 +117,7 @@ export const repositoryProductionRequestSchema = z.discriminatedUnion("action", 
     action: z.literal("prepare"),
     approvedByCallId: z.string().min(1),
     approvalReference: repositoryProductionApprovalReferenceSchema.optional(),
+    schemaActivation: repositoryProductionSchemaActivationSchema.optional(),
     creatorEmail: z
       .email()
       .transform((email) => email.toLowerCase())
@@ -133,6 +137,7 @@ export interface RepositoryProductionHandlerDependencies {
   readNativeStatus?: (
     owner: RepositoryProductionRequestOwner,
     expectedMergeSha?: string,
+    includeActivationProof?: true,
   ) => Promise<RepositoryProductionNativeStatus>;
   readDeliveryStatus: (
     owner: RepositoryProductionRequestOwner,
@@ -143,6 +148,7 @@ export interface RepositoryProductionHandlerDependencies {
     approvedByCallId: string,
     creatorEmail?: string,
     approvalReference?: RepositoryProductionApprovalReference,
+    schemaActivation?: RepositoryProductionSchemaActivation,
   ) => Promise<{
     scope: RepositoryProductionScope;
     intent: RepositoryProductionIntent;
@@ -225,7 +231,9 @@ export const createRepositoryProductionHandler =
           return reply({ code: "native_status_unavailable" }, 503);
         }
         const result = repositoryProductionNativeStatusSchema.parse(
-          await deps.readNativeStatus(owner, body.expectedMergeSha),
+          body.includeActivationProof === true
+            ? await deps.readNativeStatus(owner, body.expectedMergeSha, body.includeActivationProof)
+            : await deps.readNativeStatus(owner, body.expectedMergeSha),
         );
         if (result.appId !== owner.appId) {
           return reply({ code: "app_access_denied" }, 403);
@@ -275,6 +283,11 @@ export const createRepositoryProductionHandler =
           appAccessSnapshotSchema.parse(await deps.management.execute(owner, body.command)),
         );
       }
+      const { schemaActivation } = body;
+      if (schemaActivation !== undefined && body.approvalReference === undefined) {
+        return reply({ code: "request_invalid" }, 400);
+      }
+      const activation = schemaActivation === undefined ? [] : [schemaActivation];
       const resolved =
         body.approvalReference === undefined
           ? await deps.resolveSetup(owner, body.approvedByCallId, body.creatorEmail)
@@ -283,6 +296,7 @@ export const createRepositoryProductionHandler =
               body.approvedByCallId,
               body.creatorEmail,
               body.approvalReference,
+              ...activation,
             );
       if (resolved.scope.appId !== body.appId || resolved.intent.sessionId !== body.sessionId) {
         return reply({ code: "app_access_denied" }, 403);

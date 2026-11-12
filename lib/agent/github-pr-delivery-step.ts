@@ -1,6 +1,7 @@
 import type { ApprovalContext, ApprovalStatus } from "eve/tools/approval";
 import type { WorkflowStepToolContext } from "eve/tools";
 import type { GitHubPrDeliveryApproval } from "./github-pr-delivery-approval";
+import type { RepositoryProductionSchemaActivation } from "../provisioning/repository-production-delivery";
 
 // eslint-disable-next-line eslint/func-style -- Workflow requires a top-level step declaration.
 export async function continueGitHubPrDelivery(
@@ -111,4 +112,54 @@ export async function approveGitHubPrDelivery(
     directProductionGrantDigest: directGrant.digest,
   });
   return "approved";
+}
+
+/** After an exact native activation, install only the schema that the combined approval covered. */
+// eslint-disable-next-line eslint/func-style -- Workflow requires a top-level step declaration.
+export async function continueGitHubProductionSchema(
+  input: GitHubPrDeliveryApproval,
+  ctx: WorkflowStepToolContext,
+  activation: RepositoryProductionSchemaActivation,
+) {
+  "use step";
+  const { readGitHubPrDeliveryAuthority } = await import("./github-pr-delivery-authority");
+  const authority = await readGitHubPrDeliveryAuthority(input, ctx);
+  if (
+    !("productionSchemaApprovalCallId" in authority) ||
+    activation.reviewedHeadSha !== input.headSha
+  ) {
+    throw new Error("The approved Production schema revision changed.");
+  }
+  const { observeMergedAppProduction } = await import("./app-production-observation");
+  const target = {
+    appId: authority.subject.appId,
+    repositoryId: input.repositoryId,
+    repositoryFullName: `${input.owner}/${input.name}`,
+  };
+  const observed = await observeMergedAppProduction(target, ctx, activation.mergeSha, true);
+  if (observed.status === "monitoring-stopped") {
+    return observed;
+  }
+  if (observed.deployment.requestedRevisionActive !== true) {
+    // A previous operator may report the URL live without the exact provider proof needed for setup.
+    return observed.requestedRevision === "live"
+      ? { ...observed, requestedRevision: "awaiting-activation" as const }
+      : observed;
+  }
+  const { repositoryProductionClientForContext } = await import("./repository-production-client");
+  const client = await repositoryProductionClientForContext(ctx);
+  const { approvalReference } = await client.plan(target.appId);
+  const { setup } = await client.prepare(
+    approvalReference,
+    authority.productionSchemaApprovalCallId,
+    activation,
+  );
+  if (setup.state !== "ready") {
+    return {
+      ...observed,
+      status: "pending" as const,
+      requestedRevision: "awaiting-activation" as const,
+    };
+  }
+  return await observeMergedAppProduction(target, ctx, activation.mergeSha);
 }

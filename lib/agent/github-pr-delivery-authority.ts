@@ -208,9 +208,11 @@ export const readGitHubPrDeliveryAuthority = async (
     return authority;
   }
   const direct = { ...authority, directProduction: true as const };
-  return decision.directProduction?.subject.revision === undefined
-    ? direct
-    : { ...direct, productionRevision: true as const };
+  const revision = decision.directProduction?.subject.revision;
+  if (revision?.schemaChange !== undefined && decision.directProduction !== undefined) {
+    return { ...direct, productionSchemaApprovalCallId: decision.directProduction.callId };
+  }
+  return revision === undefined ? direct : { ...direct, productionRevision: true as const };
 };
 
 /** Capture scope facts in the parent; this is not a human approval receipt. */

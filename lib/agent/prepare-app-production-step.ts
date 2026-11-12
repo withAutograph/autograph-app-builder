@@ -26,6 +26,12 @@ export async function approvePrepareAppProduction(
   if (grant === undefined) {
     return "user-approval";
   }
+  if (grant.subject.revision?.schemaChange !== undefined) {
+    return {
+      type: "denied",
+      reason: "Builder applies the approved field after the reviewed deployment activates.",
+    };
+  }
   if (grant.subject.revision !== undefined) {
     return {
       type: "denied",
