@@ -486,6 +486,11 @@ for 8 vCPU/16 GiB and ephemeral billing before applying that same proposal.
 Failure to qualify remains a visible prerequisite; it never authorizes a blind
 retry, silent resize or replacement app.
 
+Ordinary hosted app creation uses its standard workspace if the optional local
+checker profile is requested by mistake. That request does not allocate compute
+or block the Build card. A retained profile or an explicit same-app repair still
+has to satisfy the existing profile requirements.
+
 Both fresh and reused private-compute plans expose the canonical reviewed check
 task as ready-to-submit `implementationFiles`, with its SHA-256 in separate
 metadata. Builder can pass those exact bytes through the ordinary apply or

@@ -1,5 +1,6 @@
 import type { ExistingAppChange } from "./existing-app-changes";
 import { createHash } from "node:crypto";
+import { isHostedVercelRuntime } from "../sandbox/backend";
 import {
   appBuilderWorkflowState,
   assertExactWorkflowState,
@@ -155,15 +156,23 @@ export const preparePrivateComputePlanning = async (input: {
   repairChanges?: readonly ExistingAppChange[];
   callId: string;
 }) => {
-  const selected =
-    input.requested ??
-    ("proposal" in input.state ? input.state.proposal.target.privateCompute?.id : undefined);
+  const retained =
+    "proposal" in input.state ? input.state.proposal.target.privateCompute : undefined;
+  const selected = input.requested ?? retained?.id;
   if (selected === undefined) {
     // oxlint-disable-next-line unicorn/no-useless-undefined -- No selected compute profile is an explicit optional result.
     return undefined;
   }
   if (!("appSpec" in input.state)) {
     throw new Error("Accept the app product before selecting private compute.");
+  }
+  if (
+    retained === undefined &&
+    input.repairChanges === undefined &&
+    isHostedVercelRuntime(process.env)
+  ) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- No local profile is selected for an ordinary hosted plan.
+    return undefined;
   }
   const { appId } = input.state.appSpec;
   const check = input.repairChanges?.find(
@@ -189,9 +198,17 @@ export const preparePrivateComputePlanning = async (input: {
   return profile;
 };
 /** Source-owned repair guidance is not approval and never changes the frozen profile. */
-export const privateComputeProjection = (profile?: PrivateComputeProfile) => {
+export const privateComputeProjection = (
+  profile?: PrivateComputeProfile,
+  requested?: PrivateComputeProfile["id"],
+) => {
   if (profile === undefined) {
-    return {};
+    return requested === undefined
+      ? {}
+      : {
+          privateComputeGuidance:
+            "Standard compute is available for this plan. The optional checker investigation profile is local-only. Continue with the current workspace and omit privateCompute from apply_app_creation.",
+        };
   }
   const sha256 = createHash("sha256").update(PRIVATE_COMPUTE_CHECK_TASK).digest("hex");
   if (profile.checkPolicy.afterSha256 !== sha256) {
