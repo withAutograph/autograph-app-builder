@@ -1,6 +1,7 @@
 import { observePlannedAuthoringInspection } from "../../lib/agent/planned-proposal-authoring";
 import { defineHook } from "eve/hooks";
 import { appBuilderWorkflowState } from "../../lib/agent/workflow-state";
+import { currentInitialBuildAuthoring } from "../../lib/agent/initial-build-authoring";
 import { defineState } from "eve/context";
 import type { HookContext } from "eve/hooks";
 import {
@@ -13,6 +14,7 @@ const boundary = defineState<{
   pendingInputs: string[];
   pendingCalls: string[];
   blocked: boolean;
+  draftingToolFailed?: boolean;
   observedIntent: boolean;
 }>("autograph-app-builder.preapproval-authoring-boundary.v1", () => ({
   pendingInputs: [],
@@ -28,10 +30,14 @@ const record = async (ctx: HookContext, completed = false, blocked = false, canc
   if (!state.observedIntent) {
     return;
   }
+  // A failed drafting tool does not retire a valid first plan. The retry can
+  // correct the draft and present approval, but cannot apply or release it.
+  const failedWithoutInitialPlan =
+    state.draftingToolFailed === true && currentInitialBuildAuthoring(ctx.session.id) === undefined;
   const decision = currentAuthoringDecision(ctx, {
     completed,
     pendingInput: state.pendingInputs.length > 0,
-    blocked: blocked || state.blocked || state.pendingCalls.length > 0,
+    blocked: blocked || state.blocked || failedWithoutInitialPlan || state.pendingCalls.length > 0,
   });
   if (cancelled) {
     decision.reason = "authoring_cancelled";
@@ -52,7 +58,12 @@ const record = async (ctx: HookContext, completed = false, blocked = false, canc
 export default defineHook({
   events: {
     async "turn.started"(_event, ctx) {
-      boundary.update((current) => ({ ...current, blocked: false, pendingCalls: [] }));
+      boundary.update((current) => ({
+        ...current,
+        blocked: false,
+        draftingToolFailed: false,
+        pendingCalls: [],
+      }));
       await record(ctx);
     },
     "actions.requested"(event) {
@@ -68,13 +79,18 @@ export default defineHook({
     },
     async "action.result"(event, ctx) {
       observePlannedAuthoringInspection(event, ctx);
+      const { result, status, error } = event.data;
       const resultFailed =
-        event.data.error !== undefined ||
-        (event.data.result.kind === "tool-result" && event.data.result.isError === true);
+        status === "failed" ||
+        error !== undefined ||
+        (result.kind === "tool-result" && result.isError === true);
+      const failedDraftingTool =
+        result.kind === "tool-result" && status !== "rejected" && resultFailed;
       boundary.update((current) => ({
         ...current,
-        pendingCalls: current.pendingCalls.filter((callId) => callId !== event.data.result.callId),
-        blocked: current.blocked || event.data.status !== "completed" || resultFailed,
+        pendingCalls: current.pendingCalls.filter((callId) => callId !== result.callId),
+        blocked: current.blocked || status === "rejected" || (resultFailed && !failedDraftingTool),
+        draftingToolFailed: current.draftingToolFailed === true || failedDraftingTool,
       }));
       await record(ctx);
     },
