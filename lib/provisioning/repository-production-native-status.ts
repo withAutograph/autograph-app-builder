@@ -472,10 +472,7 @@ export const createRepositoryProductionNativeStatus =
       ["responding", "sign-in-required"].includes(result.app.state);
     if (result.serviceIssue === undefined) {
       result.status = available ? "available" : "pending";
-      if (
-        requestedMerge !== undefined &&
-        (revisionSource !== null || result.deployment.state === notObserved)
-      ) {
+      if (requestedMerge !== undefined) {
         result.requestedRevision =
           available && revisionSource?.sha === requestedMerge ? "live" : "awaiting-activation";
       }

@@ -438,7 +438,7 @@ describe("read-only native Production observation", () => {
     f.setProjectLink(undefined);
     expect(await f.read(f.owner, mergeSha)).toMatchObject({
       status: "available",
-      requestedRevision: "unassessed",
+      requestedRevision: "awaiting-activation",
     });
   });
 
@@ -460,7 +460,7 @@ describe("read-only native Production observation", () => {
       f.setActivation(activation);
       expect(await f.read(f.owner, mergeSha)).toMatchObject({
         status: "available",
-        requestedRevision: "unassessed",
+        requestedRevision: "awaiting-activation",
       });
     },
   );
@@ -503,8 +503,25 @@ describe("read-only native Production observation", () => {
     });
     expect(await f.read(f.owner, mergeSha)).toMatchObject({
       status: "available",
-      requestedRevision: "unassessed",
+      requestedRevision: "awaiting-activation",
     });
+  });
+
+  it("rejects a live revision without a verified available app", async () => {
+    const f = fixture();
+    f.setProjectLink(linkedRepository);
+    f.setActivation({ source: "git", gitSource: currentGitSource });
+    const live = await f.read(f.owner, mergeSha);
+    expect(live.requestedRevision).toBe("live");
+    expect(
+      repositoryProductionNativeStatusSchema.safeParse({ ...live, status: "pending" }).success,
+    ).toBe(false);
+    expect(
+      repositoryProductionNativeStatusSchema.safeParse({
+        ...live,
+        app: { state: "registered", url: live.app.url },
+      }).success,
+    ).toBe(false);
   });
 
   it("accepts exact Git object IDs only", () => {
