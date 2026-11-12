@@ -123,7 +123,7 @@ export const prepareAppCreation = async (
       productAcceptance: productAcceptanceObligations(current.appSpec),
       ...implementationRouteContext(current.proposal.target.plan),
       reused: true,
-      ...privateComputeProjection(current.proposal.target.privateCompute),
+      ...privateComputeProjection(current.proposal.target.privateCompute, privateCompute),
     };
   }
 
@@ -315,6 +315,6 @@ export const prepareAppCreation = async (
     productAcceptance: productAcceptanceObligations(current.appSpec),
     ...implementationRouteContext(proposal.target.plan),
     reused: false,
-    ...privateComputeProjection(computeProfile),
+    ...privateComputeProjection(computeProfile, privateCompute),
   };
 };
