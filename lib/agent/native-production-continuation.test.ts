@@ -1,6 +1,7 @@
 /* oxlint-disable anti-slop/no-module-mocking -- Control the existing GitHub effect step and canonical client acquisition while keeping the workflow, serialized protected read and public progress projection real. */
+/* oxlint-disable sonarjs/no-internal-api-use -- Direct saved-session tool calls run in an installed Eve context. */
 import { beforeEach, expect, it, vi } from "vitest";
-import type { WorkflowToolContext } from "eve/tools";
+import type { ToolContext, WorkflowToolContext } from "eve/tools";
 import { z } from "zod";
 import type { GitHubPrDeliveryApproval } from "./github-pr-delivery-approval";
 import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contract";
@@ -10,11 +11,19 @@ import finishDelivery from "../../agent/tools/finish-github-pr-delivery";
 import observeProduction from "../../agent/tools/observe-app-production";
 import { HostedOperatorError } from "../provisioning/hosted-operator-contract";
 import { projectInstalledEveEvent, toPublicEvent } from "../eve/public-events";
+import {
+  ContextContainer,
+  contextStorage,
+} from "../../node_modules/eve/dist/src/context/container.js";
 
 const mocks = vi.hoisted(() => ({
   continueDelivery: vi.fn(),
   readAuthority: vi.fn(),
   clientForContext: vi.fn(),
+  githubRuntime: vi.fn(),
+  inspectPublishedPullRequest: vi.fn(),
+  inspectReconciliationHead: vi.fn(),
+  reviewedSubject: vi.fn(),
   sleep: vi.fn(),
 }));
 vi.mock("workflow", () => ({ sleep: mocks.sleep }));
@@ -24,6 +33,12 @@ vi.mock("./github-pr-delivery-step", () => ({
 }));
 vi.mock("./github-pr-delivery-authority", () => ({
   readGitHubPrDeliveryAuthority: mocks.readAuthority,
+}));
+vi.mock("./deployment-github-publication-runtime", () => ({
+  githubPublicationRuntimeForSession: mocks.githubRuntime,
+}));
+vi.mock("./github-pr-delivery-subject", () => ({
+  resolveGitHubPrDeliverySubject: mocks.reviewedSubject,
 }));
 vi.mock(import("./repository-production-client"), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -65,11 +80,12 @@ const ownerContext: OperatorOwnerContext = {
 const unavailable = (): never => {
   throw new Error("Unexpected non-read operation");
 };
-const context = (controller = new AbortController()): WorkflowToolContext => ({
+const context = (controller = new AbortController()): WorkflowToolContext & ToolContext => ({
   abortSignal: controller.signal,
   callId: "approved-merge-call",
   toolName: "finish-github-pr-delivery",
   getToken: unavailable,
+  getSandbox: unavailable,
   requireAuth: unavailable,
   ask: unavailable,
   agent: unavailable,
@@ -80,7 +96,15 @@ const context = (controller = new AbortController()): WorkflowToolContext => ({
     turn: { id: "saved-turn", sequence: 2 },
   },
 });
-const observed = (status: "pending" | "available"): RepositoryProductionNativeStatus => ({
+const observeSaved = async () =>
+  await contextStorage.run(
+    new ContextContainer(),
+    async () => await observeProduction.execute({ appId }, context()),
+  );
+const observed = (
+  status: "pending" | "available",
+  requestedRevision: RepositoryProductionNativeStatus["requestedRevision"] = "unassessed",
+): RepositoryProductionNativeStatus => ({
   version: 1,
   appId,
   observedAt: "2026-11-10T16:00:00Z",
@@ -92,7 +116,7 @@ const observed = (status: "pending" | "available"): RepositoryProductionNativeSt
   deployment: { state: status === "available" ? "active" : "not-observed" },
   app:
     status === "available" ? { state: "sign-in-required", url: appUrl } : { state: "not-observed" },
-  requestedRevision: "unassessed",
+  requestedRevision,
 });
 const workflowIterator = (execution: ReturnType<typeof finishDelivery.execute>) => {
   if (!(Symbol.asyncIterator in execution)) {
@@ -116,6 +140,10 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.sleep.mockResolvedValue(null);
   mocks.readAuthority.mockResolvedValue({ subject: { appId }, requirements: [] });
+  mocks.githubRuntime.mockResolvedValue({
+    inspectPublishedPullRequest: mocks.inspectPublishedPullRequest,
+    inspectPublishedReconciliationHead: mocks.inspectReconciliationHead,
+  });
   mocks.continueDelivery.mockResolvedValue({
     status: "merged",
     mergeCommitSha,
@@ -126,7 +154,11 @@ beforeEach(() => {
 it("continues an actual merged workflow through protected native reads without merging again", async () => {
   // The successful merge already retained its app. No current Build/review projection survives.
   mocks.readAuthority.mockRejectedValue(new Error("Old private Build projection is absent"));
-  const responses = [observed("pending"), observed("available")];
+  const responses = [
+    observed("pending", "awaiting-activation"),
+    observed("available", "awaiting-activation"),
+    observed("available", "live"),
+  ];
   const requests: { method: string | undefined; input: unknown }[] = [];
   const client = createRepositoryProductionClient({
     endpoint: "https://operator.example.com",
@@ -175,7 +207,7 @@ it("continues an actual merged workflow through protected native reads without m
     nativeProduction: {
       status: "available",
       app: { url: appUrl },
-      requestedRevision: "unassessed",
+      requestedRevision: "live",
     },
   });
   const events = projectInstalledEveEvent(
@@ -203,8 +235,7 @@ it("continues an actual merged workflow through protected native reads without m
   ]);
   const message = events.find((event) => event?.type === "assistant_message");
   expect(message?.text).toContain(appUrl);
-  expect(message?.text).toContain("Delivery of the latest update remains unconfirmed");
-  expect(requests).toHaveLength(2);
+  expect(requests).toHaveLength(3);
   for (const request of requests) {
     expect(request).toEqual({
       method: "POST",
@@ -212,6 +243,7 @@ it("continues an actual merged workflow through protected native reads without m
         version: 1,
         action: "native-status",
         appId,
+        expectedMergeSha: mergeCommitSha,
         sessionId: ownerContext.sessionId,
         ownerContext,
       },
@@ -219,7 +251,7 @@ it("continues an actual merged workflow through protected native reads without m
   }
   expect(mocks.continueDelivery).toHaveBeenCalledOnce();
   expect(mocks.readAuthority).not.toHaveBeenCalled();
-  expect(mocks.sleep).toHaveBeenCalledOnce();
+  expect(mocks.sleep).toHaveBeenCalledTimes(2);
 });
 
 it.each(["pending", "available"] as const)(
@@ -243,14 +275,116 @@ it.each(["pending", "available"] as const)(
         },
       }),
     );
-    const result = await observeProduction.execute({ appId }, context());
+    const result = await observeSaved();
     expect(result).toEqual(observed(status));
     expect(requests).toHaveLength(1);
+    expect(requests[0]).not.toHaveProperty("expectedMergeSha");
     expect(mocks.continueDelivery).not.toHaveBeenCalled();
     expect(mocks.readAuthority).not.toHaveBeenCalled();
     expect(mocks.sleep).not.toHaveBeenCalled();
   },
 );
+
+it("reads the exact historical reconciled merge without replaying Ready or merge", async () => {
+  const reconciliation = { digest: "d".repeat(64) };
+  mocks.reviewedSubject.mockReturnValue({
+    appId,
+    proposalDigest: approval.proposalDigest,
+    reconciliation,
+    installationId: "101",
+  });
+  mocks.inspectReconciliationHead.mockResolvedValue(approval.headSha);
+  mocks.inspectPublishedPullRequest.mockResolvedValue({
+    state: "merged",
+    mergeCommitSha,
+    reviewedRevision: true,
+    reviewedTarget: approval,
+  });
+  const nativeStatus = vi.fn().mockResolvedValue(observed("available", "live"));
+  mocks.clientForContext.mockResolvedValue({ nativeStatus });
+
+  await expect(observeSaved()).resolves.toMatchObject({
+    requestedRevision: "live",
+    app: { url: appUrl },
+  });
+  expect(mocks.inspectReconciliationHead).toHaveBeenCalledWith(
+    approval.proposalDigest,
+    reconciliation,
+  );
+  expect(mocks.inspectPublishedPullRequest).toHaveBeenCalledWith(
+    approval.proposalDigest,
+    approval.headSha,
+  );
+  expect(nativeStatus).toHaveBeenCalledExactlyOnceWith(appId, mergeCommitSha);
+  expect(mocks.continueDelivery).not.toHaveBeenCalled();
+  expect(mocks.readAuthority).not.toHaveBeenCalled();
+  expect(mocks.sleep).not.toHaveBeenCalled();
+});
+
+it.each(["open", "unreviewed", "moved", "foreign-app", "read-failed"] as const)(
+  "keeps independent app availability when historical delivery is %s",
+  async (failure) => {
+    const subject = {
+      appId: failure === "foreign-app" ? "other-app" : appId,
+      proposalDigest: approval.proposalDigest,
+    };
+    mocks.reviewedSubject.mockReturnValue(subject);
+    if (failure === "moved") {
+      mocks.reviewedSubject.mockReturnValueOnce(subject).mockReturnValue({
+        ...subject,
+        proposalDigest: "d".repeat(64),
+      });
+    }
+    mocks.inspectPublishedPullRequest.mockResolvedValue({
+      state: failure === "open" ? "open" : "merged",
+      mergeCommitSha,
+      reviewedRevision: failure !== "unreviewed",
+      reviewedTarget: approval,
+    });
+    if (failure === "read-failed") {
+      mocks.inspectPublishedPullRequest.mockRejectedValue(new Error("provider read failed"));
+    }
+    const nativeStatus = vi.fn().mockResolvedValue(observed("available"));
+    mocks.clientForContext.mockResolvedValue({ nativeStatus });
+
+    await expect(observeSaved()).resolves.toMatchObject({
+      requestedRevision: "unassessed",
+      app: { url: appUrl },
+    });
+    expect(nativeStatus).toHaveBeenCalledOnce();
+    expect(nativeStatus.mock.calls[0]?.[0]).toBe(appId);
+    expect(nativeStatus.mock.calls[0]?.[1]).toBeUndefined();
+    expect(mocks.continueDelivery).not.toHaveBeenCalled();
+  },
+);
+
+it("returns merged with the available app link when activation remains pending beyond the observation window", async () => {
+  const nativeStatus = vi.fn().mockResolvedValue(observed("available", "awaiting-activation"));
+  mocks.clientForContext.mockResolvedValue({ nativeStatus });
+
+  await expect(finish()).resolves.toMatchObject({
+    status: "merged",
+    mergeCommitSha,
+    nativeProduction: { requestedRevision: "awaiting-activation", app: { url: appUrl } },
+  });
+  expect(mocks.sleep).toHaveBeenCalledTimes(80);
+  expect(mocks.continueDelivery).toHaveBeenCalledOnce();
+});
+
+it("keeps the known app link and merge after a transient native provider read failure", async () => {
+  const nativeStatus = vi
+    .fn()
+    .mockResolvedValueOnce(observed("available", "awaiting-activation"))
+    .mockRejectedValueOnce(new Error("provider unavailable"));
+  mocks.clientForContext.mockResolvedValue({ nativeStatus });
+
+  await expect(finish()).resolves.toMatchObject({
+    status: "merged",
+    mergeCommitSha,
+    nativeProduction: { status: "service-unavailable", app: { url: appUrl } },
+  });
+  expect(mocks.continueDelivery).toHaveBeenCalledOnce();
+});
 
 it.each(["repositoryId", "repositoryFullName"] as const)(
   "does not present another %s as the approved merged delivery",
@@ -334,7 +468,7 @@ it("keeps a missing deployment service as Builder-managed status after merge", a
 
 it("stops saved monitoring after canonical ownership is revoked", async () => {
   mocks.clientForContext.mockRejectedValue(new HostedOperatorError("authorization_required"));
-  const result = await observeProduction.execute({ appId }, context());
+  const result = await observeSaved();
   expect(result).toEqual({ status: "monitoring-stopped", requestedRevision: "unassessed" });
   expect(mocks.sleep).not.toHaveBeenCalled();
 });

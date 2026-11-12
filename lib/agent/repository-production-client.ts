@@ -23,7 +23,10 @@ import {
 } from "../provisioning/repository-production-delivery";
 import type { RepositoryProductionDeliveryTarget } from "../provisioning/repository-production-delivery";
 import { retainManagedProductionDeliveryRequirement } from "./production-delivery-requirement";
-import { repositoryProductionNativeStatusSchema } from "../provisioning/repository-production-native-status-contract";
+import {
+  repositoryProductionExpectedMergeShaSchema,
+  repositoryProductionNativeStatusSchema,
+} from "../provisioning/repository-production-native-status-contract";
 
 const setupSchema = z.object({
   operationRef: z.uuid(),
@@ -37,13 +40,15 @@ const setupSchema = z.object({
   signInUrl: z.url().optional(),
   expiresAt: z.iso.datetime({ offset: true }).optional(),
 });
+const nativeStatusAction = "native-status";
+const deliveryStatusAction = "delivery-status";
 // oxlint-disable-next-line sonarjs/max-union-size -- Each protected setup/read action has distinct existing service handling.
 type RepositoryProductionAction =
   | "plan"
   | "prepare"
   | "setup-status"
-  | "delivery-status"
-  | "native-status";
+  | typeof deliveryStatusAction
+  | typeof nativeStatusAction;
 
 export class RepositoryProductionNativeAccessChangedError extends Error {
   constructor() {
@@ -58,6 +63,7 @@ interface RepositoryProductionRequestExtras {
   repositoryId?: string;
   repositoryFullName?: string;
   reviewedHeadSha?: string;
+  expectedMergeSha?: string;
   approvalReference?: RepositoryProductionApprovalReference;
 }
 
@@ -75,7 +81,7 @@ export const repositoryProductionResponseError = async (
   response: Response,
   action: RepositoryProductionAction,
 ): Promise<Error> => {
-  if (action === "native-status") {
+  if (action === nativeStatusAction) {
     return response.status === 403
       ? new RepositoryProductionNativeAccessChangedError()
       : new Error("Builder could not check this app’s current availability.");
@@ -156,17 +162,20 @@ export const createRepositoryProductionClient = (input: {
     extra: RepositoryProductionRequestExtras = {},
   ) => {
     let response = await request(appId, action, extra);
-    const withReviewedHead = action === "delivery-status" && extra.reviewedHeadSha !== undefined;
+    const withRevision =
+      (action === deliveryStatusAction && extra.reviewedHeadSha !== undefined) ||
+      (action === nativeStatusAction && extra.expectedMergeSha !== undefined);
     if (
-      withReviewedHead &&
+      withRevision &&
       response.status === 400 &&
       (await repositoryProductionErrorCode(response.clone())) === "request_invalid"
     ) {
-      // Older operators reject the additional field before their strict same-session read.
-      response = await request(appId, action, {
-        repositoryId: extra.repositoryId,
-        repositoryFullName: extra.repositoryFullName,
-      });
+      // Older operators can still report app availability without revision evidence.
+      const legacy =
+        action === deliveryStatusAction
+          ? { repositoryId: extra.repositoryId, repositoryFullName: extra.repositoryFullName }
+          : {};
+      response = await request(appId, action, legacy);
     }
     if (!response.ok) {
       throw await repositoryProductionResponseError(response, action);
@@ -252,8 +261,19 @@ export const createRepositoryProductionClient = (input: {
     },
     status: async (appId: string) =>
       await send(appId, "setup-status", setupSchema.extend({ version: z.literal(1) })),
-    nativeStatus: async (appId: string) => {
-      const result = await send(appId, "native-status", repositoryProductionNativeStatusSchema);
+    nativeStatus: async (appId: string, expectedMergeSha?: string) => {
+      const extra =
+        expectedMergeSha === undefined
+          ? {}
+          : {
+              expectedMergeSha: repositoryProductionExpectedMergeShaSchema.parse(expectedMergeSha),
+            };
+      const result = await send(
+        appId,
+        nativeStatusAction,
+        repositoryProductionNativeStatusSchema,
+        extra,
+      );
       if (result.appId !== appId) {
         throw new RepositoryProductionNativeAccessChangedError();
       }
@@ -262,7 +282,7 @@ export const createRepositoryProductionClient = (input: {
     deliveryStatus: async (appId: string, target: RepositoryProductionDeliveryTarget) => {
       const result = await send(
         appId,
-        "delivery-status",
+        deliveryStatusAction,
         repositoryProductionDeliveryStatusSchema,
         repositoryProductionDeliveryTargetSchema.parse(target),
       );

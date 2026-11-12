@@ -2341,4 +2341,18 @@ describe("native app availability progress", () => {
     );
     expect(JSON.stringify(events)).not.toContain("gateway-read");
   });
+
+  it.each(["finish-github-pr-delivery", "observe-app-production"])(
+    "confirms the requested revision and public app link after %s",
+    (tool) => {
+      const live = { ...nativeProduction, requestedRevision: "live" };
+      const output =
+        tool === "finish-github-pr-delivery" ? { ...merged, nativeProduction: live } : live;
+      const events = projectInstalledEveEvents([complete(tool, output)]);
+      const message = events.find((event) => event.type === "assistant_message")?.text;
+      expect(message).toContain("The latest revision is live in Production.");
+      expect(message).toContain(appUrl);
+      expect(message).not.toContain("unconfirmed");
+    },
+  );
 });

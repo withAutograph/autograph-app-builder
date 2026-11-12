@@ -3,7 +3,10 @@ import { isDeepStrictEqual } from "node:util";
 import { HostedOperatorError } from "./hosted-operator-contract";
 import type { RepositoryProductionRequestOwner } from "./repository-production-dispatcher";
 import type { RepositoryProductionObservationSubject } from "./repository-production-management-subject";
-import { repositoryProductionNativeStatusSchema } from "./repository-production-native-status-contract";
+import {
+  repositoryProductionExpectedMergeShaSchema,
+  repositoryProductionNativeStatusSchema,
+} from "./repository-production-native-status-contract";
 import type { RepositoryProductionNativeStatus } from "./repository-production-native-status-contract";
 
 type ServiceIssue = NonNullable<RepositoryProductionNativeStatus["serviceIssue"]>;
@@ -25,6 +28,7 @@ class NativeObservationReadError extends Error {
 const id = z.string().min(1);
 const projectSchema = z.object({
   id,
+  link: z.unknown().optional(),
   targets: z.object({ production: z.object({ id }).nullish() }).optional(),
 });
 const domainSchema = z.object({
@@ -41,10 +45,94 @@ const deploymentSchema = z.object({
   readyState: id,
   aliasAssigned: z.boolean().optional(),
   aliasError: z.object({}).nullish(),
+  source: z.unknown().optional(),
+  gitSource: z.unknown().optional(),
+  meta: z.unknown().optional(),
+});
+const repoId = z.union([id, z.number().int().positive()]);
+const projectGitHubLinkSchema = z.object({
+  type: z.literal("github"),
+  repoId,
+  org: id,
+  repo: id,
+  productionBranch: id,
+});
+const deploymentGitHubSourceSchema = z.object({
+  type: z.literal("github"),
+  repoId,
+  ref: id,
+  sha: repositoryProductionExpectedMergeShaSchema,
+});
+const deploymentGitHubMetadataSchema = z.object({
+  githubOrg: z.unknown().optional(),
+  githubRepo: z.unknown().optional(),
+  githubCommitRef: z.unknown().optional(),
+  githubCommitSha: z.unknown().optional(),
 });
 const catalogSchema = z.object({
   applications: z.array(z.object({ id, basePath: z.string().min(1) })),
 });
+
+const currentNativeGitSha = (
+  deployment: z.infer<typeof deploymentSchema>,
+  project: z.infer<typeof projectSchema>,
+  scope: Pick<
+    RepositoryProductionObservationSubject["scope"],
+    "repositoryId" | "repositoryFullName"
+  >,
+): string | null => {
+  if (deployment.source !== "git") {
+    return null;
+  }
+  const link = projectGitHubLinkSchema.safeParse(project.link).data;
+  const metadata = deploymentGitHubMetadataSchema.safeParse(deployment.meta).data;
+  const [owner, name] = scope.repositoryFullName.split("/");
+  const linkPresent = project.link !== null && project.link !== undefined;
+  const matchingLink =
+    link !== undefined &&
+    String(link.repoId) === scope.repositoryId &&
+    link.org === owner &&
+    link.repo === name;
+  if (linkPresent && !matchingLink) {
+    return null;
+  }
+  if (deployment.gitSource !== null && deployment.gitSource !== undefined) {
+    const source = deploymentGitHubSourceSchema.safeParse(deployment.gitSource).data;
+    if (
+      source === undefined ||
+      String(source.repoId) !== scope.repositoryId ||
+      (link !== undefined && source.ref !== link.productionBranch)
+    ) {
+      return null;
+    }
+    const conflicts =
+      metadata !== undefined &&
+      (
+        [
+          [metadata.githubOrg, owner],
+          [metadata.githubRepo, name],
+          [metadata.githubCommitRef, source.ref],
+          [metadata.githubCommitSha, source.sha],
+        ] as const
+      ).some(([value, expected]) => value !== undefined && value !== expected);
+    return conflicts ? null : source.sha;
+  }
+  // Vercel can omit Git source details for reduced reads. The Git-triggered
+  // deployment metadata is usable only with its verified project repository link.
+  if (link === undefined || metadata === undefined) {
+    return null;
+  }
+  if (
+    metadata.githubOrg !== owner ||
+    metadata.githubRepo !== name ||
+    metadata.githubCommitRef !== link.productionBranch
+  ) {
+    return null;
+  }
+  return (
+    repositoryProductionExpectedMergeShaSchema.safeParse(metadata.githubCommitSha).data ?? null
+  );
+};
 
 const publicEntry = (origin: string, path: string | undefined, base = origin) => {
   if (path === undefined) {
@@ -102,7 +190,7 @@ const documentAvailability = (
   return withinBasePath(pathname, basePath) ? "responding" : null;
 };
 
-/** Observe current provider/Gateway facts only; neither source qualification nor a delivery effect. */
+/** Observe the provider's current deployment and public app route without changing delivery. */
 export const createRepositoryProductionNativeStatus =
   (deps: {
     resolve: (
@@ -114,8 +202,14 @@ export const createRepositoryProductionNativeStatus =
     fetch?: typeof fetch;
     now?: () => Date;
   }) =>
-  async (owner: RepositoryProductionRequestOwner): Promise<RepositoryProductionNativeStatus> => {
+  async (
+    owner: RepositoryProductionRequestOwner,
+    expectedMergeSha?: string,
+  ): Promise<RepositoryProductionNativeStatus> => {
     deps.signal.throwIfAborted();
+    const requestedMerge = repositoryProductionExpectedMergeShaSchema
+      .optional()
+      .parse(expectedMergeSha);
     const subject = await deps.resolve(owner);
     deps.signal.throwIfAborted();
     const result: RepositoryProductionNativeStatus = {
@@ -230,6 +324,7 @@ export const createRepositoryProductionNativeStatus =
     const { hostname } = new URL(origin);
     const aliasPath = `/v4/aliases/${encodeURIComponent(hostname)}`;
     let activeId: string | undefined;
+    let revisionSource: { deployment: z.infer<typeof deploymentSchema>; sha: string } | null = null;
     delete result.serviceIssue;
     result.status = "pending";
     result.deployment = { state: notObserved };
@@ -246,8 +341,9 @@ export const createRepositoryProductionNativeStatus =
           domainSchema,
         );
         const alias = await readProvider(aliasPath, aliasSchema);
+        const gitInfo = requestedMerge === undefined ? "" : "?withGitRepoInfo=true";
         const deployment = await readProvider(
-          `/v13/deployments/${encodeURIComponent(activeId)}`,
+          `/v13/deployments/${encodeURIComponent(activeId)}${gitInfo}`,
           deploymentSchema,
         );
         const branchBound = (domain.gitBranch ?? null) !== null;
@@ -272,11 +368,20 @@ export const createRepositoryProductionNativeStatus =
           // Vercel can select a build before it assigns the alias, including while deployment checks run.
           await assertCurrent();
           result.app = { state: notObserved };
+          if (requestedMerge !== undefined) {
+            result.requestedRevision = "awaiting-activation";
+          }
           result.observedAt = (deps.now?.() ?? new Date()).toISOString();
           return repositoryProductionNativeStatusSchema.parse(result);
         }
         if (deployment.readyState === "READY") {
           result.deployment = { state: "active" };
+          if (requestedMerge !== undefined) {
+            const sha = currentNativeGitSha(deployment, project, scope);
+            if (sha !== null) {
+              revisionSource = { deployment, sha };
+            }
+          }
         } else if (["ERROR", "CANCELED", "CANCELLED", "BLOCKED"].includes(deployment.readyState)) {
           throw new NativeObservationReadError(providerRead);
         }
@@ -347,6 +452,11 @@ export const createRepositoryProductionNativeStatus =
         }
         if (project.targets?.production?.id !== activeId || alias.deploymentId !== activeId) {
           result.deployment = { state: notObserved };
+        } else if (
+          revisionSource !== null &&
+          currentNativeGitSha(revisionSource.deployment, project, scope) !== revisionSource.sha
+        ) {
+          revisionSource = null;
         }
       } catch (error) {
         if (!(error instanceof NativeObservationReadError)) {
@@ -362,6 +472,10 @@ export const createRepositoryProductionNativeStatus =
       ["responding", "sign-in-required"].includes(result.app.state);
     if (result.serviceIssue === undefined) {
       result.status = available ? "available" : "pending";
+      if (requestedMerge !== undefined) {
+        result.requestedRevision =
+          available && revisionSource?.sha === requestedMerge ? "live" : "awaiting-activation";
+      }
     } else {
       result.status = unavailable;
     }
