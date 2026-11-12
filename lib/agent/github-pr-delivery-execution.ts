@@ -88,6 +88,12 @@ export const continueGitHubPrDeliveryWithPorts = async (
   const readAuthority = ports.readAuthority ?? readGitHubPrDeliveryAuthority;
   const authority = await readAuthority(approval, ctx);
   const directProduction = "directProduction" in authority;
+  const productionRevision = "productionRevision" in authority;
+  const revisionSetupChanged = {
+    status: "production-revision-setup-changed" as const,
+    guidance:
+      "This release approval covers an update to the app’s existing Production setup. Builder could not verify that setup for the reviewed changes.",
+  };
   // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Verify canonical ownership before opening the scoped provider runtime.
   const { githubPublicationRuntimeForSession } =
     await import("./deployment-github-publication-runtime");
@@ -180,6 +186,9 @@ export const continueGitHubPrDeliveryWithPorts = async (
         productionSetup.applicable &&
         (productionSetup.state !== "ready" || productionSetup.preparationRequired)
       ) {
+        if (productionRevision) {
+          return revisionSetupChanged;
+        }
         return {
           status: "production-setup-required" as const,
           productionSetup,
@@ -216,6 +225,9 @@ export const continueGitHubPrDeliveryWithPorts = async (
     productionSetup.applicable &&
     (productionSetup.state !== "ready" || productionSetup.preparationRequired)
   ) {
+    if (productionRevision) {
+      return revisionSetupChanged;
+    }
     return {
       status: "production-setup-required" as const,
       readyAt,

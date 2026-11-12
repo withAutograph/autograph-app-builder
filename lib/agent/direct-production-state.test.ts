@@ -23,6 +23,12 @@ import {
   readRepositoryProductionApproval,
 } from "../eve/private-repository-production-approval";
 import { observePrivateApplyDenials } from "../eve/private-apply-denial-evidence";
+import { tenantKeyFor } from "../eve/hosted-auth";
+import {
+  GITHUB_PUBLICATION_VERSION,
+  REPOSITORY_RELEASE_GATE,
+} from "../repository/github-publication";
+import type { DraftPullRequestProposal } from "../repository/github-publication";
 import {
   repositoryProductionApprovalInput,
   repositoryProductionApprovalReference,
@@ -40,6 +46,7 @@ import {
   directProductionSubjectForPlan,
   recordDirectProductionGrant,
   requestDirectProductionGrant,
+  restoreDirectProductionRevisionPredecessor,
 } from "./direct-production-state";
 import {
   readPrivateApplyAuthority,
@@ -52,8 +59,16 @@ import {
   diagnosticBuildDecisionState,
   emitCurrentBuildWorkflowProjection,
 } from "./approved-build-continuation-runtime";
+import {
+  directProductionProgressState,
+  recordDirectProductionProgress,
+} from "./direct-production-progress";
+import { retainOwnedDraftPublicationSeal } from "./github-draft-publication-lineage";
+import { captureGitHubPrDeliveryCallScope } from "./github-pr-delivery-authority-state";
+import type { GitHubPublicationRuntime } from "./github-publication-runtime";
+import type { observeMergedAppProduction } from "./app-production-observation";
 import { stageImplementationFiles } from "./staged-implementation";
-import { appBuilderWorkflowState, updateExactWorkflow } from "./workflow-state";
+import { appBuilderWorkflowState, sha256, updateExactWorkflow } from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import {
   ARRUSTED_PRODUCTION_REPOSITORY,
@@ -212,6 +227,89 @@ const releaseContext = {
   },
 } satisfies ToolContext & { approvedTools: ReadonlySet<string> };
 
+const installPriorProduction = (stage: "live" | "setup" = "live") => {
+  installPlan();
+  const subject = requiredSubject(directProductionSubjectForPlan(releaseContext));
+  const input = {
+    callId: "prior-build",
+    implementationFiles: [],
+    toolName: "apply_app_creation" as const,
+    subject,
+  };
+  const buildScope = {
+    appId,
+    appSpecDigest: specDigest,
+    proposalDigest,
+    sessionId,
+    workspaceId: buildWorkspaceId,
+  };
+  requestPrivateApplyApproval(buildScope, input.callId);
+  expect(requestDirectProductionGrant(releaseContext, input)).toBe("user-approval");
+  const grant = recordDirectProductionGrant(releaseContext, input);
+  recordApprovedPrivateApply(buildScope, input.callId);
+  directProductionProgressState.update(() => ({ grantDigest: grant.digest, stage }));
+  return grant;
+};
+
+const revisionPage = `apps/${appId}/app/page.tsx`;
+const installHeadingRevision = (path = revisionPage) => {
+  const state = appBuilderWorkflowState.get();
+  if (state.phase !== "planned") {
+    throw new Error("The revision fixture requires the existing app plan.");
+  }
+  const appSpec = {
+    ...state.appSpec,
+    digest: sha256("Use Socket Labels as the heading"),
+    artifactRevision: sha256("heading specification"),
+    acceptedByCallId: "accept-heading",
+  };
+  const before = "export default function Page() { return <h1>Socket Label Log</h1>; }";
+  const content = "export default function Page() { return <h1>Socket Labels</h1>; }";
+  const changes = [
+    {
+      after: { content, digest: sha256(content), mode: "644" },
+      before: { digest: sha256(before), mode: "644" },
+      path,
+    },
+  ];
+  const contract = {
+    appId,
+    appSpec: { path: appSpec.artifactPath, sha256: appSpec.digest },
+    version: 1,
+  } as const;
+  const target = {
+    ...state.proposal.target,
+    contract,
+    operation: "iterate-existing-app",
+    iteration: { changes, digest: sha256(JSON.stringify(changes)) },
+    plan: {
+      ...state.proposal.target.plan,
+      source: { ...state.proposal.target.plan.source, workspacePath: `apps/${appId}` },
+    },
+  } as const;
+  const { digest: originalDigest, ...original } = state.proposal;
+  const proposal = {
+    ...original,
+    appSpecDigest: appSpec.digest,
+    artifactRevision: appSpec.artifactRevision,
+    contractDigest: sha256(JSON.stringify(contract)),
+    plannedByCallId: "plan-heading",
+    target,
+  };
+  const revision = {
+    ...state,
+    appSpec,
+    proposal: { ...proposal, digest: sha256(JSON.stringify(proposal)) },
+  };
+  expect(revision.proposal.digest).not.toBe(originalDigest);
+  updateExactWorkflow({
+    expected: state,
+    operation: "record an app heading revision",
+    transition: () => revision,
+  });
+  return revision;
+};
+
 const authoringDecision = () =>
   currentAuthoringDecision(releaseContext, {
     completed: true,
@@ -341,6 +439,71 @@ const markReviewed = () => {
     operation: "read test review outcome",
     transition: () => reviewed,
   });
+};
+
+const retainPriorPublication = (grant: ReturnType<typeof installPriorProduction>) => {
+  installPlan("kernel", { phase: "applied", appliedPaths: [appliedCuePath] });
+  markReviewed();
+  const reviewed = appBuilderWorkflowState.get();
+  if (reviewed.phase !== "reviewed") {
+    throw new Error("The previously delivered app must have a review.");
+  }
+  const { installationId } = grant.subject;
+  const reviewDigest = sha256("review of the original delivery");
+  const proposal: DraftPullRequestProposal = {
+    version: GITHUB_PUBLICATION_VERSION,
+    installationIdentityDigest: sha256("verified installation"),
+    repositoryId: repo.repositoryId,
+    owner: repo.owner,
+    name: repo.name,
+    visibility: "private",
+    baseBranch: repo.defaultBranch,
+    baseSha: repo.headSha,
+    baseTree: repo.headTree,
+    repositoryObservationDigest: sha256("verified destination"),
+    releaseGate: { name: REPOSITORY_RELEASE_GATE, configured: true },
+    reviewDigest,
+    changeSetDigest: sha256("original changes"),
+    changedContentDigest: sha256("original content"),
+    approvedPaths: [revisionPage],
+    branchName: "builder/fixture-app",
+    draft: true,
+    title: "Publish fixture app",
+    idempotencyKey: "original-publication",
+    intendedOutcome: "publish-reviewed-change-set-as-draft-pull-request",
+    digest: sha256("retained publication seal"),
+  };
+  // SAFETY: Only the review and installation identities are read by the real capture and restore paths.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Review internals and GitHub write effects are outside the fixture.
+  const withPublication = {
+    ...reviewed,
+    publishedGitHubDraftProposalDigest: proposal.digest,
+    reviewReceipt: { digest: reviewDigest },
+    githubDestinationReview: { installation: { installationId } },
+  } as Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
+  appBuilderWorkflowState.update(() => withPublication);
+  retainOwnedDraftPublicationSeal({ appId, installationId, proposal, sessionId });
+  const target = {
+    repositoryId: repo.repositoryId,
+    owner: repo.owner,
+    name: repo.name,
+    baseBranch: repo.defaultBranch,
+    headSha: "c".repeat(40),
+    pullRequestNumber: 42,
+  };
+  captureGitHubPrDeliveryCallScope(
+    { ...target, installationId, proposalDigest: proposal.digest },
+    "deliver-original-app",
+    {
+      ownerKey: tenantKeyFor({ ...grant.subject.authority, scopes: ["sessions:write"] }),
+      adapterSessionId: sessionId,
+      adapterGeneration: 1,
+      cancellationRevision: 0,
+    },
+    releaseContext.session.turn,
+    grant.digest,
+  );
+  return { proposal, target };
 };
 
 describe("direct Production Build authority", () => {
@@ -668,6 +831,194 @@ describe("direct Production Build authority", () => {
         }),
       ).toThrow("Review the current app and Arrusted destination");
       expect(currentDirectProductionGrant(ctx, subject)).toBeUndefined();
+    });
+  });
+
+  it("uses one fresh Eve Build approval for a heading revision of the same live private app", async () => {
+    const container = new ContextContainer();
+    const { session } = releaseContext;
+    container.set(SessionKey, { auth: session.auth, sessionId, turn: session.turn });
+    await contextStorage.run(container, async () => {
+      const previous = installPriorProduction();
+      const revision = installHeadingRevision();
+      const subject = requiredSubject(directProductionSubjectForPlan(releaseContext));
+      expect(subject).toEqual({
+        ...previous.subject,
+        appSpecDigest: revision.appSpec.digest,
+        proposalDigest: revision.proposal.digest,
+        revision: {
+          priorGrantDigest: previous.digest,
+          priorProposalDigest: previous.subject.proposalDigest,
+        },
+      });
+      expect(await releaseAppProduction.execute({}, releaseContext)).toMatchObject({
+        status: "review-production-release",
+        directProduction: subject,
+      });
+      expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
+      expect(() =>
+        requestDirectProductionGrant(releaseContext, {
+          callId: "reuse-prior-build",
+          implementationFiles: [],
+          toolName: "apply_app_creation",
+          subject: previous.subject,
+        }),
+      ).toThrow("Review the current app and Arrusted destination");
+      expect(() =>
+        recordDirectProductionGrant(releaseContext, {
+          callId: buildCallId,
+          implementationFiles: [],
+          toolName: "apply_app_creation",
+          subject,
+        }),
+      ).toThrow("no matching Production approval");
+
+      repositoryCommand.mockReset().mockResolvedValue({
+        ok: true,
+        receipt: { changes: [], postTree: [{ path: appliedCuePath }] },
+      });
+      const input = { directProduction: subject, implementationFiles: [] };
+      const { events, initial, run } = originalBuildHarness(input);
+      const pending = await run(initial, { message: "Release this heading update to Production." });
+      const requested = events.find((event) => event.type === "input.requested");
+      const request = requested?.data.requests.find((value) => value.kind === "tool-approval");
+      if (request === undefined) {
+        throw new Error("Expected the revision to request a new Build approval.");
+      }
+      expect(request.action).toMatchObject({ input, toolName: buildTool, callId: buildCallId });
+      expect(repositoryCommand).not.toHaveBeenCalled();
+      expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
+      expect(readPrivateApplyAuthority().grant?.proposalDigest).toBe(proposalDigest);
+
+      await run(pending.session, {
+        inputResponses: [{ optionId: "approve", requestId: request.requestId }],
+      });
+      const requests = events.flatMap((event) =>
+        event.type === "input.requested" ? event.data.requests : [],
+      );
+      expect(requests.filter((value) => value.kind === "tool-approval")).toHaveLength(1);
+      expect(repositoryCommand).toHaveBeenCalledOnce();
+      expect(readPrivateApplyAuthority().grant?.proposalDigest).toBe(revision.proposal.digest);
+      const grant = currentDirectProductionGrant(releaseContext, subject);
+      expect(grant).toMatchObject({ callId: buildCallId, subject, toolName: buildTool });
+      expect(grant?.digest).not.toBe(previous.digest);
+    });
+  });
+
+  it("does not offer a live revision to a different owner or moved installation", () => {
+    contextStorage.run(new ContextContainer(), () => {
+      installPriorProduction();
+      installHeadingRevision();
+      expect(directProductionSubjectForPlan(context("other-creator"))).toBeUndefined();
+      repositoryAccessReceiptState.update((current) =>
+        recordRepositoryAccessReceipt({
+          current,
+          sessionId,
+          confirmedByCallId: "verified-other-installation",
+          access: { ...readyAccess, scope: { ...readyAccess.scope, installationId: "41" } },
+        }),
+      );
+      expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
+    });
+  });
+
+  it("requires observed live Production before offering a revision approval", () => {
+    contextStorage.run(new ContextContainer(), () => {
+      installPriorProduction("setup");
+      installHeadingRevision();
+      expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
+    });
+  });
+
+  it("restores earlier live evidence only after reading the exact owned merge and native revision", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const previous = installPriorProduction("setup");
+      const { proposal, target } = retainPriorPublication(previous);
+      installPlan();
+      installHeadingRevision();
+      expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
+
+      const mergeCommitSha = "d".repeat(40);
+      const inspectPublishedPullRequest = vi
+        .fn<NonNullable<GitHubPublicationRuntime["inspectPublishedPullRequest"]>>()
+        .mockResolvedValue({
+          state: "merged",
+          draft: false,
+          checks: "passed",
+          headSha: target.headSha,
+          baseBranch: target.baseBranch,
+          mergeCommitSha,
+          reviewedRevision: true,
+          reviewedTarget: target,
+        });
+      const publication = vi.fn().mockResolvedValue({ inspectPublishedPullRequest });
+      const destination = {
+        repositoryId: repo.repositoryId,
+        repositoryFullName: ARRUSTED_PRODUCTION_REPOSITORY,
+      };
+      const observed = {
+        version: 1,
+        appId,
+        observedAt: "2026-11-12T15:58:07Z",
+        destination,
+        status: "available",
+        app: { state: "sign-in-required", url: "https://apps.example/fixture-app" },
+        deployment: { state: "active" },
+      } as const;
+      const observeProduction = vi
+        .fn<typeof observeMergedAppProduction>()
+        .mockResolvedValueOnce({ ...observed, requestedRevision: "awaiting-activation" })
+        .mockResolvedValueOnce({ ...observed, requestedRevision: "live" });
+      const ports = { publication, observeProduction };
+      await restoreDirectProductionRevisionPredecessor(releaseContext, ports);
+      expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
+      await restoreDirectProductionRevisionPredecessor(releaseContext, ports);
+
+      expect(publication).toHaveBeenLastCalledWith(releaseContext.session.auth, {
+        selectedInstallationId: previous.subject.installationId,
+      });
+      expect(inspectPublishedPullRequest).toHaveBeenLastCalledWith(proposal.digest);
+      expect(observeProduction).toHaveBeenLastCalledWith(
+        { appId, ...destination },
+        releaseContext,
+        mergeCommitSha,
+      );
+      recordDirectProductionProgress(previous.digest, "setup");
+      expect(directProductionProgressState.get()).toEqual({
+        grantDigest: previous.digest,
+        stage: "live",
+      });
+      expect(directProductionSubjectForPlan(releaseContext)).toMatchObject({
+        revision: { priorGrantDigest: previous.digest },
+      });
+      expect(readPrivateApplyAuthority().pending).toEqual([]);
+    });
+  });
+
+  it.each([appliedCuePath, `apps/${appId}/package.json`, "apps/another-app/app/page.tsx"])(
+    "keeps revision changes to %s outside the combined approval",
+    (path) => {
+      contextStorage.run(new ContextContainer(), () => {
+        installPriorProduction();
+        installHeadingRevision(path);
+        expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
+      });
+    },
+  );
+
+  it("refuses extra implementation files outside the frozen heading revision", () => {
+    contextStorage.run(new ContextContainer(), () => {
+      installPriorProduction();
+      installHeadingRevision();
+      const subject = requiredSubject(directProductionSubjectForPlan(releaseContext));
+      expect(() =>
+        requestDirectProductionGrant(releaseContext, {
+          callId: "extra-files",
+          implementationFiles: [{ path: revisionPage, content: "unreviewed" }],
+          toolName: "apply_app_creation",
+          subject,
+        }),
+      ).toThrow("Review the current app and Arrusted destination");
     });
   });
 

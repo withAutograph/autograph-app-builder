@@ -26,6 +26,13 @@ export async function approvePrepareAppProduction(
   if (grant === undefined) {
     return "user-approval";
   }
+  if (grant.subject.revision !== undefined) {
+    return {
+      type: "denied",
+      reason:
+        "This revision uses the app’s existing Production data and access. Continue to the reviewed release.",
+    };
+  }
   const { matchesDirectProductionSetupReference } =
     await import("../provisioning/repository-production-approval");
   return matchesDirectProductionSetupReference(grant.subject, toolInput)

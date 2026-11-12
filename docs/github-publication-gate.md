@@ -629,6 +629,13 @@ storage. A private Build that later receives a Production request uses one
 release approval with the same scope. A private-only Build grants no outward
 authority.
 
+A presentation revision to the same session's live private Arrusted app can use
+a fresh combined Build and Production approval. The approval binds the new
+proposal and the preceding live release, along with the same owner, repository,
+installation, workspace, and app. The revision uses the existing Production
+data and access. Builder reads the protected setup for the reviewed head before
+Ready and merge and stops if the changes require a different setup.
+
 For a plan acquired from Arrusted's default branch, `release-app-production`
 reads the verified repository and installation already bound to the plan.
 Supplying the same repository again uses that binding. An explicit installation

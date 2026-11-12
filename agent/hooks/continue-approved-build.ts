@@ -21,9 +21,12 @@ import {
   approvedBuildReviewProgress,
   authenticatedBuildDelivery,
   currentApprovedBuildProgress,
-  directProductionProgressState,
   recordApprovedBuildDecision,
 } from "../../lib/agent/approved-build-continuation-runtime";
+import {
+  directProductionProgressState,
+  recordDirectProductionProgress,
+} from "../../lib/agent/direct-production-progress";
 import { hasCurrentProductBehaviorPreview } from "../../lib/agent/product-behavior-state";
 import { workingPreviewState } from "../../lib/agent/working-preview-state";
 
@@ -159,7 +162,7 @@ export default defineHook({
             result.toolName !== observeProductionTool ||
             (current?.grantDigest === grant.digest && current.stage === activationUnavailable);
           if (canRecord) {
-            directProductionProgressState.update(() => ({ grantDigest: grant.digest, stage }));
+            recordDirectProductionProgress(grant.digest, stage);
           }
         }
         if (state.phase === "validated") {

@@ -21,6 +21,7 @@ export const directProductionSubjectSchema = z.strictObject({
   installationId: id,
   baseBranch: id,
   storageKind: z.enum(["none", "postgres"]),
+  revision: z.strictObject({ priorGrantDigest: digest, priorProposalDigest: digest }).optional(),
 });
 
 export type DirectProductionSubject = z.infer<typeof directProductionSubjectSchema>;
@@ -52,6 +53,14 @@ export const createDirectProductionGrant = (
   directProductionGrantSchema.parse({ ...input, digest: grantDigest(input) });
 
 export const describeDirectProductionSubject = (subject: DirectProductionSubject) => {
+  if (subject.revision !== undefined) {
+    const storage = subject.storageKind === "postgres" ? " and database" : "";
+    return [
+      `Release this update to ${subject.appId} in ${subject.repositoryFullName}.`,
+      `The app keeps its current Production URL, private access${storage}.`,
+      "Builder opens the reviewed pull request and merges it after required checks pass. The repository’s native deployment then makes the update available.",
+    ].join(" ");
+  }
   const storage =
     subject.storageKind === "postgres"
       ? "Builder prepares the app’s managed database and restricted runtime access under your workspace’s existing plan."

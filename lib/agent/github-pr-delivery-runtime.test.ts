@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   getState: vi.fn(),
   getCandidate: vi.fn(() => null),
   runtimeForSession: vi.fn(),
+  directGrant: vi.fn(),
   production:
     vi.fn<
       (target: {
@@ -35,6 +36,7 @@ vi.mock("./draft-reconciliation-state", () => ({
 }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T): T => tool }));
 vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: mocks.getState } }));
+vi.mock("./direct-production-state", () => ({ currentDirectProductionGrant: mocks.directGrant }));
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: mocks.runtimeForSession,
 }));
@@ -46,6 +48,7 @@ vi.mock("./github-production-delivery-readiness", () => ({
   }),
 }));
 beforeEach(() => {
+  mocks.directGrant.mockReset();
   mocks.production.mockReset();
   // oxlint-disable-next-line eslint/require-await -- This controlled service port resolves without provider work.
   mocks.production.mockImplementation(async ({ appId, repositoryId, repositoryFullName }) => ({
@@ -193,44 +196,58 @@ it("reports draft checks as deferred using only the session's reviewed publicati
   expect(compareAndSet).not.toHaveBeenCalled();
 });
 
-it("automatically directs managed setup before exposing the Ready/merge approval", async () => {
-  const { proposal, reviewedTarget, runtime } = fixture();
-  const mutate = vi.fn();
-  mocks.getState.mockReturnValue({
-    appSpec: { appId: "demo" },
-    githubDraftProposal: { proposal },
-    phase: "reviewed",
-  });
-  mocks.runtimeForSession.mockResolvedValue({ ...runtime, runPublishedPullRequestEffect: mutate });
-  mocks.production.mockResolvedValue({
-    version: 1,
-    appId: "demo",
-    repositoryId: reviewedTarget.repositoryId,
-    repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
-    applicable: true,
-    operationRef: "11111111-1111-4111-8111-111111111111",
-    state: "setting-up-data",
-    preparationRequired: true,
-  });
-  // SAFETY: Runtime and prerequisite reads are controlled; the real tool owns approval construction.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Fixture supplies only the fields used through these injected boundaries.
-  const result = await readDelivery.execute({}, { session: { auth: {} } } as never);
-  expect(result).toMatchObject({
-    checks: "deferred",
-    nextCall: { tool: "plan-app-production", input: { appId: "demo" } },
-  });
-  expect(result).not.toHaveProperty("approval");
-  expect(mocks.production).toHaveBeenCalledExactlyOnceWith(
-    {
+it.each([false, true])(
+  "handles missing managed setup before delivery (revision: %s)",
+  async (revision) => {
+    const { proposal, reviewedTarget, runtime } = fixture();
+    const mutate = vi.fn();
+    mocks.getState.mockReturnValue({
+      appSpec: { appId: "demo" },
+      githubDraftProposal: { proposal },
+      phase: "reviewed",
+    });
+    mocks.runtimeForSession.mockResolvedValue({
+      ...runtime,
+      runPublishedPullRequestEffect: mutate,
+    });
+    if (revision) {
+      mocks.directGrant.mockReturnValue({ subject: { revision: {} } });
+    }
+    mocks.production.mockResolvedValue({
+      version: 1,
       appId: "demo",
       repositoryId: reviewedTarget.repositoryId,
       repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
-      reviewedHeadSha: reviewedTarget.headSha,
-    },
-    expect.anything(),
-  );
-  expect(mutate).not.toHaveBeenCalled();
-});
+      applicable: true,
+      operationRef: "11111111-1111-4111-8111-111111111111",
+      state: "setting-up-data",
+      preparationRequired: true,
+    });
+    // SAFETY: Runtime and prerequisite reads are controlled; the real tool owns approval construction.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Fixture supplies only the fields used through these injected boundaries.
+    const result = await readDelivery.execute({}, { session: { auth: {} } } as never);
+    if (revision) {
+      expect(result).toMatchObject({ status: "production-revision-setup-changed" });
+      expect(result).not.toHaveProperty("nextCall");
+    } else {
+      expect(result).toMatchObject({
+        checks: "deferred",
+        nextCall: { tool: "plan-app-production", input: { appId: "demo" } },
+      });
+    }
+    expect(result).not.toHaveProperty("approval");
+    expect(mocks.production).toHaveBeenCalledExactlyOnceWith(
+      {
+        appId: "demo",
+        repositoryId: reviewedTarget.repositoryId,
+        repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
+        reviewedHeadSha: reviewedTarget.headSha,
+      },
+      expect.anything(),
+    );
+    expect(mutate).not.toHaveBeenCalled();
+  },
+);
 
 it("fails before provider inspection when the stored receipt belongs to a different repository", async () => {
   const { inspect, proposal, runtime } = fixture("101");
