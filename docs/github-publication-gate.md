@@ -629,6 +629,13 @@ storage. A private Build that later receives a Production request uses one
 release approval with the same scope. A private-only Build grants no outward
 authority.
 
+For a plan acquired from Arrusted's default branch, `release-app-production`
+reads the verified repository and installation already bound to the plan.
+Supplying the same repository again uses that binding. An explicit installation
+must match the verified one. Builder passes the returned `directProduction`
+subject with the implementation to `apply_app_creation` to present the single
+**Build and release to Production?** approval.
+
 For an existing starter-backed plan, `release-app-production` accepts the
 creator's chosen Arrusted repository as `destination`. Builder verifies the
 connected GitHub account through the same repository-access flow and records

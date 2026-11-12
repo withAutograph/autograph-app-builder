@@ -323,6 +323,46 @@ const markReviewed = () => {
 
 describe("direct Production Build authority", () => {
   it.each([
+    { repository: ARRUSTED_PRODUCTION_REPOSITORY },
+    {
+      repository: ARRUSTED_PRODUCTION_REPOSITORY,
+      selectedInstallationId: readyAccess.scope.installationId,
+    },
+  ])("reads the verified existing Arrusted release for destination %j", async (destination) => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      installPlan();
+      classifyAccess.mockReset().mockResolvedValue(readyAccess);
+      const accessBefore = repositoryAccessReceiptState.get();
+      const subject = requiredSubject(directProductionSubjectForPlan(releaseContext));
+
+      expect(await releaseAppProduction.execute({ destination }, releaseContext)).toMatchObject({
+        status: "review-production-release",
+        directProduction: subject,
+      });
+      expect(classifyAccess).not.toHaveBeenCalled();
+      expect(repositoryAccessReceiptState.get()).toEqual(accessBefore);
+      expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
+    });
+  });
+
+  it.each([
+    { repository: "other/repository" },
+    { repository: ARRUSTED_PRODUCTION_REPOSITORY, selectedInstallationId: "41" },
+  ])("refuses to change the existing Arrusted release destination to %j", async (destination) => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      installPlan();
+      classifyAccess.mockReset().mockResolvedValue(readyAccess);
+      const accessBefore = repositoryAccessReceiptState.get();
+
+      expect(await releaseAppProduction.execute({ destination }, releaseContext)).toMatchObject({
+        status: "managed-release-unavailable",
+      });
+      expect(classifyAccess).not.toHaveBeenCalled();
+      expect(repositoryAccessReceiptState.get()).toEqual(accessBefore);
+    });
+  });
+
+  it.each([
     { decision: "approve", sourceKind: "existing-repository" },
     { decision: "cancel", sourceKind: "existing-repository" },
     { decision: "approve", sourceKind: "fresh-template" },
@@ -335,10 +375,6 @@ describe("direct Production Build authority", () => {
       await contextStorage.run(container, async () => {
         installPlan("none", planned, sourceKind);
         classifyAccess.mockReset().mockResolvedValue(readyAccess);
-        const starterDestination =
-          sourceKind === "fresh-template"
-            ? { destination: { repository: ARRUSTED_PRODUCTION_REPOSITORY } }
-            : {};
         if (sourceKind === "fresh-template") {
           expect(await releaseAppProduction.execute({}, releaseContext)).toMatchObject({
             status: "production-destination-required",
@@ -358,12 +394,16 @@ describe("direct Production Build authority", () => {
           receipt: { changes: [], postTree: [{ path: appliedCuePath }] },
         });
         const preflight = await releaseAppProduction.execute(
-          { storageKind: "postgres", ...starterDestination },
+          {
+            storageKind: "postgres",
+            destination: { repository: ARRUSTED_PRODUCTION_REPOSITORY },
+          },
           releaseContext,
         );
         if (!("status" in preflight) || preflight.status !== "review-production-release") {
           throw new Error("The planned app must have a reviewable Arrusted release.");
         }
+        expect(classifyAccess).toHaveBeenCalledTimes(sourceKind === "fresh-template" ? 1 : 0);
         const subject = preflight.directProduction;
         const input = {
           directProduction: subject,

@@ -19,6 +19,8 @@ import { repositoryAccessRuntimeForSession } from "../../lib/agent/deployment-re
 import { resolveRepositoryAccessForTool } from "../../lib/agent/repository-access-tool";
 import { parseRepositoryReference } from "../../lib/integrations/repository-access";
 
+const managedReleaseUnavailable = "managed-release-unavailable" as const;
+
 const approvedPrivateBuild = (subject: z.infer<typeof directProductionSubjectSchema>) => {
   const state = appBuilderWorkflowState.get();
   if (state.phase !== "applied" && state.phase !== "validated" && state.phase !== "reviewed") {
@@ -36,7 +38,7 @@ const approvedPrivateBuild = (subject: z.infer<typeof directProductionSubjectSch
 export default defineTool({
   availableInSubagents: false,
   description:
-    "For an explicit request to release a private Arrusted app to Production, read its directProduction subject. For a starter-backed plan, supply destination with the explicitly chosen Arrusted repository and resolve any normal GitHub connection or installation choice in the same session. This keeps the existing starter source. For a new plan, a read-only storageKind hint of postgres reflects an authored .config/app-specs/<app-id>.cue; none reflects removing an existing planned CUE. Pass the subject to apply_app_creation with those implementation files for a single Build and release approval. For an already approved private build, read the subject without arguments and pass it back here to present its one Production release approval. This records the user decision and does not publish, provision or merge by itself.",
+    "For an explicit request to release a private Arrusted app to Production, read its directProduction subject. A plan with an acquired Arrusted default branch already has its verified destination; repeating that same repository is allowed. For a starter-backed plan, supply destination with the explicitly chosen Arrusted repository and resolve any normal GitHub connection or installation choice in the same session. This keeps the existing starter source. For a new plan, a read-only storageKind hint of postgres reflects an authored .config/app-specs/<app-id>.cue; none reflects removing an existing planned CUE. Pass the subject to apply_app_creation with those implementation files for a single Build and release approval. For an already approved private build, read the subject without arguments and pass it back here to present its one Production release approval. This records the user decision and does not publish, provision or merge by itself.",
   inputSchema: z
     .strictObject({
       directProduction: directProductionSubjectSchema.optional(),
@@ -73,12 +75,11 @@ export default defineTool({
     const starterPlan = freshTemplateProductionPlan(ctx);
     if (input.destination !== undefined) {
       const repository = parseRepositoryReference(input.destination.repository).fullName;
-      if (
-        starterPlan === undefined ||
-        repository.toLowerCase() !== ARRUSTED_PRODUCTION_REPOSITORY.toLowerCase()
-      ) {
-        return { status: "managed-release-unavailable" as const };
+      if (repository.toLowerCase() !== ARRUSTED_PRODUCTION_REPOSITORY.toLowerCase()) {
+        return { status: managedReleaseUnavailable };
       }
+    }
+    if (input.destination !== undefined && starterPlan !== undefined) {
       const access = await resolveRepositoryAccessForTool(
         {
           repository: ARRUSTED_PRODUCTION_REPOSITORY,
@@ -94,9 +95,21 @@ export default defineTool({
       recordFreshTemplateProductionDestination(ctx, starterPlan, access.receipt);
     }
     const subject = directProductionSubjectForPlan(ctx);
+    const requestedInstallation = input.destination?.selectedInstallationId ?? undefined;
+    if (
+      requestedInstallation !== undefined &&
+      subject !== undefined &&
+      requestedInstallation !== subject.installationId
+    ) {
+      return {
+        status: managedReleaseUnavailable,
+        guidance:
+          "The app's verified Arrusted installation differs from the selection. Read the release subject for the current plan without a destination to use its verified installation.",
+      };
+    }
     if (subject === undefined) {
       return starterPlan === undefined
-        ? { status: "managed-release-unavailable" as const }
+        ? { status: managedReleaseUnavailable }
         : {
             status: "production-destination-required" as const,
             guidance:
