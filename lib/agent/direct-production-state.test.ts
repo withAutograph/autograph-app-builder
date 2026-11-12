@@ -69,7 +69,10 @@ import { retainOwnedDraftPublicationSeal } from "./github-draft-publication-line
 import { captureGitHubPrDeliveryCallScope } from "./github-pr-delivery-authority-state";
 import type { GitHubPublicationRuntime } from "./github-publication-runtime";
 import type { observeMergedAppProduction } from "./app-production-observation";
-import { stageImplementationFiles } from "./staged-implementation";
+import {
+  previewStagedImplementationFiles,
+  stageImplementationFiles,
+} from "./staged-implementation";
 import { appBuilderWorkflowState, sha256, updateExactWorkflow } from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import {
@@ -909,129 +912,158 @@ describe("direct Production Build authority", () => {
   });
 
   it.each([
-    { label: "heading", install: installHeadingRevision, prior: installPriorProduction, scope: {} },
+    {
+      label: "heading",
+      install: installHeadingRevision,
+      prior: installPriorProduction,
+      scope: {},
+      repeatFiles: false,
+    },
     {
       label: "optional notes schema",
       install: installNotesRevision,
       prior: installPriorProduction,
       scope: { schemaChange: notesSchemaChange },
+      repeatFiles: false,
     },
     {
       label: "the notes form, save action and data read on the installed schema",
       install: installNotesAppSourceRevision,
       prior: installPriorNotesSchema,
       scope: {},
+      repeatFiles: true,
     },
-  ])("binds $label to one fresh Build approval", async ({ label, install, prior, scope }) => {
-    const container = new ContextContainer();
-    const { session } = releaseContext;
-    container.set(SessionKey, { auth: session.auth, sessionId, turn: session.turn });
-    await contextStorage.run(container, async () => {
-      const previous = prior();
-      const revision = install();
-      const subject = requiredSubject(directProductionSubjectForPlan(releaseContext));
-      expect(subject).toEqual({
-        ...previous.subject,
-        appSpecDigest: revision.appSpec.digest,
-        proposalDigest: revision.proposal.digest,
-        revision: {
-          priorGrantDigest: previous.digest,
-          priorProposalDigest: previous.subject.proposalDigest,
-          ...scope,
-        },
-      });
-      const review = await releaseAppProduction.execute({}, releaseContext);
-      expect(review).toMatchObject({
-        status: "review-production-release",
-        directProduction: subject,
-      });
-      const approvedRevision = subject.revision;
-      if (approvedRevision?.schemaChange !== undefined) {
-        const { schemaChange } = approvedRevision;
-        expect("description" in review && review.description).toContain(
-          "adds one optional text field before updating your existing database",
-        );
-        expect(() =>
-          requestDirectProductionGrant(releaseContext, {
-            callId: "forged-schema-candidate",
-            implementationFiles: [],
-            toolName: "apply_app_creation",
-            subject: {
-              ...subject,
-              revision: {
-                ...approvedRevision,
-                schemaChange: {
-                  ...schemaChange,
-                  candidateCueSha256: sha256("different CUE source"),
+  ])(
+    "binds $label to one fresh Build approval",
+    async ({ label, install, prior, scope, repeatFiles }) => {
+      const container = new ContextContainer();
+      const { session } = releaseContext;
+      container.set(SessionKey, { auth: session.auth, sessionId, turn: session.turn });
+      await contextStorage.run(container, async () => {
+        const previous = prior();
+        const revision = install();
+        const subject = requiredSubject(directProductionSubjectForPlan(releaseContext));
+        expect(subject).toEqual({
+          ...previous.subject,
+          appSpecDigest: revision.appSpec.digest,
+          proposalDigest: revision.proposal.digest,
+          revision: {
+            priorGrantDigest: previous.digest,
+            priorProposalDigest: previous.subject.proposalDigest,
+            ...scope,
+          },
+        });
+        const review = await releaseAppProduction.execute({}, releaseContext);
+        expect(review).toMatchObject({
+          status: "review-production-release",
+          directProduction: subject,
+        });
+        const approvedRevision = subject.revision;
+        if (approvedRevision?.schemaChange !== undefined) {
+          const { schemaChange } = approvedRevision;
+          expect("description" in review && review.description).toContain(
+            "adds one optional text field before updating your existing database",
+          );
+          expect(() =>
+            requestDirectProductionGrant(releaseContext, {
+              callId: "forged-schema-candidate",
+              implementationFiles: [],
+              toolName: "apply_app_creation",
+              subject: {
+                ...subject,
+                revision: {
+                  ...approvedRevision,
+                  schemaChange: {
+                    ...schemaChange,
+                    candidateCueSha256: sha256("different CUE source"),
+                  },
                 },
               },
-            },
+            }),
+          ).toThrow("Review the current app and Arrusted destination");
+        }
+        expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
+        expect(() =>
+          requestDirectProductionGrant(releaseContext, {
+            callId: "reuse-prior-build",
+            implementationFiles: [],
+            toolName: "apply_app_creation",
+            subject: previous.subject,
           }),
         ).toThrow("Review the current app and Arrusted destination");
-      }
-      expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
-      expect(() =>
-        requestDirectProductionGrant(releaseContext, {
-          callId: "reuse-prior-build",
-          implementationFiles: [],
-          toolName: "apply_app_creation",
-          subject: previous.subject,
-        }),
-      ).toThrow("Review the current app and Arrusted destination");
-      expect(() =>
-        recordDirectProductionGrant(releaseContext, {
-          callId: buildCallId,
-          implementationFiles: [],
-          toolName: "apply_app_creation",
-          subject,
-        }),
-      ).toThrow("no matching Production approval");
+        expect(() =>
+          recordDirectProductionGrant(releaseContext, {
+            callId: buildCallId,
+            implementationFiles: [],
+            toolName: "apply_app_creation",
+            subject,
+          }),
+        ).toThrow("no matching Production approval");
 
-      repositoryCommand.mockReset().mockResolvedValue({
-        ok: true,
-        receipt: { changes: [], postTree: [{ path: appliedCuePath }] },
-      });
-      const input = { directProduction: subject, implementationFiles: [] };
-      const { events, initial, run } = originalBuildHarness(input);
-      const pending = await run(initial, {
-        message: `Release this ${label} update to Production.`,
-      });
-      const requested = events.find((event) => event.type === "input.requested");
-      const request = requested?.data.requests.find((value) => value.kind === "tool-approval");
-      if (request === undefined || requested === undefined) {
-        throw new Error("Expected the revision to request a new Build approval.");
-      }
-      expect(request.action).toMatchObject({ input, toolName: buildTool, callId: buildCallId });
-      const publicApproval = projectInstalledEveEvent(requested, 0)
-        .map(toPublicEvent)
-        .find((event) => event?.type === "input_required");
-      expect(publicApproval?.request.title).toBe("Build and release to Production?");
-      if (approvedRevision?.schemaChange !== undefined) {
-        expect(publicApproval?.request.description).toContain("adds one optional text field");
-        expect(publicApproval?.request.description).not.toContain(
-          approvedRevision.schemaChange.candidateCueSha256,
+        repositoryCommand.mockReset().mockResolvedValue({
+          ok: true,
+          receipt: { changes: [], postTree: [{ path: appliedCuePath }] },
+        });
+        const frozenEdits = revision.proposal.target.iteration.changes;
+        const implementationFiles = repeatFiles
+          ? frozenEdits.slice(0, 2).map(({ path, after }, index) => {
+              if (after === undefined) {
+                throw new Error("The first two frozen edits should update existing files.");
+              }
+              return index === 0
+                ? { path, content: after.content, operation: "upsert" as const }
+                : { path, content: after.content };
+            })
+          : [];
+        const input = { directProduction: subject, implementationFiles };
+        const { events, initial, run } = originalBuildHarness(input);
+        const pending = await run(initial, {
+          message: `Release this ${label} update to Production.`,
+        });
+        const requested = events.find((event) => event.type === "input.requested");
+        const request = requested?.data.requests.find((value) => value.kind === "tool-approval");
+        if (request === undefined || requested === undefined) {
+          throw new Error("Expected the revision to request a new Build approval.");
+        }
+        expect(request.action).toMatchObject({ input, toolName: buildTool, callId: buildCallId });
+        const publicApproval = projectInstalledEveEvent(requested, 0)
+          .map(toPublicEvent)
+          .find((event) => event?.type === "input_required");
+        expect(publicApproval?.request.title).toBe("Build and release to Production?");
+        if (approvedRevision?.schemaChange !== undefined) {
+          expect(publicApproval?.request.description).toContain("adds one optional text field");
+          expect(publicApproval?.request.description).not.toContain(
+            approvedRevision.schemaChange.candidateCueSha256,
+          );
+        }
+        expect(repositoryCommand).not.toHaveBeenCalled();
+        expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
+        expect(readPrivateApplyAuthority().grant?.proposalDigest).toBe(
+          previous.subject.proposalDigest,
         );
-      }
-      expect(repositoryCommand).not.toHaveBeenCalled();
-      expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
-      expect(readPrivateApplyAuthority().grant?.proposalDigest).toBe(
-        previous.subject.proposalDigest,
-      );
 
-      await run(pending.session, {
-        inputResponses: [{ optionId: "approve", requestId: request.requestId }],
+        await run(pending.session, {
+          inputResponses: [{ optionId: "approve", requestId: request.requestId }],
+        });
+        const requests = events.flatMap((event) =>
+          event.type === "input.requested" ? event.data.requests : [],
+        );
+        expect(requests.filter((value) => value.kind === "tool-approval")).toHaveLength(1);
+        expect(repositoryCommand).toHaveBeenCalledOnce();
+        expect(readPrivateApplyAuthority().grant?.proposalDigest).toBe(revision.proposal.digest);
+        const grant = currentDirectProductionGrant(releaseContext, subject);
+        expect(grant).toMatchObject({ callId: buildCallId, subject, toolName: buildTool });
+        expect(grant?.digest).not.toBe(previous.digest);
+        expect(
+          previewStagedImplementationFiles({
+            appSpecDigest: subject.appSpecDigest,
+            files: [],
+            proposalDigest: subject.proposalDigest,
+          }),
+        ).toEqual([]);
       });
-      const requests = events.flatMap((event) =>
-        event.type === "input.requested" ? event.data.requests : [],
-      );
-      expect(requests.filter((value) => value.kind === "tool-approval")).toHaveLength(1);
-      expect(repositoryCommand).toHaveBeenCalledOnce();
-      expect(readPrivateApplyAuthority().grant?.proposalDigest).toBe(revision.proposal.digest);
-      const grant = currentDirectProductionGrant(releaseContext, subject);
-      expect(grant).toMatchObject({ callId: buildCallId, subject, toolName: buildTool });
-      expect(grant?.digest).not.toBe(previous.digest);
-    });
-  });
+    },
+  );
 
   it("does not offer a live revision to a different owner or moved installation", () => {
     contextStorage.run(new ContextContainer(), () => {
@@ -1152,7 +1184,11 @@ describe("direct Production Build authority", () => {
     });
   });
 
-  it("refuses extra implementation files outside the frozen heading revision", () => {
+  it.each([
+    { path: revisionPage, content: "changed bytes" },
+    { path: `apps/${appId}/app/other.ts`, content: "extra file" },
+    { path: revisionPage, operation: "delete" },
+  ] as const)("refuses implementation changes outside the frozen revision: %j", (file) => {
     contextStorage.run(new ContextContainer(), () => {
       installPriorProduction();
       installHeadingRevision();
@@ -1160,7 +1196,33 @@ describe("direct Production Build authority", () => {
       expect(() =>
         requestDirectProductionGrant(releaseContext, {
           callId: "extra-files",
-          implementationFiles: [{ path: revisionPage, content: "unreviewed" }],
+          implementationFiles: [file],
+          toolName: "apply_app_creation",
+          subject,
+        }),
+      ).toThrow("Review the current app and Arrusted destination");
+    });
+  });
+
+  it("does not let an exact repeat hide a conflicting staged file", () => {
+    contextStorage.run(new ContextContainer(), () => {
+      installPriorProduction();
+      const revision = installHeadingRevision();
+      const subject = requiredSubject(directProductionSubjectForPlan(releaseContext));
+      const [frozen] = revision.proposal.target.iteration.changes;
+      if (frozen?.after === undefined) {
+        throw new Error("The fixture needs a frozen edit.");
+      }
+      const exactFile = { path: frozen.path, content: frozen.after.content };
+      stageImplementationFiles({
+        appSpecDigest: subject.appSpecDigest,
+        files: [{ ...exactFile, content: "conflicting staged bytes" }],
+        proposalDigest: subject.proposalDigest,
+      });
+      expect(() =>
+        requestDirectProductionGrant(releaseContext, {
+          callId: "conflicting-stage",
+          implementationFiles: [exactFile],
           toolName: "apply_app_creation",
           subject,
         }),

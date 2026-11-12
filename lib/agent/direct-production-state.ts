@@ -301,6 +301,31 @@ const schemaRevisionScope = (
   return schemaChange.success ? { schemaChange: schemaChange.data } : undefined;
 };
 
+/** Repeated tool input cannot add a write outside the already frozen app proposal. */
+const onlyFrozenRevisionRepeats = (
+  changes: readonly TargetIterationChange[],
+  submitted: readonly ImplementationFile[],
+  staged: readonly ImplementationFile[],
+): boolean => {
+  if (submitted.length === 0 && staged.length === 0) {
+    return true;
+  }
+  const frozen = new Map(changes.map((change) => [change.path, change]));
+  if (frozen.size !== changes.length) {
+    return false;
+  }
+  const matches = (file: ImplementationFile) => {
+    const change = frozen.get(file.path);
+    if (change === undefined) {
+      return false;
+    }
+    return file.operation === "delete"
+      ? change.after === undefined
+      : change.after !== undefined && change.after.content === file.content;
+  };
+  return submitted.every(matches) && staged.every(matches);
+};
+
 const eligibleRevisionScope = (
   state: ProposedWorkflow,
   implementationFiles: readonly ImplementationFile[],
@@ -321,10 +346,10 @@ const eligibleRevisionScope = (
   }
   const stagedFiles = previewStagedImplementationFiles({
     appSpecDigest: appSpec.digest,
-    files: implementationFiles,
+    files: [],
     proposalDigest: proposal.digest,
   });
-  if (stagedFiles.length > 0) {
+  if (!onlyFrozenRevisionRepeats(changes, implementationFiles, stagedFiles)) {
     return undefined;
   }
   if (changes.every((change) => isSourceOnlyRevisionEdit(change, appPath))) {
