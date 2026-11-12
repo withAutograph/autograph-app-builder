@@ -437,8 +437,11 @@ setup and data. An eligible combined Production approval also covers a checked
 optional text field addition on the existing database. Protected preparation
 verifies the exact installed predecessor before merge. The delivery workflow
 applies the checked addition once the provider activates that merge, preserving
-existing fields, records, access and runtime credentials. Other schema, role or
-access changes use their usual approval.
+existing fields, records, access and runtime credentials. The setup plan keeps
+the saved creator binding. If the setup response is interrupted, Builder
+continues the same approved merged revision and reports it pending until the
+checked schema is applied. Other schema, role or access changes use their usual
+approval.
 
 If an older merge preceded its runtime bindings, recover in the same Builder
 session through the ordinary reviewed app repair/revision and provider-owned

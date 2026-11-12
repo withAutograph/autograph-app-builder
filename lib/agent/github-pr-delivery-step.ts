@@ -86,8 +86,12 @@ export async function approveGitHubPrDelivery(
         reconciledHead,
       );
       const target = observed?.reviewedTarget;
+      const resumableSchema =
+        observed?.state === "merged" &&
+        observed.mergeCommitSha !== undefined &&
+        directGrant.subject.revision?.schemaChange !== undefined;
       const matchesReviewedRevision = [
-        observed?.state === "open",
+        observed?.state === "open" || resumableSchema,
         observed?.reviewedRevision === true,
         target?.repositoryId === input.repositoryId,
         target?.owner === input.owner,
@@ -140,26 +144,30 @@ export async function continueGitHubProductionSchema(
   if (observed.status === "monitoring-stopped") {
     return observed;
   }
+  const pending = {
+    ...observed,
+    status: "pending" as const,
+    requestedRevision: "awaiting-activation" as const,
+  };
   if (observed.deployment.requestedRevisionActive !== true) {
-    // A previous operator may report the URL live without the exact provider proof needed for setup.
-    return observed.requestedRevision === "live"
-      ? { ...observed, requestedRevision: "awaiting-activation" as const }
-      : observed;
+    return observed.status === "available" ? pending : observed;
   }
   const { repositoryProductionClientForContext } = await import("./repository-production-client");
-  const client = await repositoryProductionClientForContext(ctx);
-  const { approvalReference } = await client.plan(target.appId);
-  const { setup } = await client.prepare(
-    approvalReference,
-    authority.productionSchemaApprovalCallId,
-    activation,
-  );
-  if (setup.state !== "ready") {
-    return {
-      ...observed,
-      status: "pending" as const,
-      requestedRevision: "awaiting-activation" as const,
-    };
+  try {
+    const client = await repositoryProductionClientForContext(ctx);
+    const { approvalReference } = await client.plan(target.appId);
+    const { setup } = await client.prepare(
+      approvalReference,
+      authority.productionSchemaApprovalCallId,
+      activation,
+    );
+    if (setup.state !== "ready") {
+      return pending;
+    }
+  } catch {
+    // The protected operation retains its outcome. Polling reconciles this same receipt before another attempt.
+    ctx.abortSignal.throwIfAborted();
+    return pending;
   }
   return await observeMergedAppProduction(target, ctx, activation.mergeSha);
 }

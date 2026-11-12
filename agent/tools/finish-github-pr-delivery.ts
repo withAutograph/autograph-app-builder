@@ -73,6 +73,13 @@ export default defineWorkflowTool({
         app: { ...nativeProduction.app, url: availableUrl },
       };
     }
+    const schemaUpdatePending =
+      schemaActivation !== undefined &&
+      nativeProduction.status !== "monitoring-stopped" &&
+      nativeProduction.requestedRevision !== "live";
+    if (schemaUpdatePending) {
+      return { ...merged, nativeProduction, schemaUpdatePending };
+    }
     return { ...merged, nativeProduction };
   },
 });

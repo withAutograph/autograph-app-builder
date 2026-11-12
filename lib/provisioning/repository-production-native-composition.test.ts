@@ -6,7 +6,9 @@ import {
   createRepositoryProductionSignupLeaseGuard,
   assertNoConflictingProductionSetup,
   completeRepositoryProductionInvitation,
+  projectRepositoryProductionSchemaNativeStatus,
   readRepositoryProductionCreatorAccess,
+  resolveRepositoryProductionPlanRecipient,
 } from "./repository-production-native";
 import { PhysicalResourceLeaseBusyError } from "./postgres-physical-resource-lease";
 import {
@@ -18,7 +20,13 @@ import type {
   RepositoryProductionRow,
   RepositoryProductionScope,
 } from "./repository-production-contract";
-import { repositoryProductionApprovalDigest } from "./repository-production-approval";
+import {
+  assertRepositoryProductionApprovalReference,
+  repositoryProductionApprovalDigest,
+  repositoryProductionApprovalInput,
+  repositoryProductionApprovalReference,
+} from "./repository-production-approval";
+import type { RepositoryProductionNativeStatus } from "./repository-production-native-status-contract";
 import type { RepositoryProductionSetupPorts } from "./repository-production-setup";
 
 const scope: RepositoryProductionScope = {
@@ -183,6 +191,72 @@ const fixture = () => {
     },
   };
 };
+
+describe("schema-only Production continuation", () => {
+  const linkedEmail = "creator@example.test";
+
+  it.each([oldIntent, { ...oldIntent, creatorEmail: linkedEmail }])(
+    "uses the saved creator selection in both plan and prepare",
+    async (savedIntent) => {
+      const readRetainedRecipient = vi.fn(async () => linkedEmail);
+      const input = { approvedSchemaRevision: true, readRetainedRecipient };
+      const selected = await resolveRepositoryProductionPlanRecipient(input);
+      const plannedIntent =
+        selected === undefined ? savedIntent : { ...savedIntent, creatorEmail: selected };
+      const reference = repositoryProductionApprovalReference(
+        repositoryProductionApprovalInput(scope, plannedIntent),
+      );
+      const prepared = repositoryProductionApprovalInput(scope, savedIntent);
+      expect(() => {
+        assertRepositoryProductionApprovalReference(prepared, reference);
+      }).not.toThrow();
+      expect(readRetainedRecipient).not.toHaveBeenCalled();
+      await expect(
+        resolveRepositoryProductionPlanRecipient({ ...input, creatorEmail: "other@example.test" }),
+      ).rejects.toThrow("repository_production_creator_recipient_locked");
+    },
+  );
+
+  it("still discovers a linked recipient for ordinary setup", async () => {
+    const readRetainedRecipient = vi.fn(async () => linkedEmail);
+    await expect(
+      resolveRepositoryProductionPlanRecipient({
+        approvedSchemaRevision: false,
+        readRetainedRecipient,
+      }),
+    ).resolves.toBe(linkedEmail);
+    expect(readRetainedRecipient).toHaveBeenCalledOnce();
+  });
+
+  it("reports a deployed revision as pending until its schema is ready while preserving provider proof", async () => {
+    const observation: RepositoryProductionNativeStatus = {
+      version: 1,
+      appId: scope.appId,
+      observedAt: "2026-11-12T18:00:00.000Z",
+      status: "available",
+      deployment: { state: "active" },
+      app: { state: "sign-in-required", url: "https://apps.example/requests" },
+      requestedRevision: "live",
+    };
+    const isReady = vi.fn(async () => false);
+    await expect(
+      projectRepositoryProductionSchemaNativeStatus(observation, undefined, isReady),
+    ).resolves.toEqual({ ...observation, requestedRevision: "awaiting-activation" });
+    isReady.mockResolvedValueOnce(true);
+    await expect(
+      projectRepositoryProductionSchemaNativeStatus(observation, undefined, isReady),
+    ).resolves.toEqual(observation);
+
+    const withProof = {
+      ...observation,
+      deployment: { ...observation.deployment, requestedRevisionActive: true as const },
+    };
+    await expect(
+      projectRepositoryProductionSchemaNativeStatus(withProof, true, isReady),
+    ).resolves.toEqual(withProof);
+    expect(isReady).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe("automatic setup completion", () => {
   it.each([false, true])(

@@ -15,7 +15,7 @@ import {
 
 export default defineTool({
   description:
-    "Read this session's reviewed pull request and required checks. For a first managed Production release, finish data and access setup after draft publication. For an approved revision, verify the existing setup. Follow the returned nextCall for setup or reviewed delivery using the current release approval. A draft defers checks until Ready. Passing checks or setup do not claim native activation or hosted behavior.",
+    "Read this session's reviewed pull request and required checks. For a first managed Production release, finish data and access setup after draft publication. For an approved revision, verify the existing setup. A merged optional-field revision can resume its already approved database update. Follow the returned nextCall for setup or reviewed delivery using the current release approval. A draft defers checks until Ready. Passing checks or setup do not claim native activation or hosted behavior.",
   async execute(_input, ctx) {
     const subject = resolveGitHubPrDeliverySubject(
       appBuilderWorkflowState.get(),
@@ -41,23 +41,29 @@ export default defineTool({
     const checks = observation.draft ? "deferred" : observation.checks;
     const result = { ...observation, checks };
     const reconciliationIsReady = reconciliation === undefined || reconciledHead !== undefined;
+    const targetScope = {
+      appId: subject.appId,
+      repositoryId: observation.reviewedTarget.repositoryId,
+      repositoryFullName: `${observation.reviewedTarget.owner}/${observation.reviewedTarget.name}`,
+    };
+    const revision = currentDirectProductionGrant(ctx, targetScope)?.subject.revision;
+    const schemaRevision = revision?.schemaChange !== undefined;
+    const resumableSchema =
+      schemaRevision && observation.state === "merged" && observation.mergeCommitSha !== undefined;
+    const canContinue = observation.state === "open" || resumableSchema;
     if (
-      runtime.runPublishedPullRequestEffect !== undefined &&
-      observation.state === "open" &&
-      observation.reviewedRevision &&
-      reconciliationIsReady
+      runtime.runPublishedPullRequestEffect === undefined ||
+      !observation.reviewedRevision ||
+      !reconciliationIsReady ||
+      !canContinue
     ) {
-      const targetScope = {
-        appId: subject.appId,
-        repositoryId: observation.reviewedTarget.repositoryId,
-        repositoryFullName: `${observation.reviewedTarget.owner}/${observation.reviewedTarget.name}`,
-      };
+      return result;
+    }
+    if (observation.state === "open") {
       const productionSetup = await readGitHubProductionDeliveryReadiness(
         { ...targetScope, reviewedHeadSha: observation.reviewedTarget.headSha },
         ctx,
       );
-      const revision = currentDirectProductionGrant(ctx, targetScope)?.subject.revision;
-      const schemaRevision = revision?.schemaChange !== undefined;
       const setupChanged =
         !productionSetup.applicable ||
         productionSetup.state !== "ready" ||
@@ -78,30 +84,29 @@ export default defineTool({
           nextCall: githubProductionSetupContinuation(productionSetup),
         };
       }
-      const target: typeof observation.reviewedTarget & { installationId?: string } = {
-        ...observation.reviewedTarget,
-      };
-      if (installation !== undefined) {
-        target.installationId = installation;
-      }
-      const approval: typeof target & {
-        proposalDigest: string;
-        reconciliationDigest?: string;
-        readyAt?: string;
-      } = { ...target, proposalDigest };
-      if (reconciledHead !== undefined && reconciliation !== undefined) {
-        approval.reconciliationDigest = reconciliation.digest;
-      }
-      if (observation.readyAt !== undefined) {
-        approval.readyAt = observation.readyAt;
-      }
-      return {
-        ...result,
-        approval,
-        nextCall: { tool: "finish-github-pr-delivery" as const, input: approval },
-      };
     }
-    return result;
+    const target: typeof observation.reviewedTarget & { installationId?: string } = {
+      ...observation.reviewedTarget,
+    };
+    if (installation !== undefined) {
+      target.installationId = installation;
+    }
+    const approval: typeof target & {
+      proposalDigest: string;
+      reconciliationDigest?: string;
+      readyAt?: string;
+    } = { ...target, proposalDigest };
+    if (reconciledHead !== undefined && reconciliation !== undefined) {
+      approval.reconciliationDigest = reconciliation.digest;
+    }
+    if (observation.readyAt !== undefined) {
+      approval.readyAt = observation.readyAt;
+    }
+    return {
+      ...result,
+      approval,
+      nextCall: { tool: "finish-github-pr-delivery" as const, input: approval },
+    };
   },
   inputSchema: z.strictObject({}),
 });

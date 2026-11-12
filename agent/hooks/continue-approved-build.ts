@@ -43,6 +43,7 @@ const preparedSetup = z.object({ setup: setupState });
 const mergedDelivery = z.object({
   status: z.literal("merged"),
   nativeProduction: repositoryProductionNativeStatusSchema.optional(),
+  schemaUpdatePending: z.literal(true).optional(),
 });
 const finishedDeliveryTool = "finish-github-pr-delivery";
 const observeProductionTool = "observe-app-production";
@@ -61,6 +62,9 @@ const deliveryProgress = (toolName: string, output: z.infer<ReturnType<typeof z.
   if (toolName === finishedDeliveryTool) {
     const delivered = mergedDelivery.safeParse(output);
     if (delivered.success) {
+      if (delivered.data.schemaUpdatePending === true) {
+        return "schema-update-pending";
+      }
       return delivered.data.nativeProduction?.requestedRevision === "live"
         ? liveStage
         : activationUnavailable;

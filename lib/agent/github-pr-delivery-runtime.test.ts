@@ -337,3 +337,33 @@ it("selects the reconciled revision only when GitHub proves the retained commit"
     runtime.inspectPublishedReconciliationHead?.(proposal.digest, reconciliation),
   ).resolves.toBeNull();
 });
+
+it("offers the existing approved schema delivery after merge without attempting GitHub or setup writes", async () => {
+  const { inspect, observation, proposal, reviewedTarget, runtime } = fixture();
+  const mutate = vi.fn();
+  mocks.getState.mockReturnValue({
+    appSpec: { appId: "demo" },
+    githubDraftProposal: { proposal },
+    phase: "reviewed",
+  });
+  mocks.runtimeForSession.mockResolvedValue({ ...runtime, runPublishedPullRequestEffect: mutate });
+  inspect.mockResolvedValue({
+    ...observation,
+    draft: false,
+    state: "merged",
+    mergeCommitSha: "f".repeat(40),
+  });
+  // SAFETY: Runtime and prerequisite reads are controlled; the tool owns approval construction.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Supply the used session field.
+  const ctx = { session: { auth: {} } } as never;
+  await expect(readDelivery.execute({}, ctx)).resolves.not.toHaveProperty("nextCall");
+  mocks.directGrant.mockReturnValue({
+    subject: { revision: { schemaChange: { kind: "add-optional-text-field" } } },
+  });
+  await expect(readDelivery.execute({}, ctx)).resolves.toMatchObject({
+    state: "merged",
+    nextCall: { tool: "finish-github-pr-delivery", input: { headSha: reviewedTarget.headSha } },
+  });
+  expect(mutate).not.toHaveBeenCalled();
+  expect(mocks.production).not.toHaveBeenCalled();
+});

@@ -174,9 +174,16 @@ it("installs the approved addition only after the provider activates the exact m
       ...observed("pending", "awaiting-activation"),
       deployment: { state: "active", requestedRevisionActive: true },
     })
+    .mockResolvedValueOnce({
+      ...observed("pending", "awaiting-activation"),
+      deployment: { state: "active", requestedRevisionActive: true },
+    })
     .mockResolvedValueOnce(observed("available", "live"));
   const plan = vi.fn().mockResolvedValue({ approvalReference });
-  const prepare = vi.fn().mockResolvedValue({ setup: { state: "ready" } });
+  const prepare = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("Setup response unavailable"))
+    .mockResolvedValueOnce({ setup: { state: "ready" } });
   mocks.clientForContext.mockResolvedValue({ nativeStatus, plan, prepare });
   mocks.sleep.mockImplementationOnce(async () => {
     expect(prepare).not.toHaveBeenCalled();
@@ -189,13 +196,14 @@ it("installs the approved addition only after the provider activates the exact m
   });
   expect(nativeStatus).toHaveBeenNthCalledWith(1, appId, mergeCommitSha, true);
   expect(nativeStatus).toHaveBeenNthCalledWith(2, appId, mergeCommitSha, true);
-  expect(prepare).toHaveBeenCalledExactlyOnceWith(approvalReference, "single-build-approval", {
+  expect(prepare).toHaveBeenCalledTimes(2);
+  expect(prepare).toHaveBeenLastCalledWith(approvalReference, "single-build-approval", {
     deliveryCallId: "approved-merge-call",
     mergeIntentDigest,
     mergeSha: mergeCommitSha,
     reviewedHeadSha: approval.headSha,
   });
-  expect(nativeStatus).toHaveBeenNthCalledWith(3, appId, mergeCommitSha);
+  expect(nativeStatus).toHaveBeenNthCalledWith(4, appId, mergeCommitSha);
   expect(mocks.continueDelivery).toHaveBeenCalledTimes(1);
 });
 
