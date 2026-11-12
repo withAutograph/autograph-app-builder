@@ -270,8 +270,9 @@ flow. A current direct Production approval covers both and the managed setup
 between them. Follow the tool continuations without asking for another approval
 within that scope. After merging a managed destination, the same delivery workflow
 follows provider-owned activation and checks the live app entry. Share its
-observed public URL when available. Current availability, delivery of the newly
-merged revision, and authenticated app behavior are separate facts. To check
+observed public URL when available. Say the latest revision is live only when
+the observation confirms the merged revision. Current availability, delivery of
+the newly merged revision, and authenticated app behavior are separate facts. To check
 availability again in a saved session, use `observe-app-production` for one
 current read of the same app, including a retry after a service issue. A pending
 result returns immediately. Continue the reviewed PR delivery before merge

@@ -175,6 +175,34 @@ describe("protected repository Production dispatcher", () => {
     expect(f.deps.management.execute).not.toHaveBeenCalled();
   });
 
+  it("passes a valid requested revision only to the protected native read", async () => {
+    const f = fixture();
+    const native = {
+      version: 1 as const,
+      appId: owner.appId,
+      observedAt: "2026-11-10T15:00:00Z",
+      status: "available" as const,
+      deployment: { state: "active" as const },
+      app: { state: "sign-in-required" as const, url: "https://apps.test/requests" },
+      requestedRevision: "live" as const,
+    };
+    const readNativeStatus = vi.fn().mockResolvedValue(native);
+    Object.assign(f.deps, { readNativeStatus });
+    const body = {
+      version: 1,
+      ...owner,
+      action: "native-status",
+      expectedMergeSha: "a".repeat(40),
+    };
+    const response = await f.send(body);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(native);
+    expect(readNativeStatus).toHaveBeenCalledExactlyOnceWith(owner, body.expectedMergeSha);
+    expect((await f.send({ ...body, expectedMergeSha: "main" })).status).toBe(400);
+    expect(readNativeStatus).toHaveBeenCalledOnce();
+    expect(f.deps.resolveSetup).not.toHaveBeenCalled();
+  });
+
   it("reads delivery prerequisites for the exact reviewed repository without preparing or reading People", async () => {
     const f = fixture();
     const target = { repositoryId: "123", repositoryFullName: "example/repo" };

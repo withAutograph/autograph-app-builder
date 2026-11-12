@@ -20,7 +20,10 @@ import type {
   RepositoryProductionDeliveryStatus,
   RepositoryProductionDeliveryTarget,
 } from "./repository-production-delivery";
-import { repositoryProductionNativeStatusSchema } from "./repository-production-native-status-contract";
+import {
+  repositoryProductionExpectedMergeShaSchema,
+  repositoryProductionNativeStatusSchema,
+} from "./repository-production-native-status-contract";
 import type { RepositoryProductionNativeStatus } from "./repository-production-native-status-contract";
 import type {
   RepositoryProductionIntent,
@@ -86,7 +89,11 @@ export const repositoryProductionRequestSchema = z.discriminatedUnion("action", 
       .optional(),
   }),
   z.strictObject({ ...ownerFields, action: z.literal("setup-status") }),
-  z.strictObject({ ...ownerFields, action: z.literal("native-status") }),
+  z.strictObject({
+    ...ownerFields,
+    action: z.literal("native-status"),
+    expectedMergeSha: repositoryProductionExpectedMergeShaSchema.optional(),
+  }),
   z.strictObject({
     ...ownerFields,
     ...repositoryProductionDeliveryTargetSchema.shape,
@@ -125,6 +132,7 @@ export interface RepositoryProductionHandlerDependencies {
   readSetup: (owner: RepositoryProductionRequestOwner) => Promise<RepositoryProductionSetupResult>;
   readNativeStatus?: (
     owner: RepositoryProductionRequestOwner,
+    expectedMergeSha?: string,
   ) => Promise<RepositoryProductionNativeStatus>;
   readDeliveryStatus: (
     owner: RepositoryProductionRequestOwner,
@@ -217,7 +225,7 @@ export const createRepositoryProductionHandler =
           return reply({ code: "native_status_unavailable" }, 503);
         }
         const result = repositoryProductionNativeStatusSchema.parse(
-          await deps.readNativeStatus(owner),
+          await deps.readNativeStatus(owner, body.expectedMergeSha),
         );
         if (result.appId !== owner.appId) {
           return reply({ code: "app_access_denied" }, 403);

@@ -1557,7 +1557,10 @@ const nativeProductionEvents = (
 
   let text: string;
   if (observed.status === "pending") {
-    text = "The app’s live availability is still pending.";
+    text =
+      observed.requestedRevision === "awaiting-activation"
+        ? "Builder is still waiting to confirm the latest revision at the Production URL."
+        : "The app’s live availability is still pending.";
   } else if (observed.status === "monitoring-stopped") {
     text = "Builder stopped checking the live app. Continue this session to check again.";
   } else {
@@ -1567,7 +1570,10 @@ const nativeProductionEvents = (
       observed.status === "available"
         ? "The live app is available."
         : "Builder could not check the app’s current availability. Continue this session to check again.";
-    text = `${availability}${link}\n\nDelivery of the latest update remains unconfirmed.`;
+    text =
+      observed.status === "available" && observed.requestedRevision === "live"
+        ? `The latest revision is live in Production.${link}`
+        : `${availability}${link}\n\nDelivery of the latest update remains unconfirmed.`;
   }
   return [
     progress,

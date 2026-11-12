@@ -408,12 +408,16 @@ then checks the app’s registered route and entry on the Gateway. The read
 reports pending activation while the verified public alias still serves the
 previous deployment and Vercel is building the selected deployment or explicitly
 reports that its ready deployment awaits alias assignment. Required deployment
-checks can delay that assignment. The result
-describes current availability and may include the app’s public entry URL.
-The delivery of the requested revision remains unassessed. The completed merge
-is independent of these observations. The owner can check the same saved app
-again through `observe-app-production`, including when no current build is
-running.
+checks can delay that assignment. The app URL and current availability are
+reported independently of revision confirmation. After merge, Builder follows
+activation automatically. It confirms the revision when the active deployment
+has matching native Git source for the verified merge and the public Gateway
+serves the saved app. If the previous release is still available, Builder
+continues observing for a bounded period. Missing or conflicting source
+evidence leaves the revision unconfirmed. This read is independent of the
+completed merge and does not select or activate a deployment. A saved session
+can check again through `observe-app-production`, using its verified merged
+publication when available.
 
 An authoritative configured-service response may classify an unrelated repository
 as unmanaged. A GitHub-only deployment with no managed operator capability keeps

@@ -38,6 +38,10 @@ describe("Production request failure guidance", () => {
 });
 
 const repository = { repositoryId: "123", repositoryFullName: "example/repo" };
+type RequestTarget = Partial<typeof repository> & {
+  reviewedHeadSha?: string;
+  expectedMergeSha?: string;
+};
 const reviewedTarget = { ...repository, reviewedHeadSha: "a".repeat(40) };
 const status = {
   version: 1,
@@ -73,10 +77,10 @@ const deliveryClient = () => {
     workloadToken: vi.fn<() => Promise<string>>().mockResolvedValue("builder-token"),
     fetch,
   });
-  const requestBody = (target: typeof repository) =>
+  const requestBody = (target: RequestTarget, action = "delivery-status") =>
     JSON.stringify({
       version: 1,
-      action: "delivery-status",
+      action,
       appId: status.appId,
       sessionId: ownerContext.sessionId,
       ownerContext,
@@ -145,5 +149,42 @@ describe("reviewed-head Production readiness transport", () => {
       fixture.client.deliveryStatus(status.appId, { ...repository, reviewedHeadSha: "main" }),
     ).rejects.toThrow();
     expect(fixture.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("native Production revision transport", () => {
+  const native = {
+    version: 1,
+    appId: status.appId,
+    observedAt: "2026-11-11T00:00:00Z",
+    status: "available",
+    deployment: { state: "active" },
+    app: { state: "responding", url: "https://apps.test/example-app" },
+    requestedRevision: "live",
+  };
+  const expectedMergeSha = "c".repeat(40);
+
+  it("requests evidence for the merged revision", async () => {
+    const f = deliveryClient();
+    f.fetch.mockResolvedValueOnce(Response.json(native));
+    await expect(f.client.nativeStatus(status.appId, expectedMergeSha)).resolves.toEqual(native);
+    expect(f.fetch).toHaveBeenCalledWith(
+      new URL("https://operator.test/v1/repository-production"),
+      expect.objectContaining({ body: f.requestBody({ expectedMergeSha }, "native-status") }),
+    );
+  });
+
+  it("keeps legacy availability unassessed during rollout", async () => {
+    const f = deliveryClient();
+    const legacy = { ...native, requestedRevision: "unassessed" };
+    f.fetch
+      .mockResolvedValueOnce(Response.json({ code: "request_invalid" }, { status: 400 }))
+      .mockResolvedValueOnce(Response.json(legacy));
+    await expect(f.client.nativeStatus(status.appId, expectedMergeSha)).resolves.toEqual(legacy);
+    expect(f.fetch).toHaveBeenNthCalledWith(
+      2,
+      new URL("https://operator.test/v1/repository-production"),
+      expect.objectContaining({ body: f.requestBody({}, "native-status") }),
+    );
   });
 });

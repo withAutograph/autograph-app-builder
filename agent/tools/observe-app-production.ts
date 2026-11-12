@@ -1,15 +1,14 @@
-import { defineWorkflowTool } from "eve/tools";
+import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { observeAppProductionStep } from "../../lib/agent/observe-app-production-step";
+import { observeSavedAppProduction } from "../../lib/agent/app-production-observation";
 import { builderAppIdSchema } from "../../lib/provisioning/names";
 
-export default defineWorkflowTool({
+export default defineTool({
   availableInSubagents: false,
   description:
-    "Check the saved app's current native Production availability once and return even when it is pending. This independent read works without an old Build, Ready call, executable artifact or setup journal. Continue the reviewed PR delivery when availability is pending before merge. Builder resolves the same owned app and configured destination. An available app entry can be opened immediately; requestedRevision remains unassessed and this does not verify the latest code, sign-in or business behavior. Service issues are Builder-managed; retain any known safe app link and retry this same saved app when service access is restored. This never provisions, approves, merges, deploys, activates or tests anything.",
+    "Check the saved app's current native Production availability once and return even when it is pending. Builder reads the same owned app and can confirm a reviewed revision when the saved publication and GitHub prove its merge. If that history is unavailable, check current app availability. An available app entry can be opened immediately. This observation does not verify authenticated app behavior or change delivery state.",
   inputSchema: z.strictObject({ appId: builderAppIdSchema }),
   async execute(input, ctx) {
-    "use workflow";
-    return await observeAppProductionStep(input.appId, ctx);
+    return await observeSavedAppProduction(input.appId, ctx);
   },
 });

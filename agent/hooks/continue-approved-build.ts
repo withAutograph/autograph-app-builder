@@ -58,14 +58,14 @@ const deliveryProgress = (toolName: string, output: z.infer<ReturnType<typeof z.
   if (toolName === finishedDeliveryTool) {
     const delivered = mergedDelivery.safeParse(output);
     if (delivered.success) {
-      return delivered.data.nativeProduction?.status === "available"
+      return delivered.data.nativeProduction?.requestedRevision === "live"
         ? liveStage
         : activationUnavailable;
     }
   }
   if (toolName === observeProductionTool) {
     const observed = repositoryProductionNativeStatusSchema.safeParse(output);
-    if (observed.data?.status === "available") {
+    if (observed.data?.requestedRevision === "live") {
       return liveStage;
     }
   }

@@ -9,7 +9,11 @@ const publicAppUrl = z.url().refine((value) => {
   return url.protocol === "https:" && url.username === "" && url.password === "" && publicHost;
 }, "The app entry must use its public HTTPS origin without credentials");
 
-/** Observation only: current app availability never qualifies a newly merged revision. */
+export const repositoryProductionExpectedMergeShaSchema = z
+  .string()
+  .regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
+
+/** Current app availability and activation of an expected merge are independent observations. */
 export const repositoryProductionNativeStatusSchema = z.strictObject({
   version: z.literal(1),
   appId: builderAppIdSchema,
@@ -28,7 +32,7 @@ export const repositoryProductionNativeStatusSchema = z.strictObject({
     state: z.enum(["responding", "sign-in-required", "registered", "not-observed", unavailable]),
     url: publicAppUrl.optional(),
   }),
-  requestedRevision: z.literal("unassessed"),
+  requestedRevision: z.enum(["unassessed", "awaiting-activation", "live"]),
   serviceIssue: z
     .enum(["configuration", "provider-access", "provider-read", "domain-binding", "gateway-read"])
     .optional(),

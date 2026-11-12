@@ -12,8 +12,9 @@ export async function observeAppProductionStep(appId: string, ctx: WorkflowStepT
 export async function observeMergedAppProductionStep(
   target: AppProductionDeliveryTarget,
   ctx: WorkflowStepToolContext,
+  expectedMergeSha?: string,
 ) {
   "use step";
   const { observeMergedAppProduction } = await import("./app-production-observation");
-  return await observeMergedAppProduction(target, ctx);
+  return await observeMergedAppProduction(target, ctx, expectedMergeSha);
 }

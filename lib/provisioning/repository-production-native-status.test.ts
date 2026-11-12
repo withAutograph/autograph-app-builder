@@ -2,7 +2,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { HostedOperatorError } from "./hosted-operator-contract";
 import { createRepositoryProductionNativeStatus } from "./repository-production-native-status";
-import { repositoryProductionNativeStatusSchema } from "./repository-production-native-status-contract";
+import {
+  repositoryProductionExpectedMergeShaSchema,
+  repositoryProductionNativeStatusSchema,
+} from "./repository-production-native-status-contract";
 import {
   createRepositoryProductionObservationResolver,
   readRepositoryProductionObservationSession,
@@ -70,6 +73,16 @@ interface FixtureDomain {
 interface FixtureActivation {
   aliasAssigned?: boolean;
   aliasError?: { code: string; message: string } | null;
+  source?: string;
+  gitSource?: object;
+  meta?: object;
+}
+interface FixtureProjectLink {
+  type: string;
+  org: string;
+  repo: string;
+  repoId: number;
+  productionBranch: string;
 }
 type CanObserveSavedSetup = NonNullable<
   Parameters<typeof createRepositoryProductionObservationResolver>[0]["canObserveSavedSetup"]
@@ -113,6 +126,7 @@ const fixture = (appId = "requests", canObserveSavedSetup?: CanObserveSavedSetup
   let activeId = "provider-current";
   let readyState = "READY";
   let activation: FixtureActivation = {};
+  let projectLink: FixtureProjectLink | undefined;
   let aliasDeploymentId: string | undefined;
   let aliasProjectId = profile.projectId;
   let registered = true;
@@ -144,7 +158,7 @@ const fixture = (appId = "requests", canObserveSavedSetup?: CanObserveSavedSetup
         return Response.json({
           id: profile.projectId,
           targets: { production: { id: activeId } },
-          gitSource: { sha: "not-an-expected-version" },
+          link: projectLink,
         });
       }
       if (url.pathname.endsWith("/domains/apps.example")) {
@@ -263,6 +277,9 @@ const fixture = (appId = "requests", canObserveSavedSetup?: CanObserveSavedSetup
     setActivation: (value: FixtureActivation) => {
       activation = value;
     },
+    setProjectLink: (value: FixtureProjectLink | undefined) => {
+      projectLink = value;
+    },
     setAlias: (value: { deploymentId?: string; projectId?: string }) => {
       aliasDeploymentId = value.deploymentId;
       aliasProjectId = value.projectId ?? profile.projectId;
@@ -362,7 +379,7 @@ describe("read-only native Production observation", () => {
     expect(f.readCredential).not.toHaveBeenCalled();
     expect(f.requests).toEqual([]);
   });
-  it("keeps a newly merged revision unassessed even when the current app already responds", async () => {
+  it("keeps the revision unassessed for an independent availability read", async () => {
     const f = fixture();
     f.setRoute({ status: 200, location: null });
     expect(await f.read(f.owner)).toMatchObject({
@@ -370,6 +387,135 @@ describe("read-only native Production observation", () => {
       app: { state: "responding" },
       requestedRevision: "unassessed",
     });
+  });
+  const mergeSha = "a".repeat(40);
+  const priorSha = "b".repeat(40);
+  const linkedRepository = {
+    type: "github",
+    org: "example",
+    repo: "apps",
+    repoId: 123,
+    productionBranch: "main",
+  };
+  const currentGitSource = { type: "github", repoId: 123, ref: "main", sha: mergeSha };
+  const nativeMetadata = {
+    githubOrg: "example",
+    githubRepo: "apps",
+    githubCommitRef: "main",
+    githubCommitSha: mergeSha,
+  };
+
+  it("waits for the squash merge SHA while an older app revision is available", async () => {
+    const f = fixture();
+    f.setProjectLink(linkedRepository);
+    f.setActivation({ source: "git", gitSource: { ...currentGitSource, sha: priorSha } });
+    expect(await f.read(f.owner, mergeSha)).toMatchObject({
+      status: "available",
+      app: { state: "sign-in-required", url: "https://apps.example/requests" },
+      requestedRevision: "awaiting-activation",
+    });
+    f.changeActivation();
+    f.setActivation({ source: "git", gitSource: currentGitSource });
+    expect(await f.read(f.owner, mergeSha)).toMatchObject({
+      status: "available",
+      requestedRevision: "live",
+    });
+    expect(
+      f.requests
+        .filter(({ url }) => url.pathname.startsWith("/v13/deployments/"))
+        .map(({ url }) => url.searchParams.get("withGitRepoInfo")),
+    ).toEqual(["true", "true"]);
+  });
+
+  it("verifies reduced Vercel Git provenance against the linked repository", async () => {
+    const f = fixture();
+    f.setProjectLink(linkedRepository);
+    f.setActivation({ source: "git", meta: nativeMetadata });
+    expect(await f.read(f.owner, mergeSha)).toMatchObject({
+      status: "available",
+      requestedRevision: "live",
+    });
+    f.setProjectLink(undefined);
+    expect(await f.read(f.owner, mergeSha)).toMatchObject({
+      status: "available",
+      requestedRevision: "unassessed",
+    });
+  });
+
+  it.each([
+    { source: "cli", gitSource: currentGitSource, meta: nativeMetadata },
+    { source: "git", gitSource: { ...currentGitSource, repoId: 456 }, meta: nativeMetadata },
+    {
+      source: "git",
+      gitSource: currentGitSource,
+      meta: { ...nativeMetadata, githubCommitSha: priorSha },
+    },
+    { source: "git", meta: { ...nativeMetadata, githubRepo: "another-app" } },
+    { source: "git", meta: { ...nativeMetadata, githubCommitRef: "feature" } },
+  ])(
+    "preserves the open app without confirming incompatible provenance: %j",
+    async (activation) => {
+      const f = fixture();
+      f.setProjectLink(linkedRepository);
+      f.setActivation(activation);
+      expect(await f.read(f.owner, mergeSha)).toMatchObject({
+        status: "available",
+        requestedRevision: "unassessed",
+      });
+    },
+  );
+
+  it("waits for the canonical alias and owned app route before confirming the exact revision", async () => {
+    const f = fixture();
+    f.setProjectLink(linkedRepository);
+    f.setActivation({ source: "git", gitSource: currentGitSource, aliasAssigned: false });
+    f.setAlias({ deploymentId: "previous-production" });
+    expect(await f.read(f.owner, mergeSha)).toMatchObject({
+      status: "pending",
+      requestedRevision: "awaiting-activation",
+    });
+    f.setAlias({});
+    f.setRegistered(false);
+    expect(await f.read(f.owner, mergeSha)).toMatchObject({
+      status: "pending",
+      requestedRevision: "awaiting-activation",
+    });
+    f.setRegistered(true);
+    f.duringRead((url) => {
+      if (url.pathname === "/_platform/catalog") {
+        f.changeActivation();
+      }
+    });
+    expect(await f.read(f.owner, mergeSha)).toMatchObject({
+      status: "pending",
+      requestedRevision: "awaiting-activation",
+    });
+  });
+
+  it("does not confirm reduced metadata after the project link changes during the public read", async () => {
+    const f = fixture();
+    f.setProjectLink(linkedRepository);
+    f.setActivation({ source: "git", meta: nativeMetadata });
+    f.duringRead((url) => {
+      if (url.pathname === "/_platform/catalog") {
+        f.setProjectLink({ ...linkedRepository, repoId: 456 });
+      }
+    });
+    expect(await f.read(f.owner, mergeSha)).toMatchObject({
+      status: "available",
+      requestedRevision: "unassessed",
+    });
+  });
+
+  it("accepts exact Git object IDs only", () => {
+    expect(repositoryProductionExpectedMergeShaSchema.safeParse(mergeSha).success).toBe(true);
+    expect(repositoryProductionExpectedMergeShaSchema.safeParse("b".repeat(64)).success).toBe(true);
+    expect(repositoryProductionExpectedMergeShaSchema.safeParse("a".repeat(39)).success).toBe(
+      false,
+    );
+    expect(repositoryProductionExpectedMergeShaSchema.safeParse("A".repeat(40)).success).toBe(
+      false,
+    );
   });
   it("keeps an app missing from the active catalog pending without guessing a URL", async () => {
     const f = fixture();
