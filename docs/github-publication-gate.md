@@ -637,6 +637,10 @@ revision uses the existing Production data and access. Builder reads the
 protected setup for the reviewed head before Ready and merge. An app code
 revision that keeps its schema and deployment configuration uses a read-only
 setup check. This covers app-owned forms, server actions, and data reads.
+The frozen proposal supplies the Build files for an existing revision. The
+Build call can omit those files or repeat their exact contents and operations.
+Builder applies the frozen changes once. Changed bytes or additional files
+require a new proposal before Builder can present its Production approval.
 
 For an optional field addition, the same approval covers the checked schema
 update on the existing database. Protected setup binds the exact reviewed

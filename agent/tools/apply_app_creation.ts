@@ -86,7 +86,7 @@ export default defineTool({
     return delivery === "user-approval" ? delivery : build;
   },
   description:
-    "Build this app in the build workspace, then validate it for review. When the user asks to prepare a planned private build for review, draft the implementation files in the tool input and submit this call to present the normal Build approval. Preparing that input does not write to the workspace. Wait for the approval decision before any implementation write. For a retry of the same proposal, send only repaired files. Omitted paths retain their staged contents, and supplied paths replace them. A new proposal starts a fresh submission. When the plan selects privateCompute, send its exact profile ID so the user can approve the compute footprint before resizing the private execution session. If the user explicitly requested direct Production on Arrusted, obtain the current directProduction subject from release-app-production, supplying the storageKind read hint if the drafted scaffold CUE changes storage. Pass the subject unchanged with the exact implementation files to show one combined Build and Production approval. A default Build authorizes only the private app.",
+    "Build this app in the build workspace, then validate it for review. When the user asks to prepare a planned private build for review, draft the implementation files in the tool input and submit this call to present the normal Build approval. Preparing that input does not write to the workspace. Wait for the approval decision before any implementation write. For a retry of the same proposal, send only repaired files. Omitted paths retain their staged contents, and supplied paths replace them. A new proposal starts a fresh submission. When the plan selects privateCompute, send its exact profile ID so the user can approve the compute footprint before resizing the private execution session. If the user explicitly requested direct Production on Arrusted, obtain the current directProduction subject from release-app-production, supplying the storageKind read hint if the drafted scaffold CUE changes storage. Pass the subject unchanged to show one combined Build and Production approval. For an existing app revision, its frozen plan already contains the changes, so omit implementationFiles. For a new app, include the complete implementation files. A default Build authorizes only the private app.",
   // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Keep exact current proposal, internal correction, approval, workspace and implementation scope checks ordered at the effect boundary.
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
@@ -132,14 +132,15 @@ export default defineTool({
         workflowPhase: current.phase,
       };
     }
-    if (input.directProduction !== undefined) {
-      recordDirectProductionGrant(ctx, {
-        callId: ctx.callId,
-        implementationFiles: input.implementationFiles,
-        toolName: "apply_app_creation",
-        subject: input.directProduction,
-      });
-    }
+    const productionGrant =
+      input.directProduction === undefined
+        ? undefined
+        : recordDirectProductionGrant(ctx, {
+            callId: ctx.callId,
+            implementationFiles: input.implementationFiles,
+            toolName: "apply_app_creation",
+            subject: input.directProduction,
+          });
     recordApprovedPrivateApply(scope, ctx.callId);
     if (current.proposal.target.privateCompute !== undefined) {
       await applyApprovedPrivateComputeProfile({
@@ -169,11 +170,15 @@ export default defineTool({
       };
     }
 
-    const implementationFiles = stageImplementationFiles({
-      appSpecDigest: current.appSpec.digest,
-      files: input.implementationFiles,
-      proposalDigest: current.proposal.digest,
-    });
+    // The frozen Production revision executor already applies any verified repeats.
+    const implementationFiles =
+      productionGrant?.subject.revision === undefined
+        ? stageImplementationFiles({
+            appSpecDigest: current.appSpec.digest,
+            files: input.implementationFiles,
+            proposalDigest: current.proposal.digest,
+          })
+        : [];
     // Existing app submissions are deltas; repository checks own validation.
     let architectureDiagnostics: string[] = [];
     if (!("operation" in current.proposal.target)) {
