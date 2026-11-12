@@ -172,15 +172,16 @@ before the first `accept_app_spec` attempt. Do not ask for formal UI finalizatio
 artifact acceptance, or planning approval. Ask a product question only when no safe revisable default
 can resolve a material ambiguity.
 
-Once the implementation plan is ready, the first normal prompt is **Build this
-app?**. Use the Browser prototype for optional design feedback. If a prototype
-was stored but cannot be opened, continue with the plan and report its rendering
-as unobserved. Approval authorizes editing and validating the
-private App Builder checkout only. Denial preserves the preview for refinement;
-revisions update the plan silently. Publication and other outward effects need
-their own later effect-based approval. Reuse the prepared checkout while
-refining the design, and keep the applied interface on the same public Arrusted
-components and token entrypoint as the preview.
+Once the implementation plan is ready, present **Build this app?** for private
+preview or **Build and release to Production?** for an explicit direct Production
+request for a new private Arrusted app. Use the Browser prototype for optional
+design feedback. If a prototype was stored but cannot be opened, continue with
+the plan and report its rendering as unobserved. The preview Build covers the
+private checkout. The combined card also covers its reviewed publication,
+managed setup, and merge after required checks. Denial preserves the preview
+for refinement, and revisions update the plan silently. Reuse the prepared
+checkout while refining the design, and keep the applied interface on the same
+public Arrusted components and token entrypoint as the preview.
 Carry the reviewed route composition, responsive choices, and supported props
 into implementation; change fixture data to real data bindings rather than
 redesigning the UI from the prose brief. Load the same required providers and

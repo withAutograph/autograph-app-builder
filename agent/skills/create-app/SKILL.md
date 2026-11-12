@@ -241,15 +241,18 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    for complete contents and `{path, operation: "delete"}` for removal. Rename
    by deleting the old path and adding the new path in the same proposal.
    Preserve unrelated files; do not leave retired backend/demo modules behind.
-   This produces the first normal user prompt: **Build this app?** Do not request approval before this point for
-   session work, source access, inspection, design, prototypes, internal
-   drafting, or planning. Never invoke the target command through generic shell
-   access.
+   For an explicit direct Production request for a new private Arrusted app,
+   read the `directProduction` subject with `release-app-production` and include
+   it with those implementation files. This presents **Build and release to
+   Production?**. For private preview, the card is **Build this app?**. Do not
+   request approval for session work, source access, inspection, design,
+   prototypes, internal drafting, or planning. Never invoke the target command
+   through generic shell access.
 
-7. Treat approval of **Build this app?** as permission to edit, validate, and
-   run the implementation in the private App Builder checkout. It is not
-   permission to push a branch, open a pull request, deploy, provision app
-   resources, publish a package, or change the user's external repository.
+7. **Build this app?** covers editing, validating, and running the
+   implementation in the private App Builder checkout. **Build and release to
+   Production?** also covers publishing the reviewed draft, managed Production
+   setup, and marking Ready and merging after required checks.
    Use `apply_app_creation` for the approved implementation. The prepared
    checkout remains the live working source; do not assume apply creates a
    fresh overlay or that normal source edits require a new workspace.
@@ -563,9 +566,13 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
 ## Production delivery
 
 For a new private app explicitly requested in Arrusted Production, call
-`release-app-production` to read the exact release subject. Request
-`storageKind: "postgres"` if the new implementation submits a CUE schema.
-Pass the subject to the normal Build call to show one approval for Build and Production.
+`release-app-production` to read the exact release subject. A plan acquired
+from Arrusted's default branch already binds the verified destination. The tool
+can read it from the plan or accept the same repository name again. For an
+existing starter plan, supply the named Arrusted destination and keep the
+starter source. Request `storageKind: "postgres"` if the new implementation
+submits a CUE schema. Pass the subject unchanged with the complete
+`implementationFiles` to `apply_app_creation` for the combined approval.
 If the user asks to release after private Build, use that subject with
 `release-app-production` to show one release approval. Follow the exact sealed
 publication, protected setup and reviewed merge continuations under that approval.

@@ -71,14 +71,16 @@ first decision after the implementation plan is ready is **Build this app?**
 for private preview or **Build and release to Production?** for direct delivery.
 A prototype and browser walkthrough are available for design feedback. They do
 not block this approval. Request it through the build tool approval card in the
-same planning turn. If the user explicitly
-requested direct Production for a new private Arrusted app, resolve the named
-repository's default branch before acquiring a starter, then read its
-`directProduction` subject using `release-app-production` and pass it to the
-Build call. If a starter plan is already present, keep that plan and include
-the named destination when reading the release subject. A working Preview and
-design prototype are optional. If the new implementation submits the app's CUE schema, request
-the subject with `storageKind: "postgres"` so the card includes the database.
+same planning turn. For an explicit request to deliver a new private Arrusted
+app directly to Production, resolve the named repository's default branch before
+acquiring a starter. This binds the verified destination for
+`release-app-production`. The tool can read that destination from the plan or
+accept the same repository name again. If a starter plan already exists, keep it
+and pass the named destination to `release-app-production`. If the new
+implementation submits the app's CUE schema, request the subject with
+`storageKind: "postgres"` so the card includes the database. Pass the returned
+`directProduction` subject with the complete implementation to
+`apply_app_creation` to present **Build and release to Production?**.
 The card covers Build, the reviewed draft, managed data and creator access,
 and merge after required checks. Otherwise
 Build covers private implementation and the first working preview. A later
@@ -102,8 +104,8 @@ then press Continue for a yes-or-no approval.
 Use Vercel Sandbox with project-scoped OIDC and structured commands. Never use
 static provider keys, shell wrappers, or a fallback runtime. Design, planning,
 dependency setup, and prototypes need no approval. Use the integrated Browser
-for previews, not an MCP App preview surface. Do not edit or validate the full
-app until **Build this app?** is approved.
+for previews, not an MCP App preview surface. Wait for approval of the build
+card before editing or validating the full app.
 
 Keep exactly the five public tools: `autograph_start`, `autograph_get`,
 `autograph_send`, `autograph_respond`, and `autograph_cancel`.
@@ -164,8 +166,9 @@ implementation plan. Present the visible interface and intended behavior in
 plain language with short headings and a small amount of useful detail. Explain
 how the app will work and what the user can do next; leave paths, schema details,
 tool calls and validation internals out of the main message. Then invoke the
-approval-bound build operation so the first normal
-prompt is **Build this app?** Repair incomplete internal artifacts and retry
+build operation to present **Build this app?** for private preview or
+**Build and release to Production?** for a new private Arrusted app explicitly
+requested in Production. Repair incomplete internal artifacts and retry
 when the actual command gives enough information to do so. Ask a product
 question only for genuine ambiguity. Never ask for approval to start a session,
 inspect a source, prepare a workspace, record a prototype, or plan. For a new app,
@@ -528,8 +531,8 @@ custom controls, or newly invented components. When the catalog lacks a useful
 element, adapt the design with available components or offer a product-level
 alternative. Route and fixture wiring may compose existing components, not
 implement replacements. Follow `design-app` for the component-backed Browser
-preview when it serves the brief. Record the design and prepare the plan silently. The first normal
-prompt remains **Build this app?**, not a separate UI-finalization decision.
+preview when it serves the brief. Record the design and prepare the plan
+silently, then present the build card for the requested delivery.
 
 An enabled control promises a working interaction. Follow `design-app`'s
 `references/interactions.md` when wiring navigation and actions: use the preview

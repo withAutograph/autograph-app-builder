@@ -3,8 +3,9 @@
 Keep `app-spec.md` human-readable and synchronized with prototype revisions.
 This is internal planning guidance. Derive it from the brief and safe revisable
 defaults without asking for formal specification or UI-finalization acceptance.
-The first normal prompt remains **Build this app?** after the Browser prototype
-and implementation plan are ready.
+After the implementation plan is ready, present **Build this app?** for private
+preview or **Build and release to Production?** for a new private Arrusted app
+explicitly requested in Production. The Browser prototype is optional.
 
 ## Inference labels
 
@@ -173,6 +174,7 @@ After those conditions pass, record explicit readiness with status
 plan silently. Do not turn internal recording or preparation into another user
 approval.
 
-Formal AppSpec recording is internal planning state, not authority to mutate the
-target. **Build this app?** authorizes editing and validating the private checkout;
-repository publication and other outward effects require separate approval.
+Formal AppSpec recording is internal planning state. **Build this app?**
+authorizes editing and validating the private checkout. **Build and release to
+Production?** also authorizes the reviewed draft, managed setup, and merge
+after required checks for the approved app and destination.
