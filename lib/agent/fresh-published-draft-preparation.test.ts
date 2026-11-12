@@ -95,6 +95,9 @@ const mocks = vi.hoisted(() => ({
   candidate: undefined as unknown as Candidate,
   access: undefined as unknown as RepositoryAccessReceipt,
   owned: undefined as unknown as Owned,
+  ownedFirstPublication: undefined as
+    | Pick<OwnedPublicationReconciliationScope, "proposal" | "publication">
+    | undefined,
   onOwnedRead: undefined as undefined | (() => void),
   classify: vi.fn<(proposal: DraftPullRequestProposal) => Promise<"recorded" | "unrecorded">>(),
   ownedProposalDigests: [] as string[],
@@ -169,7 +172,11 @@ vi.mock("./deployment-github-publication-runtime", () => ({
     inspectPriorAppPublication: mocks.classify,
     inspectExistingDraftReconciliationSource: async () => {
       mocks.onSourceRead?.();
-      return { draft: mocks.owned.draft, base: { headSha: mocks.candidate.baseSha } };
+      return {
+        draft: mocks.owned.draft,
+        base: { headSha: mocks.candidate.baseSha },
+        ownedPublication: mocks.ownedFirstPublication,
+      };
     },
     inspectOwnedPublishedDraftRepairSource: async (request: {
       publishedProposalDigest: string;
@@ -211,6 +218,13 @@ vi.mock("../repository/sandbox-draft-reconciliation", () => ({
   preparePublishedDraftRepairCandidate: vi.fn(),
   inspectDraftReconciliation: mocks.inspectCandidate,
 }));
+vi.mock("../repository/retire-unused-draft-worktrees", () => ({
+  retireUnusedDraftWorktrees: async () => ({ status: "unavailable" }),
+  annotateDraftWorktreeRetirementError: () => {},
+}));
+vi.mock("../repository/compact-accepted-planning-input", () => ({
+  compactAcceptedPlanningInput: async () => ({ status: "retained" }),
+}));
 
 const retainedSource = vi.hoisted(() => ({
   observed: vi.fn(),
@@ -238,7 +252,7 @@ vi.mock("../repository/supported-template", async (importOriginal) => ({
   readPreparedSandboxSourceManifest: retainedSource.original,
 }));
 
-describe("owned fresh-template draft preparation after review recovery", () => {
+describe("owned draft preparation after review recovery", () => {
   let fixture: Fixture;
   let root: string;
   const ctx = {
@@ -278,6 +292,8 @@ describe("owned fresh-template draft preparation after review recovery", () => {
       proposal: scope.proposal,
       publication: scope.publication,
     };
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- The acquired-source provider proof is absent unless a test supplies it.
+    mocks.ownedFirstPublication = undefined;
     // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     mocks.onOwnedRead = undefined;
     mocks.classify.mockReset().mockResolvedValue("unrecorded");
@@ -1178,6 +1194,114 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     expect(readFileSync(path.join(previous.root, "candidate.txt"), "utf-8")).toBe(
       "latest unpublished candidate bytes\n",
     );
+  });
+
+  const selectAcquiredSource = () => {
+    const reviewed = structuredClone(fixture.reviewed);
+    reviewed.sourceReceipt = {
+      ...reviewed.sourceReceipt,
+      sourceKind: "existing-repository",
+    };
+    reviewed.githubSource = mocks.owned.source;
+    mocks.workflow = reviewed;
+    mocks.candidate.githubSourceDigest = mocks.owned.source.digest;
+    mocks.candidate.reviewedLineage = reviewed;
+    mocks.ownedFirstPublication = {
+      proposal: mocks.owned.proposal,
+      publication: mocks.owned.publication,
+    };
+  };
+
+  it("recomposes a verified acquired-source first draft with its private app edits and exact review", async () => {
+    selectAcquiredSource();
+    const previous = structuredClone(mocks.candidate);
+    const { workflow } = mocks;
+    await expect(
+      prepareDraftReconciliationTool.execute(
+        { pullRequestNumber: 42, repairOriginalPublication: { discardAddedPaths: [] } },
+        ctx,
+      ),
+    ).resolves.toMatchObject({ status: "ready_for_validation", headSha: previous.headSha });
+    expect(mocks.prepare.mock.calls[0]?.[0]).toMatchObject({
+      originalPublicationRepair: { discardAddedPaths: [] },
+      ownedPublication: mocks.ownedFirstPublication,
+      previousCandidate: {
+        root: previous.root,
+        originalReviewDigest: previous.originalReviewDigest,
+      },
+      replayPreviousCandidate: true,
+    });
+    expect(mocks.workflow).toBe(workflow);
+    expect(readFileSync(path.join(previous.root, "candidate.txt"), "utf-8")).toBe(
+      "latest unpublished candidate bytes\n",
+    );
+  });
+
+  it.each(["missing", "moved-head", "moved-tree"] as const)(
+    "rejects acquired-source composition repair with %s original ownership proof",
+    async (failure) => {
+      selectAcquiredSource();
+      // SAFETY: Model a stale or unavailable result from the controlled provider read.
+      mocks.ownedFirstPublication =
+        failure === "missing"
+          ? undefined
+          : {
+              proposal: mocks.owned.proposal,
+              publication: {
+                ...mocks.owned.publication,
+                ...(failure === "moved-head"
+                  ? { branchSha: "c".repeat(40) }
+                  : { branchTree: "c".repeat(40) }),
+              },
+            };
+      const previous = mocks.candidate;
+      await expect(
+        prepareDraftReconciliationTool.execute(
+          { pullRequestNumber: 42, repairOriginalPublication: { discardAddedPaths: [] } },
+          ctx,
+        ),
+      ).rejects.toThrow("verified original first-draft head");
+      expect(mocks.prepare).not.toHaveBeenCalled();
+      expect(mocks.candidate).toBe(previous);
+    },
+  );
+
+  it("retains acquired-source repair on the same owned candidate during ordinary preparation", async () => {
+    selectAcquiredSource();
+    mocks.candidate.originalPublicationRepair = { discardAddedPaths: [] };
+    await expect(
+      prepareDraftReconciliationTool.execute({ pullRequestNumber: 42 }, ctx),
+    ).resolves.toMatchObject({ status: "ready_for_validation" });
+    expect(mocks.prepare.mock.calls[0]?.[0]).toMatchObject({
+      originalPublicationRepair: { discardAddedPaths: [] },
+      replayPreviousCandidate: true,
+    });
+  });
+
+  it("keeps deletion, source restoration and reopening restricted to starter drafts", async () => {
+    selectAcquiredSource();
+    await expect(
+      prepareDraftReconciliationTool.execute(
+        {
+          pullRequestNumber: 42,
+          repairOriginalPublication: { discardAddedPaths: ["app/page.tsx"] },
+        },
+        ctx,
+      ),
+    ).rejects.toThrow("cannot remove original draft files");
+    await expect(
+      prepareDraftReconciliationTool.execute(
+        { pullRequestNumber: 42, restoreInitialAppSource: true },
+        ctx,
+      ),
+    ).rejects.toThrow("only for this reviewed starter-created app");
+    await expect(
+      prepareDraftReconciliationTool.execute(
+        { pullRequestNumber: 42, recovery: "reopen-current-owned-draft" },
+        ctx,
+      ),
+    ).rejects.toThrow("only for this reviewed starter-created app");
+    expect(mocks.prepare).not.toHaveBeenCalled();
   });
 
   it("retains the original cleanup selection for a retry against the same owned head", async () => {

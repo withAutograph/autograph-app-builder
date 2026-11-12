@@ -28,6 +28,7 @@ import {
   draftReconciliationCompletions,
   draftReconciliationState,
   retainCandidateValidationAttempt,
+  samePersistedDraftCandidate,
   updateExactDraftReconciliation,
 } from "@/lib/agent/draft-reconciliation-state";
 import type {
@@ -474,6 +475,62 @@ interface ValidationStepResult {
   output?: ReturnType<typeof validationOutputExcerpt>;
 }
 
+const frozenLockfileMismatch = /^error: lockfile had changes, but lockfile is frozen$/mu;
+
+const sameCandidateInstallTarget = (
+  current: DraftReconciliationCandidate,
+  planned: DraftReconciliationCandidate,
+): boolean =>
+  (
+    [
+      "appId",
+      "baseSha",
+      "baseTree",
+      "githubSourceDigest",
+      "headSha",
+      "headTree",
+      "originalReviewDigest",
+      "pullRequestNumber",
+      "repositoryId",
+      "root",
+    ] as const
+  ).every((key) => current[key] === planned[key]);
+
+const hasOriginalCompositionRecovery = (candidate: DraftReconciliationCandidate): boolean => {
+  if (
+    candidate.kind === "published-draft-repair" ||
+    candidate.originalPublicationRepair !== undefined ||
+    candidate.dependencyCatalogPending !== undefined ||
+    candidate.dependencyCatalog !== undefined
+  ) {
+    return false;
+  }
+  const workflow = appBuilderWorkflowState.get();
+  const reviewed = resolveDraftReviewedWorkflow(workflow, candidate);
+  if (reviewed?.appSpec.appId !== candidate.appId) {
+    return false;
+  }
+  if (currentDraftCandidateSource(workflow, candidate) === undefined) {
+    return false;
+  }
+  const { publicationScope } = candidate;
+  if (publicationScope === undefined) {
+    // Older acquired-source candidates may retain only the same app's publication marker.
+    // Preparation re-observes the original publication and refuses an unproved head.
+    return (
+      reviewed.publishedGitHubDraftProposalDigest !== undefined &&
+      reviewed.githubSource?.repository.repositoryId === candidate.repositoryId
+    );
+  }
+  const { proposal, publication } = publicationScope;
+  return [
+    publication.branchSha === candidate.headSha,
+    publication.branchTree === candidate.headTree,
+    publication.pullRequestNumber === candidate.pullRequestNumber,
+    proposal.approvedPaths.includes("bun.lock"),
+  ].every(Boolean);
+};
+
 const testShardForStep = (step: ValidationStep, appId: string): string | undefined => {
   if (step.kind !== "check") {
     return undefined;
@@ -752,6 +809,7 @@ const runIncrementalValidation = async (
     });
   }
   let result: ValidationStepResult;
+  let installCandidate: DraftReconciliationCandidate | null = null;
   let recovery: ValidationStep | undefined;
   let { compilation } = run;
   try {
@@ -766,6 +824,10 @@ const runIncrementalValidation = async (
         workspaceRoot: candidate.workspaceRoot,
         signal: ctx.abortSignal,
       });
+      const retained = draftReconciliationState.get();
+      if (retained !== null && sameCandidateInstallTarget(retained, candidate)) {
+        installCandidate = structuredClone(retained);
+      }
       const installed = await sandbox.run({
         abortSignal: ctx.abortSignal,
         command: installCommand,
@@ -1019,6 +1081,35 @@ const runIncrementalValidation = async (
         problem: `The repository command failed and reported a concrete setup repair. Run the returned fixed nextCommand, then rerun the repository checks.`,
         status: "in_progress" as const,
       };
+    }
+    if (
+      installCandidate !== null &&
+      result.output !== undefined &&
+      [result.output.stderr, result.output.stdout].some((stream) =>
+        frozenLockfileMismatch.test(stream),
+      )
+    ) {
+      ctx.abortSignal?.throwIfAborted();
+      if (
+        samePersistedDraftCandidate(draftReconciliationState.get(), installCandidate) &&
+        hasOriginalCompositionRecovery(installCandidate)
+      ) {
+        return {
+          command: result.command,
+          exitCode: result.exitCode,
+          output: result.output,
+          problem:
+            "The frozen install found a lockfile mismatch. Verify the same draft’s original publication and rebuild its registration and lockfile from the current repository, then validate the repaired candidate.",
+          nextCall: {
+            tool: "prepare_github_draft_pr_reconciliation" as const,
+            input: {
+              pullRequestNumber: installCandidate.pullRequestNumber,
+              repairOriginalPublication: { discardAddedPaths: [] },
+            },
+          },
+          status: "needs_repair" as const,
+        };
+      }
     }
     return {
       command: result.command,

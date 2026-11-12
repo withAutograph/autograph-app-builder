@@ -410,6 +410,12 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    candidate with `validate_github_draft_pr_reconciliation`. Request browser
    tests and additional checks for the specific changes they cover. Keep
    explicitly requested lint separate and advisory.
+   If the frozen Bun install returns an exact composition repair `nextCall`,
+   use that call for the same PR. Builder verifies its own original first
+   publication and rebuilds shared composition from the current base plus the
+   selected app. Do not guess a dependency to normalize or ask the creator
+   for repository paths. Validate and review the repaired candidate before
+   its normal exact update approval.
    If an existing app dependency needs shared Bun catalog alignment, use
    `normalize_github_draft_pr_dependency_catalog` with its package name. It operates
    on this candidate, preserves the existing concrete version, normalizes its

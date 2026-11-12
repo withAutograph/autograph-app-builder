@@ -2,6 +2,7 @@ import type { runAppBrowserTests as runAppBrowserTestsPort } from "../../agent/t
 import type { SandboxSession } from "eve/sandbox";
 import path from "node:path";
 import type { resolvePreparedRuntimeExecution } from "./prepared-runtime-execution";
+import type { samePersistedDraftCandidate } from "./draft-reconciliation-state";
 /* oxlint-disable anti-slop/no-module-mocking, anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns, typescript/no-unsafe-type-assertion, eslint/require-await -- Isolated Eve state and sandbox stubs exercise the real validation tool. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -67,16 +68,22 @@ vi.mock("./source-bound-sandbox", () => ({
     spawn: mocks.spawn,
   }),
 }));
-vi.mock("./draft-reconciliation-state", () => ({
-  candidateValidationAttemptHistory: { get: () => mocks.attempts },
-  draftReconciliationCompletions: { get: () => mocks.completions },
-  draftReconciliationState: { get: () => mocks.candidate },
-  retainCandidateValidationAttempt: (attempt: Record<string, unknown>) =>
-    mocks.attempts.push(attempt),
-  updateExactDraftReconciliation: ({ transition }: { transition: () => unknown }) => {
-    mocks.candidate = transition() as Record<string, unknown>;
-  },
-}));
+vi.mock("./draft-reconciliation-state", async (original) => {
+  const actual = await original<{
+    samePersistedDraftCandidate: typeof samePersistedDraftCandidate;
+  }>();
+  return {
+    samePersistedDraftCandidate: actual.samePersistedDraftCandidate,
+    candidateValidationAttemptHistory: { get: () => mocks.attempts },
+    draftReconciliationCompletions: { get: () => mocks.completions },
+    draftReconciliationState: { get: () => mocks.candidate },
+    retainCandidateValidationAttempt: (attempt: Record<string, unknown>) =>
+      mocks.attempts.push(attempt),
+    updateExactDraftReconciliation: ({ transition }: { transition: () => unknown }) => {
+      mocks.candidate = transition() as Record<string, unknown>;
+    },
+  };
+});
 vi.mock("./workflow-state", () => ({
   appBuilderWorkflowState: { get: () => mocks.workflow },
 }));
@@ -506,11 +513,13 @@ describe("draft reconciliation command progress", () => {
         },
         context,
       );
-    await expect(call()).resolves.toMatchObject({
+    const failed = await call();
+    expect(failed).toMatchObject({
       command: installCommand,
       output: { stderr: "lockfile mismatch" },
       status: "needs_repair",
     });
+    expect(failed).not.toHaveProperty("nextCall");
     expect(mocks.candidate?.validationRun).toMatchObject({ commands: [], nextIndex: 0 });
     expect(mocks.compile).not.toHaveBeenCalled();
     mocks.run.mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
@@ -518,6 +527,78 @@ describe("draft reconciliation command progress", () => {
       nextCommand: schemaCommand,
       status: "in_progress",
     });
+  });
+
+  const retainOriginalPublication = () => {
+    mocks.workflow = {
+      ...mocks.workflow,
+      appSpec: { appId: "spend-review", digest },
+      githubSource: { digest, repository: { repositoryId: "repo-id" } },
+      publishedGitHubDraftProposalDigest: digest,
+    };
+  };
+  const frozenInstallFailure = "error: lockfile had changes, but lockfile is frozen";
+  const failFrozenInstall = (duringInstall?: () => void) => {
+    mocks.run.mockImplementation(async (input: { command: string }) => {
+      if (input.command !== installCommand) {
+        return { exitCode: 0, stderr: "", stdout: "" };
+      }
+      duringInstall?.();
+      return { exitCode: 1, stderr: frozenInstallFailure, stdout: "bun install v1.3.14" };
+    });
+  };
+
+  it("directs an exact frozen install failure to ownership-verified repair of the same draft", async () => {
+    // Older acquired-source candidates have reviewed publication lineage but no first-publication scope.
+    retainOriginalPublication();
+    failFrozenInstall();
+
+    expect(await candidateValidationCall(installCommand)).toMatchObject({
+      command: installCommand,
+      exitCode: 1,
+      output: { stderr: frozenInstallFailure },
+      status: "needs_repair",
+      nextCall: {
+        tool: "prepare_github_draft_pr_reconciliation",
+        input: { pullRequestNumber: 7, repairOriginalPublication: { discardAddedPaths: [] } },
+      },
+    });
+    expect(mocks.candidate?.validationRun).toMatchObject({ commands: [], nextIndex: 0 });
+    expect(mocks.compile).not.toHaveBeenCalled();
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it("leaves a frozen install failure actionable without offering an unowned composition repair", async () => {
+    failFrozenInstall();
+    const failed = await candidateValidationCall(installCommand);
+    expect(failed).toMatchObject({
+      status: "needs_repair",
+      output: { stderr: frozenInstallFailure },
+    });
+    expect(failed).not.toHaveProperty("nextCall");
+  });
+
+  it("does not schedule a second original composition repair for a still-failing candidate", async () => {
+    retainOriginalPublication();
+    mocks.candidate = {
+      ...mocks.candidate,
+      originalPublicationRepair: { discardAddedPaths: [] },
+    };
+    failFrozenInstall();
+    const failed = await candidateValidationCall(installCommand);
+    expect(failed).toMatchObject({ status: "needs_repair" });
+    expect(failed).not.toHaveProperty("nextCall");
+  });
+
+  it("does not infer repair from an install that returned for a replaced candidate", async () => {
+    retainOriginalPublication();
+    failFrozenInstall(() => {
+      mocks.candidate = { ...mocks.candidate, headSha: "different-head" };
+    });
+    const failed = await candidateValidationCall(installCommand);
+    expect(failed).toMatchObject({ status: "needs_repair" });
+    expect(failed).not.toHaveProperty("nextCall");
+    expect(mocks.candidate).toMatchObject({ headSha: "different-head" });
   });
 
   it("retires only unused worktrees before a direct failed-compilation retry", async () => {

@@ -846,6 +846,16 @@ Builder selects unwanted original additions from that draft's diff; the creator
 supplies product feedback, not repository paths or manual commands. This is a
 private preparation operation, not publication or approval.
 
+An existing-repository source can also rebuild the composition of its own
+first app publication, with an empty cleanup list. The canonical original
+proposal and publication must prove that the selected app was absent from the
+original base and that the current PR is still at that exact published head.
+The selected app's checked CUE planning input can be part of this proof;
+unrelated app and configuration files cannot. Rebuild from the verified
+current base using the repository's own registration and lock generation.
+This mode never deletes additional paths, replaces the source or adopts an
+unrelated draft.
+
 The original tenant-scoped proposal, successful publication, app/spec ownership,
 repository, current head and base remain verified. Each selected deletion must
 have been added by that exact original publication, remain byte- and mode-identical
@@ -864,6 +874,12 @@ non-app index is bound into the existing reconciliation scope. Generic candidate
 editors still cannot write arbitrary shared or root files. The corrected diff
 requires normal review, exact update approval and provider readback; a changed
 revision cannot reuse an old approval.
+
+When a candidate's fixed Bun install reports that the frozen lock would
+change, Builder can return this exact same-PR repair as its next operation.
+The operation rechecks the owned publication before preparing any candidate.
+Other install failures keep their original diagnostic. Dependency catalog
+normalization remains a separate operation for a declared dependency issue.
 
 Draft validation runs the selected repository build and declared app tests.
 Prepare the candidate's local Preview runtime only when a selected browser
