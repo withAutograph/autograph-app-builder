@@ -1091,14 +1091,21 @@ exit "$status"`,
   );
 
   it.each([
-    [false, "mise run --no-deps --skip-tools app:test example 1/1", "repository-test 1/1"],
-    [true, "mise run --no-deps --skip-tools app:test example 1/1", "repository-test 1/1"],
+    { streaming: false, reuseRetainedLocalRuntime: true },
+    { streaming: true, reuseRetainedLocalRuntime: true },
+    { streaming: false, reuseRetainedLocalRuntime: false },
+    { streaming: true, reuseRetainedLocalRuntime: false },
   ] as const)(
-    "hands compiler inputs and the prepared state directory to mise with streaming=%s for %s",
-    async (streaming, validationCommand, runtimeTask) => {
+    "runs app tests with streaming=$streaming and retained runtime reuse=$reuseRetainedLocalRuntime",
+    async ({ streaming, reuseRetainedLocalRuntime }) => {
+      const validationCommand = "mise run --no-deps --skip-tools app:test example 1/1";
       const directory = mkdtempSync(path.join(tmpdir(), "builder-runtime-handoff-"));
       const environmentPath = localRuntimeEnvironmentPath(directory, "example");
       const stateDirectory = path.posix.dirname(environmentPath);
+      const expectedStateDirectory = reuseRetainedLocalRuntime ? stateDirectory : "";
+      const expectedTask = reuseRetainedLocalRuntime
+        ? "run --no-deps app:runtime run example repository-test 1/1"
+        : validationCommand.slice("mise ".length);
       mkdirSync(stateDirectory, { mode: 0o700, recursive: true });
       writeFileSync(environmentPath, "{}", { mode: 0o600 });
       mkdirSync(path.join(directory, ".config/mise"), { recursive: true });
@@ -1116,11 +1123,11 @@ case "$1" in
 esac
 if [ ! -f "$PWD/toolchain-ready" ]; then exit 25; fi
 if [ -n "$MISE_CONFIG_FILE" ]; then exit 26; fi
-if [ "$*" != "run --no-deps app:runtime run example ${runtimeTask}" ]; then exit 21; fi
-if [ "$APP_RUNTIME_STATE_DIR" != '${stateDirectory}' ]; then exit 22; fi
-if [ ! -f "$APP_RUNTIME_STATE_DIR/environment.json" ]; then exit 23; fi
+if [ "$*" != '${expectedTask}' ]; then exit 21; fi
+if [ "$APP_RUNTIME_STATE_DIR" != '${expectedStateDirectory}' ]; then exit 22; fi
+if [ ! -f '${environmentPath}' ]; then exit 23; fi
 if [ "$APP_SCHEMA_TRANSITION_PREDECESSOR_FILES" != '["original.json"]' ]; then exit 24; fi
-printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
+printf '%s\\n' "$*"
 `,
         { mode: 0o755 },
       );
@@ -1141,9 +1148,7 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
         }
         return { exitCode: result.status ?? -1, stderr: result.stderr, stdout: result.stdout };
       };
-      expect(
-        execute({ command: `mise run --no-deps app:runtime run example ${runtimeTask}` }).exitCode,
-      ).toBe(25);
+      expect(execute({ command: `mise ${expectedTask}` }).exitCode).toBe(25);
       const run = vi.fn((input: Parameters<SandboxSession["run"]>[0]) =>
         Promise.resolve(execute(input)),
       );
@@ -1158,7 +1163,9 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
       });
       const chunks: string[] = [];
       try {
-        const result = await sandboxValidationCommandExecutor()({
+        const result = await sandboxValidationCommandExecutor(
+          reuseRetainedLocalRuntime ? {} : { reuseRetainedLocalRuntime },
+        )({
           appId: "example",
           command: validationCommand,
           environment: {
@@ -1177,12 +1184,8 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
           validationRoot: directory,
         });
         expect(result.exitCode).toBe(0);
-        expect(streaming ? chunks.join("") : result.stdout).toContain(stateDirectory);
+        expect(streaming ? chunks.join("") : result.stdout).toContain(expectedTask);
         expect(streaming ? spawn : run).toHaveBeenCalledOnce();
-        expect((streaming ? spawn : run).mock.calls[0]?.[0].env).toEqual({
-          APP_RUNTIME_STATE_DIR: stateDirectory,
-          APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
-        });
         expect(streaming ? run : spawn).not.toHaveBeenCalled();
       } finally {
         rmSync(stateDirectory, { force: true, recursive: true });

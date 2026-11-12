@@ -506,9 +506,11 @@ const currentValidationSteps = (
   })
     .filter((step) => step.name === "test" && !completedShards.has(step.command.split(" ").at(-1)))
     .map(({ command }) => ({ command, kind: "check" }));
+  const pendingSteps = run.steps.slice(run.nextIndex);
+  const localSetup = pendingSteps.find((step) => step.kind === "local");
   let inserted = false;
-  const pending = run.steps.slice(run.nextIndex).flatMap((step) => {
-    if (!runBrowserTests && isOptionalPreviewStep(step)) {
+  const pending = pendingSteps.flatMap((step) => {
+    if (step.kind === "local" || (!runBrowserTests && step.kind === "browser")) {
       return [];
     }
     const isTest = testShardForStep(step, appId) !== undefined;
@@ -529,6 +531,14 @@ const currentValidationSteps = (
       kind: "browser",
       command: appBrowserTestCommand(appId),
     });
+  }
+  const browserIndex = selected.findIndex((step) => step.kind === "browser");
+  if (localSetup !== undefined && browserIndex !== -1) {
+    selected.splice(
+      browserIndex,
+      0,
+      currentValidationStep(localSetup, appId, run.schemaTaskCompleted, testShards),
+    );
   }
   return [...completed, ...selected];
 };
@@ -644,9 +654,7 @@ const runIncrementalValidation = async (
     ...run,
     steps: currentValidationSteps(run, candidate.appId, testShards, input.runBrowserTests),
   };
-  if (originalStep?.kind !== "browser") {
-    run = await preparePendingBrowserStep(run, candidate, sandbox);
-  }
+  run = await preparePendingBrowserStep(run, candidate, sandbox);
   const previewSelectionChanged =
     previousPreviewSteps !== run.steps.slice(run.nextIndex).filter(isOptionalPreviewStep).length;
   if (previewSelectionChanged) {
@@ -901,6 +909,7 @@ const runIncrementalValidation = async (
               run: () =>
                 sandboxValidationCommandExecutor({
                   alreadyCompiled,
+                  reuseRetainedLocalRuntime: false,
                   testShards,
                 })({
                   appId: candidate.appId,

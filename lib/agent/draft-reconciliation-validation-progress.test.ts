@@ -1305,9 +1305,13 @@ describe("draft reconciliation command progress", () => {
     });
   });
 
-  it.each([false, true])(
-    "resumes the required checks past a retained local setup step (saved browser: %s)",
-    async (retainedBrowser) => {
+  it.each([
+    { retainedBrowser: false, runBrowserTests: false },
+    { retainedBrowser: true, runBrowserTests: false },
+    { retainedBrowser: true, runBrowserTests: true },
+  ])(
+    "resumes required tests before retained Preview setup (saved browser: $retainedBrowser, selected: $runBrowserTests)",
+    async ({ retainedBrowser, runBrowserTests }) => {
       mocks.declaresLocal = true;
       const completed = [installCommand, schemaCommand, checkCommand].map((command) => ({
         command,
@@ -1333,17 +1337,34 @@ describe("draft reconciliation command progress", () => {
           ],
         },
       };
-      await expect(candidateValidationCall(localSetupCommand)).resolves.toMatchObject({
+      await expect(
+        candidateValidationCall(localSetupCommand, runBrowserTests),
+      ).resolves.toMatchObject({
         status: "plan_refreshed",
         nextCommand: testCommand,
         passedCommands: completed.length,
       });
-      const result = await validateAppCreation.execute({ implementationFiles: [] }, context);
+      const result = await validateAppCreation.execute(
+        { implementationFiles: [], runBrowserTests },
+        context,
+      );
       expect(result).toMatchObject({ status: "validated" });
-      expect(mocks.local).not.toHaveBeenCalled();
-      expect(mocks.browser).not.toHaveBeenCalled();
+      expect(mocks.local).toHaveBeenCalledTimes(Number(runBrowserTests));
+      expect(mocks.browser).toHaveBeenCalledTimes(Number(runBrowserTests));
       expect(mocks.candidate?.validation).toMatchObject({
-        commands: [...completed, { command: testCommand, exitCode: 0 }],
+        commands: [
+          ...completed,
+          { command: testCommand, exitCode: 0 },
+          ...(runBrowserTests
+            ? [
+                { command: localSetupCommand, exitCode: 0 },
+                {
+                  command: "mise run --no-deps app:runtime run spend-review test-e2e",
+                  exitCode: 0,
+                },
+              ]
+            : []),
+        ],
       });
     },
   );
@@ -1440,6 +1461,36 @@ describe("draft reconciliation command progress", () => {
     expect(mocks.attempts).toEqual(
       expect.arrayContaining([expect.objectContaining({ command: browserCommand, exitCode: 1 })]),
     );
+  });
+
+  it("refreshes a saved browser step when the app still needs local setup", async () => {
+    for (const command of [installCommand, schemaCommand, checkCommand, testCommand]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Save the original plan at its browser step without a local setup receipt.
+      await candidateValidationCall(command, true);
+    }
+    mocks.declaresLocal = true;
+    const browserCommand = "mise run --no-deps app:runtime run spend-review test-e2e";
+    await expect(candidateValidationCall(browserCommand, true)).resolves.toMatchObject({
+      status: "plan_refreshed",
+      nextCommand: localSetupCommand,
+      passedCommands: 4,
+    });
+    expect(mocks.local).not.toHaveBeenCalled();
+    expect(mocks.browser).not.toHaveBeenCalled();
+    await expect(candidateValidationCall(localSetupCommand, true)).resolves.toMatchObject({
+      command: localSetupCommand,
+      nextCommand: browserCommand,
+      status: "in_progress",
+    });
+    expect(mocks.local).toHaveBeenCalledOnce();
+    expect(mocks.browser).not.toHaveBeenCalled();
+    await expect(candidateValidationCall(browserCommand, true)).resolves.toMatchObject({
+      command: browserCommand,
+      nextCommand: captureCommand,
+      status: "in_progress",
+    });
+    expect(mocks.local).toHaveBeenCalledOnce();
+    expect(mocks.browser).toHaveBeenCalledOnce();
   });
 
   it.each(["schema", "build", "unit"] as const)(

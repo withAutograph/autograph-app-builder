@@ -869,4 +869,5 @@ Draft validation runs the selected repository build and declared app tests.
 Prepare the candidate's local Preview runtime only when a selected browser
 check needs it. A direct Production repair does not require Preview setup,
 and an unselected Preview step from an earlier attempt does not block the
-required checks.
+required checks. Declared repository tests use their normal task environment,
+so they cannot silently pick up a retained Preview from an earlier release.
