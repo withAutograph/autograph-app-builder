@@ -19,6 +19,12 @@ export interface FirstAppRegistration {
   frameworkUpgrade?: FrameworkVersions;
 }
 
+/** Authored inputs for this app's starter-backed scaffold. */
+export const firstAppPlanningPaths = (appId: string) => [
+  `.config/app-specs/${appId}.cue`,
+  `.config/app-specs/${appId}.md`,
+];
+
 export interface GitHubDestinationReviewBinding {
   repository: GitHubRepositoryObservation;
   installation: GitHubInstallationIdentity;
@@ -75,13 +81,17 @@ export const createGitHubDestinationReviewBinding = (
   if (registration !== undefined) {
     const appRoot = `apps/${registration.appId}/`;
     const allowed = new Set(["package.json", "microfrontends.json", "bun.lock"]);
+    const planningPaths = new Set(firstAppPlanningPaths(registration.appId));
     const scoped = [
       /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(registration.appId),
       candidates.has(`${appRoot}package.json`),
       registrationPaths.has("microfrontends.json"),
       registrationPaths.size === registration.paths.length,
       registration.paths.every((path) => allowed.has(path) && candidates.has(path)),
-      candidatePaths.every((path) => path.startsWith(appRoot) || registrationPaths.has(path)),
+      candidatePaths.every(
+        (path) =>
+          path.startsWith(appRoot) || registrationPaths.has(path) || planningPaths.has(path),
+      ),
     ].every(Boolean);
     if (!scoped) {
       throw new Error(
