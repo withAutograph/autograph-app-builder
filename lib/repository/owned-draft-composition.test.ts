@@ -176,17 +176,25 @@ export const planMicrofrontendRegistration=(bytes,input)=>{
         },
       }),
     );
-    write(
-      checkout,
-      "bun.lock",
-      text({
-        workspaces: {
-          "apps/existing": { name: "@fixture/existing" },
-          [`apps/${appId}`]: { name: `@autograph/${appId}` },
-        },
-        retained: "base-lock",
-      }),
-    );
+    if (options.realBun === true) {
+      const sibling = "apps/existing/package.json";
+      const manifest = readFileSync(path.join(checkout, sibling), "utf-8");
+      rmSync(path.join(checkout, sibling));
+      runBun(checkout);
+      write(checkout, sibling, manifest);
+    } else {
+      write(
+        checkout,
+        "bun.lock",
+        text({
+          workspaces: {
+            "apps/existing": { name: "@fixture/existing" },
+            [`apps/${appId}`]: { name: `@autograph/${appId}` },
+          },
+          retained: "base-lock",
+        }),
+      );
+    }
   } else {
     // Intentionally different from the accepted app: content equality is not ownership proof.
     write(checkout, "app/page.tsx", "export default 'unintended root application';\n");
@@ -701,6 +709,58 @@ describe("owned original publication composition repair", () => {
       "Non-app content changed after Git prepared this owned draft merge",
     );
   });
+
+  it.skipIf(availableBun === undefined)(
+    "repairs a first publication's frozen lock without deleting files or losing saved app edits",
+    async () => {
+      if (availableBun === undefined) {
+        throw new Error("The explicit local Bun fixture binary is unavailable");
+      }
+      const f = fixture({ firstPublication: true, realBun: true });
+      const frozenInstall = (root: string) =>
+        spawnSync(availableBun, ["install", "--frozen-lockfile", "--ignore-scripts"], {
+          cwd: root,
+          encoding: "utf-8",
+          env: { ...process.env, BUN_INSTALL_CACHE_DIR: path.join(f.workspace, "bun-cache") },
+        });
+      const input = {
+        sandbox: f.session,
+        workspaceRoot: f.workspace,
+        repository: repo,
+        appId,
+        headBranch: f.headBranch,
+        headSha: f.originalHead,
+        baseBranch: "main",
+        baseSha: f.currentBase,
+      };
+      const previous = await prepareDraftReconciliation(input);
+      const failure = frozenInstall(previous.root);
+      expect(failure.status).not.toBe(0);
+      expect(failure.stderr).toContain("lockfile had changes, but lockfile is frozen");
+      const appPage = `apps/${appId}/app/page.tsx`;
+      const edit = "export default 'preserved private app edit';\n";
+      write(previous.root, appPage, edit);
+
+      const repaired = await prepareDraftReconciliation({
+        ...input,
+        ownedPublication: f.owned,
+        previousCandidate: previous,
+        replayPreviousCandidate: true,
+        originalPublicationRepair: { discardAddedPaths: [] },
+      });
+      expect(repaired.root).not.toBe(previous.root);
+      expect(repaired.conflicts).toEqual([]);
+      expect(readFileSync(path.join(repaired.root, appPage), "utf-8")).toBe(edit);
+      expect(f.lockSeeds).toEqual([f.currentLock]);
+      const proof = await inspectDraftReconciliation({ sandbox: f.session, prepared: repaired });
+      expect(proof.baseChanges.map(({ path: file }) => file).toSorted()).toEqual(
+        f.owned.proposal.approvedPaths,
+      );
+      const success = frozenInstall(repaired.root);
+      expect(success.status, success.stderr).toBe(0);
+      expect(git(f.checkout, "rev-parse", `refs/heads/${f.headBranch}`)).toBe(f.originalHead);
+    },
+  );
 
   it.skipIf(availableBun === undefined)(
     "regenerates a real Bun lock while retaining unrelated current workspaces and selections",

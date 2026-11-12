@@ -193,6 +193,7 @@ const ownedDraftFixture = (
 };
 
 const firstAppManifest = "apps/demo/package.json";
+const firstAppCue = ".config/app-specs/demo.cue";
 const hash = (serialized: string) => createHash("sha256").update(serialized).digest("hex");
 
 const firstAppPublicationFixture = (extraPaths: readonly string[] = []) => {
@@ -216,7 +217,7 @@ const firstAppPublicationFixture = (extraPaths: readonly string[] = []) => {
   ].toSorted();
   const changes = approvedPaths.map((path) => {
     const after = { mode: "644", digest: hash(path) };
-    return path.startsWith("apps/")
+    return path.startsWith("apps/") || path === firstAppCue
       ? { path, kind: "added" as const, after }
       : {
           path,
@@ -308,22 +309,25 @@ const firstAppPublicationFixture = (extraPaths: readonly string[] = []) => {
 };
 
 describe("owned first app registration on an acquired repository", () => {
-  it("binds the exact original draft and original base absence before carrying its root lock", async () => {
-    const f = firstAppPublicationFixture();
-    const result = await f.runtime.inspectExistingDraftReconciliationSource(f.request);
-    expect(result.ownedPublication).toEqual({ proposal: f.proposal, publication: f.publication });
-    expect(f.readProposal).toHaveBeenCalledExactlyOnceWith(f.proposal.digest);
-    expect(f.inspectDestinationFiles).toHaveBeenCalledExactlyOnceWith({
-      paths: [firstAppManifest],
-      repository: f.originalBase,
-    });
-    expect(result.base.headSha).toBe(f.repository.headSha);
-  });
+  it.each([false, true])(
+    "binds the exact original draft and original base absence with a CUE transport: %s",
+    async (hasCue) => {
+      const f = firstAppPublicationFixture(hasCue ? [firstAppCue] : []);
+      const result = await f.runtime.inspectExistingDraftReconciliationSource(f.request);
+      expect(result.ownedPublication).toEqual({ proposal: f.proposal, publication: f.publication });
+      expect(f.readProposal).toHaveBeenCalledExactlyOnceWith(f.proposal.digest);
+      expect(f.inspectDestinationFiles).toHaveBeenCalledExactlyOnceWith({
+        paths: [firstAppManifest],
+        repository: f.originalBase,
+      });
+      expect(result.base.headSha).toBe(f.repository.headSha);
+    },
+  );
 
   it.each(["headSha", "headTree", "origin"] as const)(
     "keeps ordinary source inspection without authorizing inherited root content after %s moves",
     async (field) => {
-      const f = firstAppPublicationFixture();
+      const f = firstAppPublicationFixture([firstAppCue]);
       if (field === "origin") {
         f.draft.verifiedBuilderOrigin = { appId: "123", authorId: "900", marker: "f".repeat(64) };
       } else {
@@ -336,13 +340,20 @@ describe("owned first app registration on an acquired repository", () => {
     },
   );
 
-  it("requires explicit same-app saved publication context and refuses other root paths", async () => {
-    const f = firstAppPublicationFixture(["docs/unrelated.md"]);
-    const unrelated = await f.runtime.inspectExistingDraftReconciliationSource(f.request);
-    expect(unrelated.ownedPublication).toBeUndefined();
+  it.each([
+    ".config/app-specs/sibling.cue",
+    ".config/app-specs/demo.cue.bak",
+    "apps/sibling/package.json",
+    "docs/unrelated.md",
+  ])("refuses unrelated publication path %s alongside the selected CUE", async (path) => {
+    const f = firstAppPublicationFixture([firstAppCue, path]);
+    const result = await f.runtime.inspectExistingDraftReconciliationSource(f.request);
+    expect(result.ownedPublication).toBeUndefined();
     expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+  });
 
-    const owned = firstAppPublicationFixture();
+  it("requires explicit same-app saved publication context", async () => {
+    const owned = firstAppPublicationFixture([firstAppCue]);
     const { priorPublishedProposalDigest: _saved, ...withoutSaved } = owned.request;
     void _saved;
     const missingSaved = await owned.runtime.inspectExistingDraftReconciliationSource(withoutSaved);
@@ -357,12 +368,12 @@ describe("owned first app registration on an acquired repository", () => {
   });
 
   it("rejects a canonical receipt whose paths differ from the approved proposal", async () => {
-    const f = firstAppPublicationFixture();
+    const f = firstAppPublicationFixture([firstAppCue]);
     const { digest: _digest, ...receipt } = f.publication;
     void _digest;
     const changed = {
       ...receipt,
-      normalizedChangedPaths: [firstAppManifest, "microfrontends.json"],
+      normalizedChangedPaths: [firstAppManifest, "bun.lock", "microfrontends.json"],
     };
     f.read.mockResolvedValue({ ...changed, digest: hash(JSON.stringify(changed)) });
     await expect(f.runtime.inspectExistingDraftReconciliationSource(f.request)).rejects.toThrow();
@@ -370,7 +381,7 @@ describe("owned first app registration on an acquired repository", () => {
   });
 
   it("does not expand an existing app whose manifest was already present in the sealed base", async () => {
-    const f = firstAppPublicationFixture();
+    const f = firstAppPublicationFixture([firstAppCue]);
     f.inspectDestinationFiles.mockResolvedValue([
       { path: firstAppManifest, mode: "644", digest: hash(firstAppManifest) },
     ]);

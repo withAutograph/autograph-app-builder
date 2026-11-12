@@ -42,7 +42,12 @@ export const isFirstAppPublicationPathScope = (
   appId: string,
 ): boolean => {
   const appRoot = `apps/${appId}/`;
-  const registration = new Set(["bun.lock", "microfrontends.json", "package.json"]);
+  const registration = new Set([
+    "bun.lock",
+    "microfrontends.json",
+    "package.json",
+    `.config/app-specs/${appId}.cue`,
+  ]);
   return [
     /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId),
     paths.includes(`${appRoot}package.json`),
