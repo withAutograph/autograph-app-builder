@@ -224,6 +224,49 @@ const isExistingPresentationEdit = (change: TargetIterationChange, appPath: stri
   );
 };
 
+const isOwnedAppSourceEdit = (change: TargetIterationChange, appPath: string): boolean => {
+  if (isExistingPresentationEdit(change, appPath)) {
+    return true;
+  }
+  const { path, before, after } = change;
+  if (after === undefined || (before?.mode ?? "644") !== after.mode) {
+    return false;
+  }
+  const relative = path.slice(appPath.length + 1);
+  const appSource =
+    path.startsWith(`${appPath}/`) &&
+    /^(?:src\/)?(?:app|components|lib)\/.+\.(?:[jt]sx?|css)$/u.test(relative) &&
+    !relative.split("/").some((part) => part.startsWith(".") || part === "schema");
+  const routeFile = /(?:^|\/)(?:layout|route|middleware|proxy)\.[jt]sx?$/u.test(relative);
+  const newEntry =
+    before === undefined &&
+    /(?:^|\/)(?:page|template|loading|not-found|error|global-error|default)\.[jt]sx?$/u.test(
+      relative,
+    );
+  return appSource && !routeFile && !newEntry;
+};
+
+const isSourceOnlyRevisionEdit = (change: TargetIterationChange, appPath: string): boolean => {
+  const { path, before, after } = change;
+  if (
+    before === undefined ||
+    after === undefined ||
+    before.mode !== after.mode ||
+    !path.startsWith(`${appPath}/`)
+  ) {
+    return false;
+  }
+  const relative = path.slice(appPath.length + 1);
+  const runtimeBinding = /^(?:src\/)?app\/data\/(?:context|protected-config)\.[jt]sx?$/u.test(
+    relative,
+  );
+  const configuration = /\.config\.[jt]sx?$/u.test(relative);
+  const testSource =
+    /^tests\/.+\.[jt]sx?$/u.test(relative) &&
+    !relative.split("/").some((part) => part.startsWith(".") || part === "schema");
+  return !runtimeBinding && !configuration && (isOwnedAppSourceEdit(change, appPath) || testSource);
+};
+
 type RevisionScope = Pick<NonNullable<DirectProductionSubject["revision"]>, "schemaChange">;
 
 /** The schema compiler and protected installer independently verify the effect of these exact bytes. */
@@ -247,29 +290,7 @@ const schemaRevisionScope = (
   ) {
     return undefined;
   }
-  const applicationEdit = ({ path, before, after }: TargetIterationChange) => {
-    if (after === undefined || (before?.mode ?? "644") !== after.mode) {
-      return false;
-    }
-    const relative = path.slice(appPath.length + 1);
-    const appSource =
-      path.startsWith(`${appPath}/`) &&
-      /^(?:src\/)?(?:app|components|lib)\/.+\.(?:[jt]sx?|css)$/u.test(relative) &&
-      !relative.split("/").some((part) => part.startsWith(".") || part === "schema");
-    const routeFile = /(?:^|\/)(?:layout|route|middleware|proxy)\.[jt]sx?$/u.test(relative);
-    const newEntry =
-      before === undefined &&
-      /(?:^|\/)(?:page|template|loading|not-found|error|global-error|default)\.[jt]sx?$/u.test(
-        relative,
-      );
-    return appSource && !routeFile && !newEntry;
-  };
-  if (
-    !changes.every(
-      (change) =>
-        change === cue || isExistingPresentationEdit(change, appPath) || applicationEdit(change),
-    )
-  ) {
+  if (!changes.every((change) => change === cue || isOwnedAppSourceEdit(change, appPath))) {
     return undefined;
   }
   const schemaChange = directProductionSchemaChangeSchema.safeParse({
@@ -306,7 +327,7 @@ const eligibleRevisionScope = (
   if (stagedFiles.length > 0) {
     return undefined;
   }
-  if (changes.every((change) => isExistingPresentationEdit(change, appPath))) {
+  if (changes.every((change) => isSourceOnlyRevisionEdit(change, appPath))) {
     return {};
   }
   const { schema } = target.plan.source;

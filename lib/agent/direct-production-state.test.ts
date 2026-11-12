@@ -229,21 +229,20 @@ const releaseContext = {
   },
 } satisfies ToolContext & { approvedTools: ReadonlySet<string> };
 
-const installPriorProduction = (stage: "live" | "setup" = "live") => {
-  installPlan();
+const approveFixtureProduction = (callId: string, stage: "live" | "setup") => {
   const subject = requiredSubject(directProductionSubjectForPlan(releaseContext));
   const input = {
-    callId: "prior-build",
+    callId,
     implementationFiles: [],
     toolName: "apply_app_creation" as const,
     subject,
   };
   const buildScope = {
-    appId,
-    appSpecDigest: specDigest,
-    proposalDigest,
-    sessionId,
-    workspaceId: buildWorkspaceId,
+    appId: subject.appId,
+    appSpecDigest: subject.appSpecDigest,
+    proposalDigest: subject.proposalDigest,
+    sessionId: subject.sessionId,
+    workspaceId: subject.buildWorkspaceId,
   };
   requestPrivateApplyApproval(buildScope, input.callId);
   expect(requestDirectProductionGrant(releaseContext, input)).toBe("user-approval");
@@ -251,6 +250,10 @@ const installPriorProduction = (stage: "live" | "setup" = "live") => {
   recordApprovedPrivateApply(buildScope, input.callId);
   directProductionProgressState.update(() => ({ grantDigest: grant.digest, stage }));
   return grant;
+};
+const installPriorProduction = (stage: "live" | "setup" = "live") => {
+  installPlan();
+  return approveFixtureProduction("prior-build", stage);
 };
 
 const revisionPage = `apps/${appId}/app/page.tsx`;
@@ -350,6 +353,31 @@ const installNotesRevision = () =>
     "Add optional saved notes to socket labels",
     appliedCuePath,
   );
+const installPriorNotesSchema = () => {
+  installPriorProduction();
+  installNotesRevision();
+  return approveFixtureProduction("prior-schema-revision", "live");
+};
+const installNotesAppSourceRevision = () => {
+  const appRoute = `apps/${appId}/app/${appId}`;
+  return installRevision(
+    [
+      revisionEdit(
+        `${appRoute}/label-form.tsx`,
+        '<input name="label" />',
+        '<><input name="label" /><textarea name="notes" /></>',
+      ),
+      revisionEdit(`${appRoute}/actions.ts`, "create({ label })", "create({ label, notes })"),
+      revisionEdit(`${appRoute}/data.ts`, 'select: ["label"]', 'select: ["label", "notes"]'),
+      revisionEdit(
+        `apps/${appId}/tests/notes.spec.ts`,
+        'await page.getByText("Label").count()',
+        'await page.getByLabel("Notes").fill("Use a dry socket")',
+      ),
+    ],
+    "Enter, save and reopen notes using the already installed schema",
+  );
+};
 const notesSchemaChange = {
   kind: "add-optional-text-field",
   priorCueSha256: sha256(beforeNotesCue),
@@ -881,18 +909,25 @@ describe("direct Production Build authority", () => {
   });
 
   it.each([
-    { label: "heading", install: installHeadingRevision, scope: {} },
+    { label: "heading", install: installHeadingRevision, prior: installPriorProduction, scope: {} },
     {
-      label: "optional notes",
+      label: "optional notes schema",
       install: installNotesRevision,
+      prior: installPriorProduction,
       scope: { schemaChange: notesSchemaChange },
     },
-  ])("binds $label to one fresh Build approval", async ({ label, install, scope }) => {
+    {
+      label: "the notes form, save action and data read on the installed schema",
+      install: installNotesAppSourceRevision,
+      prior: installPriorNotesSchema,
+      scope: {},
+    },
+  ])("binds $label to one fresh Build approval", async ({ label, install, prior, scope }) => {
     const container = new ContextContainer();
     const { session } = releaseContext;
     container.set(SessionKey, { auth: session.auth, sessionId, turn: session.turn });
     await contextStorage.run(container, async () => {
-      const previous = installPriorProduction();
+      const previous = prior();
       const revision = install();
       const subject = requiredSubject(directProductionSubjectForPlan(releaseContext));
       expect(subject).toEqual({
@@ -979,7 +1014,9 @@ describe("direct Production Build authority", () => {
       }
       expect(repositoryCommand).not.toHaveBeenCalled();
       expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
-      expect(readPrivateApplyAuthority().grant?.proposalDigest).toBe(proposalDigest);
+      expect(readPrivateApplyAuthority().grant?.proposalDigest).toBe(
+        previous.subject.proposalDigest,
+      );
 
       await run(pending.session, {
         inputResponses: [{ optionId: "approve", requestId: request.requestId }],
@@ -1089,11 +1126,28 @@ describe("direct Production Build authority", () => {
   it.each([
     `apps/${appId}/schema/unselected.cue`,
     `apps/${appId}/package.json`,
-    "apps/another-app/app/page.tsx",
+    `apps/${appId}/next.config.ts`,
+    `apps/${appId}/app/api/route.ts`,
+    `apps/${appId}/app/.config/policy.ts`,
+    `apps/${appId}/app/data/context.ts`,
+    `apps/${appId}/app/data/protected-config.ts`,
+    `apps/${appId}/tests/playwright.config.ts`,
+    "apps/another-app/app/data.ts",
   ])("keeps revision changes to %s outside the combined approval", (path) => {
     contextStorage.run(new ContextContainer(), () => {
       installPriorProduction();
       installHeadingRevision(path);
+      expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
+    });
+  });
+
+  it("leaves additions and deletions outside the existing source-only revision scope", () => {
+    contextStorage.run(new ContextContainer(), () => {
+      installPriorProduction();
+      const { before, after, path } = revisionEdit(`apps/${appId}/app/notes.ts`, "old", "new");
+      installRevision([{ path, after }], "Create a new source module");
+      expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
+      installRevision([{ path, before }], "Remove the source module");
       expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
     });
   });

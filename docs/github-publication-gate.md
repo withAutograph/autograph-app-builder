@@ -629,17 +629,20 @@ storage. A private Build that later receives a Production request uses one
 release approval with the same scope. A private-only Build grants no outward
 authority.
 
-A presentation revision or safe optional text field addition to the same
-session's live private Arrusted app can use a combined Build and Production approval. The approval binds the new
-proposal and the preceding live release, along with the same owner, repository,
-installation, workspace, and app. The revision uses the existing Production
-data and access. Builder reads the protected setup for the reviewed head before
-Ready and merge. A presentation revision uses a read-only setup check. For an
-optional field addition, the same approval covers the checked schema update on
-the existing database. Protected setup binds the exact reviewed source to the
-installed release and verifies the transition before merge. Builder applies
-the checked addition after the provider activates that exact merged revision,
-then observes the app URL.
+An app code revision or safe optional text field addition to the same
+session's live private Arrusted app can use a combined Build and Production
+approval. The approval binds the new proposal and the preceding live release,
+along with the same owner, repository, installation, workspace, and app. The
+revision uses the existing Production data and access. Builder reads the
+protected setup for the reviewed head before Ready and merge. An app code
+revision that keeps its schema and deployment configuration uses a read-only
+setup check. This covers app-owned forms, server actions, and data reads.
+
+For an optional field addition, the same approval covers the checked schema
+update on the existing database. Protected setup binds the exact reviewed
+source to the installed release and verifies the transition before merge.
+Builder applies the checked addition after the provider activates that exact
+merged revision, then observes the app URL.
 
 For a plan acquired from Arrusted's default branch, `release-app-production`
 reads the verified repository and installation already bound to the plan.

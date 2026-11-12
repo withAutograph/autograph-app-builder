@@ -84,7 +84,7 @@ implementation submits the app's CUE schema, request the subject with
 `directProduction` subject with the complete implementation to
 `apply_app_creation` to present **Build and release to Production?**.
 The card covers Build, the reviewed draft, managed data and creator access,
-and merge after required checks. For a requested presentation update or safe optional text field addition to
+and merge after required checks. For a requested app code update or safe optional text field addition to
 this session's live private Arrusted app, plan the revision and call
 `release-app-production` before presenting the Build card. Pass the returned
 subject to `apply_app_creation` with an empty implementation file list. The
