@@ -2,7 +2,10 @@ import { isDeepStrictEqual } from "node:util";
 import { defineState } from "eve/context";
 import type { ToolContext } from "eve/tools";
 
-import { exactForwardedSessionAuthority } from "../hosted/session-authority";
+import {
+  exactForwardedSessionAuthority,
+  HostedSessionAuthorityError,
+} from "../hosted/session-authority";
 import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import type { ImplementationFile } from "./apply-implementation-files";
 import {
@@ -14,6 +17,7 @@ import type {
   DirectProductionGrant,
   DirectProductionSubject,
 } from "./direct-production-authorization";
+import { readPrivateApplyAuthority } from "./private-apply-authority";
 import { repositoryAccessReceiptState } from "./repository-access-state";
 import type { RepositoryAccessReceipt } from "./repository-access-state";
 import {
@@ -45,6 +49,7 @@ type ProductionDestination = Pick<
 
 const authorization = defineState<{
   freshDestination?: FreshTemplateProductionPlan & ProductionDestination;
+  authoringPlan?: DirectProductionSubject;
   grant?: DirectProductionGrant;
   pending: Record<string, DirectProductionGrant>;
 }>("autograph-app-builder.direct-production-authorization.v1", () => ({ pending: {} }));
@@ -200,6 +205,46 @@ export const directProductionSubjectForPlan = (
 
 const sameSubject = (first: DirectProductionSubject | undefined, second: DirectProductionSubject) =>
   isDeepStrictEqual(first, second);
+
+/** A successful preflight permits drafting to continue for the exact plan, without granting Build. */
+export const recordPlannedDirectProductionAuthoring = (subject: DirectProductionSubject): void => {
+  if (appBuilderWorkflowState.get().phase === "planned") {
+    authorization.update((state) => ({ ...state, authoringPlan: subject }));
+  }
+};
+
+export const currentPlannedDirectProductionAuthoring = (ctx: OwnerContext): string | undefined => {
+  const { authoringPlan } = authorization.get();
+  if (authoringPlan === undefined || appBuilderWorkflowState.get().phase !== "planned") {
+    return undefined;
+  }
+  let current: DirectProductionSubject | undefined;
+  try {
+    current = directProductionSubjectForPlan(ctx);
+  } catch (error) {
+    if (error instanceof HostedSessionAuthorityError) {
+      return undefined;
+    }
+    throw error;
+  }
+  if (
+    current === undefined ||
+    !sameSubject({ ...current, storageKind: authoringPlan.storageKind }, authoringPlan)
+  ) {
+    return undefined;
+  }
+  const { grant, terminalDecisions } = readPrivateApplyAuthority();
+  const { proposalDigest, sessionId } = current;
+  if (
+    (grant?.proposalDigest === proposalDigest && grant.sessionId === sessionId) ||
+    terminalDecisions?.some(
+      ({ scope }) => scope.proposalDigest === proposalDigest && scope.sessionId === sessionId,
+    ) === true
+  ) {
+    return undefined;
+  }
+  return proposalDigest;
+};
 
 export const currentDirectProductionGrant = (
   ctx: OwnerContext,

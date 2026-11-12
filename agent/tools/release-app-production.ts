@@ -11,6 +11,7 @@ import {
   freshTemplateProductionPlan,
   recordDirectProductionGrant,
   recordFreshTemplateProductionDestination,
+  recordPlannedDirectProductionAuthoring,
   requestDirectProductionGrant,
 } from "../../lib/agent/direct-production-state";
 import { assertApprovedPrivateApplySession } from "../../lib/agent/private-apply-authority";
@@ -117,14 +118,26 @@ export default defineTool({
           };
     }
     if (input.directProduction === undefined) {
-      const storageKind =
-        appBuilderWorkflowState.get().phase === "planned" ? input.storageKind : undefined;
-      const review = storageKind === undefined ? subject : { ...subject, storageKind };
-      return {
+      const planned = appBuilderWorkflowState.get().phase === "planned";
+      const review =
+        planned && input.storageKind !== undefined
+          ? { ...subject, storageKind: input.storageKind }
+          : subject;
+      if (planned) {
+        recordPlannedDirectProductionAuthoring(subject);
+      }
+      const result = {
         status: "review-production-release" as const,
         directProduction: review,
         description: describeDirectProductionSubject(review),
       };
+      return planned
+        ? {
+            ...result,
+            guidance:
+              "This is the scope of the current draft, before Build. Continue drafting the accepted app. If its implementation includes the app CUE, read this subject with storageKind postgres, then submit the subject and implementation together for the combined Build approval. A visual prototype is optional.",
+          }
+        : result;
     }
     approvedPrivateBuild(subject);
     recordDirectProductionGrant(ctx, {

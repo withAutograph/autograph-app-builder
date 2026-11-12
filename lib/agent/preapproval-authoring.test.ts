@@ -31,6 +31,12 @@ const accepted = (durable = false): AppBuilderWorkflowState =>
     sourceReceipt: { digest: hash("c") },
     workspace: { workspaceId: "workspace", workspaceDigest: hash("d") },
   }) as unknown as AppBuilderWorkflowState;
+const planned = (proposalDigest = hash("e")) =>
+  ({
+    ...accepted(),
+    phase: "planned",
+    proposal: { digest: proposalDigest },
+  }) as unknown as AppBuilderWorkflowState;
 const input = (state = accepted()) => ({
   adapterSessionId: "logical",
   blocked: false,
@@ -66,13 +72,49 @@ describe("preapproval drafting intent", () => {
   it("records a running turn as working, never dispatchable", () => {
     expect(decidePreapprovalAuthoring({ ...input(), completed: false }).decision).toBe("working");
   });
-  it("stops authoring when a real proposal exists, before any Build approval", () => {
-    const state = {
-      ...accepted(),
-      phase: "planned",
-      proposal: { digest: hash("e") },
-    } as unknown as AppBuilderWorkflowState;
-    expect(decidePreapprovalAuthoring(input(state)).decision).toBe("planned");
+  it("stops at a planned proposal without a current Production preflight", () => {
+    expect(decidePreapprovalAuthoring(input(planned())).decision).toBe("planned");
+    expect(
+      decidePreapprovalAuthoring({ ...input(planned()), directProductionProposalDigest: hash("f") })
+        .decision,
+    ).toBe("planned");
+  });
+  it("continues drafting for the planned proposal with a matching Production preflight", () => {
+    const ready = decidePreapprovalAuthoring({
+      ...input(planned()),
+      directProductionProposalDigest: hash("e"),
+    });
+    expect(ready).toMatchObject({
+      decision: "runnable",
+      scope: {
+        authoritySessionId: "logical",
+        appId: "stock-review",
+        appSpecDigest: hash("a"),
+        workspaceId: "workspace",
+      },
+    });
+    expect(preapprovalAuthoringDecisionSchema.parse(ready)).toEqual(ready);
+    expect(ready).not.toHaveProperty("approval");
+    const successor = decidePreapprovalAuthoring({
+      ...input(planned(hash("f"))),
+      directProductionProposalDigest: hash("f"),
+    });
+    expect(successor.decision).toBe("runnable");
+    expect(successor.scopeDigest).not.toBe(ready.scopeDigest);
+  });
+  it.each([
+    ["pendingInput", "waiting-input"],
+    ["pendingApproval", "waiting-input"],
+    ["blocked", "blocked"],
+    ["sourcePrerequisite", "blocked"],
+  ] as const)("halts planned Production authoring at %s", (key, decision) => {
+    expect(
+      decidePreapprovalAuthoring({
+        ...input(planned()),
+        directProductionProposalDigest: hash("e"),
+        [key]: true,
+      }),
+    ).toMatchObject({ decision });
   });
   it("never relabels another session's accepted artifact", () => {
     const state = accepted(true);
