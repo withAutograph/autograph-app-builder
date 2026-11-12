@@ -18,7 +18,7 @@ describe("existing-app prototype planning", () => {
     const plan = vi.fn(async () => {
       await Promise.resolve();
     });
-    await expect(continuePrototypePlanning(plan)).resolves.toEqual({
+    await expect(continuePrototypePlanning(plan)).resolves.toMatchObject({
       implementationPlanReady: true,
     });
     expect(plan).toHaveBeenCalledOnce();

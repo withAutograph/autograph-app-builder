@@ -14,6 +14,7 @@ import { appBuilderWorkflowState } from "./workflow-state";
 import { currentLocalSourcePrerequisite } from "./local-source-prerequisite-state";
 import { readPrivateApplyAuthority } from "./private-apply-authority";
 import { currentPlannedDirectProductionAuthoring } from "./direct-production-state";
+import { currentInitialBuildAuthoring } from "./initial-build-authoring";
 import {
   decidePreapprovalAuthoring,
   readInternalAuthoringMarker,
@@ -36,6 +37,7 @@ export const currentAuthoringDecision = (
   decidePreapprovalAuthoring({
     ...boundary,
     correction: currentPlannedAuthoringCorrection(ctx),
+    initialBuildProposalDigest: currentInitialBuildAuthoring(ctx.session.id),
     directProductionProposalDigest: currentPlannedDirectProductionAuthoring(ctx),
     adapterSessionId: ctx.session.id,
     turnId: ctx.session.turn.id,

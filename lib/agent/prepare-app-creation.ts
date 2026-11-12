@@ -10,6 +10,7 @@ import { resolveLatestFrameworkVersions } from "../repository/framework-upgrade"
 import { refreshPlanningSource } from "./refresh-planning-source";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { implementationRouteContext } from "./implementation-route-context";
+import { recordInitialBuildAuthoring } from "./initial-build-authoring";
 import type { ExistingAppChange } from "./existing-app-changes";
 import {
   resolveAcceptedAppSpecContent,
@@ -298,6 +299,7 @@ export const prepareAppCreation = async (
       };
     },
   });
+  recordInitialBuildAuthoring(ctx.session.id);
   if (repair?.approvedBase !== undefined) {
     existingAppRepairHistory.update((history) => [
       ...history,

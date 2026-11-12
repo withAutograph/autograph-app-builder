@@ -172,7 +172,9 @@ before the first `accept_app_spec` attempt. Do not ask for formal UI finalizatio
 artifact acceptance, or planning approval. Ask a product question only when no safe revisable default
 can resolve a material ambiguity.
 
-Once the implementation plan is ready, present **Build this app?** for private
+For explicit design-only or planning-only requests, keep the AppSpec in draft
+and present the requested design or plan. For a requested build, once the
+implementation plan is ready, present **Build this app?** for private
 preview or **Build and release to Production?** for an explicit direct Production
 request for a new private Arrusted app. Use the Browser prototype for optional
 design feedback. If a prototype was stored but cannot be opened, continue with

@@ -280,7 +280,7 @@ export const continueHostedPreapprovalAuthoring = async (
           error: {
             code: "preapproval_authoring_no_progress",
             message:
-              "Builder completed the drafting continuation without producing a proposal. The accepted app is unfinished; continue through an ordinary user turn to revise the plan.",
+              "Builder paused before presenting the Build approval. Continue in this session to pick up the saved design.",
           },
         }
       : input.result;

@@ -17,7 +17,11 @@ import {
   diagnosticAuthoringDecisionState,
   authenticatedAuthoringDelivery,
 } from "./preapproval-authoring-runtime";
-import { requestPrivateApplyApproval } from "./private-apply-authority";
+import { recordInitialBuildAuthoring } from "./initial-build-authoring";
+import { readPrivateApplyAuthority, requestPrivateApplyApproval } from "./private-apply-authority";
+import { observePrivateApplyDecisionEvent } from "./private-apply-decision-lifecycle";
+import { privateApplyDenialEvents } from "../eve/private-apply-denial.test-fixture";
+import { targetProposalSchema } from "../repository/target-planning";
 import hook from "../../agent/hooks/continue-preapproval-authoring";
 import acceptAppSpec from "../../agent/tools/accept_app_spec";
 
@@ -89,6 +93,66 @@ const seed = async () => {
   } as unknown as Parameters<typeof acceptAppSpec.execute>[1]);
   expect(appBuilderWorkflowState.get().phase).toBe("app_spec_accepted");
 };
+
+const freezePlan = (callId: string, operation?: "iterate-existing-app") => {
+  const current = appBuilderWorkflowState.get();
+  if (current.phase !== "app_spec_accepted" && current.phase !== "planned") {
+    throw new Error("This fixture needs an accepted app");
+  }
+  const { appId, artifactPath, digest } = current.appSpec;
+  const packageName = `@repo/${appId}`;
+  const appSpec = { path: artifactPath, sha256: digest };
+  const changes = [
+    {
+      after: { content: "updated", digest: sha256("updated"), mode: "644" },
+      path: `apps/${appId}/app/page.tsx`,
+    },
+  ];
+  const contract = { appId, appSpec, version: 1 };
+  const target = targetProposalSchema.parse({
+    blockers: [],
+    contract,
+    mutations: [],
+    plan: {
+      product: { appSpec },
+      source: {
+        packageName,
+        runtime: "nextjs",
+        schema: { kind: "none" },
+        workspacePath: `apps/${appId}`,
+      },
+      topology: {
+        configPath: "microfrontends.json",
+        packageName,
+        projectName: appId,
+        routes: [`/${appId}`],
+      },
+    },
+    ...(operation === undefined
+      ? undefined
+      : { operation, iteration: { changes, digest: sha256(JSON.stringify(changes)) } }),
+  });
+  const proposal = {
+    version: 1,
+    appSpecDigest: digest,
+    artifactRevision: current.appSpec.artifactRevision,
+    contractDigest: sha256(JSON.stringify(contract)),
+    plannedByCallId: callId,
+    sourceReceiptDigest: current.sourceReceipt.digest,
+    target,
+    workspaceDigest: current.workspace.workspaceDigest,
+  };
+  const planned = {
+    ...current,
+    phase: "planned",
+    dependencyReceipt: { digest: sha256("dependency") },
+    identityReceipt: { digest: sha256("identity"), identity: { appId } },
+    proposal: { ...proposal, digest: sha256(JSON.stringify(proposal)) },
+  } as unknown as Extract<AppBuilderWorkflowState, { phase: "planned" }>;
+  appBuilderWorkflowState.update(() => planned);
+  return planned;
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -120,6 +184,100 @@ describe("native preapproval drafting lifecycle", () => {
           workspaceId: "same-sandbox",
         },
       });
+    });
+  });
+  it("continues the first frozen Build plan after an idle turn without release preflight", async () => {
+    await contextStorage.run(context(), async () => {
+      await seed();
+      await emit("turn.started");
+      await emit("actions.requested", { actions: [{ callId: "first-plan" }] });
+      freezePlan("first-plan");
+      recordInitialBuildAuthoring(ctx.session.id);
+      await emit("action.result", {
+        status: "completed",
+        result: {
+          kind: "tool-result",
+          toolName: "prepare_app_creation",
+          callId: "first-plan",
+          output: { reused: false },
+        },
+      });
+      await emit("turn.completed");
+      const ready = diagnosticAuthoringDecisionState.get();
+      expect(ready).toMatchObject({
+        decision: "runnable",
+        scope: { authoritySessionId: ctx.session.id, acceptedByCallId: "actual-accept" },
+      });
+      expect(readPrivateApplyAuthority()).toEqual({ grant: null, pending: [] });
+
+      const nextTurn = {
+        session: { ...ctx.session, turn: { id: "authoring-turn", sequence: 2 } },
+      };
+      await emit("turn.started", {}, nextTurn);
+      authenticatedAuthoringDelivery.update(() => ({
+        turnId: nextTurn.session.turn.id,
+        scopeDigest: ready!.scopeDigest!,
+      }));
+      await emit("turn.completed", {}, nextTurn);
+      expect(diagnosticAuthoringDecisionState.get()).toMatchObject({
+        decision: "blocked",
+        reason: "authoring_no_progress",
+      });
+    });
+  });
+  it("requires a recording for the exact current first plan", async () => {
+    await contextStorage.run(context(), async () => {
+      await seed();
+      await emit("turn.started");
+      freezePlan("first-plan");
+      await emit("turn.completed");
+      expect(diagnosticAuthoringDecisionState.get()?.decision).toBe("planned");
+
+      recordInitialBuildAuthoring(ctx.session.id);
+      freezePlan("replacement-plan");
+      await emit("turn.completed");
+      expect(diagnosticAuthoringDecisionState.get()?.decision).toBe("planned");
+    });
+  });
+  it("keeps existing app proposals outside first-Build continuation", async () => {
+    await contextStorage.run(context(), async () => {
+      await seed();
+      await emit("turn.started");
+      freezePlan("revision-plan", "iterate-existing-app");
+      recordInitialBuildAuthoring(ctx.session.id);
+      await emit("turn.completed");
+      expect(diagnosticAuthoringDecisionState.get()?.decision).toBe("planned");
+    });
+  });
+  it("waits for pending Build approval and respects a settled denial on the first plan", async () => {
+    await contextStorage.run(context(), async () => {
+      await seed();
+      await emit("turn.started");
+      const state = freezePlan("first-plan");
+      recordInitialBuildAuthoring(ctx.session.id);
+      requestPrivateApplyApproval(
+        {
+          appId: state.appSpec.appId,
+          appSpecDigest: state.appSpec.digest,
+          proposalDigest: state.proposal.digest,
+          sessionId: ctx.session.id,
+          workspaceId: state.workspace.workspaceId,
+        },
+        "pending-build",
+      );
+      await emit("turn.completed");
+      expect(diagnosticAuthoringDecisionState.get()?.decision).toBe("waiting-input");
+      expect(readPrivateApplyAuthority().grant).toBeNull();
+
+      for (const event of privateApplyDenialEvents("pending-build")) {
+        observePrivateApplyDecisionEvent(
+          event as Parameters<typeof observePrivateApplyDecisionEvent>[0],
+          ctx.session.id,
+        );
+      }
+      await emit("turn.completed");
+      expect(readPrivateApplyAuthority().pending).toEqual([]);
+      expect(diagnosticAuthoringDecisionState.get()?.decision).toBe("planned");
     });
   });
   it.each([
