@@ -377,10 +377,12 @@ a GitHub write or use a different app, session or revision. Managed Production
 setup still verifies the published source before applying its effects.
 A starter-created app's first destination review includes its complete
 app-owned source even when its latest repair diff contains only a few files.
-Builder includes the retained registration and dependency changes against the
-original starter manifest. If the destination has independently changed one of
-those shared files, reconcile that file against the current destination before
-publishing.
+For a selected existing Arrusted repository, Builder verifies that the app is
+absent from the destination and prepares its registration and dependency changes
+against the observed default branch. It adds the selected app to the live
+workspace, route catalog and lockfile. Unrelated apps added after the starter
+was acquired stay in the resulting composition. The selected app and the
+resulting shared-file changes are part of the same review and approval.
 
 A saved new app may have acquired its delivery repository as its source. The
 same `prepare_github_draft_review` flow can recover its first publication.
@@ -508,9 +510,9 @@ destination setup at `/builds/<session-id>/destination`. Use that setup to choos
 where to store and release the app, then resume the saved build. Publication
 retains its separate approval.
 
-For a new app, a repository the user explicitly chose is its delivery
-destination. Acquire the canonical starter as `fresh-template` and pass the
-chosen repository as `destination: { repository: "owner/name", selectedInstallationId? }`.
+For a new app using the canonical `fresh-template` starter, a repository the
+user explicitly chose is its delivery destination. Pass it as
+`destination: { repository: "owner/name", selectedInstallationId? }`.
 Preparation observes the actual repository and installation through the ordinary
 session-owned GitHub connection. The creator may supply a GitHub repository URL or
 `owner/name`; Builder resolves its connected installation and numeric repository
@@ -862,3 +864,10 @@ non-app index is bound into the existing reconciliation scope. Generic candidate
 editors still cannot write arbitrary shared or root files. The corrected diff
 requires normal review, exact update approval and provider readback; a changed
 revision cannot reuse an old approval.
+
+Draft validation runs the selected repository build and declared app tests.
+Prepare the candidate's local Preview runtime only when a selected browser
+check needs it. A direct Production repair does not require Preview setup,
+and an unselected Preview step from an earlier attempt does not block the
+required checks. Declared repository tests use their normal task environment,
+so they cannot silently pick up a retained Preview from an earlier release.

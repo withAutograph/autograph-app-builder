@@ -2,6 +2,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -185,7 +186,7 @@ const fixture = (realBun = false) => {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Limit fixture authority to its local test ports.
     sandbox: sandbox as SandboxSession,
   };
-  return { apply, input, packageJson, remoteFetch, repository, routes, workspace, write };
+  return { apply, input, packageJson, remoteFetch, repository, routes, runBun, workspace, write };
 };
 
 afterEach(() => {
@@ -230,6 +231,70 @@ it.skipIf(!hasBun)(
       readdirSync(f.workspace).some((entry) => entry.startsWith(".first-app-publication-")),
     ).toBe(false);
     expect(f.remoteFetch).not.toHaveBeenCalled();
+  },
+);
+
+it.skipIf(!hasBun)(
+  "retains a concurrently published app and its lock entry when composing a starter app",
+  async () => {
+    const f = fixture(true);
+    git(
+      f.repository,
+      "restore",
+      "packages/platform-microfrontends/src/policy/config-registration.ts",
+    );
+    const sibling = "apps/concurrent-app";
+    const siblingPackage = "@autograph/concurrent-app";
+    const targetPackage = {
+      ...f.packageJson,
+      workspaces: [...f.packageJson.workspaces, sibling],
+    };
+    const targetRoutes = {
+      applications: {
+        ...f.routes.applications,
+        "concurrent-app": { packageName: siblingPackage },
+      },
+    };
+    f.write(f.repository, "package.json", json(targetPackage));
+    f.write(f.repository, "microfrontends.json", json(targetRoutes));
+    f.write(f.repository, `${sibling}/package.json`, json({ name: siblingPackage }));
+    expect(f.runBun(f.repository, "install", "--lockfile-only", "--ignore-scripts").status).toBe(0);
+    const target = commit(f.repository);
+
+    const files = await planFirstAppPublicationComposition({
+      ...f.input,
+      destination: { ...f.input.destination, headSha: target.sha, headTree: target.tree },
+    });
+    const result = new Map(files.map(({ path: filename, content }) => [filename, content]));
+    expect(JSON.parse(result.get("package.json") ?? "")).toEqual({
+      ...targetPackage,
+      workspaces: [...targetPackage.workspaces, selected],
+    });
+    expect(JSON.parse(result.get("microfrontends.json") ?? "")).toMatchObject(targetRoutes);
+    expect(result.get("bun.lock")).toContain(`"${sibling}"`);
+    expect(result.get("bun.lock")).toContain(`"${selected}"`);
+
+    const verification = path.join(f.workspace, "verification");
+    cpSync(f.repository, verification, {
+      recursive: true,
+      filter: (entry) => ![".git", "node_modules"].includes(path.basename(entry)),
+    });
+    f.write(
+      verification,
+      `${selected}/package.json`,
+      readFileSync(path.join(f.apply, selected, "package.json"), "utf-8"),
+    );
+    for (const [filename, content] of result) {
+      f.write(verification, filename, content);
+    }
+    const frozen = f.runBun(
+      verification,
+      "install",
+      "--frozen-lockfile",
+      "--lockfile-only",
+      "--ignore-scripts",
+    );
+    expect(frozen.status, frozen.stderr).toBe(0);
   },
 );
 

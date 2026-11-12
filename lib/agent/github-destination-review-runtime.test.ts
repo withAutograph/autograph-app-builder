@@ -157,7 +157,7 @@ const installation = (operation: GitHubOperation, installationId = "10") =>
     selectedRepositoryIds: ["100"],
   });
 const readInstallation = installation("resolve-existing-source");
-const repository = createRepositoryObservation({
+const repositoryFields = {
   defaultBranch: "main",
   headSha: "1".repeat(40),
   headTree: "2".repeat(40),
@@ -167,7 +167,8 @@ const repository = createRepositoryObservation({
   releaseGate: { configured: false, name: "REPOSITORY_RELEASE_ENABLED" },
   repositoryId: "100",
   visibility: "private",
-});
+} satisfies Parameters<typeof createRepositoryObservation>[0];
+const repository = createRepositoryObservation(repositoryFields);
 const source: ImmutableGitHubSourceReceipt = {
   digest: "a".repeat(64),
   installationIdentityDigest: readInstallation.digest,
@@ -446,108 +447,138 @@ const markerOnlyRevision = async () => {
 };
 
 describe("saved first publication destination review", () => {
-  it("prepares the same app and repository-generated registration before any GitHub write", async () => {
-    const f = await ownedRevisionTool(false, false);
-    const root = "/workspace/saved-app";
-    const frameworkUpgrade = {
-      next: "16.3.4",
-      react: "19.3.0",
-      reactDom: "19.3.0",
-      typesReact: "19.3.1",
-      typesReactDom: "19.3.0",
-    };
-    toolPorts.state = {
-      ...f.state,
-      phase: "validated",
-      sourceReceipt: { ...f.state.sourceReceipt, sourceKind: "existing-repository" },
-      githubSource: source,
-      applyReceipt: { ...f.state.applyReceipt, applyRoot: root, frameworkUpgrade },
-    };
-    delete toolPorts.prior;
-    const manifest = "apps/example/package.json";
-    const appFiles = [
-      { path, digest: after, mode: "644" },
-      { path: manifest, digest: before, mode: "644" },
-    ];
-    toolPorts.observed = {
-      files: [...appFiles, { path: "apps/unrelated/package.json", digest: before, mode: "644" }],
-      treeDigest: normalized.postTreeDigest,
-    };
-    f.inspectDestinationFiles.mockResolvedValue([
-      { path: "bun.lock", digest: before, mode: "644" },
-      { path: "microfrontends.json", digest: before, mode: "644" },
-      { path: "package.json", digest: before, mode: "644" },
-    ]);
-    const registration = (
-      [
-        { path: "bun.lock", content: "generated lock", mode: "644" },
-        { path: "microfrontends.json", content: "generated routes", mode: "644" },
-      ] as const
-    ).map((file) => ({ ...file, digest: createHash("sha256").update(file.content).digest("hex") }));
-    firstAppComposition.acquiredSourceLacksApp.mockResolvedValueOnce(true);
-    firstAppComposition.planFirstAppPublicationComposition.mockResolvedValueOnce(registration);
-    const written = new Map<string, string>();
-    const writeTextFile = vi.fn(
-      async ({ content, path: filePath }: { content: string; path: string }) => {
-        written.set(filePath.replace(/^saved-app\//u, ""), content);
-        await Promise.resolve();
-      },
-    );
-    const run = vi.fn(async () => {
-      const snapshot = [
-        ...appFiles,
-        ...[...written].map(([filePath, content]) => ({
-          path: filePath,
-          digest: createHash("sha256").update(content).digest("hex"),
-          mode: "644",
-        })),
+  it.each(["existing-repository", "fresh-template"] as const)(
+    "prepares the same %s app and repository-generated registration before any GitHub write",
+    async (sourceKind) => {
+      const f = await ownedRevisionTool(false, false);
+      const starter = sourceKind === "fresh-template";
+      const destinationRepository = starter
+        ? createRepositoryObservation({ ...repositoryFields, name: "arrusted-development" })
+        : repository;
+      f.inspectRepository.mockResolvedValue(destinationRepository);
+      if (starter) {
+        toolPorts.target = {
+          destination: {
+            owner: destinationRepository.owner,
+            name: destinationRepository.name,
+            repositoryId: destinationRepository.repositoryId,
+            installationId: "10",
+            defaultBranch: destinationRepository.defaultBranch,
+          },
+        };
+      }
+      const root = "/workspace/saved-app";
+      const frameworkUpgrade = {
+        next: "16.3.4",
+        react: "19.3.0",
+        reactDom: "19.3.0",
+        typesReact: "19.3.1",
+        typesReactDom: "19.3.0",
+      };
+      toolPorts.state = {
+        ...f.state,
+        phase: "validated",
+        sourceReceipt: { ...f.state.sourceReceipt, sourceKind },
+        githubSource: starter ? undefined : source,
+        applyReceipt: { ...f.state.applyReceipt, applyRoot: root, frameworkUpgrade },
+      };
+      delete toolPorts.prior;
+      const manifest = "apps/example/package.json";
+      const appFiles = [
+        { path, digest: after, mode: "644" },
+        { path: manifest, digest: before, mode: "644" },
       ];
-      return await Promise.resolve({
-        exitCode: 0,
-        stderr: "",
-        stdout: snapshot.map((file) => `${file.mode}\t${file.digest}\t${file.path}`).join("\n"),
+      const starterSchema = ".config/app-specs/example.cue";
+      if (starter) {
+        appFiles.push({ path: starterSchema, digest: before, mode: "644" });
+      }
+      toolPorts.observed = {
+        files: [...appFiles, { path: "apps/unrelated/package.json", digest: before, mode: "644" }],
+        treeDigest: normalized.postTreeDigest,
+      };
+      f.inspectDestinationFiles.mockResolvedValue([
+        { path: "bun.lock", digest: before, mode: "644" },
+        { path: "microfrontends.json", digest: before, mode: "644" },
+        { path: "package.json", digest: before, mode: "644" },
+      ]);
+      const registration = (
+        [
+          { path: "bun.lock", content: "generated lock", mode: "644" },
+          { path: "microfrontends.json", content: "generated routes", mode: "644" },
+        ] as const
+      ).map((file) => ({
+        ...file,
+        digest: createHash("sha256").update(file.content).digest("hex"),
+      }));
+      firstAppComposition.acquiredSourceLacksApp.mockResolvedValueOnce(true);
+      firstAppComposition.planFirstAppPublicationComposition.mockResolvedValueOnce(registration);
+      const written = new Map<string, string>();
+      const writeTextFile = vi.fn(
+        async ({ content, path: filePath }: { content: string; path: string }) => {
+          written.set(filePath.replace(/^saved-app\//u, ""), content);
+          await Promise.resolve();
+        },
+      );
+      const run = vi.fn(async () => {
+        const snapshot = [
+          ...appFiles,
+          ...[...written].map(([filePath, content]) => ({
+            path: filePath,
+            digest: createHash("sha256").update(content).digest("hex"),
+            mode: "644",
+          })),
+        ];
+        return await Promise.resolve({
+          exitCode: 0,
+          stderr: "",
+          stdout: snapshot.map((file) => `${file.mode}\t${file.digest}\t${file.path}`).join("\n"),
+        });
       });
-    });
-    // SAFETY: The composition ports are mocked, and the real tool only writes and reads back the overlay through these Sandbox methods.
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- This partial Sandbox fixture implements the only methods this path consumes.
-    const context = {
-      ...f.context,
-      getSandbox: async () =>
-        await Promise.resolve({ id: f.state.workspace.workspaceId, run, writeTextFile }),
-    } as unknown as typeof f.context;
+      // SAFETY: The composition ports are mocked, and the real tool only writes and reads back the overlay through these Sandbox methods.
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- This partial Sandbox fixture implements the only methods this path consumes.
+      const context = {
+        ...f.context,
+        getSandbox: async () =>
+          await Promise.resolve({ id: f.state.workspace.workspaceId, run, writeTextFile }),
+      } as unknown as typeof f.context;
 
-    await expect(prepareDraftReview.execute({}, context)).resolves.toMatchObject({
-      candidatePathCount: 4,
-      originalSourceSha: source.resolvedSha,
-      status: "destination-review-required",
-    });
-    expect(firstAppComposition.acquiredSourceLacksApp).toHaveBeenCalledWith(
-      expect.objectContaining({
-        acquired: { sha: source.resolvedSha, tree: source.resolvedTree },
-        appId: "example",
-      }),
-    );
-    expect(firstAppComposition.planFirstAppPublicationComposition).toHaveBeenCalledWith(
-      expect.objectContaining({
-        appId: "example",
-        applyRoot: root,
-        destination: repository,
-        frameworkUpgrade,
-      }),
-    );
-    expect(readToolState()?.githubDestinationReview).toMatchObject({
-      candidatePaths: [manifest, path, "bun.lock", "microfrontends.json"].toSorted(),
-      firstAppRegistration: {
-        appId: "example",
-        frameworkUpgrade,
-        paths: ["bun.lock", "microfrontends.json"],
-      },
-      repository,
-    });
-    expect(written).toEqual(new Map(registration.map((file) => [file.path, file.content])));
-    expect(f.compareAndSet).not.toHaveBeenCalled();
-    expect(f.unexpected).not.toHaveBeenCalled();
-  });
+      await expect(prepareDraftReview.execute({}, context)).resolves.toMatchObject({
+        candidatePathCount: starter ? 5 : 4,
+        originalSourceSha: source.resolvedSha,
+        status: "destination-review-required",
+      });
+      expect(firstAppComposition.acquiredSourceLacksApp).toHaveBeenCalledWith(
+        expect.objectContaining({
+          acquired: { sha: source.resolvedSha, tree: source.resolvedTree },
+          appId: "example",
+        }),
+      );
+      expect(firstAppComposition.planFirstAppPublicationComposition).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appId: "example",
+          applyRoot: root,
+          destination: destinationRepository,
+          frameworkUpgrade,
+        }),
+      );
+      const candidatePaths = [manifest, path, "bun.lock", "microfrontends.json"];
+      if (starter) {
+        candidatePaths.push(starterSchema);
+      }
+      expect(readToolState()?.githubDestinationReview).toMatchObject({
+        candidatePaths: candidatePaths.toSorted(),
+        firstAppRegistration: {
+          appId: "example",
+          frameworkUpgrade,
+          paths: ["bun.lock", "microfrontends.json"],
+        },
+        repository: destinationRepository,
+      });
+      expect(written).toEqual(new Map(registration.map((file) => [file.path, file.content])));
+      expect(f.compareAndSet).not.toHaveBeenCalled();
+      expect(f.unexpected).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("same-session post-merge destination review", () => {

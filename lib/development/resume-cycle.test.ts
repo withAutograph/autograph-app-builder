@@ -236,6 +236,16 @@ it("reports an actionable stale selected install before replacing source, depend
 });
 it("preserves an intentionally selected owner-bound dependency cache while rebinding the cycle", async () => {
   const f = await fixture();
+  // A parallel test can claim the port after this fixture releases it. The
+  // running-instance test retains a real connection check.
+  const stoppedConnection = vi
+    .spyOn(Socket.prototype, "connect")
+    .mockImplementation(function connectStoppedFixture(this: Socket) {
+      queueMicrotask(() => {
+        this.destroy(Object.assign(new Error("Stopped fixture"), { code: "ECONNREFUSED" }));
+      });
+      return this;
+    });
   try {
     const closed = once(f.server, "close");
     f.server.close();
@@ -252,6 +262,7 @@ it("preserves an intentionally selected owner-bound dependency cache while rebin
     expect(resumed.dependencyBinding.modulesRoot).toBe(cache);
     expect(await realpath(path.join(resumed.application.root, "node_modules"))).toBe(cache);
   } finally {
+    stoppedConnection.mockRestore();
     await rm(f.root, { force: true, recursive: true });
   }
 });

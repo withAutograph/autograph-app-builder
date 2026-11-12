@@ -13,7 +13,10 @@ import {
   assertExactWorkflowState,
 } from "@/lib/agent/workflow-state";
 import type { OverlayFile } from "@/lib/repository/target-apply";
-import { createGitHubDestinationReviewBinding } from "@/lib/repository/github-destination-review";
+import {
+  createGitHubDestinationReviewBinding,
+  firstAppPlanningPaths,
+} from "@/lib/repository/github-destination-review";
 import type { FirstAppRegistration } from "@/lib/repository/github-destination-review";
 import {
   acquiredSourceLacksApp,
@@ -23,6 +26,7 @@ import { inspectApplyOverlay, reviewedOverlayTreeDigest } from "@/lib/repository
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { checkedNativeToolResult } from "@/lib/eve/payload-envelope";
+import { ARRUSTED_PRODUCTION_REPOSITORY } from "@/lib/agent/direct-production-authorization";
 import { currentDirectProductionGrant } from "@/lib/agent/direct-production-state";
 import { resolvePublicationTargetForTool } from "@/lib/agent/github-publication-destination";
 import { repositoryAccessRuntimeForSession } from "@/lib/agent/deployment-repository-access-runtime";
@@ -41,6 +45,7 @@ import type {
   OwnedAppRevisionLookup,
 } from "@/lib/agent/github-publication-runtime";
 
+const freshTemplateSourceKind = "fresh-template";
 const firstPublicationPaths = ["package.json", "microfrontends.json", "bun.lock"];
 
 export const initialDraftCandidatePaths = async (
@@ -73,7 +78,7 @@ export const initialDraftCandidatePaths = async (
   const retainedRegistration = new Map<string, string>();
   // A later repair can reset the local before-tree to an already-scaffolded app.
   if (
-    state.sourceReceipt.sourceKind === "fresh-template" &&
+    state.sourceReceipt.sourceKind === freshTemplateSourceKind &&
     (includeFreshRegistration || appFiles.some(({ path }) => !candidatePaths.has(path)))
   ) {
     const original = await readOriginal(input.sandbox, state.workspace);
@@ -128,7 +133,7 @@ export default defineTool({
     const updatingExistingDraft =
       state.phase === "reviewed" && state.existingDraftUpdate !== undefined;
     const approvedProduction =
-      state.sourceReceipt.sourceKind === "fresh-template" && state.githubSource === undefined
+      state.sourceReceipt.sourceKind === freshTemplateSourceKind && state.githubSource === undefined
         ? currentDirectProductionGrant(ctx, state.appSpec)?.subject
         : undefined;
     const resolved = await resolvePublicationTargetForTool({
@@ -215,19 +220,40 @@ export default defineTool({
     const { appId } = state.appSpec;
     const { githubSource } = state;
     const baseline = appBaselineState.get();
-    const mayBeFirstPublication = [
+    const { sourceReceipt } = state;
+    const existingSource = sourceReceipt.sourceKind === "existing-repository";
+    const selectedDestination = target.destination;
+    const starterFirstPublication = [
       publishedProposalDigest === undefined,
-      state.sourceReceipt.sourceKind === "existing-repository",
+      sourceReceipt.sourceKind === freshTemplateSourceKind,
       baseline === undefined,
-      observed.files.some(({ path }) => path === `apps/${appId}/package.json`),
+      selectedDestination !== undefined &&
+        `${selectedDestination.owner}/${selectedDestination.name}` ===
+          ARRUSTED_PRODUCTION_REPOSITORY,
     ].every(Boolean);
-    const acquired =
-      mayBeFirstPublication && githubSource !== undefined
-        ? { sha: githubSource.resolvedSha, tree: githubSource.resolvedTree }
-        : undefined;
+    const hasAppManifest = observed.files.some(({ path }) => path === `apps/${appId}/package.json`);
+    if (starterFirstPublication && !hasAppManifest) {
+      throw new Error("The new app manifest is unavailable for first publication.");
+    }
+    const mayBeExistingSourceFirstPublication = [
+      publishedProposalDigest === undefined,
+      existingSource,
+      baseline === undefined,
+      hasAppManifest,
+    ].every(Boolean);
+    let acquired;
+    if (starterFirstPublication) {
+      acquired = { sha: sourceReceipt.sourceSha, tree: sourceReceipt.sourceTree };
+    } else if (mayBeExistingSourceFirstPublication && githubSource !== undefined) {
+      acquired = { sha: githubSource.resolvedSha, tree: githubSource.resolvedTree };
+    }
     const firstPublication =
       acquired !== undefined &&
       (await acquiredSourceLacksApp({ acquired, appId, sandbox, signal: ctx.abortSignal }));
+    if (starterFirstPublication && !firstPublication) {
+      throw new Error("The selected app already exists in its acquired starter source.");
+    }
+    const planningPaths = starterFirstPublication ? firstAppPlanningPaths(appId) : [];
     const pathInput = {
       sandbox,
       state,
@@ -247,10 +273,7 @@ export default defineTool({
         ownedAppRevision.installationId = target.destination.installationId;
       }
     }
-    let selectedPaths =
-      publishedProposalDigest === undefined
-        ? await initialDraftCandidatePaths(pathInput)
-        : undefined;
+    let selectedPaths;
     if (firstPublication) {
       selectedPaths = {
         candidatePaths: [
@@ -258,11 +281,15 @@ export default defineTool({
             observed.files.map(({ path }) => ({ kind: "added" as const, path })),
             appId,
             true,
+            false,
+            planningPaths,
           ).map(({ path }) => path),
           ...firstPublicationPaths,
         ],
-        retainedRegistration: new Map(),
+        retainedRegistration: new Map<string, string>(),
       };
+    } else if (publishedProposalDigest === undefined) {
+      selectedPaths = await initialDraftCandidatePaths(pathInput);
     }
     let destination: Awaited<
       ReturnType<NonNullable<GitHubPublicationRuntime["inspectDraftDestination"]>>
@@ -432,7 +459,10 @@ export default defineTool({
       const paths = files.map(({ path }) => path);
       const registeredPaths = new Set<string>(paths);
       candidatePaths = candidatePaths.filter(
-        (path) => path.startsWith(`apps/${appId}/`) || registeredPaths.has(path),
+        (path) =>
+          path.startsWith(`apps/${appId}/`) ||
+          planningPaths.includes(path) ||
+          registeredPaths.has(path),
       );
       firstAppRegistration = { appId, paths };
       if (frameworkUpgrade !== undefined) {
@@ -445,8 +475,8 @@ export default defineTool({
       }
       const staged = await inspectApplyOverlay(sandbox, state.applyReceipt.applyRoot);
       if (
-        reviewedOverlayTreeDigest(staged, appId, true) !==
-          reviewedOverlayTreeDigest(observed, appId, true) ||
+        reviewedOverlayTreeDigest(staged, appId, true, false, planningPaths) !==
+          reviewedOverlayTreeDigest(observed, appId, true, false, planningPaths) ||
         files.some(
           ({ path, digest, mode }) =>
             !staged.files.some(
@@ -458,7 +488,7 @@ export default defineTool({
           "The app or generated registration changed during first publication review.",
         );
       }
-      postTreeDigest = reviewedOverlayTreeDigest(staged, appId, true, false, paths);
+      postTreeDigest = reviewedOverlayTreeDigest(staged, appId, existingSource, false, paths);
     }
     assertExistingAppReviewScope(
       {

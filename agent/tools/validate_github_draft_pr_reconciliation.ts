@@ -489,8 +489,8 @@ const testShardForStep = (step: ValidationStep, appId: string): string | undefin
   return normalized.command === planned?.command ? shard : undefined;
 };
 
-const isOptionalBrowserStep = (step: ValidationStep, appId: string) =>
-  step.kind === "browser" && step.command === appBrowserTestCommand(appId);
+const isOptionalPreviewStep = (step: ValidationStep) =>
+  step.kind === "local" || step.kind === "browser";
 
 /** Pending test commands follow current selection; completed evidence stays intact. */
 const currentValidationSteps = (
@@ -506,9 +506,11 @@ const currentValidationSteps = (
   })
     .filter((step) => step.name === "test" && !completedShards.has(step.command.split(" ").at(-1)))
     .map(({ command }) => ({ command, kind: "check" }));
+  const pendingSteps = run.steps.slice(run.nextIndex);
+  const localSetup = pendingSteps.find((step) => step.kind === "local");
   let inserted = false;
-  const pending = run.steps.slice(run.nextIndex).flatMap((step) => {
-    if (!runBrowserTests && isOptionalBrowserStep(step, appId)) {
+  const pending = pendingSteps.flatMap((step) => {
+    if (step.kind === "local" || (!runBrowserTests && step.kind === "browser")) {
       return [];
     }
     const isTest = testShardForStep(step, appId) !== undefined;
@@ -521,10 +523,7 @@ const currentValidationSteps = (
     return [...(insert ? tests : []), ...(isTest ? [] : [current])];
   });
   const selected = [...pending, ...(inserted ? [] : tests)];
-  if (
-    runBrowserTests &&
-    ![...completed, ...selected].some((step) => isOptionalBrowserStep(step, appId))
-  ) {
+  if (runBrowserTests && ![...completed, ...selected].some((step) => step.kind === "browser")) {
     const before = selected.findIndex(
       (step) => step.kind === "additional" || step.kind === "capture",
     );
@@ -533,7 +532,38 @@ const currentValidationSteps = (
       command: appBrowserTestCommand(appId),
     });
   }
+  const browserIndex = selected.findIndex((step) => step.kind === "browser");
+  if (localSetup !== undefined && browserIndex !== -1) {
+    selected.splice(
+      browserIndex,
+      0,
+      currentValidationStep(localSetup, appId, run.schemaTaskCompleted, testShards),
+    );
+  }
   return [...completed, ...selected];
+};
+
+/** Local runtime setup belongs to the selected browser task, after the required checks. */
+const preparePendingBrowserStep = async (
+  run: NonNullable<DraftReconciliationCandidate["validationRun"]>,
+  candidate: DraftReconciliationCandidate,
+  sandbox: SandboxSession,
+) => {
+  const { nextIndex, steps } = run;
+  if (steps[nextIndex]?.kind !== "browser" || steps.some((step) => step.kind === "local")) {
+    return run;
+  }
+  if (!(await appDeclaresLocalSetup({ appId: candidate.appId, root: candidate.root, sandbox }))) {
+    return run;
+  }
+  return {
+    ...run,
+    steps: [
+      ...steps.slice(0, nextIndex),
+      { kind: "local" as const, command: localPreviewExecutionCommand(candidate.appId) },
+      ...steps.slice(nextIndex),
+    ],
+  };
 };
 
 /** Eve publishes progress at tool boundaries, so each incremental call runs one command. */
@@ -619,22 +649,20 @@ const runIncrementalValidation = async (
     };
   }
   const nextIndexToRun = run.nextIndex;
-  const browserWasPending = run.steps
-    .slice(run.nextIndex)
-    .some((step) => isOptionalBrowserStep(step, candidate.appId));
+  const previousPreviewSteps = run.steps.slice(run.nextIndex).filter(isOptionalPreviewStep).length;
   run = {
     ...run,
     steps: currentValidationSteps(run, candidate.appId, testShards, input.runBrowserTests),
   };
-  const browserSelectionChanged =
-    browserWasPending !==
-    run.steps.slice(run.nextIndex).some((step) => isOptionalBrowserStep(step, candidate.appId));
-  if (browserSelectionChanged) {
+  run = await preparePendingBrowserStep(run, candidate, sandbox);
+  const previewSelectionChanged =
+    previousPreviewSteps !== run.steps.slice(run.nextIndex).filter(isOptionalPreviewStep).length;
+  if (previewSelectionChanged) {
     ctx.abortSignal?.throwIfAborted();
     const refreshedRun = run;
     updateExactDraftReconciliation({
       expected: candidate,
-      operation: "updating the selected optional browser task",
+      operation: "updating optional browser validation and its local setup",
       transition: () => {
         const next = { ...candidate, validationRun: refreshedRun };
         delete next.validation;
@@ -881,6 +909,7 @@ const runIncrementalValidation = async (
               run: () =>
                 sandboxValidationCommandExecutor({
                   alreadyCompiled,
+                  reuseRetainedLocalRuntime: false,
                   testShards,
                 })({
                   appId: candidate.appId,
@@ -908,22 +937,6 @@ const runIncrementalValidation = async (
                   onChunk,
                 }),
             });
-      const checkedBuild =
-        step.kind === "check" && planned?.name === "check-build" && execution.exitCode === 0;
-      if (
-        checkedBuild &&
-        run.steps[run.nextIndex + 1]?.kind !== "local" &&
-        (await appDeclaresLocalSetup({ appId: candidate.appId, root: candidate.root, sandbox }))
-      ) {
-        run = {
-          ...run,
-          steps: [
-            ...run.steps.slice(0, run.nextIndex + 1),
-            { kind: "local", command: localPreviewExecutionCommand(candidate.appId) },
-            ...run.steps.slice(run.nextIndex + 1),
-          ],
-        };
-      }
       if (step.kind === "check" && execution.exitCode !== 0) {
         recovery = await recoveryStep({
           appId: candidate.appId,
@@ -1035,7 +1048,12 @@ const runIncrementalValidation = async (
   }
   const nextIndex = run.nextIndex + 1;
   if (nextIndex < run.steps.length) {
-    const nextRun = { ...run, commands, nextIndex, resolvedTree: after.resolvedTree, compilation };
+    const nextRun = await preparePendingBrowserStep(
+      { ...run, commands, nextIndex, resolvedTree: after.resolvedTree, compilation },
+      candidate,
+      sandbox,
+    );
+    ctx.abortSignal?.throwIfAborted();
     updateExactDraftReconciliation({
       expected: latest,
       operation: `recording ${step.command} validation progress`,
@@ -1044,9 +1062,9 @@ const runIncrementalValidation = async (
     return {
       command: step.command,
       exitCode: 0,
-      nextCommand: run.steps[nextIndex]?.command,
+      nextCommand: nextRun.steps[nextIndex]?.command,
       passedCommands: commands.length,
-      remainingCommands: run.steps.length - nextIndex,
+      remainingCommands: nextRun.steps.length - nextIndex,
       status: "in_progress" as const,
     };
   }
@@ -1145,7 +1163,7 @@ export const validateDraftReconciliation = async (
 
 export default defineTool({
   description:
-    "Restore this candidate's locked dependencies using the existing sandbox cache, compile the selected app once for this coherent candidate validation, then run the native application build and all declared app:test shards without repeating compilation, run selected local or browser checks, and capture its actual checked release. Keep additionalCheckTasks empty for ordinary delivery and use it only for an explicitly requested check. Each coherent validation pass checks its own locked dependency graph before running checks; preserve earlier source and validation evidence. Failures identify the command and cause. This does not update GitHub.",
+    "Restore this candidate's locked dependencies using the existing sandbox cache, compile the selected app once for this coherent candidate validation, then run the native application build and all declared app:test shards without repeating compilation. If runBrowserTests is selected, run the app's required local browser setup and browser task. Capture the candidate's actual checked release. Keep additionalCheckTasks empty for ordinary delivery and use it only for an explicitly requested check. Each coherent validation pass checks its own locked dependency graph before running checks; preserve earlier source and validation evidence. Failures identify the command and cause. This does not update GitHub.",
   execute: validateDraftReconciliation,
   inputSchema: z.strictObject({
     additionalCheckTasks: z.array(z.string().regex(/^check:[A-Za-z0-9:_-]+$/u)).default([]),

@@ -90,7 +90,9 @@ jobs:
 
   eve-fresh-bootstrap:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # The six isolated Eve launches can take more than 15 minutes on hosted runners.
+    # Match the canary cap so a slow launch does not prevent the last scenario.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3

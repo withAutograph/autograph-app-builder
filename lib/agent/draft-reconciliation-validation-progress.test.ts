@@ -29,6 +29,7 @@ const schemaCommand = "mise run --no-deps app:compile spend-review";
 const checkCommand = repositoryDeliveryBuildCommand("spend-review", true);
 const uncompiledBuild = repositoryDeliveryBuildCommand("spend-review");
 const testCommand = "mise run --no-deps --skip-deps --skip-tools app:test spend-review 1/1";
+const localSetupCommand = "mise run app:local -- spend-review setup";
 const captureCommand = "Capture selected checked app release";
 const mocks = vi.hoisted(() => ({
   candidate: null as Record<string, unknown> | null,
@@ -87,7 +88,7 @@ vi.mock("../repository/sandbox-draft-reconciliation", () => ({
 }));
 vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
   appDeclaresLocalSetup: async () => mocks.declaresLocal,
-  localPreviewExecutionCommand: () => "mise run app:local -- spend-review setup",
+  localPreviewExecutionCommand: () => localSetupCommand,
   prepareAppLocalPreview: mocks.local,
   prepareValidationLocalData: vi.fn(),
 }));
@@ -168,19 +169,19 @@ const candidateLogStore = () => {
   return store;
 };
 
-const candidateValidationCall = async (command?: string) =>
+const candidateValidationCall = async (command?: string, runBrowserTests = false) =>
   (await validateReconciliation.execute(
     {
       additionalCheckTasks: [],
       expectedCommand: command,
       incremental: true,
-      runBrowserTests: false,
+      runBrowserTests,
     },
     context,
   )) as Exclude<Awaited<ReturnType<typeof validateReconciliation.execute>>, AsyncIterable<unknown>>;
 
-const incremental = async (expectedCommand: string) => {
-  const call = candidateValidationCall;
+const incremental = async (expectedCommand: string, runBrowserTests = false) => {
+  const call = async (command?: string) => await candidateValidationCall(command, runBrowserTests);
   if (mocks.candidate?.validationRun === undefined) {
     const bootstrap = await call();
     if (expectedCommand === installCommand || bootstrap.status !== "in_progress") {
@@ -846,7 +847,7 @@ describe("draft reconciliation command progress", () => {
           ],
         },
       };
-      await expect(incremental(pending.original)).resolves.toMatchObject({
+      await expect(incremental(pending.original, true)).resolves.toMatchObject({
         command: pending.current,
         nextCommand: "mise run --no-deps app:runtime run spend-review test-e2e",
         status: "in_progress",
@@ -933,7 +934,8 @@ describe("draft reconciliation command progress", () => {
     const store = candidateLogStore();
     mocks.logStore.mockResolvedValue(store);
     mocks.declaresLocal = true;
-    await incremental(checkCommand);
+    await incremental(checkCommand, true);
+    await incremental(testCommand, true);
     const prior = [...mocks.attempts];
     mocks.local.mockResolvedValueOnce({
       command: "mise run app:local -- spend-review setup",
@@ -944,7 +946,7 @@ describe("draft reconciliation command progress", () => {
         "kernel_bind_actor_membership rejected runtime preparation\nBearer local-secret\nhttps://user:db-secret@database.invalid/app\n",
       stdout: "local setup began\n",
     });
-    await expect(incremental("mise run app:local -- spend-review setup")).resolves.toMatchObject({
+    await expect(incremental(localSetupCommand, true)).resolves.toMatchObject({
       exitCode: 1,
       status: "needs_repair",
     });
@@ -989,7 +991,8 @@ describe("draft reconciliation command progress", () => {
     "keeps failed local setup independent of %s log storage",
     async (state) => {
       mocks.declaresLocal = true;
-      await incremental(checkCommand);
+      await incremental(checkCommand, true);
+      await incremental(testCommand, true);
       if (state === "partial") {
         const store = candidateLogStore();
         store.putChunk = async () => {
@@ -1004,7 +1007,7 @@ describe("draft reconciliation command progress", () => {
         stderr: "kernel_bind_actor_membership rejected runtime preparation",
         stdout: "",
       });
-      await expect(incremental("mise run app:local -- spend-review setup")).resolves.toMatchObject({
+      await expect(incremental(localSetupCommand, true)).resolves.toMatchObject({
         exitCode: 3,
         status: "needs_repair",
       });
@@ -1028,7 +1031,8 @@ describe("draft reconciliation command progress", () => {
     async (mode) => {
       mocks.logStore.mockResolvedValue(candidateLogStore());
       mocks.declaresLocal = true;
-      await incremental(checkCommand);
+      await incremental(checkCommand, true);
+      await incremental(testCommand, true);
       if (mode === "returned") {
         mocks.local.mockResolvedValueOnce({
           command: "mise run app:local -- spend-review setup",
@@ -1037,12 +1041,13 @@ describe("draft reconciliation command progress", () => {
           stderr: "",
           stdout: "",
         });
-        await expect(
-          incremental("mise run app:local -- spend-review setup"),
-        ).resolves.toMatchObject({ exitCode: null, status: "needs_repair" });
+        await expect(incremental(localSetupCommand, true)).resolves.toMatchObject({
+          exitCode: null,
+          status: "needs_repair",
+        });
       } else {
         mocks.local.mockRejectedValueOnce(new Error("sandbox command interrupted"));
-        await expect(incremental("mise run app:local -- spend-review setup")).rejects.toThrow(
+        await expect(incremental(localSetupCommand, true)).rejects.toThrow(
           "sandbox command interrupted",
         );
       }
@@ -1285,6 +1290,85 @@ describe("draft reconciliation command progress", () => {
     expect(recovered.stderr).not.toContain("catalog-secret");
   });
 
+  it("validates a persistent app for delivery without preparing local runtime data", async () => {
+    mocks.declaresLocal = true;
+    const result = await validateAppCreation.execute({ implementationFiles: [] }, context);
+    expect(result).toMatchObject({ status: "validated" });
+    expect(mocks.local).not.toHaveBeenCalled();
+    expect(mocks.browser).not.toHaveBeenCalled();
+    expect(mocks.publish).toHaveBeenCalledOnce();
+    expect(mocks.candidate?.validation).toMatchObject({
+      commands: [installCommand, schemaCommand, checkCommand, testCommand].map((command) => ({
+        command,
+        exitCode: 0,
+      })),
+    });
+  });
+
+  it.each([
+    { retainedBrowser: false, runBrowserTests: false },
+    { retainedBrowser: true, runBrowserTests: false },
+    { retainedBrowser: true, runBrowserTests: true },
+  ])(
+    "resumes required tests before retained Preview setup (saved browser: $retainedBrowser, selected: $runBrowserTests)",
+    async ({ retainedBrowser, runBrowserTests }) => {
+      mocks.declaresLocal = true;
+      const completed = [installCommand, schemaCommand, checkCommand].map((command) => ({
+        command,
+        exitCode: 0,
+      }));
+      mocks.candidate = {
+        ...mocks.candidate,
+        validationRun: {
+          commands: completed,
+          nextIndex: completed.length,
+          resolvedTree: tree,
+          schemaTaskCompleted: true,
+          steps: [
+            { command: installCommand, kind: "install" },
+            { command: schemaCommand, kind: "schema" },
+            { command: checkCommand, kind: "check" },
+            { command: localSetupCommand, kind: "local" },
+            { command: testCommand, kind: "check" },
+            ...(retainedBrowser
+              ? [{ command: "mise run app:runtime run spend-review test-e2e", kind: "browser" }]
+              : []),
+            { command: captureCommand, kind: "capture" },
+          ],
+        },
+      };
+      await expect(
+        candidateValidationCall(localSetupCommand, runBrowserTests),
+      ).resolves.toMatchObject({
+        status: "plan_refreshed",
+        nextCommand: testCommand,
+        passedCommands: completed.length,
+      });
+      const result = await validateAppCreation.execute(
+        { implementationFiles: [], runBrowserTests },
+        context,
+      );
+      expect(result).toMatchObject({ status: "validated" });
+      expect(mocks.local).toHaveBeenCalledTimes(Number(runBrowserTests));
+      expect(mocks.browser).toHaveBeenCalledTimes(Number(runBrowserTests));
+      expect(mocks.candidate?.validation).toMatchObject({
+        commands: [
+          ...completed,
+          { command: testCommand, exitCode: 0 },
+          ...(runBrowserTests
+            ? [
+                { command: localSetupCommand, exitCode: 0 },
+                {
+                  command: "mise run --no-deps app:runtime run spend-review test-e2e",
+                  exitCode: 0,
+                },
+              ]
+            : []),
+        ],
+      });
+    },
+  );
+
   it.each([false, undefined])(
     "normal app validation honors browser selection %s after the same candidate's optional browser failure",
     async (selected) => {
@@ -1344,7 +1428,8 @@ describe("draft reconciliation command progress", () => {
     },
   );
 
-  it("adds an explicitly selected browser task to the same pending required-check pass", async () => {
+  it("adds local setup for browser validation selected after the required checks", async () => {
+    mocks.declaresLocal = true;
     for (const command of [installCommand, schemaCommand, checkCommand, testCommand]) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Advance the actual durable validation pass before selecting the optional task.
       await candidateValidationCall(command);
@@ -1367,11 +1452,45 @@ describe("draft reconciliation command progress", () => {
         context,
       ),
     ).resolves.toMatchObject({ status: "needs_repair", command: browserCommand, exitCode: 1 });
+    expect(mocks.local).toHaveBeenCalledOnce();
     expect(mocks.browser).toHaveBeenCalledOnce();
+    expect(mocks.local.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.browser.mock.invocationCallOrder[0] ?? 0,
+    );
     expect(mocks.candidate).not.toHaveProperty("validation");
     expect(mocks.attempts).toEqual(
       expect.arrayContaining([expect.objectContaining({ command: browserCommand, exitCode: 1 })]),
     );
+  });
+
+  it("refreshes a saved browser step when the app still needs local setup", async () => {
+    for (const command of [installCommand, schemaCommand, checkCommand, testCommand]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Save the original plan at its browser step without a local setup receipt.
+      await candidateValidationCall(command, true);
+    }
+    mocks.declaresLocal = true;
+    const browserCommand = "mise run --no-deps app:runtime run spend-review test-e2e";
+    await expect(candidateValidationCall(browserCommand, true)).resolves.toMatchObject({
+      status: "plan_refreshed",
+      nextCommand: localSetupCommand,
+      passedCommands: 4,
+    });
+    expect(mocks.local).not.toHaveBeenCalled();
+    expect(mocks.browser).not.toHaveBeenCalled();
+    await expect(candidateValidationCall(localSetupCommand, true)).resolves.toMatchObject({
+      command: localSetupCommand,
+      nextCommand: browserCommand,
+      status: "in_progress",
+    });
+    expect(mocks.local).toHaveBeenCalledOnce();
+    expect(mocks.browser).not.toHaveBeenCalled();
+    await expect(candidateValidationCall(browserCommand, true)).resolves.toMatchObject({
+      command: browserCommand,
+      nextCommand: captureCommand,
+      status: "in_progress",
+    });
+    expect(mocks.local).toHaveBeenCalledOnce();
+    expect(mocks.browser).toHaveBeenCalledOnce();
   });
 
   it.each(["schema", "build", "unit"] as const)(
@@ -1489,8 +1608,8 @@ describe("draft reconciliation command progress", () => {
         { command: installCommand, exitCode: 0 },
         { command: schemaCommand, exitCode: 0 },
         { command: checkCommand, exitCode: 0 },
-        { command: "mise run app:local -- spend-review setup", exitCode: 0 },
         { command: testCommand, exitCode: 0 },
+        { command: localSetupCommand, exitCode: 0 },
         { command: "mise run --no-deps app:runtime run spend-review test-e2e", exitCode: 0 },
         { command: "mise run --no-deps --skip-tools check:vercel-services", exitCode: 0 },
       ],
