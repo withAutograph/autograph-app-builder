@@ -22,6 +22,7 @@ import {
   assertDirectRepositoryProductionApproval,
   readRepositoryProductionApproval,
 } from "../eve/private-repository-production-approval";
+import { observePrivateApplyDenials } from "../eve/private-apply-denial-evidence";
 import {
   repositoryProductionApprovalInput,
   repositoryProductionApprovalReference,
@@ -35,11 +36,18 @@ import {
 } from "../hosted/realm-continuation-authority";
 import {
   currentDirectProductionGrant,
+  currentPlannedDirectProductionAuthoring,
   directProductionSubjectForPlan,
   recordDirectProductionGrant,
   requestDirectProductionGrant,
 } from "./direct-production-state";
-import { recordApprovedPrivateApply, requestPrivateApplyApproval } from "./private-apply-authority";
+import {
+  readPrivateApplyAuthority,
+  recordApprovedPrivateApply,
+  requestPrivateApplyApproval,
+  retainPrivateApplyDenials,
+} from "./private-apply-authority";
+import { currentAuthoringDecision } from "./preapproval-authoring-runtime";
 import {
   diagnosticBuildDecisionState,
   emitCurrentBuildWorkflowProjection,
@@ -146,22 +154,29 @@ const installPlan = (
         };
   const workflow = {
     ...observed,
-    appSpec: { appId, digest: specDigest },
+    appSpec: {
+      appId,
+      digest: specDigest,
+      acceptedByCallId: "accept-fixture-app",
+      artifactPath: "prototype/fixture-app/app-spec.md",
+      artifactRevision: "f".repeat(64),
+    },
+    artifacts: [],
     dependencyReceipt: {},
     identityReceipt: { identity: { schemaCuePath: appliedCuePath } },
-    sourceReceipt: { sourceKind },
+    sourceReceipt: { sourceKind, digest: "a".repeat(64) },
     proposal: {
       digest: proposalDigest,
       target: { contract: { appId }, plan: { source: { schema: { kind: storageKind } } } },
     },
-    workspace: { workspaceId: buildWorkspaceId },
+    workspace: { workspaceId: buildWorkspaceId, workspaceDigest: "b".repeat(64) },
   };
   if (sourceKind === "existing-repository") {
     Object.assign(workflow, { githubSource: { repository: repo, resolvedRef: "refs/heads/main" } });
   }
-  // SAFETY: The authorizer consumes only these scope fields and the applied source paths.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The fixture omits unrelated workflow receipts.
-  const state = workflow as AppBuilderWorkflowState;
+  // SAFETY: Drafting and approval use the supplied scope and applied source paths.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The fixture omits unrelated workflow receipts.
+  const state = workflow as unknown as AppBuilderWorkflowState;
   appBuilderWorkflowState.update(() => state);
   repositoryAccessReceiptState.update((current) =>
     recordRepositoryAccessReceipt({
@@ -196,6 +211,13 @@ const releaseContext = {
     throw new Error("A release decision cannot open provider authorization.");
   },
 } satisfies ToolContext & { approvedTools: ReadonlySet<string> };
+
+const authoringDecision = () =>
+  currentAuthoringDecision(releaseContext, {
+    completed: true,
+    blocked: false,
+    pendingInput: false,
+  });
 
 const authoredReleaseApproval = () => {
   const policy = releaseAppProduction.approval;
@@ -334,11 +356,15 @@ describe("direct Production Build authority", () => {
       classifyAccess.mockReset().mockResolvedValue(readyAccess);
       const accessBefore = repositoryAccessReceiptState.get();
       const subject = requiredSubject(directProductionSubjectForPlan(releaseContext));
+      expect(currentPlannedDirectProductionAuthoring(releaseContext)).toBeUndefined();
+      expect(authoringDecision().decision).toBe("planned");
 
       expect(await releaseAppProduction.execute({ destination }, releaseContext)).toMatchObject({
         status: "review-production-release",
         directProduction: subject,
       });
+      expect(currentPlannedDirectProductionAuthoring(releaseContext)).toBe(proposalDigest);
+      expect(authoringDecision().decision).toBe("runnable");
       expect(classifyAccess).not.toHaveBeenCalled();
       expect(repositoryAccessReceiptState.get()).toEqual(accessBefore);
       expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
@@ -359,8 +385,48 @@ describe("direct Production Build authority", () => {
       });
       expect(classifyAccess).not.toHaveBeenCalled();
       expect(repositoryAccessReceiptState.get()).toEqual(accessBefore);
+      expect(currentPlannedDirectProductionAuthoring(releaseContext)).toBeUndefined();
+      expect(authoringDecision().decision).toBe("planned");
     });
   });
+
+  it.each(["installation", "proposal"] as const)(
+    "does not resume drafting after the verified %s changes",
+    async (changed) => {
+      await contextStorage.run(new ContextContainer(), async () => {
+        installPlan();
+        expect(await releaseAppProduction.execute({}, releaseContext)).toMatchObject({
+          status: "review-production-release",
+        });
+        expect(currentPlannedDirectProductionAuthoring(releaseContext)).toBe(proposalDigest);
+        if (changed === "installation") {
+          repositoryAccessReceiptState.update((current) =>
+            recordRepositoryAccessReceipt({
+              current,
+              sessionId,
+              confirmedByCallId: "another-verified-installation",
+              access: { ...readyAccess, scope: { ...readyAccess.scope, installationId: "41" } },
+            }),
+          );
+        } else {
+          const state = appBuilderWorkflowState.get();
+          if (state.phase !== "planned") {
+            throw new Error("The fixture must have a planned app.");
+          }
+          updateExactWorkflow({
+            expected: state,
+            operation: "plan a successor app proposal",
+            transition: () => ({
+              ...state,
+              proposal: { ...state.proposal, digest: "e".repeat(64) },
+            }),
+          });
+        }
+        expect(currentPlannedDirectProductionAuthoring(releaseContext)).toBeUndefined();
+        expect(authoringDecision().decision).toBe("planned");
+      });
+    },
+  );
 
   it.each([
     { decision: "approve", sourceKind: "existing-repository" },
@@ -404,6 +470,7 @@ describe("direct Production Build authority", () => {
           throw new Error("The planned app must have a reviewable Arrusted release.");
         }
         expect(classifyAccess).toHaveBeenCalledTimes(sourceKind === "fresh-template" ? 1 : 0);
+        expect(authoringDecision().decision).toBe("runnable");
         const subject = preflight.directProduction;
         const input = {
           directProduction: subject,
@@ -418,12 +485,14 @@ describe("direct Production Build authority", () => {
         expect(request?.action).toMatchObject({ input, toolName: buildTool, callId: buildCallId });
         expect(repositoryCommand).not.toHaveBeenCalled();
         expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
+        expect(authoringDecision().decision).toBe("waiting-input");
         if (request === undefined) {
           throw new Error("The original Build must wait for an actual Eve approval.");
         }
         await run(pending.session, {
           inputResponses: [{ optionId: decision, requestId: request.requestId }],
         });
+        expect(authoringDecision().decision).not.toBe("runnable");
         const requests = events.flatMap((event) =>
           event.type === "input.requested" ? event.data.requests : [],
         );
@@ -435,6 +504,11 @@ describe("direct Production Build authority", () => {
           outcome: decision === "approve" ? "approved" : "cancelled",
         });
         if (decision === "cancel") {
+          const proofs = observePrivateApplyDenials({ calls: [buildCallId], events, sessionId });
+          expect(proofs).toHaveLength(1);
+          retainPrivateApplyDenials({ expected: readPrivateApplyAuthority(), proofs });
+          expect(readPrivateApplyAuthority().pending).toHaveLength(0);
+          expect(authoringDecision().decision).toBe("planned");
           await emitCurrentBuildWorkflowProjection(releaseContext);
           expect(diagnosticBuildDecisionState.get()?.directProduction).toBeUndefined();
           expect(repositoryCommand).not.toHaveBeenCalled();

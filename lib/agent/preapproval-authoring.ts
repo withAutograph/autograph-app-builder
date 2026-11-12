@@ -82,6 +82,7 @@ export const decidePreapprovalAuthoring = (input: {
   blocked: boolean;
   sourcePrerequisite: boolean;
   correction?: PlannedAuthoringCorrection;
+  directProductionProposalDigest?: string;
 }): PreapprovalAuthoringDecision => {
   const base = {
     version: 1 as const,
@@ -102,10 +103,12 @@ export const decidePreapprovalAuthoring = (input: {
   }
   const correcting =
     current.phase === "planned" && input.correction?.proposalDigest === current.proposal.digest;
-  if ("proposal" in current && !correcting) {
+  const draftingProduction =
+    current.phase === "planned" && input.directProductionProposalDigest === current.proposal.digest;
+  if ("proposal" in current && !correcting && !draftingProduction) {
     return { ...base, decision: "planned" };
   }
-  if (!authoringPhases.has(current.phase) && !correcting) {
+  if (!authoringPhases.has(current.phase) && !correcting && !draftingProduction) {
     return { ...base, decision: "blocked" };
   }
   // Legacy inline AppSpecs and current durable artifact references are already
@@ -148,6 +151,7 @@ export const decidePreapprovalAuthoring = (input: {
           phase: current.phase,
           dependencyReceipt: "dependencyReceipt" in current ? current.dependencyReceipt : undefined,
           identityReceipt: "identityReceipt" in current ? current.identityReceipt : undefined,
+          directProductionProposalDigest: draftingProduction ? current.proposal.digest : undefined,
         }),
       )
       .digest("hex"),

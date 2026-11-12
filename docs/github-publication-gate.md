@@ -636,6 +636,13 @@ must match the verified one. Builder passes the returned `directProduction`
 subject with the implementation to `apply_app_creation` to present the single
 **Build and release to Production?** approval.
 
+A successful planned preflight can continue drafting that same verified app
+until Builder presents its Build card. The preflight's storage description
+reflects the files drafted so far. The Build card binds storage to the
+submitted implementation. Drafting continues under the existing authenticated
+authoring flow, with pending inputs, denial, cancellation and no-progress
+handling intact. Only the Build decision grants release authority.
+
 For an existing starter-backed plan, `release-app-production` accepts the
 creator's chosen Arrusted repository as `destination`. Builder verifies the
 connected GitHub account through the same repository-access flow and records
