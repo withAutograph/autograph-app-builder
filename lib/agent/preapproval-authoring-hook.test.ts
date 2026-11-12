@@ -63,6 +63,22 @@ const emit = async (name: string, data: object = {}, owner = ctx) => {
   }
   await handler({ data }, owner as HookContext);
 };
+const finishInspection = async (
+  status: "completed" | "failed" | "rejected",
+  isError: boolean,
+  owner = ctx,
+) => {
+  const callId = `inspection-${owner.session.turn.id}`;
+  await emit("actions.requested", { actions: [{ callId }] }, owner);
+  await emit(
+    "action.result",
+    {
+      status,
+      result: { kind: "tool-result", toolName: "inspect_repository", callId, isError },
+    },
+    owner,
+  );
+};
 const seed = async () => {
   const content = normalizeBuildReadyAppSpec(BUILD_READY_APP_SPEC);
   const artifact = {
@@ -223,6 +239,63 @@ describe("native preapproval drafting lifecycle", () => {
         decision: "blocked",
         reason: "authoring_no_progress",
       });
+    });
+  });
+  it.each([
+    { status: "failed", isError: false },
+    { status: "completed", isError: true },
+  ] as const)(
+    "continues an exact first Build plan after tool result $status with isError $isError",
+    async ({ status, isError }) => {
+      await contextStorage.run(context(), async () => {
+        await seed();
+        await emit("turn.started");
+        freezePlan("first-plan");
+        recordInitialBuildAuthoring(ctx.session.id);
+        await finishInspection(status, isError);
+        await emit("turn.completed");
+        const ready = diagnosticAuthoringDecisionState.get();
+        expect(ready?.decision).toBe("runnable");
+        expect(readPrivateApplyAuthority()).toEqual({ grant: null, pending: [] });
+
+        const nextTurn = {
+          session: { ...ctx.session, turn: { id: "authoring-turn", sequence: 2 } },
+        };
+        await emit("turn.started", {}, nextTurn);
+        authenticatedAuthoringDelivery.update(() => ({
+          turnId: nextTurn.session.turn.id,
+          scopeDigest: ready!.scopeDigest!,
+        }));
+        await finishInspection(status, isError, nextTurn);
+        await emit("turn.completed", {}, nextTurn);
+        expect(diagnosticAuthoringDecisionState.get()).toMatchObject({
+          decision: "blocked",
+          reason: "authoring_no_progress",
+        });
+      });
+    },
+  );
+  it("keeps a rejected action blocking even with the exact first Build plan", async () => {
+    await contextStorage.run(context(), async () => {
+      await seed();
+      await emit("turn.started");
+      freezePlan("first-plan");
+      recordInitialBuildAuthoring(ctx.session.id);
+      await finishInspection("rejected", true);
+      await emit("turn.completed");
+      expect(diagnosticAuthoringDecisionState.get()?.decision).toBe("blocked");
+    });
+  });
+  it("keeps a failed step blocking after a tool failure on the first Build plan", async () => {
+    await contextStorage.run(context(), async () => {
+      await seed();
+      await emit("turn.started");
+      freezePlan("first-plan");
+      recordInitialBuildAuthoring(ctx.session.id);
+      await finishInspection("failed", false);
+      await emit("step.failed");
+      await emit("turn.completed");
+      expect(diagnosticAuthoringDecisionState.get()?.decision).toBe("blocked");
     });
   });
   it("requires a recording for the exact current first plan", async () => {
