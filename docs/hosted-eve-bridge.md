@@ -280,6 +280,11 @@ it only as part of the exact repeat-delivery proof above. The earlier committed
 result and merge receipt must prove it reused authority that had already
 expired before the repeat began. A post-Stop merge, later step, or incomplete
 child remains unproven.
+An app-owned evidence refusal records only the fixed check that failed. It
+does not include tool input, release or account identifiers, or journal data.
+If a native compaction event removed an earlier delivery from the current
+prompt, recovery can read its exact completed checkpoint and native result.
+A contradictory retained call or result still refuses transfer.
 Other internal inbox messages without settlement proof still prevent transfer. Recovery reports a fixed
 message category to operations without recording payloads or arbitrary message
 kinds. That category provides no authority to discard or replay the message.

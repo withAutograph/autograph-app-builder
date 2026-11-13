@@ -5,7 +5,11 @@ import {
   verifySettledGitHubDelivery,
   verifySettledGitHubDeliveryWithPriorReceipt,
 } from "./native-recovery-github-delivery-witness";
-import type { PriorMergeReceiptReader } from "./native-recovery-github-delivery-witness";
+import type {
+  CancelledGitHubDeliveryRefusal,
+  CancelledGitHubDeliveryWitness,
+  PriorMergeReceiptReader,
+} from "./native-recovery-github-delivery-witness";
 import {
   approval,
   callKey,
@@ -119,11 +123,89 @@ describe("verifySettledGitHubDeliveryWithPriorReceipt", () => {
   it("accepts an exact completed earlier merge for a stopped repeat of the same delivery", async () => {
     const { witness, priorMergeReceipt } = fixture({ priorMerge: true });
     const readReceipt = vi.fn(async () => await Promise.resolve(priorMergeReceipt));
+    const onRefusal = vi.fn<(boundary: CancelledGitHubDeliveryRefusal) => void>();
     expect(verifySettledGitHubDelivery(witness, owner)).toBe(false);
     await expect(
-      verifySettledGitHubDeliveryWithPriorReceipt(witness, owner, readReceipt),
+      verifySettledGitHubDeliveryWithPriorReceipt(witness, owner, readReceipt, onRefusal),
     ).resolves.toBe(true);
     expect(readReceipt).toHaveBeenCalledExactlyOnceWith(priorMergeReceipt.intentDigest);
+    expect(onRefusal).not.toHaveBeenCalled();
+  });
+
+  it("reports only a fixed code for the first refused evidence boundary", async () => {
+    const {
+      witness,
+      context,
+      capturedCall,
+      priorCapturedCall,
+      committedDelivery,
+      priorMergeReceipt,
+    } = fixture({ priorMerge: true });
+    const privateValue = "private-witness-payload-canary";
+    const receipts = new Map([[privateValue, priorMergeReceipt]]);
+    const readReceipt = vi.fn<PriorMergeReceiptReader>(
+      async (key) => await Promise.resolve(receipts.get(key)),
+    );
+
+    const cases = [
+      {
+        candidate: {
+          ...witness,
+          serializedContext: { [APP_BUILDER_WORKFLOW_STATE_KEY]: privateValue },
+        },
+        reason: "reviewed_state_shape",
+      },
+      {
+        candidate: { ...witness, serializedContext: { ...context, [callKey]: privateValue } },
+        reason: "capture_shape",
+      },
+      {
+        candidate: {
+          ...witness,
+          serializedContext: { ...context, [callKey]: [priorCapturedCall] },
+        },
+        reason: "current_capture_missing",
+      },
+      {
+        candidate: {
+          ...witness,
+          serializedContext: {
+            ...context,
+            [callKey]: [{ ...priorCapturedCall, owner: capturedCall.owner }, capturedCall],
+          },
+        },
+        reason: "prior_epoch_mismatch",
+      },
+      {
+        candidate: {
+          ...witness,
+          readCommittedDelivery:
+            vi.fn<NonNullable<CancelledGitHubDeliveryWitness["readCommittedDelivery"]>>(),
+        },
+        reason: "prior_history_missing",
+      },
+      {
+        candidate: {
+          ...witness,
+          readCommittedDelivery: () => ({ ...committedDelivery, result: privateValue }),
+        },
+        reason: "prior_result_shape",
+      },
+      {
+        candidate: witness,
+        reason: "receipt_missing",
+      },
+    ];
+    await Promise.all(
+      cases.map(async ({ candidate, reason }) => {
+        const onRefusal = vi.fn<(boundary: CancelledGitHubDeliveryRefusal) => void>();
+        await expect(
+          verifySettledGitHubDeliveryWithPriorReceipt(candidate, owner, readReceipt, onRefusal),
+        ).resolves.toBe(false);
+        expect(onRefusal).toHaveBeenCalledExactlyOnceWith(reason);
+      }),
+    );
+    expect(readReceipt).toHaveBeenCalledTimes(1);
   });
 
   it("requires the prior completed epoch and exact journal for a final post-Stop schema step", async () => {

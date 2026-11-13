@@ -839,7 +839,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,1225 @@
+@@ -0,0 +1,1240 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
@@ -1808,7 +1808,10 @@ new file mode 100644
 +
 +/** Keep earlier proof bounded to the one exact call referenced by the child. */
 +function readEarlierCommittedDelivery({ callId, from, nativeEvents, candidates, latest, dependencies }) {
-+  if (typeof callId !== "string" || callId.length === 0 || callId === from.callId) return;
++  const refuse = (boundary) => {
++    try { console.info(JSON.stringify({ event: "builder.cancelled_delivery_history", boundary })); } catch {}
++  };
++  if (typeof callId !== "string" || callId.length === 0 || callId === from.callId) return refuse("prior_call_identity");
 +  const requests = [];
 +  const results = [];
 +  for (const [index, event] of nativeEvents.entries()) {
@@ -1820,7 +1823,7 @@ new file mode 100644
 +      results.push({ index, event });
 +    }
 +  }
-+  if (requests.length !== 1 || results.length !== 1) return;
++  if (requests.length !== 1 || results.length !== 1) return refuse("prior_native_event_pair");
 +  const [request] = requests;
 +  const [result] = results;
 +  const { turnId, sequence, stepIndex } = request.event.data;
@@ -1829,10 +1832,10 @@ new file mode 100644
 +    request.action.kind !== "tool-call" || request.action.toolName !== from.toolName ||
 +    outcome.turnId !== turnId || outcome.sequence !== sequence || outcome.stepIndex !== stepIndex ||
 +    outcome.status !== "completed" || outcome.result?.kind !== "tool-result" ||
-+    outcome.result.toolName !== from.toolName || outcome.result.isError === true) return;
++    outcome.result.toolName !== from.toolName || outcome.result.isError === true) return refuse("prior_native_event_scope");
 +  // The parent history must retain the same assistant call and actual result.
 +  // An emitted result by itself is not an authored-state commit.
-+  const matchHistory = (checkpoint) => {
++  const retainedHistory = (checkpoint) => {
 +    const history = dependencies.readDurableSession(checkpoint.sessionState).history;
 +    const called = [];
 +    const returned = [];
@@ -1843,20 +1846,32 @@ new file mode 100644
 +        if (part.type === "tool-result") returned.push({ index, message, part });
 +      }
 +    }
++    if (called.length === 0 && returned.length === 0) return "absent";
 +    return called.length === 1 && returned.length === 1 && called[0].index < returned[0].index &&
 +      called[0].message.role === "assistant" && called[0].part.providerExecuted !== true &&
 +      called[0].part.toolName === from.toolName &&
 +      isDeepStrictEqual(parseJsonObject(called[0].part.input), request.action.input) &&
 +      returned[0].message.role === "tool" && returned[0].part.toolName === from.toolName &&
 +      returned[0].part.output?.type === "json" &&
-+      isDeepStrictEqual(returned[0].part.output.value, outcome.result.output);
++      isDeepStrictEqual(returned[0].part.output.value, outcome.result.output) ? "matches" : "conflicting";
 +  };
-+  if (!matchHistory(latest) || !candidates.some((checkpoint) =>
++  const latestHistory = retainedHistory(latest);
++  if (latestHistory === "conflicting") return refuse("prior_latest_history_conflict");
++  const earlier = candidates.some((checkpoint) =>
 +    checkpoint.origin.slot < latest.origin.slot &&
 +    checkpoint.kind === "committed-turn-output" &&
 +    checkpoint.sessionState.emissionState.sequence > sequence &&
 +    checkpoint.sessionState.emissionState.sequence <= from.sequence &&
-+    matchHistory(checkpoint))) return;
++    retainedHistory(checkpoint) === "matches");
++  if (!earlier) return refuse("prior_committed_checkpoint");
++  // Compaction may remove the older call and result from the latest prompt.
++  // An earlier exact durable commit remains evidence; do not accept a
++  // contradictory retained copy or an absence with no native compaction.
++  if (latestHistory === "absent" && !nativeEvents.some((event, index) =>
++    index > result.index && event.type === "compaction.completed" &&
++    event.data?.sessionId === latest.sessionState.sessionId &&
++    Number.isSafeInteger(event.data.sequence) && event.data.sequence >= sequence &&
++    event.data.sequence <= from.sequence)) return refuse("prior_history_without_compaction");
 +  return { toolInput: request.action.input, result: outcome.result.output };
 +}
 +

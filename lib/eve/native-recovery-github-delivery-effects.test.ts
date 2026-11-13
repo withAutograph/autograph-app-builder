@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { z } from "zod";
+import type { GitHubDeliveryEffectRejection } from "./native-recovery-github-delivery-effects";
 import {
   hasSettledGitHubDeliveryEffects,
   readSettledGitHubDeliveryRepeat,
@@ -64,15 +65,19 @@ const schema = (output: Json, reviewedActivation = activation) =>
 const prove = (
   completedSteps: Parameters<typeof hasSettledGitHubDeliveryEffects>[0]["completedSteps"],
   schemaChangeExpected = true,
+  report?: Parameters<typeof hasSettledGitHubDeliveryEffects>[1],
 ) =>
-  hasSettledGitHubDeliveryEffects({
-    callId,
-    logicalSessionId,
-    appId,
-    toolInput: approval,
-    schemaChangeExpected,
-    completedSteps,
-  });
+  hasSettledGitHubDeliveryEffects(
+    {
+      callId,
+      logicalSessionId,
+      appId,
+      toolInput: approval,
+      schemaChangeExpected,
+      completedSteps,
+    },
+    report,
+  );
 
 describe("retained GitHub delivery effects", () => {
   it("recognizes the reviewed merge and the exact schema activation after an earlier pending read", () => {
@@ -100,6 +105,14 @@ describe("retained GitHub delivery effects", () => {
     expect(prove([ready, merge(mergedWithSchema), schema(providerOnly)])).toBe(false);
     expect(prove([ready, merge(mergedWithSchema), schema(pending)])).toBe(false);
     expect(prove([ready, merge(mergedWithSchema)])).toBe(false);
+  });
+
+  it("reports why an incomplete direct delivery was rejected and stays silent on success", () => {
+    const report = vi.fn<(reason: GitHubDeliveryEffectRejection) => void>();
+    expect(prove([ready, merge(mergedWithSchema), schema(live)], true, report)).toBe(true);
+    expect(report).not.toHaveBeenCalled();
+    expect(prove([ready, merge(mergedWithSchema), schema(pending)], true, report)).toBe(false);
+    expect(report.mock.calls).toEqual([["schema-not-confirmed-live"]]);
   });
 
   it.each([
@@ -193,16 +206,20 @@ describe("repeat GitHub delivery effects", () => {
   const readRepeat = (
     completedSteps: Parameters<typeof readSettledGitHubDeliveryRepeat>[0]["completedSteps"],
     overrides: Partial<Parameters<typeof readSettledGitHubDeliveryRepeat>[0]> = {},
+    report?: Parameters<typeof readSettledGitHubDeliveryRepeat>[1],
   ) =>
-    readSettledGitHubDeliveryRepeat({
-      callId,
-      logicalSessionId,
-      appId,
-      toolInput: repeatApproval,
-      schemaChangeExpected: true,
-      completedSteps,
-      ...overrides,
-    });
+    readSettledGitHubDeliveryRepeat(
+      {
+        callId,
+        logicalSessionId,
+        appId,
+        toolInput: repeatApproval,
+        schemaChangeExpected: true,
+        completedSteps,
+        ...overrides,
+      },
+      report,
+    );
 
   it("identifies the exact older merge receipt after one completed read of the merged PR", () => {
     expect(readRepeat([repeatMerge])).toEqual({ ...prior, mergeSha: mergeCommitSha, readyAt });
@@ -264,6 +281,27 @@ describe("repeat GitHub delivery effects", () => {
         },
       ]),
     ).toBeNull();
+  });
+
+  it.each([
+    {
+      output: {
+        kind: "authorization-required",
+        signal: { privateHint: "not logged" },
+        authorized: [],
+      },
+      reason: "step-authorization-required",
+    },
+    {
+      output: { kind: "result", output: live, authorized: ["private-attempt-id"] },
+      reason: "step-authorization-recorded",
+    },
+    { output: { output: live, authorized: [] }, reason: "invalid-step-output" },
+  ])("reports $reason for an unproven final step wrapper", ({ output, reason }) => {
+    const report = vi.fn<(reason: GitHubDeliveryEffectRejection) => void>();
+    const late = { ...repeatSchema(live), afterStop: true, output } as const;
+    expect(readRepeat([repeatMerge, late], {}, report)).toBeNull();
+    expect(report.mock.calls).toEqual([[reason]]);
   });
 
   it.each(["failed", "cancelled"] as const)(
