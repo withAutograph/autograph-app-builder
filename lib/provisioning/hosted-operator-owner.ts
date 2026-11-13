@@ -221,6 +221,8 @@ const readCurrentOwnedSession = async (
       nativeRecoveryBinding: currentBinding,
       privateBuildDecision: current.privateBuildDecision,
       builderDestination: current.builderDestination ?? original.builderDestination,
+      cancellationRevision: current.cancellationRevision,
+      resumedCancellationRevision: current.resumedCancellationRevision,
       resumability: current.resumability,
       stage: current.stage,
       status: current.status,

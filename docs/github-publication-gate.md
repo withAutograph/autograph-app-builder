@@ -655,6 +655,10 @@ update on the existing database. Protected setup binds the exact reviewed
 source to the installed release and verifies the transition before merge.
 Builder applies the checked addition after the provider activates that exact
 merged revision, then observes the app URL.
+After Builder recovers a stopped session, the protected schema install keeps
+the original app, session, and approval references. It verifies the merge
+receipt against the recovered worker's current cancellation revision. A later
+Stop of that worker prevents the install from using the earlier execution.
 For an already merged schema revision, the delivery read checks the saved
 app and repository, the exact merge SHA, and the current protected schema grant.
 When the operator confirms that the exact grant's schema is installed, Builder
