@@ -23,7 +23,7 @@ vi.mock("./github-pr-delivery-authority", () => ({
 }));
 vi.mock("./direct-production-state", () => ({ currentDirectProductionGrant: mocks.readGrant }));
 vi.mock("./app-production-observation", () => ({
-  readLiveMergedAppProduction: mocks.liveProduction,
+  readSettledMergedAppProductionSchema: mocks.liveProduction,
 }));
 vi.mock("./draft-reconciliation-state", () => ({
   draftReconciliationState: { get: mocks.getCandidate },
@@ -178,32 +178,35 @@ it("reuses the combined approval only for the exact already-merged schema revisi
   expect(mocks.run).not.toHaveBeenCalled();
 });
 
-it("refuses a stale delivery request for the exact already-live schema revision before capture", async () => {
-  const installationId = "10";
-  const digest = "7".repeat(64);
-  const input = { ...approval, installationId, readyAt };
-  const target = {
-    appId: "example-app",
-    repositoryId: reviewedTarget.repositoryId,
-    repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
-  };
-  mocks.getState.mockReturnValue({
-    ...mocks.getState(),
-    githubDestinationReview: { installation: { installationId } },
-  });
-  mocks.inspect.mockResolvedValue(observe({ state: "merged", mergeCommitSha }));
-  mocks.readGrant.mockReturnValue({
-    digest,
-    subject: { revision: { schemaChange: { kind: "add-optional-text-field" } } },
-  });
-  mocks.liveProduction.mockResolvedValue({ requestedRevision: "live" });
-  await expect(approve(input)).resolves.toMatchObject({ type: "denied" });
-  expect(mocks.liveProduction.mock.calls).toMatchObject([
-    [target, { session, callId, abortSignal }, mergeCommitSha, digest],
-  ]);
-  expect(mocks.captureAuthority).not.toHaveBeenCalled();
-  expect(mocks.run).not.toHaveBeenCalled();
-});
+it.each(["live", "awaiting-activation"] as const)(
+  "refuses stale delivery after protected installation even with requested revision %s",
+  async (requestedRevision) => {
+    const installationId = "10";
+    const digest = "7".repeat(64);
+    const input = { ...approval, installationId, readyAt };
+    const target = {
+      appId: "example-app",
+      repositoryId: reviewedTarget.repositoryId,
+      repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
+    };
+    mocks.getState.mockReturnValue({
+      ...mocks.getState(),
+      githubDestinationReview: { installation: { installationId } },
+    });
+    mocks.inspect.mockResolvedValue(observe({ state: "merged", mergeCommitSha }));
+    mocks.readGrant.mockReturnValue({
+      digest,
+      subject: { revision: { schemaChange: { kind: "add-optional-text-field" } } },
+    });
+    mocks.liveProduction.mockResolvedValue({ requestedRevision, schemaSetupSettled: true });
+    await expect(approve(input)).resolves.toMatchObject({ type: "denied" });
+    expect(mocks.liveProduction.mock.calls).toMatchObject([
+      [target, { session, callId, abortSignal }, mergeCommitSha, digest],
+    ]);
+    expect(mocks.captureAuthority).not.toHaveBeenCalled();
+    expect(mocks.run).not.toHaveBeenCalled();
+  },
+);
 
 it("requires provider proof of the retained reconciliation before approving its exact head", async () => {
   const reconciliation = { digest: "e".repeat(64) };

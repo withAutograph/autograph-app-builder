@@ -128,8 +128,8 @@ export const observeMergedAppProduction = async (
     : monitoringStopped();
 };
 
-/** The ordinary protected observation checks both native activation and the installed schema. */
-export const readLiveMergedAppProduction = async (
+/** Verify this grant's installed schema independently of the active deployment. */
+export const readSettledMergedAppProductionSchema = async (
   target: AppProductionDeliveryTarget,
   ctx: AppProductionObservationContext,
   mergeSha: string,
@@ -142,11 +142,15 @@ export const readLiveMergedAppProduction = async (
     undefined,
     schemaGrantDigest,
   );
+  if (observed.status === monitoringStoppedStatus || observed.appId !== target.appId) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing evidence is the caller's explicit optional result.
+    return undefined;
+  }
   const isLive =
     observed.status === "available" &&
     observed.requestedRevision === "live" &&
     observed.deployment.requestedRevisionActive === undefined;
-  return isLive && observed.appId === target.appId ? observed : undefined;
+  return isLive || observed.schemaSetupSettled === true ? observed : undefined;
 };
 
 const currentReviewedDelivery = () =>

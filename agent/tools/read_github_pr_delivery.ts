@@ -8,7 +8,7 @@ import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { currentDirectProductionGrant } from "@/lib/agent/direct-production-state";
 import { recordDirectProductionProgress } from "@/lib/agent/direct-production-progress";
-import { readLiveMergedAppProduction } from "@/lib/agent/app-production-observation";
+import { readSettledMergedAppProductionSchema } from "@/lib/agent/app-production-observation";
 import { resolveGitHubPrDeliverySubject } from "@/lib/agent/github-pr-delivery-subject";
 import {
   readGitHubProductionDeliveryReadiness,
@@ -17,7 +17,7 @@ import {
 
 export default defineTool({
   description:
-    "Read this session's reviewed pull request and required checks. For a first managed Production release, finish data and access setup after draft publication. For an approved revision, verify the existing setup. For a merged optional-field revision, report the confirmed live app or resume the already approved database update. Follow the returned nextCall for setup or reviewed delivery using the current release approval. A draft defers checks until Ready. Passing checks or setup do not claim native activation or hosted behavior.",
+    "Read this session's reviewed pull request and required checks. For a first managed Production release, finish data and access setup after draft publication. For an approved revision, verify the existing setup. For a merged optional-field revision, report settled database setup separately from current app availability, or resume the already approved database update. Follow the returned nextCall for setup or reviewed delivery using the current release approval. A draft defers checks until Ready. Passing checks or setup do not claim native activation or hosted behavior.",
   async execute(_input, ctx) {
     const subject = resolveGitHubPrDeliverySubject(
       appBuilderWorkflowState.get(),
@@ -65,7 +65,7 @@ export default defineTool({
       return result;
     }
     if (grant !== undefined && schemaMergeSha !== undefined) {
-      const nativeProduction = await readLiveMergedAppProduction(
+      const nativeProduction = await readSettledMergedAppProductionSchema(
         targetScope,
         ctx,
         schemaMergeSha,
@@ -88,7 +88,16 @@ export default defineTool({
         return result;
       }
       if (nativeProduction !== undefined) {
-        recordDirectProductionProgress(grant.digest, "live");
+        if (nativeProduction.requestedRevision === "live") {
+          recordDirectProductionProgress(grant.digest, "live");
+        } else {
+          recordDirectProductionProgress(
+            grant.digest,
+            nativeProduction.status === "available"
+              ? "schema-settled"
+              : "schema-settled-availability-unconfirmed",
+          );
+        }
         return { ...result, nativeProduction };
       }
     }
