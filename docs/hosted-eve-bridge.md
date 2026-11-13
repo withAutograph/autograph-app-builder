@@ -245,6 +245,9 @@ cancellation must bind the registered child and the settlement input. The
 child's retained entry, control receipt, completed callback, and terminal
 state must prove that exact notice. Native step inspection uses the provider's
 default page size and follows every cursor before accepting the proof.
+A failed or cancelled sibling step is terminal but does not prove delivery
+or settle its effects. Pending, running, and unknown steps still block this
+proof. The exact callback must have completed before the child run settled.
 The parent may persist the notice after
 descendant cleanup completes but before its cancellation checkpoint commits.
 A refusal reports only a fixed witness category and, if a read threw, the
