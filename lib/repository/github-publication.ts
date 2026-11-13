@@ -409,6 +409,7 @@ export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter 
     proposal: ExistingDraftReconciliationProposal,
     content: ReconciliationContent,
     recovery?: OwnedDraftInspectionRecovery,
+    assertEffectCurrent?: () => void,
   ) => Promise<GitHubMutationAcknowledgement>;
   inspectAppliedDraftReconciliation?: (
     proposal: ExistingDraftReconciliationProposal,

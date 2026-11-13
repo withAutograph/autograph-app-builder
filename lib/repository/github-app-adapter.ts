@@ -275,6 +275,7 @@ export interface GitHubAppInstallationProvider {
     proposal: ExistingDraftReconciliationProposal,
     content: ReconciliationContent,
     recovery?: OwnedDraftInspectionRecovery,
+    assertEffectCurrent?: () => void,
     // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   ) => Promise<unknown>;
   inspectAppliedDraftReconciliation: (
@@ -611,12 +612,12 @@ export function createGitHubAppPublicationAdapter(
         ),
       );
     },
-    async reconcileExistingDraft(proposal, content, recovery) {
+    async reconcileExistingDraft(proposal, content, recovery, assertEffectCurrent) {
       return parseProviderResponse(
         acknowledgementSchema,
         await sanitizedProviderCall(
           // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
-          () => provider.reconcileExistingDraft(proposal, content, recovery),
+          () => provider.reconcileExistingDraft(proposal, content, recovery, assertEffectCurrent),
           "update the existing draft PR",
         ),
       );

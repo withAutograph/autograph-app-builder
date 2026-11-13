@@ -8,8 +8,10 @@ import {
 } from "../../lib/agent/direct-production-authorization";
 import {
   currentDirectProductionProposalIsDelivered,
+  directProductionReconciliationContinuation,
   directProductionSubjectForPlan,
   freshTemplateProductionPlan,
+  prepareDirectProductionDraftReconciliation,
   recordDirectProductionGrant,
   recordFreshTemplateProductionDestination,
   recordPlannedDirectProductionAuthoring,
@@ -41,7 +43,7 @@ const approvedPrivateBuild = (subject: z.infer<typeof directProductionSubjectSch
 export default defineTool({
   availableInSubagents: false,
   description:
-    "For an explicit request to release a private Arrusted app to Production, read its directProduction subject. Use it before Build for a new app or an eligible revision to this session's already live app. Builder can approve app-owned source edits such as forms, save actions and data reads, or a checked addition of one optional text field to the existing database. A revision reuses the saved repository, app, data, and access. A plan with an acquired Arrusted default branch already has its verified destination; repeating that same repository is allowed. For a new starter-backed plan, supply destination with the explicitly chosen Arrusted repository and resolve any normal GitHub connection or installation choice in the same session. For a new app, a read-only storageKind hint of postgres reflects an authored .config/app-specs/<app-id>.cue; none reflects removing an existing planned CUE. Pass the subject to apply_app_creation for a single Build and release approval. For an already approved private build, read the subject without arguments and pass it back here to present its Production release approval. This records the user decision and does not publish, provision or merge by itself.",
+    "For an explicit request to release a private Arrusted app to Production, read its directProduction subject. Use it before Build for a new app or an eligible revision to this session's already live app. Builder can approve app-owned source edits such as forms, save actions and data reads, or a checked addition of one optional text field to the existing database. A revision reuses the saved repository, app, data, and access. A plan with an acquired Arrusted default branch already has its verified destination; repeating that same repository is allowed. For a new starter-backed plan, supply destination with the explicitly chosen Arrusted repository and resolve any normal GitHub connection or installation choice in the same session. For a new app, a read-only storageKind hint of postgres reflects an authored .config/app-specs/<app-id>.cue; none reflects removing an existing planned CUE. Pass the subject to apply_app_creation for a single Build and release approval. For an already approved private build, read the subject without arguments and pass it back here to present its Production release approval. This also applies after Builder seals an eligible correction to the exact owned still-draft schema revision. Follow the nextCall returned for that correction after approval. This tool records the user decision and does not publish, provision or merge by itself.",
   inputSchema: z
     .strictObject({
       directProduction: directProductionSubjectSchema.optional(),
@@ -97,6 +99,9 @@ export default defineTool({
       ctx.abortSignal?.throwIfAborted();
       recordFreshTemplateProductionDestination(ctx, starterPlan, access.receipt);
     }
+    if (input.directProduction === undefined) {
+      await prepareDirectProductionDraftReconciliation(ctx);
+    }
     let subject = directProductionSubjectForPlan(ctx);
     if (subject === undefined && input.directProduction === undefined) {
       await restoreDirectProductionRevisionPredecessor(ctx);
@@ -144,6 +149,13 @@ export default defineTool({
         directProduction: review,
         description: describeDirectProductionSubject(review),
       };
+      if (review.revision?.reconciliation !== undefined) {
+        return {
+          ...result,
+          guidance:
+            "Pass this exact directProduction subject back to release-app-production to present one approval for this correction, Ready and merge. Follow its nextCall after approval.",
+        };
+      }
       return planned
         ? {
             ...result,
@@ -160,6 +172,8 @@ export default defineTool({
       toolName: "release-app-production",
       subject: input.directProduction,
     });
-    return { status: "production-release-approved" as const };
+    const status = "production-release-approved" as const;
+    const nextCall = directProductionReconciliationContinuation(subject);
+    return nextCall === null ? { status } : { status, nextCall };
   },
 });

@@ -7,8 +7,11 @@ import {
   HostedSessionAuthorityError,
 } from "../hosted/session-authority";
 import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
+import { GENERATED_RELEASE_MEMBERS } from "../provisioning/hosted-operator-sandbox-launcher";
+import type { OverlayChange } from "../repository/target-apply";
 import type { TargetIterationChange } from "../repository/target-planning";
 import type { ImplementationFile } from "./apply-implementation-files";
+import { approvalReceiptForExistingDraftUpdate } from "./approval-receipt";
 import {
   ARRUSTED_PRODUCTION_REPOSITORY,
   createDirectProductionGrant,
@@ -24,6 +27,11 @@ import { observeMergedAppProduction } from "./app-production-observation";
 import type { GitHubPublicationRuntime } from "./github-publication-runtime";
 import { ownedDraftPublicationHistory } from "./github-draft-publication-lineage";
 import { currentGitHubPrDeliveryAuthorityProjection } from "./github-pr-delivery-authority-state";
+import {
+  draftReconciliationCompletions,
+  draftReconciliationState,
+} from "./draft-reconciliation-state";
+import { currentDraftCandidateSource } from "./published-draft-repair";
 import {
   directProductionProgressState,
   directProductionDeliverySettled,
@@ -68,6 +76,7 @@ const authorization = defineState<{
   freshDestination?: FreshTemplateProductionPlan & ProductionDestination;
   authoringPlan?: DirectProductionSubject;
   grant?: DirectProductionGrant;
+  reconciliation?: { failedGrantDigest: string; subject: DirectProductionSubject } | null;
   revisionAnchor?: { proposalDigest: string; priorGrant: DirectProductionGrant };
   pending: Record<string, DirectProductionGrant>;
 }>("autograph-app-builder.direct-production-authorization.v1", () => ({ pending: {} }));
@@ -211,7 +220,9 @@ const revisionPredecessor = (proposalDigest: string): DirectProductionGrant | un
     : undefined;
 };
 
-const isExistingPresentationEdit = (change: TargetIterationChange, appPath: string): boolean => {
+type AppFileChange = Pick<OverlayChange, "path" | "before" | "after">;
+
+const isExistingPresentationEdit = (change: AppFileChange, appPath: string): boolean => {
   const { before, after, path } = change;
   if (
     before === undefined ||
@@ -229,7 +240,7 @@ const isExistingPresentationEdit = (change: TargetIterationChange, appPath: stri
   );
 };
 
-const isOwnedAppSourceEdit = (change: TargetIterationChange, appPath: string): boolean => {
+const isOwnedAppSourceEdit = (change: AppFileChange, appPath: string): boolean => {
   if (isExistingPresentationEdit(change, appPath)) {
     return true;
   }
@@ -251,7 +262,7 @@ const isOwnedAppSourceEdit = (change: TargetIterationChange, appPath: string): b
   return appSource && !routeFile && !newEntry;
 };
 
-const isSourceOnlyRevisionEdit = (change: TargetIterationChange, appPath: string): boolean => {
+const isSourceOnlyRevisionEdit = (change: AppFileChange, appPath: string): boolean => {
   const { path, before, after } = change;
   if (
     before === undefined ||
@@ -437,6 +448,155 @@ const subjectForProposal = (
     : undefined;
 };
 
+const reviewedDraftReconciliation = (state: ProposedWorkflow) => {
+  const candidate = draftReconciliationState.get();
+  const proposal = candidate?.proposal;
+  if (state.phase !== "reviewed" || candidate === null) {
+    return null;
+  }
+  const originPublicationDigest =
+    candidate.publishedOrigin?.publicationProposalDigest ??
+    candidate.publicationScope?.proposal.digest ??
+    state.publishedGitHubDraftProposalDigest ??
+    state.githubDraftProposal?.proposal.digest;
+  const matches = [
+    candidate.kind !== "published-draft-repair",
+    candidate.appId === state.appSpec.appId,
+    candidate.originalReviewDigest === state.reviewReceipt?.digest,
+    originPublicationDigest !== undefined,
+  ].every(Boolean);
+  return matches && originPublicationDigest !== undefined
+    ? { candidate, proposal, originPublicationDigest }
+    : null;
+};
+
+const directDraftReconciliationScope = (
+  state: ProposedWorkflow,
+  subject: DirectProductionSubject,
+  failedGrant: DirectProductionGrant,
+) => {
+  const reviewBinding = reviewedDraftReconciliation(state);
+  const { revision } = subject;
+  const previous = failedGrant.subject.revision;
+  if (
+    reviewBinding === null ||
+    revision?.schemaChange === undefined ||
+    previous?.schemaChange === undefined
+  ) {
+    return null;
+  }
+  if (
+    failedGrant.subject.proposalDigest !== subject.proposalDigest ||
+    failedGrant.subject.appSpecDigest !== subject.appSpecDigest ||
+    !matchesRevisionPredecessor(subject, failedGrant.subject)
+  ) {
+    return null;
+  }
+  const { candidate, proposal, originPublicationDigest } = reviewBinding;
+  if (proposal === undefined) {
+    return null;
+  }
+  const completion = draftReconciliationCompletions
+    .get()
+    .find(({ proposal: retained }) => isDeepStrictEqual(retained, proposal));
+  const compilation = candidate.validation?.compilation;
+  if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- The original owned review and new sealed compiler capture must bind the same candidate.
+    completion?.preparation !== "sealed-before-approval" ||
+    compilation?.release.status !== "published" ||
+    proposal.returnToDraft === true ||
+    candidate.conflicts.length > 0 ||
+    candidate.dependencyCatalog !== undefined ||
+    !isDeepStrictEqual(candidate.review, completion.review) ||
+    !isDeepStrictEqual(compilation, completion.compilation) ||
+    currentDraftCandidateSource(state, candidate) === undefined
+  ) {
+    return null;
+  }
+  const { review, appReview } = completion;
+  const { selection } = compilation.release;
+  const matches = [
+    completion.appId === subject.appId,
+    completion.githubSourceDigest === candidate.githubSourceDigest,
+    completion.root === candidate.root,
+    appReview.appSpecDigest === subject.appSpecDigest,
+    appReview.digest === candidate.originalReviewDigest,
+    review.dependencyCatalog === undefined,
+    review.appId === subject.appId,
+    review.digest === proposal.reviewDigest,
+    review.resolvedTree === proposal.resolvedTree,
+    candidate.validation?.resolvedTree === proposal.resolvedTree,
+    candidate.repositoryId === subject.repositoryId,
+    proposal.repositoryId === subject.repositoryId,
+    `${proposal.owner}/${proposal.name}` === subject.repositoryFullName,
+    proposal.baseBranch === subject.baseBranch,
+    candidate.pullRequestNumber === proposal.pullRequestNumber,
+    candidate.headSha === proposal.expectedHeadSha,
+    candidate.headTree === proposal.expectedHeadTree,
+    candidate.baseSha === proposal.expectedBaseSha,
+    candidate.baseTree === proposal.expectedBaseTree,
+    selection.appId === subject.appId,
+    selection.appSpecDigest === subject.appSpecDigest,
+    previous.priorGrantDigest === revision.priorGrantDigest,
+    previous.priorProposalDigest === revision.priorProposalDigest,
+    previous.schemaChange.priorCueSha256 === revision.schemaChange.priorCueSha256,
+  ].every(Boolean);
+  if (!matches) {
+    return null;
+  }
+  const appPath = `apps/${subject.appId}`;
+  const cuePath = `${appPath}/schema/${subject.appId}.cue`;
+  const releasePath = `${appPath}/schema/release/${selection.releaseId}`;
+  const generated = new Set([
+    `${appPath}/schema/index.ts`,
+    ...GENERATED_RELEASE_MEMBERS.map((member) => `${releasePath}/${member}`),
+  ]);
+  const cue = review.baseChanges.find(({ path }) => path === cuePath);
+  const candidateCueSha256 = cue?.after?.digest;
+  const correctBase =
+    cue?.before?.digest === revision.schemaChange.priorCueSha256 &&
+    cue.before.mode === cue.after?.mode;
+  const sameFileScope = review.baseChanges.every((change) => {
+    const mode = change.after?.mode;
+    const unchangedMode = mode === change.before?.mode;
+    const ordinaryNewFile = change.before === undefined && (mode === "644" || mode === "100644");
+    if (mode === undefined || !(unchangedMode || ordinaryNewFile)) {
+      return false;
+    }
+    return (
+      change === cue || generated.has(change.path) || isSourceOnlyRevisionEdit(change, appPath)
+    );
+  });
+  const correctedBytes =
+    candidateCueSha256 !== undefined &&
+    candidateCueSha256 !== revision.schemaChange.candidateCueSha256 &&
+    candidateCueSha256 !== revision.schemaChange.priorCueSha256;
+  if (!correctBase || !sameFileScope || !correctedBytes) {
+    return null;
+  }
+  const corrected = directProductionSubjectSchema.safeParse({
+    ...subject,
+    revision: {
+      ...revision,
+      schemaChange: { ...revision.schemaChange, candidateCueSha256 },
+      reconciliation: {
+        digest: proposal.digest,
+        originPublicationDigest,
+        originPublicationReceiptDigest: proposal.priorPublicationDigest,
+        pullRequestNumber: proposal.pullRequestNumber,
+        expectedHeadSha: proposal.expectedHeadSha,
+        expectedBaseSha: proposal.expectedBaseSha,
+        resolvedTree: proposal.resolvedTree,
+        reviewDigest: review.digest,
+      },
+    },
+  });
+  return corrected.success ? { subject: corrected.data, proposal, originPublicationDigest } : null;
+};
+
+const sameSubject = (first: DirectProductionSubject | undefined, second: DirectProductionSubject) =>
+  isDeepStrictEqual(first, second);
+
 /** Derive the reviewable scope from the owner's accepted private plan and verified repository. */
 export const directProductionSubjectForPlan = (
   ctx: OwnerContext,
@@ -448,17 +608,39 @@ export const directProductionSubjectForPlan = (
   }
   const predecessor =
     "operation" in state.proposal.target ? revisionPredecessor(state.proposal.digest) : undefined;
-  return subjectForProposal(ctx, state, implementationFiles, predecessor);
+  const subject = subjectForProposal(ctx, state, implementationFiles, predecessor);
+  const { grant, reconciliation } = authorization.get();
+  if (
+    subject?.revision?.schemaChange === undefined ||
+    grant?.subject.proposalDigest !== subject.proposalDigest
+  ) {
+    return subject;
+  }
+  if (reviewedDraftReconciliation(state) === null) {
+    return grant.subject.revision?.reconciliation === undefined ? subject : undefined;
+  }
+  const draft = directDraftReconciliationScope(state, subject, grant);
+  if (
+    draft === null ||
+    !sameSubject(reconciliation?.subject, draft.subject) ||
+    (reconciliation?.failedGrantDigest !== grant.digest &&
+      !sameSubject(grant.subject, draft.subject))
+  ) {
+    return undefined;
+  }
+  return draft.subject;
 };
-
-const sameSubject = (first: DirectProductionSubject | undefined, second: DirectProductionSubject) =>
-  isDeepStrictEqual(first, second);
 
 interface RevisionObservationPorts {
   publication?: (
     auth: ToolContext["session"]["auth"],
     options: { selectedInstallationId: string },
-  ) => Promise<Pick<GitHubPublicationRuntime, "inspectPublishedPullRequest">>;
+  ) => Promise<
+    Pick<
+      GitHubPublicationRuntime,
+      "inspectPublishedPullRequest" | "inspectPublishedReconciliationHead"
+    >
+  >;
   observeProduction?: typeof observeMergedAppProduction;
 }
 
@@ -483,6 +665,7 @@ const priorRevisionDelivery = (state: ProposedWorkflow, priorGrant: DirectProduc
     knownProposals.add(priorDraft);
   }
   const { calls } = currentGitHubPrDeliveryAuthorityProjection();
+  const marker = prior.revision?.reconciliation;
   const delivery = calls.findLast((call) =>
     [
       call.cancelled !== true,
@@ -490,11 +673,204 @@ const priorRevisionDelivery = (state: ProposedWorkflow, priorGrant: DirectProduc
       call.subject.appId === prior.appId,
       call.subject.appSpecDigest === prior.appSpecDigest,
       call.subject.installationId === prior.installationId,
-      call.subject.reconciliationDigest === undefined,
+      call.subject.reconciliationDigest === marker?.digest,
       knownProposals.has(call.subject.proposalDigest),
     ].every(Boolean),
   );
-  return delivery === undefined ? undefined : { delivery, owner, name };
+  if (delivery === undefined) {
+    return null;
+  }
+  if (marker === undefined) {
+    return { delivery, owner, name };
+  }
+  const completion = draftReconciliationCompletions
+    .get()
+    .find(
+      ({ proposal, preparation }) =>
+        preparation === "sealed-before-approval" && proposal.digest === marker.digest,
+    );
+  const reconcile = completion?.proposal;
+  if (
+    reconcile === undefined ||
+    ![
+      delivery.subject.proposalDigest === marker.originPublicationDigest,
+      reconcile.priorPublicationDigest === marker.originPublicationReceiptDigest,
+      reconcile.pullRequestNumber === marker.pullRequestNumber,
+      reconcile.resolvedTree === marker.resolvedTree,
+      reconcile.reviewDigest === marker.reviewDigest,
+    ].every(Boolean)
+  ) {
+    return null;
+  }
+  return { delivery, owner, name, reconcile };
+};
+
+const observePriorRevisionPullRequest = async (
+  runtime: Awaited<ReturnType<NonNullable<RevisionObservationPorts["publication"]>>>,
+  prior: NonNullable<ReturnType<typeof priorRevisionDelivery>>,
+) => {
+  const { proposalDigest } = prior.delivery.subject;
+  if (prior.reconcile === undefined) {
+    return await runtime.inspectPublishedPullRequest?.(proposalDigest);
+  }
+  const reviewedHead = await runtime.inspectPublishedReconciliationHead?.(
+    proposalDigest,
+    prior.reconcile,
+  );
+  return reviewedHead === undefined || reviewedHead === null
+    ? null
+    : await runtime.inspectPublishedPullRequest?.(proposalDigest, reviewedHead);
+};
+
+interface ReconciliationObservationPorts {
+  publication?: (
+    auth: ToolContext["session"]["auth"],
+    options: { selectedInstallationId: string },
+  ) => Promise<
+    Pick<
+      GitHubPublicationRuntime,
+      | "inspectPublishedPullRequest"
+      | "inspectPublishedReconciliationHead"
+      | "inspectExistingDraftReconciliationSource"
+      | "readSucceededDraftPublication"
+    >
+  >;
+}
+
+/** A new combined decision can replace the grant for an exact still-draft schema revision. */
+export const prepareDirectProductionDraftReconciliation = async (
+  ctx: ToolContext,
+  ports: ReconciliationObservationPorts = {},
+): Promise<void> => {
+  ctx.abortSignal.throwIfAborted();
+  const state = appBuilderWorkflowState.get();
+  const { grant } = authorization.get();
+  if (
+    state.phase !== "reviewed" ||
+    reviewedDraftReconciliation(state) === null ||
+    grant?.subject.revision?.schemaChange === undefined
+  ) {
+    return;
+  }
+  const predecessor = revisionPredecessor(state.proposal.digest);
+  const subject = subjectForProposal(ctx, state, [], predecessor);
+  if (predecessor === undefined || subject === undefined) {
+    return;
+  }
+  const corrected = directDraftReconciliationScope(state, subject, grant);
+  const prior = priorRevisionDelivery(state, predecessor);
+  if (corrected === null || prior === null) {
+    return;
+  }
+  const approvedRepair = grant.subject.revision.reconciliation;
+  if (approvedRepair === undefined && !sameSubject(subject, grant.subject)) {
+    return;
+  }
+  if (approvedRepair !== undefined) {
+    const repaired = corrected.subject.revision?.reconciliation;
+    const matchesDraft = [
+      repaired?.originPublicationDigest === approvedRepair.originPublicationDigest,
+      repaired?.originPublicationReceiptDigest === approvedRepair.originPublicationReceiptDigest,
+      repaired?.pullRequestNumber === approvedRepair.pullRequestNumber,
+      repaired?.expectedHeadSha === approvedRepair.expectedHeadSha,
+    ].every(Boolean);
+    if (!matchesDraft || sameSubject(grant.subject, corrected.subject)) {
+      return;
+    }
+  }
+  authorization.update((current) =>
+    current.reconciliation ? { ...current, reconciliation: null } : current,
+  );
+  const { proposal } = corrected;
+  const isCurrent = () => {
+    ctx.abortSignal.throwIfAborted();
+    return (
+      isDeepStrictEqual(appBuilderWorkflowState.get(), state) &&
+      isDeepStrictEqual(authorization.get().grant, grant) &&
+      isDeepStrictEqual(priorRevisionDelivery(state, predecessor), prior) &&
+      isDeepStrictEqual(directDraftReconciliationScope(state, subject, grant), corrected)
+    );
+  };
+  try {
+    const runtime = await (ports.publication ?? githubPublicationRuntimeForSession)(
+      ctx.session.auth,
+      { selectedInstallationId: subject.installationId },
+    );
+    if (!isCurrent()) {
+      return;
+    }
+    const [owned, origin, previous] = await Promise.all([
+      runtime.inspectExistingDraftReconciliationSource({
+        repositoryId: proposal.repositoryId,
+        owner: proposal.owner,
+        name: proposal.name,
+        pullRequestNumber: proposal.pullRequestNumber,
+        priorPublishedProposalDigest: corrected.originPublicationDigest,
+      }),
+      runtime.readSucceededDraftPublication?.(corrected.originPublicationDigest),
+      observePriorRevisionPullRequest(runtime, prior),
+    ]);
+    if (!isCurrent()) {
+      return;
+    }
+    const { draft, base, publishedHeadSha } = owned;
+    const draftMatches = [
+      draft.state === "open",
+      draft.draft,
+      draft.repositoryId === proposal.repositoryId,
+      draft.headRepositoryId === proposal.repositoryId,
+      draft.baseRepositoryId === proposal.repositoryId,
+      draft.number === proposal.pullRequestNumber,
+      draft.pullRequestId === proposal.pullRequestId,
+      draft.headBranch === proposal.branchName,
+      draft.baseBranch === proposal.baseBranch,
+      draft.verifiedBuilderOrigin?.marker === proposal.originMarker,
+      draft.headSha === proposal.expectedHeadSha,
+      draft.headTree === proposal.expectedHeadTree,
+      publishedHeadSha === proposal.expectedHeadSha,
+      origin?.proposalDigest === corrected.originPublicationDigest,
+      origin?.digest === proposal.priorPublicationDigest,
+      origin?.branchSha === proposal.expectedHeadSha,
+      origin?.branchTree === proposal.expectedHeadTree,
+      base.headSha === proposal.expectedBaseSha,
+      base.headTree === proposal.expectedBaseTree,
+      base.installationIdentityDigest === proposal.installationIdentityDigest,
+    ].every(Boolean);
+    const merged = previous?.reviewedTarget;
+    const predecessorMerged = [
+      previous?.state === "merged",
+      previous?.reviewedRevision === true,
+      previous?.mergeCommitSha !== undefined,
+      merged?.repositoryId === proposal.repositoryId,
+      merged?.owner === proposal.owner,
+      merged?.name === proposal.name,
+      merged?.baseBranch === proposal.baseBranch,
+      merged?.pullRequestNumber !== proposal.pullRequestNumber,
+    ].every(Boolean);
+    if (draftMatches && predecessorMerged) {
+      authorization.update((current) => ({
+        ...current,
+        reconciliation: { failedGrantDigest: grant.digest, subject: corrected.subject },
+      }));
+    }
+  } catch {
+    ctx.abortSignal.throwIfAborted();
+  }
+};
+
+export const directProductionReconciliationContinuation = (subject: DirectProductionSubject) => {
+  const marker = subject.revision?.reconciliation;
+  const proposal = draftReconciliationState.get()?.proposal;
+  if (marker === undefined || proposal?.digest !== marker.digest) {
+    return null;
+  }
+  return {
+    tool: "reconcile_github_draft_pr" as const,
+    input: {
+      expectedProposalDigest: marker.digest,
+      approvalReceipt: approvalReceiptForExistingDraftUpdate(proposal),
+    },
+  };
 };
 
 /** Restore a lost live observation through the original approved delivery and current provider readback. */
@@ -516,8 +892,8 @@ export const restoreDirectProductionRevisionPredecessor = async (
     return;
   }
   const subject = subjectForProposal(ctx, state, [], grant);
-  const priorDelivery = subject === undefined ? undefined : priorRevisionDelivery(state, grant);
-  if (subject === undefined || priorDelivery === undefined) {
+  const priorDelivery = subject === undefined ? null : priorRevisionDelivery(state, grant);
+  if (subject === undefined || priorDelivery === null) {
     return;
   }
   const isCurrent = () => {
@@ -529,7 +905,7 @@ export const restoreDirectProductionRevisionPredecessor = async (
       sameSubject(subjectForProposal(ctx, state, [], grant), subject)
     );
   };
-  const { delivery, owner, name } = priorDelivery;
+  const { owner, name } = priorDelivery;
   try {
     const runtime = await (ports.publication ?? githubPublicationRuntimeForSession)(
       ctx.session.auth,
@@ -540,7 +916,7 @@ export const restoreDirectProductionRevisionPredecessor = async (
     if (!isCurrent()) {
       return;
     }
-    const observed = await runtime.inspectPublishedPullRequest?.(delivery.subject.proposalDigest);
+    const observed = await observePriorRevisionPullRequest(runtime, priorDelivery);
     if (
       !isCurrent() ||
       observed?.state !== "merged" ||

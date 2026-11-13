@@ -36,6 +36,8 @@ import {
   writeDraftReconciliationResolution,
 } from "./sandbox-draft-reconciliation";
 
+import { GENERATED_RELEASE_MEMBERS } from "../provisioning/hosted-operator-sandbox-launcher";
+import { discardUnissuedDraftSchemaRelease } from "./sandbox-draft-schema-release";
 import { retireUnusedDraftWorktrees } from "./retire-unused-draft-worktrees";
 import { attachCheckoutDependencyView } from "./dependency-cache";
 import { publicationContentSourceForReviewedWorkflow } from "../agent/github-publication-content-source";
@@ -243,7 +245,98 @@ const importValue = (cwd: string) =>
     { cwd, encoding: "utf-8" },
   ).trim();
 
+const releaseCut = (releaseId: string) => `apps/demo/schema/release/${releaseId}`;
+
 describe("isolated draft reconciliation", () => {
+  const draftReleaseFixture = async () => {
+    const f = fixture();
+    const checkout = path.join(f.root, "repository");
+    const releaseId = "2026-11-16.v2";
+    const baseRelease = "2026-11-16.v1";
+    const release = releaseCut(releaseId);
+    const predecessor = `${releaseCut(baseRelease)}/release-manifest.json`;
+    const baseSha = advanceFixtureBase(f, { [predecessor]: "canonical predecessor" });
+    git(checkout, "switch", "draft");
+    mkdirSync(path.join(checkout, release), { recursive: true });
+    for (const member of GENERATED_RELEASE_MEMBERS) {
+      writeFileSync(
+        path.join(checkout, release, member),
+        member === "release-manifest.json"
+          ? JSON.stringify({
+              app: "demo",
+              schema_version: releaseId,
+              compiler: { name: "schema-compiler" },
+            })
+          : `generated ${member}`,
+      );
+    }
+    git(checkout, "add", "--", release);
+    git(
+      checkout,
+      "-c",
+      "user.name=Fixture",
+      "-c",
+      "user.email=fixture@example.test",
+      "commit",
+      "-m",
+      "draft schema",
+    );
+    git(checkout, "push", "origin", "draft");
+    const headSha = git(checkout, "rev-parse", "HEAD");
+    const prepared = await prepareDraftReconciliation({
+      ...candidateFixtureInput(f, baseSha),
+      headSha,
+    });
+    const discard = async (target = releaseId, validatedTree?: string) =>
+      await discardUnissuedDraftSchemaRelease({
+        assertCurrent: vi.fn<() => void>(),
+        markUncertain: vi.fn<() => void>(),
+        prepared,
+        releaseId: target,
+        sandbox: f.sandbox,
+        validatedTree,
+      });
+    return { checkout, discard, f, headSha, predecessor, prepared, release };
+  };
+
+  it("preserves the base release, original draft, and other edits when preparing to regenerate a draft cut", async () => {
+    const { checkout, discard, f, headSha, predecessor, prepared, release } =
+      await draftReleaseFixture();
+    const appFile = "apps/demo/tests/journey.spec.ts";
+    writeFileSync(path.join(prepared.root, appFile), "private repair");
+    await expect(discard()).resolves.toEqual({ path: release });
+    expect(existsSync(path.join(prepared.root, release))).toBe(false);
+    expect(existsSync(path.join(prepared.root, predecessor))).toBe(true);
+    expect(readFileSync(path.join(prepared.root, appFile), "utf-8")).toBe("private repair");
+    expect(existsSync(path.join(checkout, release))).toBe(true);
+    expect(git(f.root, "--git-dir=remote.git", "rev-parse", "draft")).toBe(headSha);
+  });
+
+  it("rejects an established cut, path escape, and links without altering either release", async () => {
+    const { discard, predecessor, prepared, release } = await draftReleaseFixture();
+    await expect(discard("2026-11-16.v1")).rejects.toThrow("established base history");
+    await expect(discard("../../../../docs")).rejects.toThrow();
+    const fixtureFile = path.join(prepared.root, release, "sql-bundle.sql");
+    rmSync(fixtureFile);
+    symlinkSync(path.join(prepared.root, predecessor), fixtureFile);
+    await expect(discard()).rejects.toThrow("link");
+    expect(lstatSync(fixtureFile).isSymbolicLink()).toBe(true);
+    expect(existsSync(path.join(prepared.root, predecessor))).toBe(true);
+  });
+
+  it("only moves changed compiler output with the validated private candidate tree", async () => {
+    const { discard, prepared, release } = await draftReleaseFixture();
+    const changed = `${release}/sql-bundle.sql`;
+    writeFileSync(path.join(prepared.root, changed), "new checked output");
+    await expect(discard()).rejects.toThrow("does not match the draft");
+    const appFile = "apps/demo/tests/journey.spec.ts";
+    writeFileSync(path.join(prepared.root, appFile), "resolve merge");
+    git(prepared.root, "add", "--", changed, appFile);
+    const candidateTree = git(prepared.root, "write-tree");
+    await expect(discard(undefined, candidateTree)).resolves.toEqual({ path: release });
+    expect(existsSync(path.join(prepared.root, release))).toBe(false);
+  });
+
   const catalogCandidate = async () => {
     const f = fixture(false, true);
     const prepared = await prepareDraftReconciliation(candidateFixtureInput(f));

@@ -333,6 +333,7 @@ export interface ExistingDraftReconciliationAdapter {
     proposal: ExistingDraftReconciliationProposal,
     content: ReconciliationContent,
     recovery?: OwnedDraftInspectionRecovery,
+    assertEffectCurrent?: () => void,
   ) => Promise<GitHubMutationAcknowledgement>;
   inspectAppliedDraftReconciliation: (
     proposal: ExistingDraftReconciliationProposal,
@@ -638,6 +639,7 @@ export const reconcileExistingDraft = async (input: {
   review: ReconciliationReviewReceipt;
   contentSource: GitHubDraftPullRequestContentSource;
   recovery?: OwnedDraftInspectionRecovery;
+  assertEffectCurrent?: () => void;
 }): Promise<ExistingDraftObservation> => {
   const { proposal, review } = input;
   const inspected = await inspectAppliedExistingDraftReconciliation(input);
@@ -655,9 +657,15 @@ export const reconcileExistingDraft = async (input: {
     );
   }
   const content = await readContent(review, input.contentSource);
+  input.assertEffectCurrent?.();
   let result: GitHubMutationAcknowledgement;
   try {
-    result = await input.adapter.reconcileExistingDraft(proposal, content, input.recovery);
+    result = await input.adapter.reconcileExistingDraft(
+      proposal,
+      content,
+      input.recovery,
+      input.assertEffectCurrent,
+    );
   } catch (error) {
     const readback: Parameters<typeof inspectDraftAfterWrite>[0] = {
       adapter: input.adapter,

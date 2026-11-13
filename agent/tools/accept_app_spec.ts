@@ -25,6 +25,8 @@ import {
   sameAppAccessIntent,
 } from "@/lib/agent/app-access-intent";
 import type { ExistingAppChange } from "@/lib/agent/existing-app-changes";
+import { optionalTextFieldSchema } from "@/lib/repository/optional-text-field";
+import type { OptionalTextField } from "@/lib/repository/optional-text-field";
 
 import { prepareAppCreation } from "@/lib/agent/prepare-app-creation";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
@@ -69,6 +71,7 @@ const planAcceptedAppSpec = async (
   ctx: Parameters<typeof prepareAppCreation>[1],
   existingAppChanges?: ExistingAppChange[],
   frameworkUpgrade?: "latest",
+  optionalTextField?: OptionalTextField,
 ) => {
   let latest = appBuilderWorkflowState.get();
   if (
@@ -113,19 +116,21 @@ const planAcceptedAppSpec = async (
       await prepareAppCreation(
         {
           existingAppChanges,
+          optionalTextField,
           frameworkUpgrade:
             frameworkUpgrade ?? ("appSpec" in latest ? latest.appSpec.frameworkUpgrade : undefined),
         },
         ctx,
       );
     },
-    planComplete: "proposal" in latest && existingAppChanges === undefined,
+    planComplete:
+      "proposal" in latest && existingAppChanges === undefined && optionalTextField === undefined,
   });
 };
 
 export default defineTool({
   description:
-    "Silently accept the current AppSpec artifact with explicit build-ready intent and continue planning. Before authoring it, read design-app references/app-spec.md for product coverage guidance; section names, order, and Markdown formatting are advisory. Preserve the user's actual requirements and declare readiness with JSON status build-ready only when the product intent is ready; a later draft status keeps planning open. For an existing app, include existingAppChanges with complete replacement contents for each app-owned file to change; if recording the AppSpec said planning needs changes, call this tool with the accepted artifact and those changes before requesting build approval. No new approval receipt is required. This does not publish or change an external repository.",
+    "Silently accept the current AppSpec artifact with explicit build-ready intent and continue planning. Before authoring it, read design-app references/app-spec.md for product coverage guidance; section names, order, and Markdown formatting are advisory. Preserve the user's actual requirements and declare readiness with JSON status build-ready only when the product intent is ready; a later draft status keeps planning open. For an existing app, include existingAppChanges with complete replacement contents for each app-owned file to change. When adding one optional text field to an existing generated app, pass optionalTextField with its modelId, fieldId, label and any existing changeTypeIds that must write it; Builder preserves existing CUE and authors the change before Build approval. Omit the CUE file from existingAppChanges when using optionalTextField. If recording the AppSpec said planning needs changes, call this tool with the accepted artifact and those changes before requesting build approval. No new approval receipt is required. This does not publish or change an external repository.",
   // oxlint-disable-next-line eslint/complexity -- Preserve the accepted-spec resume protocol while forwarding explicit repair intent.
   async execute(
     {
@@ -133,6 +138,7 @@ export default defineTool({
       expectedArtifactDigest,
       expectedArtifactRevision,
       existingAppChanges,
+      optionalTextField,
       frameworkUpgrade,
       access,
     },
@@ -183,7 +189,7 @@ export default defineTool({
       current.appSpec.artifactRevision === artifact.revision &&
       sameAppAccessIntent(current.appSpec.access, selectedAccess)
     ) {
-      await planAcceptedAppSpec(ctx, existingAppChanges, frameworkUpgrade);
+      await planAcceptedAppSpec(ctx, existingAppChanges, frameworkUpgrade, optionalTextField);
       await emitCurrentBuildWorkflowProjection(ctx);
       return acceptanceResult(current.appSpec, true);
     }
@@ -241,7 +247,7 @@ export default defineTool({
       current.appSpec.appId === accepted.appId &&
       sameAppAccessIntent(current.appSpec.access, accepted.access)
     ) {
-      await planAcceptedAppSpec(ctx, existingAppChanges, frameworkUpgrade);
+      await planAcceptedAppSpec(ctx, existingAppChanges, frameworkUpgrade, optionalTextField);
       await emitCurrentBuildWorkflowProjection(ctx);
       return acceptanceResult(current.appSpec, true);
     }
@@ -269,7 +275,7 @@ export default defineTool({
         };
       },
     });
-    await planAcceptedAppSpec(ctx, existingAppChanges, frameworkUpgrade);
+    await planAcceptedAppSpec(ctx, existingAppChanges, frameworkUpgrade, optionalTextField);
     await emitCurrentBuildWorkflowProjection(ctx);
     return acceptanceResult(accepted, false);
   },
@@ -287,6 +293,7 @@ export default defineTool({
         "Upgrade this existing app to the latest stable Next.js and React versions; new apps select current stable versions automatically. Shared catalog and lockfile updates are included in the reviewed change set.",
       ),
     existingAppChanges: existingAppChangesSchema.optional(),
+    optionalTextField: optionalTextFieldSchema.optional(),
     expectedArtifactDigest: z
       .string()
       .regex(/^[0-9a-f]{64}$/u)

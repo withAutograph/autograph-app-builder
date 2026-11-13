@@ -211,6 +211,30 @@ describe("existing draft reconciliation", () => {
     expect(mock.updates).toBe(1);
   });
 
+  it("rechecks the current approval after reading the reviewed content and before writing", async () => {
+    const mock = mockAdapter();
+    const proposal = await seal(mock.adapter);
+    let read = false;
+    await expect(
+      reconcileExistingDraft({
+        adapter: mock.adapter,
+        assertEffectCurrent() {
+          expect(read).toBe(true);
+          throw new Error("Approval is no longer current.");
+        },
+        contentSource: {
+          async readFile() {
+            read = true;
+            return { bytes, digest: digest(bytes), mode: "644" };
+          },
+        },
+        proposal,
+        review,
+      }),
+    ).rejects.toThrow("Approval is no longer current.");
+    expect(mock.updates).toBe(0);
+  });
+
   it("reports an uncertain update when both the write and PR readback fail", async () => {
     const mock = mockAdapter();
     const proposal = await seal(mock.adapter);

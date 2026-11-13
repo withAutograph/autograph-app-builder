@@ -1263,6 +1263,7 @@ export const createRepositoryProductionNativeHandler =
       ) => {
         const { compiledPublication, intent, scope } = found;
         const review = session.privateBuildDecision?.githubDelivery?.current;
+        const approvedReconciliation = grant.subject.revision?.reconciliation;
         const matches = [
           session.status !== "cancelled",
           review !== undefined && review !== null,
@@ -1275,7 +1276,11 @@ export const createRepositoryProductionNativeHandler =
           compiledPublication !== undefined,
           compiledPublication?.gitSha === intent.sourceSha,
           intent.sourceSha === reviewedHeadSha,
-          compiledPublication?.reviewDigest === review?.reviewDigest,
+          compiledPublication?.reviewDigest ===
+            (approvedReconciliation?.reviewDigest ?? review?.reviewDigest),
+          approvedReconciliation?.digest === review?.reconciliationDigest,
+          approvedReconciliation === undefined ||
+            approvedReconciliation.originPublicationDigest === review?.proposalDigest,
         ].every(Boolean);
         if (!matches) {
           throw schemaRevisionUnverified();

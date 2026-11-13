@@ -195,6 +195,10 @@ export const readGitHubPrDeliveryAuthority = async (
       approved?.repositoryFullName === `${approval.owner}/${approval.name}`,
       approved?.installationId === approval.installationId,
       approved?.baseBranch === approval.baseBranch,
+      approved?.revision?.reconciliation === undefined ||
+        (approved.revision.reconciliation.digest === subject.reconciliationDigest &&
+          approved.revision.reconciliation.originPublicationDigest === subject.proposalDigest &&
+          approved.revision.reconciliation.pullRequestNumber === approval.pullRequestNumber),
     ].every(Boolean);
     if (!matchesRelease) {
       throw unavailable(capturedCallMismatch);

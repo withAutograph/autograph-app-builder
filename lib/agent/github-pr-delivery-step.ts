@@ -57,6 +57,15 @@ export async function approveGitHubPrDelivery(
           baseBranch: input.baseBranch,
           installationId,
         });
+  const approvedRepair = directGrant?.subject.revision?.reconciliation;
+  if (
+    approvedRepair !== undefined &&
+    (approvedRepair.digest !== reconciliationDigest ||
+      approvedRepair.originPublicationDigest !== input.proposalDigest ||
+      approvedRepair.pullRequestNumber !== input.pullRequestNumber)
+  ) {
+    return { reason: "The reviewed draft update has changed.", type: "denied" };
+  }
   if (reconciliationDigest !== undefined || directGrant !== undefined) {
     const { reconciliation } = subject;
     const selectedInstallationId = subject.installationId;

@@ -182,8 +182,9 @@ assessment. Optional `inspect_github_draft_pr_reconciliation` calls with
 cursors/path selection for the resolved diff against the live base and the delta
 from the old PR head. Neither pagination must be exhausted. Inspection progress
 is not review or publication authority. Use the review's returned `nextCall` to
-seal that exact candidate. A separate approval binds both parent commits, the
-resolved tree, both diffs, the draft PR, and the tenant-scoped repository.
+seal that exact candidate. An approval binds both parent commits, the resolved
+tree, both diffs, the draft PR, and the tenant-scoped repository. An eligible
+optional-field correction can use the same approval for Production delivery.
 GitHub receives a merge commit through an expected-head update without force
 pushing. A moved base or head requires a fresh merge, validation, review, and
 approval.
@@ -650,9 +651,24 @@ Build call can omit those files or repeat their exact contents and operations.
 Builder applies the frozen changes once. Changed bytes or additional files
 require a new proposal before Builder can present its Production approval.
 
-For an optional field addition, the same approval covers the checked schema
-update on the existing database. Protected setup binds the exact reviewed
-source to the installed release and verifies the transition before merge.
+For one optional text field on a supported generated CUE layout, Builder
+prepares the schema with `optionalTextField`, preserving the original CUE
+outside the new field, its existing write operations and the release version.
+Form, save and display changes belong to the same frozen proposal. The same
+approval covers the checked schema update on the existing database.
+
+If an earlier candidate failed before merge, Builder can prepare an ordinary
+reconciliation of its owned open draft and retains every checked release on
+the base. If the draft contains stale generated compatibility evidence,
+Builder can move that unissued cut aside inside the private workspace and
+recompile it after verifying the original draft and base. The combined
+approval binds the corrected CUE, both reviewed diffs, and the exact draft
+head, base, app and repository.
+Builder uses it to update that draft, then verifies the new head before Ready
+and merge. A moved head or base requires a new review and approval.
+
+Protected setup binds the exact reviewed source to the installed release
+and verifies the transition before merge.
 Builder applies the checked addition after the provider activates that exact
 merged revision, then observes the app URL.
 After Builder recovers a stopped session, the protected schema install keeps

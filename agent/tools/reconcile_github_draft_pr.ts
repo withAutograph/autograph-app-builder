@@ -11,7 +11,8 @@ import { createHash } from "node:crypto";
 
 import { defineTool } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
-import { always } from "eve/tools/approval";
+import { defineState } from "eve/context";
+import { currentDirectProductionGrant } from "@/lib/agent/direct-production-state";
 import { z } from "zod";
 
 import {
@@ -37,6 +38,25 @@ import type { AppBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { recordPublishedReconciliationForSession } from "@/lib/agent/published-app-source";
 import { assertReconciliationCompletionOwnerForSession } from "@/lib/agent/compiled-operator-artifacts";
 import { inspectDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
+
+const directReconciliationCalls = defineState<
+  { callId: string; grantDigest: string; proposalDigest: string }[]
+>("autograph-app-builder.direct-production-reconciliation-calls.v1", () => []);
+
+const directReconciliationGrant = (
+  ctx: Parameters<typeof currentDirectProductionGrant>[0],
+  proposalDigest: string,
+): ReturnType<typeof currentDirectProductionGrant> => {
+  const candidate = draftReconciliationState.get();
+  if (candidate === null || candidate.proposal?.digest !== proposalDigest) {
+    return undefined;
+  }
+  const grant = currentDirectProductionGrant(ctx, {
+    appId: candidate.appId,
+    repositoryId: candidate.repositoryId,
+  });
+  return grant?.subject.revision?.reconciliation?.digest === proposalDigest ? grant : undefined;
+};
 
 const missingCompletion = () => ({
   status: "completion_context_missing" as const,
@@ -88,13 +108,53 @@ const retainPublishedReconciliation = (
 };
 
 export default defineTool({
-  approval: always(),
+  approval(ctx) {
+    const input = ctx.toolInput;
+    if (input === undefined || input.recordCurrentEquivalentRelease === true) {
+      return "user-approval";
+    }
+    const { expectedProposalDigest, approvalReceipt } = input;
+    const grant = directReconciliationGrant(ctx, expectedProposalDigest);
+    const proposal = draftReconciliationState.get()?.proposal;
+    if (grant === undefined || proposal === undefined) {
+      return "user-approval";
+    }
+    assertApprovalReceipt({
+      actual: approvalReceipt,
+      phase: "draft_update",
+      subjectDigest: proposal.digest,
+      target: approvalTargetFromExistingDraftReconciliation(proposal),
+    });
+    const prior = directReconciliationCalls.get().find((call) => call.callId === ctx.callId);
+    if (prior === undefined) {
+      directReconciliationCalls.update((calls) => [
+        ...calls,
+        { callId: ctx.callId, proposalDigest: proposal.digest, grantDigest: grant.digest },
+      ]);
+    } else if (prior.proposalDigest !== proposal.digest || prior.grantDigest !== grant.digest) {
+      throw new Error("The reviewed draft update no longer matches its Production approval.");
+    }
+    return "approved";
+  },
   description:
-    "After separate exact proposal approval, update the same owned open PR with the reviewed merge commit, or verify that this exact approved merge already succeeded and finish its original release recording. A server-sealed returnToDraft proposal explicitly returns the exact owned Ready PR to draft before publishing the correction; ordinary draft proposals cannot change Ready PRs. Corrected revisions need fresh Ready/merge approval. Recovery reads no current candidate bytes and never writes Git. Optional recordCurrentEquivalentRelease associates this verified publication only with the exact equivalent current compiled capture, without modifying Git or selecting another release. Fresh publication still requires the exact validated checkout. This never force pushes or deploys.",
+    "With the exact Production approval for an eligible schema correction, or a separate exact proposal approval, update the same owned open PR with the reviewed merge commit, or verify that this exact approved merge already succeeded and finish its original release recording. A server-sealed returnToDraft proposal explicitly returns the exact owned Ready PR to draft before publishing the correction; ordinary draft proposals cannot change Ready PRs. The same Production approval can cover Ready and merge for its exact corrected draft. Other corrected revisions need fresh Ready/merge approval. Recovery reads no current candidate bytes and never writes Git. Optional recordCurrentEquivalentRelease associates this verified publication only with the exact equivalent current compiled capture, without modifying Git or selecting another release. Fresh publication still requires the exact validated checkout. This never force pushes or deploys.",
   // oxlint-disable-next-line eslint/complexity -- Completion recovery and fresh publication have distinct approval, ownership and candidate preconditions.
   async execute(input, ctx) {
     ctx.abortSignal?.throwIfAborted();
     const candidate = draftReconciliationState.get();
+    const directCall = directReconciliationCalls.get().find((call) => call.callId === ctx.callId);
+    const assertEffectCurrent = () => {
+      ctx.abortSignal?.throwIfAborted();
+      if (
+        directCall !== undefined &&
+        (directCall.proposalDigest !== input.expectedProposalDigest ||
+          directReconciliationGrant(ctx, input.expectedProposalDigest)?.digest !==
+            directCall.grantDigest)
+      ) {
+        throw new Error("The reviewed draft update no longer matches its Production approval.");
+      }
+    };
+    assertEffectCurrent();
     if (
       publishedDraftRepairCompletions
         .get()
@@ -237,7 +297,7 @@ export default defineTool({
       // A successful Git write can outlive its local delivery projection. Only restore it for
       // the still-current approved candidate; historical recording remains independently valid.
       await assertReconciliationCompletionOwnerForSession(session);
-      ctx.abortSignal?.throwIfAborted();
+      assertEffectCurrent();
       const current = matchingApprovedCandidate(
         appBuilderWorkflowState.get(),
         draftReconciliationState.get(),
@@ -317,6 +377,7 @@ export default defineTool({
     };
     await assertReconciliationCompletionOwnerForSession(session);
     const publication = await runtime.reconcileExistingDraft({
+      assertEffectCurrent,
       contentSource,
       proposal,
       recovery,

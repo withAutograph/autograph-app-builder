@@ -10,13 +10,15 @@ import { resumeApprovedAppBuild } from "@/lib/agent/existing-app-repair-planning
 import { emitCurrentBuildWorkflowProjection } from "@/lib/agent/approved-build-continuation-runtime";
 import { appBuilderWorkflowState, assertUpstreamMutationAllowed } from "@/lib/agent/workflow-state";
 import { refreshOwnedAppSource } from "@/lib/agent/refresh-owned-app-source";
+import { optionalTextFieldSchema } from "@/lib/repository/optional-text-field";
 
 export default defineTool({
   description:
-    "Prepare or resume the implementation plan for the already accepted AppSpec. Ordinary app creation uses the current workspace. Use privateCompute only for an explicitly requested local checker investigation. For a new change on a delivered app, inspect its existing app files and submit nonempty existingAppChanges; a no-files call reuses the old plan. A connected GitHub checkout obtains updated compiler capabilities automatically during approved schema compilation. Only if a delivered starter-backed workspace needs newer shared source, pass refreshSource: true by itself, then inspect and prepare the change. If the tool returns connected_source_retained, continue planning immediately with that checkout. Live app observation is not a planning prerequisite. Never ask the creator for a ref or start another app. If an unapplied repair displaced an approved build, pass only resumeApprovedBuild: true to return to it. Repairs within the same accepted behavior retain their existing approved repair path; a different new proposal requires its normal current Build approval. This tool does not apply, publish, deploy, provision resources or connect providers.",
+    "Prepare or resume the implementation plan for the already accepted AppSpec. Ordinary app creation uses the current workspace. Use privateCompute only for an explicitly requested local checker investigation. For a new change on a delivered app, inspect its existing app files and submit nonempty existingAppChanges; a no-files call reuses the old plan. For a single optional text field on an existing generated app, use optionalTextField with modelId, fieldId, label and any existing changeTypeIds that must write the field. Supply only corresponding app code in existingAppChanges; Builder preserves the existing CUE and adds the field before preparing the Build approval. A connected GitHub checkout obtains updated compiler capabilities automatically during approved schema compilation. Only if a delivered starter-backed workspace needs newer shared source, pass refreshSource: true by itself, then inspect and prepare the change. If the tool returns connected_source_retained, continue planning immediately with that checkout. Live app observation is not a planning prerequisite. Never ask the creator for a ref or start another app. If an unapplied repair displaced an approved build, pass only resumeApprovedBuild: true to return to it. Repairs within the same accepted behavior retain their existing approved repair path; a different new proposal requires its normal current Build approval. This tool does not apply, publish, deploy, provision resources or connect providers.",
   inputSchema: z
     .object({
       existingAppChanges: existingAppChangesSchema.optional(),
+      optionalTextField: optionalTextFieldSchema.optional(),
       frameworkUpgrade: z.literal("latest").optional(),
       privateCompute: z.literal(PRIVATE_COMPUTE_PROFILE_ID).optional(),
       resumeApprovedBuild: z.literal(true).optional(),
@@ -27,6 +29,7 @@ export default defineTool({
         input.resumeApprovedBuild !== true ||
         [
           input.existingAppChanges,
+          input.optionalTextField,
           input.frameworkUpgrade,
           input.privateCompute,
           input.refreshSource,
@@ -38,6 +41,7 @@ export default defineTool({
         input.refreshSource !== true ||
         [
           input.existingAppChanges,
+          input.optionalTextField,
           input.frameworkUpgrade,
           input.privateCompute,
           input.resumeApprovedBuild,
