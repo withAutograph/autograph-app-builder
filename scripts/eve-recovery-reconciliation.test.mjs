@@ -1171,7 +1171,10 @@ test("an internal workflow receipt stays fenced and its private contents are not
     const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
     assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
     assert.deepEqual(records, [
-      JSON.stringify({ event: "builder.cancellation_inbox_refusal", boundary: "runtime_action_result" }),
+      JSON.stringify({
+        event: "builder.cancellation_inbox_refusal",
+        boundary: "runtime_action_result",
+      }),
     ]);
   } finally {
     diagnostic.mockRestore();
