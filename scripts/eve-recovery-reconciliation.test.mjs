@@ -17,6 +17,7 @@ const originalTurnId = "turn-original";
 const childDeploymentId = "child-deployment";
 const originalNativeCallId = "original-native";
 const originalOwnerId = "original-owner";
+const fixtureAppId = "fixture-app";
 const completedStatus = "completed";
 const eventsListOperation = "events.list";
 
@@ -351,21 +352,24 @@ const addSettledCancellation = async ({
   const active = clearPendingCoordinationBatch({
     ...source,
     history: [source.history[0]],
-    ...(beforeCancellationSend === true ? { continuationToken: "old-turn-inbox" } : {}),
   });
+  if (beforeCancellationSend === true) {
+    active.continuationToken = "old-turn-inbox";
+  }
   const before = { ...sourcePair, sessionState: createDurableSessionState({ session: active }) };
+  const idle = {
+    ...active,
+    state: {
+      ...active.state,
+      "eve.harness.emission": { ...emission, sequence: 2, stepIndex: 0, turnId: "" },
+    },
+  };
+  if (beforeCancellationSend === true) {
+    idle.continuationToken = "new-idle-inbox";
+  }
   const settled = {
     ...sourcePair,
-    sessionState: createDurableSessionState({
-      session: {
-        ...active,
-        ...(beforeCancellationSend === true ? { continuationToken: "new-idle-inbox" } : {}),
-        state: {
-          ...active.state,
-          "eve.harness.emission": { ...emission, sequence: 2, stepIndex: 0, turnId: "" },
-        },
-      },
-    }),
+    sessionState: createDurableSessionState({ session: idle }),
   };
   steps.get("prior").output = await output({
     action: stopDuringTurnStep === true ? "cancelled" : "park",
@@ -379,13 +383,19 @@ const addSettledCancellation = async ({
     input: await args(before),
     output: await output(settled),
   });
-  const cancelReceipt = event(stopDuringTurnStep === true ? 4 : 5, "hook_received", "command-hook", {
-    token: `eve:session:${logicalSessionId}:inbox`,
-    payload: await output({ kind: "cancel", turnId: originalTurnId }),
-  });
+  const cancelReceipt = event(
+    stopDuringTurnStep === true ? 4 : 5,
+    "hook_received",
+    "command-hook",
+    {
+      token: `eve:session:${logicalSessionId}:inbox`,
+      payload: await output({ kind: "cancel", turnId: originalTurnId }),
+    },
+  );
+  const queuedSendSlot = stopDuringTurnStep === true ? 5 : 6;
   const queuedSend =
     beforeCancellationSend === true
-      ? event(stopDuringTurnStep === true ? 5 : 6, "hook_received", "old-continuation", {
+      ? event(queuedSendSlot, "hook_received", "old-continuation", {
           token: "old-turn-inbox",
           payload: await output({ kind: "send", payload: { message: "still queued" } }),
         })
@@ -1019,7 +1029,7 @@ test("idle transfer uses the paired output that settled the native cancellation"
 
 test("idle transfer can recover a Stop received inside the producing turn step", async () => {
   const f = await settledIdleFixture({
-    interruptedObservation: { appId: "fixture-app" },
+    interruptedObservation: { appId: fixtureAppId },
     stopDuringTurnStep: true,
   });
   const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
@@ -1031,7 +1041,7 @@ test("idle transfer can recover a Stop received inside the producing turn step",
   assert.deepEqual(result.checkpointCore, f.settled);
 });
 
-test("idle transfer rejects an earlier Send received inside the producing turn step", async () => {
+test("idle transfer rejects a queued Send received inside the producing turn step", async () => {
   const f = await settledIdleFixture({ beforeCancellationSend: true, stopDuringTurnStep: true });
   const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
   assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
@@ -1079,7 +1089,7 @@ test("an unknown dispatched action in the cancelled turn still prevents idle rec
 });
 
 test("settled cancellation can retain an interrupted read-only Production observation", async () => {
-  const f = await settledIdleFixture({ interruptedObservation: { appId: "fixture-app" } });
+  const f = await settledIdleFixture({ interruptedObservation: { appId: fixtureAppId } });
   const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
   assert.equal(result.kind, "ready");
   assert.equal(result.provenance.selectedOrigin.stepId, settledCancelStepId);
@@ -1089,7 +1099,7 @@ test("settled cancellation can retain an interrupted read-only Production observ
 
 test("an interrupted Production observation with another input remains uncertain", async () => {
   const f = await settledIdleFixture({
-    interruptedObservation: { appId: "fixture-app", other: "unsupported" },
+    interruptedObservation: { appId: fixtureAppId, other: "unsupported" },
   });
   const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
   assert.equal(result.kind, "uncertain");
