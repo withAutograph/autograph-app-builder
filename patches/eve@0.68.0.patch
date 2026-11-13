@@ -819,10 +819,11 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,759 @@
+@@ -0,0 +1,781 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
++import { getBlockingWorkflowToolRuns } from "#harness/workflow-tool-runs.js";
 +import { isDeepStrictEqual } from "node:util";
 +import {
 +  sessionCommandHookToken,
@@ -1270,29 +1271,50 @@ new file mode 100644
 +      }
 +    }
 +
-+    const emittedReports = [];
-+    const oldestReportSlot = cancellationInbox.find((item) => item?.payload?.kind === "report")?.slot;
-+    if (oldestReportSlot !== undefined) {
++    const consumedWorkflowSteps = [];
++    const workflowMessageSlots = new Map();
++    for (const item of cancellationInbox) {
++      const kind = item?.payload?.kind;
++      if ((kind === "report" || kind === "outcome") && !workflowMessageSlots.has(kind))
++        workflowMessageSlots.set(kind, item.slot);
++    }
++    if (workflowMessageSlots.size > 0) {
 +      for (const { event, slot } of events) {
-+        if (slot <= oldestReportSlot || slot >= latest.origin.slot ||
-+          event.eventType !== "step_completed" ||
-+          stepNames.get(event.correlationId) !== "emitWorkflowToolRunReportStep") continue;
++        if (slot >= latest.origin.slot || event.eventType !== "step_completed") continue;
++        const name = stepNames.get(event.correlationId);
++        const kind = name === "emitWorkflowToolRunReportStep" ? "report" :
++          name === "releaseAgentInvocationOwnerStep" ? "outcome" : undefined;
++        const oldestSlot = workflowMessageSlots.get(kind);
++        if (oldestSlot === undefined || slot <= oldestSlot) continue;
 +        const origin = inputOrigins.get(event.correlationId);
-+        if (origin === undefined || origin.slot >= slot) continue;
++        if (origin === undefined || origin.slot <= oldestSlot || origin.slot >= slot) continue;
 +        await authorizeOwner(binding);
 +        try {
 +          const step = await world.steps.get(run.runId, event.correlationId, { resolveData: "all" });
 +          if (step.runId !== run.runId || step.stepId !== event.correlationId ||
-+            nativeFunction(step.stepName) !== "emitWorkflowToolRunReportStep" ||
++            nativeFunction(step.stepName) !== name ||
 +            step.status !== "completed" || step.input === undefined) continue;
 +          const argument = (await dependencies.hydrateStepArguments(step.input, run.runId, key))?.args?.[0];
-+          if (isRecord(argument)) emittedReports.push({
-+            startedSlot: origin.slot,
-+            from: argument.from,
-+            update: argument.update,
-+          });
++          if (!isRecord(argument)) continue;
++          if (kind === "report") {
++            consumedWorkflowSteps.push({ kind, startedSlot: origin.slot,
++              from: argument.from, update: argument.update });
++          } else {
++            const session = dependencies.readDurableSession(argument.sessionState);
++            if (session.sessionId !== binding.logicalSessionId ||
++              argument.sessionState.sessionId !== session.sessionId ||
++              typeof argument.ownerId !== "string" || typeof argument.cancelled !== "boolean") continue;
++            const owners = getBlockingWorkflowToolRuns(session.state).filter(
++              (entry) => entry.address.runId === argument.ownerId,
++            );
++            if (owners.length !== 1) continue;
++            const { callId, toolName, origin: callOrigin, address } = owners[0];
++            consumedWorkflowSteps.push({ kind, startedSlot: origin.slot,
++              callId, toolName, turnId: callOrigin.turnId, stepIndex: callOrigin.stepIndex,
++              runId: address.runId, cancelled: argument.cancelled });
++          }
 +        } catch {
-+          // Unreadable emitter input cannot certify that a particular report ran.
++          // A missing or unreadable consuming step grants no settlement proof.
 +        }
 +      }
 +    }
@@ -1342,7 +1364,7 @@ new file mode 100644
 +      nativeEvents,
 +      carriedInbox,
 +      cancellationInbox,
-+      emittedReports,
++      consumedWorkflowSteps,
 +      issues,
 +    };
 +    await authorizeOwner(binding);
@@ -2658,10 +2680,11 @@ diff --git a/dist/src/execution/session/recovery-reconciliation.js b/dist/src/ex
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-reconciliation.js
-@@ -0,0 +1,790 @@
+@@ -0,0 +1,878 @@
 +import { activeTurnId } from "#harness/active-turn-id.js";
 +import { createRuntimeToolResultFromValue } from "#harness/action-result-helpers.js";
-+import { createActionPartialEvent } from "#protocol/message.js";
++import { createActionPartialEvent, createActionResultEvent } from "#protocol/message.js";
++import { workflowToolRunOutcomeToToolResult } from "#execution/tools/workflow/owner-inbox.js";
 +import { parseJsonObject, parseJsonValue } from "#shared/json.js";
 +import { decodeSessionInboxPayload } from "#execution/session-inbox/protocol.js";
 +import { proposeRetrospectiveCancelledToolHistory } from "#execution/session/recovery-cancelled-tool-history.js";
@@ -3000,33 +3023,36 @@ new file mode 100644
 +  return prototype === Object.prototype || prototype === null;
 +}
 +
-+const reportRefKeys = new Set([
++const workflowRefKeys = new Set([
 +  "callId", "ownerRunId", "ownerAnchorRunId", "execution", "input",
 +  "runId", "sequence", "stepIndex", "toolName", "turnId",
 +]);
 +
-+function matchCompletedReport(payload, item, cancel, usedReports, usedPartials) {
++function isBoundWorkflowRef(payload, from) {
++  return record(from) &&
++    Object.keys(from).every((key) => workflowRefKeys.has(key)) &&
++    from.ownerRunId === payload.checkpointOwnerRunId &&
++    (from.ownerAnchorRunId === undefined ||
++      from.ownerAnchorRunId === payload.binding.ownerRunId ||
++      from.ownerAnchorRunId === payload.binding.logicalSessionId) &&
++    ["blocking", "background"].includes(from.execution) &&
++    [from.runId, from.callId, from.toolName, from.turnId].every(
++      (value) => typeof value === "string" && value.length > 0,
++    ) &&
++    from.runId !== from.ownerRunId &&
++    [from.sequence, from.stepIndex].every((value) => Number.isSafeInteger(value) && value >= 0) &&
++    isDeepStrictEqual(parseJsonObject(from.input), from.input);
++}
++
++function matchCompletedReport(payload, item, cancel, usedWorkflowSteps, usedPartials) {
 +  const report = item.payload;
 +  const from = report.from;
 +  if (!record(report) || Object.keys(report).length !== 3 ||
-+    !Object.hasOwn(report, "update") || !record(from) ||
-+    Object.keys(from).some((key) => !reportRefKeys.has(key)) ||
-+    from.ownerRunId !== payload.checkpointOwnerRunId ||
-+    (from.ownerAnchorRunId !== undefined &&
-+      from.ownerAnchorRunId !== payload.binding.ownerRunId &&
-+      from.ownerAnchorRunId !== payload.binding.logicalSessionId) ||
-+    !["blocking", "background"].includes(from.execution) ||
-+    ![from.runId, from.callId, from.toolName, from.turnId].every(
-+      (value) => typeof value === "string" && value.length > 0,
-+    ) ||
-+    from.runId === from.ownerRunId ||
-+    ![from.sequence, from.stepIndex].every((value) => Number.isSafeInteger(value) && value >= 0))
-+    return false;
-+  if (!isDeepStrictEqual(parseJsonObject(from.input), from.input) ||
++    !Object.hasOwn(report, "update") || !isBoundWorkflowRef(payload, from) ||
 +    !isDeepStrictEqual(parseJsonValue(report.update), report.update)) return false;
 +
-+  const matchingReports = (payload.emittedReports ?? []).filter((proof) =>
-+    !usedReports.has(proof) && proof.startedSlot > item.slot &&
++  const matchingReports = (payload.consumedWorkflowSteps ?? []).filter((proof) =>
++    proof.kind === "report" && !usedWorkflowSteps.has(proof) && proof.startedSlot > item.slot &&
 +    isDeepStrictEqual(proof.from, from) && isDeepStrictEqual(proof.update, report.update));
 +  if (matchingReports.length !== 1) return false;
 +  const partial = createActionPartialEvent({
@@ -3038,8 +3064,78 @@ new file mode 100644
 +  const matchingPartials = payload.nativeEvents.slice(0, cancel).filter((event) =>
 +    !usedPartials.has(event) && event.type === partial.type && isDeepStrictEqual(event.data, partial.data));
 +  if (matchingPartials.length !== 1) return false;
-+  usedReports.add(matchingReports[0]);
++  usedWorkflowSteps.add(matchingReports[0]);
 +  usedPartials.add(matchingPartials[0]);
++  return true;
++}
++
++function hasCommittedWorkflowOutcome(history, from) {
++  let call;
++  let result;
++  for (const message of history) {
++    if (!Array.isArray(message.content)) continue;
++    for (const part of message.content) {
++      if (part.toolCallId !== from.callId) continue;
++      if (part.type === "tool-call") {
++        if (call !== undefined || result !== undefined || message.role !== "assistant" ||
++          part.toolName !== from.toolName || part.providerExecuted === true ||
++          !isDeepStrictEqual(part.input, from.input)) return false;
++        call = part;
++      } else if (part.type === "tool-result") {
++        if (call === undefined || result !== undefined || message.role !== "tool" ||
++          part.toolName !== from.toolName || isCancelledToolHistoryResult(part) ||
++          !record(part.output) || part.output.type === "execution-denied") return false;
++        result = part;
++      }
++    }
++  }
++  return result !== undefined;
++}
++
++function isSupportedWorkflowOutcome(result) {
++  if (!record(result)) return false;
++  switch (result.status) {
++    case "completed":
++      return Object.keys(result).length === 2 && Object.hasOwn(result, "output") &&
++        isDeepStrictEqual(parseJsonValue(result.output), result.output);
++    case "failed":
++      return Object.keys(result).length === 2 && Object.hasOwn(result, "error") &&
++        isDeepStrictEqual(parseJsonValue(result.error), result.error);
++    case "cancelled":
++      return Object.keys(result).every((key) => key === "status" || key === "reason") &&
++        (result.reason === undefined || typeof result.reason === "string");
++    default:
++      return false;
++  }
++}
++
++function matchCommittedOutcome(payload, item, cancel, session, usedSteps, usedResults) {
++  const outcome = item.payload;
++  const from = outcome.from;
++  if (!record(outcome) || Object.keys(outcome).length !== 3 ||
++    !isBoundWorkflowRef(payload, from) || from.execution !== "blocking" ||
++    !isSupportedWorkflowOutcome(outcome.result) ||
++    !hasCommittedWorkflowOutcome(session.history, from)) return false;
++  const ownerSteps = (payload.consumedWorkflowSteps ?? []).filter((proof) =>
++    proof.kind === "outcome" && !usedSteps.has(proof) && proof.startedSlot > item.slot &&
++    proof.runId === from.runId && proof.callId === from.callId &&
++    proof.toolName === from.toolName && proof.turnId === from.turnId &&
++    proof.stepIndex === from.stepIndex && proof.cancelled === (outcome.result.status === "cancelled"));
++  if (ownerSteps.length !== 1) return false;
++  const expected = createActionResultEvent({
++    result: workflowToolRunOutcomeToToolResult(outcome),
++    sequence: from.sequence, stepIndex: from.stepIndex, turnId: from.turnId,
++  });
++  const matchingResults = payload.nativeEvents.slice(0, cancel).filter((event) =>
++    !usedResults.has(event) && event.type === expected.type &&
++    event.data?.sequence === expected.data.sequence &&
++    event.data?.stepIndex === expected.data.stepIndex &&
++    event.data?.turnId === expected.data.turnId &&
++    event.data?.status === expected.data.status &&
++    isDeepStrictEqual(event.data?.result, expected.data.result));
++  if (matchingResults.length !== 1) return false;
++  usedSteps.add(ownerSteps[0]);
++  usedResults.add(matchingResults[0]);
 +  return true;
 +}
 +
@@ -3054,8 +3150,9 @@ new file mode 100644
 +    event.type === "turn.started" && sameTurn(event) ? event.meta?.deliveryIds ?? [] : []));
 +  const ended = new Set(payload.nativeEvents[cancel].meta?.deliveryIds ?? []);
 +  const consumed = new Set();
-+  const usedReports = new Set();
++  const usedWorkflowSteps = new Set();
 +  const usedPartials = new Set();
++  const usedResults = new Set();
 +  let matchedStop = false;
 +  const inboxUncertain = (boundary) => {
 +    reportCancellationInboxRefusal(boundary);
@@ -3066,11 +3163,24 @@ new file mode 100644
 +    if (item === null) return inboxUncertain("unsupported_command");
 +    if (item.payload?.kind === "report") {
 +      try {
-+        if (matchCompletedReport(payload, item, cancel, usedReports, usedPartials)) continue;
++        if (matchCompletedReport(payload, item, cancel, usedWorkflowSteps, usedPartials)) continue;
 +      } catch {
 +        // Malformed progress data grants no authority.
 +      }
 +      return inboxUncertain("workflow_report_not_proven_emitted");
++    }
++    if (item.payload?.kind === "outcome") {
++      try {
++        if (matchCommittedOutcome(payload, item, cancel, session, usedWorkflowSteps, usedResults)) continue;
++      } catch {
++        // A malformed or uncommitted outcome grants no authority.
++      }
++      const status = item.payload.result?.status;
++      return inboxUncertain(
++        status === "completed" ? "workflow_outcome_completed_unproven" :
++        status === "failed" ? "workflow_outcome_failed_unproven" :
++        status === "cancelled" ? "workflow_outcome_cancelled_unproven" : "workflow_outcome_invalid",
++      );
 +    }
 +    let command;
 +    try {
