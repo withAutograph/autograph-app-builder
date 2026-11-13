@@ -53,11 +53,17 @@ const { SessionKey } = await load("context/keys.js");
 const { createToolLoopHarness } = await load("harness/tool-loop.js");
 const {
   createActionPartialEvent,
+  createActionResultEvent,
   createTurnCancelledEvent,
   createTurnStartedEvent,
   stampMessageStreamEvent,
 } = await load("protocol/message.js");
 const { createRuntimeToolResultFromValue } = await load("harness/action-result-helpers.js");
+const { settleCancelledToolHistory } = await load("harness/cancelled-tool-history.js");
+const { registerWorkflowToolRun } = await load("harness/workflow-tool-runs.js");
+const { workflowToolRunOutcomeToToolResult } = await load(
+  "execution/tools/workflow/owner-inbox.js",
+);
 const { MockLanguageModelV4 } = await import("ai/test");
 const { z } = await import("zod");
 const ownerRunId = "wrun_physical_original";
@@ -370,6 +376,48 @@ const workflowReportRun = {
   turnId: originalTurnId,
 };
 const workflowReportUpdate = { status: "merged", mergeCommitSha: "c".repeat(40) };
+const workflowOutcomeStepId = "release-owned-workflow-invocation";
+const workflowOutcomeResult = {
+  status: completedStatus,
+  output: { ...workflowReportUpdate, nativeProduction: { status: "available" } },
+};
+const defaultWorkflowOutcome = {
+  kind: "outcome",
+  from: workflowReportRun,
+  result: workflowOutcomeResult,
+};
+const workflowOutcomeToolResult = workflowToolRunOutcomeToToolResult(defaultWorkflowOutcome);
+
+const workflowOutcomeHistory = (history, evidence) => {
+  const { callId, toolName, input } = workflowReportRun;
+  const called = [
+    ...history,
+    {
+      role: "assistant",
+      content: [{ type: "tool-call", toolCallId: callId, toolName, input }],
+    },
+  ];
+  if (evidence.result === "synthetic") {
+    return settleCancelledToolHistory(called, [{ callId, toolName }]);
+  }
+  if (evidence.result === "pending") {
+    return called;
+  }
+  return [
+    ...called,
+    {
+      role: "tool",
+      content: [
+        {
+          type: toolResultKind,
+          toolCallId: callId,
+          toolName,
+          output: { type: "json", value: evidence.historyOutput ?? workflowOutcomeResult.output },
+        },
+      ],
+    },
+  ];
+};
 
 const nativeWorkflowReport = (run, update) =>
   stampMessageStreamEvent(
@@ -398,6 +446,7 @@ const addSettledCancellation = async ({
   cancellationSendEvidence,
   stopDuringTurnStep,
   workflowReport,
+  workflowOutcome,
 }) => {
   const active = clearPendingCoordinationBatch({
     ...source,
@@ -406,11 +455,18 @@ const addSettledCancellation = async ({
   if (beforeCancellationSend === true) {
     active.continuationToken = "old-turn-inbox";
   }
-  const before = { ...sourcePair, sessionState: createDurableSessionState({ session: active }) };
+  const settledActive =
+    workflowOutcome === undefined
+      ? active
+      : { ...active, history: workflowOutcomeHistory(active.history, workflowOutcome) };
+  const before = {
+    ...sourcePair,
+    sessionState: createDurableSessionState({ session: settledActive }),
+  };
   const idle = {
-    ...active,
+    ...settledActive,
     state: {
-      ...active.state,
+      ...settledActive.state,
       "eve.harness.emission": { ...emission, sequence: 2, stepIndex: 0, turnId: "" },
     },
   };
@@ -426,7 +482,7 @@ const addSettledCancellation = async ({
     steps.get("prior").input = await args({
       ...before,
       sessionState: createDurableSessionState({
-        session: { ...active, continuationToken: priorInbox },
+        session: { ...settledActive, continuationToken: priorInbox },
       }),
     });
   }
@@ -448,8 +504,9 @@ const addSettledCancellation = async ({
     cancellationSendEvidence.afterStop !== true;
   const firstReceiptSlot = stopDuringTurnStep === true ? 4 : 5;
   const standardStopSlot = sendBeforeStop ? firstReceiptSlot + 1 : firstReceiptSlot;
-  const stopSlot =
+  const reportStopSlot =
     workflowReport !== undefined && workflowReport.afterStop !== true ? 8 : standardStopSlot;
+  const stopSlot = workflowOutcome === undefined ? reportStopSlot : 11;
   const cancelReceipt = event(stopSlot, "hook_received", commandHookId, {
     token: `eve:session:${logicalSessionId}:inbox`,
     payload: await output({ kind: "cancel", turnId: originalTurnId }),
@@ -524,10 +581,57 @@ const addSettledCancellation = async ({
         event(reportSlot + 2, "step_completed", workflowReportStepId),
       );
     }
-    receipts.sort((left, right) => left.eventId.localeCompare(right.eventId));
   }
+  if (workflowOutcome !== undefined) {
+    const outcomeSlot = workflowReport === undefined ? 5 : 8;
+    const outcome = {
+      ...defaultWorkflowOutcome,
+      from: { ...workflowReportRun, ...workflowOutcome.from },
+      result: {
+        ...workflowOutcomeResult,
+        output: workflowOutcome.receiptOutput ?? workflowOutcomeResult.output,
+      },
+    };
+    receipts.push(
+      event(outcomeSlot, "hook_received", commandHookId, {
+        token: `eve:session:${logicalSessionId}:inbox`,
+        payload: await output(outcome),
+      }),
+    );
+    if (workflowOutcome.omitStep !== true) {
+      const { callId, toolName, turnId, stepIndex, runId } = workflowReportRun;
+      const releasing = registerWorkflowToolRun(active, {
+        callId,
+        toolName,
+        origin: { turnId, stepIndex },
+        address: { runId, hookToken: "owned-delivery-control" },
+        lifetime: "turn",
+      });
+      steps.set(workflowOutcomeStepId, {
+        runId: ownerRunId,
+        stepId: workflowOutcomeStepId,
+        stepName:
+          "step//eve/execution/tools/subagent/invoke-step.js//releaseAgentInvocationOwnerStep",
+        status: completedStatus,
+        input: await args({
+          ownerId: runId,
+          cancelled: false,
+          sessionState: createDurableSessionState({ session: releasing }),
+        }),
+        output: await output({
+          sessionState: createDurableSessionState({ session: releasing }),
+        }),
+      });
+      receipts.push(
+        event(outcomeSlot + 1, "step_started", workflowOutcomeStepId),
+        event(outcomeSlot + 2, "step_completed", workflowOutcomeStepId),
+      );
+    }
+  }
+  receipts.sort((left, right) => left.eventId.localeCompare(right.eventId));
   const afterPriorStepStart = events.findIndex((entry) => entry.eventId === eventId(3)) + 1;
-  const settlementSlot = workflowReport === undefined ? 7 : 9;
+  const reportSettlementSlot = workflowReport === undefined ? 7 : 9;
+  const settlementSlot = workflowOutcome === undefined ? reportSettlementSlot : 12;
   events.splice(
     afterPriorStepStart,
     events.length - afterPriorStepStart,
@@ -795,10 +899,11 @@ const fixture = async (options = {}) => {
           cancellationSendEvidence: options.cancellationSendEvidence,
           stopDuringTurnStep: options.stopDuringTurnStep,
           workflowReport: options.workflowReport,
+          workflowOutcome: options.workflowOutcome,
         })
       : undefined;
   await appendHistoricalInbox(events, event, output, options.inboxSuffix, settled === undefined);
-  const { cancellationSendEvidence, workflowReport } = options;
+  const { cancellationSendEvidence, workflowReport, workflowOutcome } = options;
   const cancelledTurn = { sequence: emission.sequence, turnId: originalTurnId };
   const reportEvents =
     workflowReport === undefined || workflowReport.omitPartial === true
@@ -861,6 +966,22 @@ const fixture = async (options = {}) => {
         ]
       : []),
     ...(workflowReport?.partialAfterCancellation === true ? [] : reportEvents),
+    ...(workflowOutcome === undefined || workflowOutcome.omitNativeResult === true
+      ? []
+      : [
+          stampMessageStreamEvent(
+            createActionResultEvent({
+              rejected: workflowOutcome.nativeRejected === true,
+              sequence: workflowReportRun.sequence,
+              stepIndex: workflowReportRun.stepIndex,
+              turnId: workflowReportRun.turnId,
+              result: {
+                ...workflowOutcomeToolResult,
+                output: workflowOutcome.nativeOutput ?? workflowOutcomeToolResult.output,
+              },
+            }),
+          ),
+        ]),
     ...(options.cancelled === true || settled !== undefined
       ? [
           cancellationSendEvidence === undefined
@@ -1339,6 +1460,50 @@ test("an exactly consumed report leaves a later uncommitted effect fenced", asyn
   assert.equal(result.kind, "uncertain");
   assert.equal(result.reason, uncommittedActionResultReason);
 });
+
+test("idle transfer accepts a consumed workflow outcome with its exact committed call and result", async () => {
+  const f = await settledIdleFixture({
+    encrypted: true,
+    workflowOutcome: { historyOutput: { summary: "The app is available" } },
+  });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "ready");
+  assert.equal(result.provenance.selectedOrigin.stepId, settledCancelStepId);
+  assert.equal(result.provenance.coveredNativeEventIds.includes(eventId(5)), true);
+  assert.equal(result.replayInput, undefined);
+  assert.equal(result.carriedInbox, undefined);
+  assert.deepEqual(result.checkpointCore, f.settled);
+});
+
+test("idle transfer verifies the retained report and outcome for the same workflow without replay", async () => {
+  const f = await settledIdleFixture({ encrypted: true, workflowReport: {}, workflowOutcome: {} });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "ready");
+  assert.equal(result.provenance.coveredNativeEventIds.includes(eventId(5)), true);
+  assert.equal(result.provenance.coveredNativeEventIds.includes(eventId(8)), true);
+  assert.equal(result.replayInput, undefined);
+  assert.equal(result.carriedInbox, undefined);
+  assert.deepEqual(result.checkpointCore, f.settled);
+});
+
+for (const { name, evidence } of [
+  { name: "an uncommitted result", evidence: { result: "pending" } },
+  { name: "a synthetic cancelled result", evidence: { result: "synthetic" } },
+  { name: "a mismatched native result", evidence: { nativeOutput: { status: "different" } } },
+  { name: "no completed release step", evidence: { omitStep: true } },
+  { name: "a mismatched receipt output", evidence: { receiptOutput: { status: "different" } } },
+  { name: "a foreign owner", evidence: { from: { ownerRunId: "wrun_foreign_owner" } } },
+  { name: "a foreign child run", evidence: { from: { runId: "wrun_foreign_child" } } },
+  { name: "no native result", evidence: { omitNativeResult: true } },
+  { name: "a native result marked rejected", evidence: { nativeRejected: true } },
+]) {
+  test(`idle transfer refuses a retained workflow outcome with ${name}`, async () => {
+    const f = await settledIdleFixture({ encrypted: true, workflowOutcome: evidence });
+    const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+    assert.equal(result.kind, "uncertain");
+    assert.equal(result.reason, unconsumedNativeInboxReason);
+  });
+}
 
 test("idle transfer preserves a genuine send queued after the cancellation checkpoint", async () => {
   const queued = {

@@ -235,8 +235,11 @@ the start and cancellation of that turn. Recovery can also account for an
 internal progress report when the same native owner completed the exact
 report-emission step and the retained stream contains its matching progress
 event. This proves display only; it settles no tool result, approval or external
-effect and does not replay the report. Other internal inbox messages without
-settlement proof still prevent transfer. Recovery reports a fixed
+effect and does not replay the report. A blocking workflow outcome additionally
+requires its exact registered child, a completed owner cleanup step after the
+receipt, a matching native action result, and the committed tool transcript.
+A cancelled-history placeholder does not establish that a result committed.
+Other internal inbox messages without settlement proof still prevent transfer. Recovery reports a fixed
 message category to operations without recording payloads or arbitrary message
 kinds. That category provides no authority to discard or replay the message.
 
