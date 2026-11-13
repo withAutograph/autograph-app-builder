@@ -7,6 +7,7 @@ import {
   directProductionSubjectSchema,
 } from "../../lib/agent/direct-production-authorization";
 import {
+  currentDirectProductionProposalIsLive,
   directProductionSubjectForPlan,
   freshTemplateProductionPlan,
   recordDirectProductionGrant,
@@ -111,6 +112,13 @@ export default defineTool({
         status: managedReleaseUnavailable,
         guidance:
           "The app's verified Arrusted installation differs from the selection. Read the release subject for the current plan without a destination to use its verified installation.",
+      };
+    }
+    if (input.directProduction === undefined && currentDirectProductionProposalIsLive(ctx)) {
+      return {
+        status: "production-revision-plan-required" as const,
+        guidance:
+          "The current proposal is already live. For a new requested change, read this app's current source and call prepare_app_creation with the nonempty existingAppChanges for the new change. Then call this tool again to get the new Production subject and present the combined Build card in the same turn. Keep the same app, destination and saved data. If the user only asked to check the live app, use observe-app-production instead.",
       };
     }
     if (subject === undefined) {

@@ -637,6 +637,14 @@ revision uses the existing Production data and access. Builder reads the
 protected setup for the reviewed head before Ready and merge. An app code
 revision that keeps its schema and deployment configuration uses a read-only
 setup check. This covers app-owned forms, server actions, and data reads.
+For each new revision request, Builder prepares a new proposal with nonempty
+`existingAppChanges` before reading the release subject. If the current proposal
+is already live, release preflight returns `production-revision-plan-required`.
+Builder prepares the requested changes and retries in the same turn to present
+the combined Build card. A supported starter-backed session that needs newer
+repository capabilities can use the existing [private source
+refresh](chat-native-repository-access-and-session-resume.md#continuing-a-delivered-app-on-current-shared-source)
+before planning the revision.
 The frozen proposal supplies the Build files for an existing revision. The
 Build call can omit those files or repeat their exact contents and operations.
 Builder applies the frozen changes once. Changed bytes or additional files
