@@ -346,6 +346,7 @@ const addSettledCancellation = async ({
   sourcePair,
   steps,
   beforeCancellationSend,
+  stopDuringTurnStep,
 }) => {
   const active = clearPendingCoordinationBatch({
     ...source,
@@ -366,7 +367,10 @@ const addSettledCancellation = async ({
       },
     }),
   };
-  steps.get("prior").output = await output({ action: "park", ...before });
+  steps.get("prior").output = await output({
+    action: stopDuringTurnStep === true ? "cancelled" : "park",
+    ...before,
+  });
   steps.set(settledCancelStepId, {
     runId: ownerRunId,
     stepId: settledCancelStepId,
@@ -375,21 +379,25 @@ const addSettledCancellation = async ({
     input: await args(before),
     output: await output(settled),
   });
+  const cancelReceipt = event(stopDuringTurnStep === true ? 4 : 5, "hook_received", "command-hook", {
+    token: `eve:session:${logicalSessionId}:inbox`,
+    payload: await output({ kind: "cancel", turnId: originalTurnId }),
+  });
+  const queuedSend =
+    beforeCancellationSend === true
+      ? event(stopDuringTurnStep === true ? 5 : 6, "hook_received", "old-continuation", {
+          token: "old-turn-inbox",
+          payload: await output({ kind: "send", payload: { message: "still queued" } }),
+        })
+      : undefined;
+  const afterPriorStepStart = events.findIndex((entry) => entry.eventId === eventId(3)) + 1;
   events.splice(
-    2,
-    events.length - 2,
-    event(5, "hook_received", "command-hook", {
-      token: `eve:session:${logicalSessionId}:inbox`,
-      payload: await output({ kind: "cancel", turnId: originalTurnId }),
-    }),
-    ...(beforeCancellationSend === true
-      ? [
-          event(6, "hook_received", "old-continuation", {
-            token: "old-turn-inbox",
-            payload: await output({ kind: "send", payload: { message: "still queued" } }),
-          }),
-        ]
-      : []),
+    afterPriorStepStart,
+    events.length - afterPriorStepStart,
+    ...(stopDuringTurnStep === true ? [] : [event(4, "step_completed", "prior")]),
+    cancelReceipt,
+    ...(queuedSend === undefined ? [] : [queuedSend]),
+    ...(stopDuringTurnStep === true ? [event(6, "step_completed", "prior")] : []),
     event(7, "step_started", settledCancelStepId),
     event(8, "step_completed", settledCancelStepId),
   );
@@ -639,6 +647,7 @@ const fixture = async (options = {}) => {
           sourcePair,
           steps,
           beforeCancellationSend: options.beforeCancellationSend,
+          stopDuringTurnStep: options.stopDuringTurnStep,
         })
       : undefined;
   await appendHistoricalInbox(events, event, output, options.inboxSuffix, settled === undefined);
@@ -1006,6 +1015,26 @@ test("idle transfer uses the paired output that settled the native cancellation"
     "execution/session/recovery-resume-phase.js",
   );
   assert.equal(await deriveTerminalRecoveryResumePhase(result), "await-input");
+});
+
+test("idle transfer can recover a Stop received inside the producing turn step", async () => {
+  const f = await settledIdleFixture({
+    interruptedObservation: { appId: "fixture-app" },
+    stopDuringTurnStep: true,
+  });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "ready");
+  assert.equal(result.provenance.selectedOrigin.stepId, settledCancelStepId);
+  assert.ok(result.provenance.coveredNativeEventIds.includes(eventId(4)));
+  assert.equal(result.replayInput, undefined);
+  assert.equal(result.carriedInbox, undefined);
+  assert.deepEqual(result.checkpointCore, f.settled);
+});
+
+test("idle transfer rejects an earlier Send received inside the producing turn step", async () => {
+  const f = await settledIdleFixture({ beforeCancellationSend: true, stopDuringTurnStep: true });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
 });
 
 test("idle transfer preserves a genuine send queued after the cancellation checkpoint", async () => {

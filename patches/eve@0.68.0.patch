@@ -819,10 +819,11 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,706 @@
+@@ -0,0 +1,717 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
++import { isDeepStrictEqual } from "node:util";
 +import {
 +  sessionCommandHookToken,
 +  sessionInboxHookToken,
@@ -1181,10 +1182,20 @@ new file mode 100644
 +    // Preserve accepted, uncommitted command envelopes as inert private evidence.
 +    // Only the activated recovery owner may admit them through the ordinary inbox.
 +    const carriedInbox = [];
-+    const latest = [...unique].sort((left, right) => right.origin.slot - left.origin.slot)[0];
-+    const previousSlot = latest.cancellation === undefined ? latest.origin.slot
-+      : unique.reduce((slot, candidate) => candidate.origin.slot < latest.origin.slot
-+        ? Math.max(slot, candidate.origin.slot) : slot, 0);
++    const [latest, previous] = [...unique].sort((left, right) => right.origin.slot - left.origin.slot);
++    let previousSlot = latest.cancellation === undefined ? latest.origin.slot : previous?.origin.slot ?? 0;
++    if (latest.cancellation !== undefined && previous?.kind === "committed-turn-output") {
++      const emission = previous.sessionState.emissionState;
++      // Stop can reach the running producer before its output is committed.
++      // Include only that producer's step, never an earlier turn's inbox.
++      const settlementInput = steps.get(latest.origin.stepId)?.arguments?.args?.[0];
++      if (emission?.sequence === latest.cancellation.sequence &&
++        activeTurnId(emission) === latest.cancellation.turnId &&
++        isDeepStrictEqual(previous.sessionState, settlementInput?.sessionState) &&
++        isDeepStrictEqual(previous.serializedContext, settlementInput?.serializedContext)) {
++        previousSlot = inputOrigins.get(previous.origin.stepId)?.slot ?? previousSlot;
++      }
++    }
 +    const latestSession = dependencies.readDurableSession(latest.sessionState);
 +    const command = sessionCommandHookToken(binding.logicalSessionId);
 +    const inboxTokens = new Set([command, sessionInboxHookToken(command)]);
