@@ -645,7 +645,9 @@ export const currentDirectProductionGrant = (
 export const currentDirectProductionProposalIsLive = (ctx: OwnerContext): boolean => {
   const state = appBuilderWorkflowState.get();
   const progress = directProductionProgressState.get();
-  if (progress?.stage !== "live" || !("proposal" in state)) return false;
+  if (progress?.stage !== "live" || !("proposal" in state)) {
+    return false;
+  }
   const grant = currentDirectProductionGrant(ctx, { appId: state.appSpec.appId });
   return grant !== undefined && progress.grantDigest === grant.digest;
 };
