@@ -84,11 +84,18 @@ implementation submits the app's CUE schema, request the subject with
 `directProduction` subject with the complete implementation to
 `apply_app_creation` to present **Build and release to Production?**.
 The card covers Build, the reviewed draft, managed data and creator access,
-and merge after required checks. For a requested app code update or safe optional text field addition to
-this session's live private Arrusted app, plan the revision and call
-`release-app-production` before presenting the Build card. Pass the returned
-subject to `apply_app_creation` with an empty implementation file list. The
-revision card covers the reviewed update to the same Production app. After
+and merge after required checks. For a new requested app code update or safe
+optional text field addition to this session's live private Arrusted app,
+inspect its current files and call `prepare_app_creation` with nonempty
+`existingAppChanges` for the new request before reading its release subject.
+If a supported starter-backed session needs newer repository capabilities,
+first call `prepare_app_creation({ refreshSource: true })`, then inspect the
+refreshed source and plan the edits. Call `release-app-production` on the new
+proposal and pass its subject to `apply_app_creation` with an empty
+implementation file list. Present the combined Build card in the same turn.
+If release preflight returns `production-revision-plan-required`, prepare the
+new changes and retry preflight in that turn without asking the creator.
+The revision card covers the reviewed update to the same Production app. After
 publication, use `read_github_pr_delivery` and `finish-github-pr-delivery` to
 verify its existing setup and release the revision. For a schema addition, compile
 the selected schema after Build. The reviewed delivery verifies the checked

@@ -241,11 +241,12 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    for complete contents and `{path, operation: "delete"}` for removal. Rename
    by deleting the old path and adding the new path in the same proposal.
    Preserve unrelated files; do not leave retired backend/demo modules behind.
-   For an explicit direct Production request for an eligible private Arrusted app
-   or a revision that changes app code or adds a safe optional text field,
-   read the `directProduction` subject with `release-app-production` and include
-   it with those implementation files. This presents **Build and release to
-   Production?**. For private preview, the card is **Build this app?**. Do not
+   For an explicit direct Production request for an eligible private Arrusted app,
+   read the `directProduction` subject with `release-app-production` and pass
+   it to `apply_app_creation`. For a new request on an already delivered app,
+   first prepare the nonempty `existingAppChanges` for that request as described
+   in [Production delivery](#production-delivery). This presents **Build and
+   release to Production?**. For private preview, the card is **Build this app?**. Do not
    request approval for session work, source access, inspection, design,
    prototypes, internal drafting, or planning. Never invoke the target command
    through generic shell access.
@@ -574,10 +575,17 @@ existing starter plan, supply the named Arrusted destination and keep the
 starter source. Request `storageKind: "postgres"` if the new implementation
 submits a CUE schema. Pass the subject unchanged with the complete
 `implementationFiles` to `apply_app_creation` for the combined approval.
-For an explicitly requested Production update to this session's already live
-private Arrusted app, prepare the app code or safe optional text field revision and call
-`release-app-production` before Build. Use the returned revision subject and
-empty `implementationFiles` with `apply_app_creation`. After publication,
+For a new Production update requested for this session's already live private
+Arrusted app, inspect the app's current files and call `prepare_app_creation`
+with nonempty `existingAppChanges` that implement the new request. Include
+complete replacement content for each changed file. If a supported
+starter-backed session needs newer repository capabilities, call
+`prepare_app_creation({ refreshSource: true })` by itself before inspection.
+Then read the new proposal's subject with `release-app-production` and use it
+with empty `implementationFiles` in `apply_app_creation` to present the
+combined Build card in the same turn. If release preflight returns
+`production-revision-plan-required`, prepare the new app changes and retry
+preflight in the same turn without asking the creator. After publication,
 `finish-github-pr-delivery` verifies existing data and access before Ready and
 merge. For a schema addition, compile the approved app before publication.
 The delivery tool verifies the checked update before merge and applies it after

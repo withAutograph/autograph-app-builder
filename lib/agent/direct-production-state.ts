@@ -641,6 +641,17 @@ export const currentDirectProductionGrant = (
   return grant;
 };
 
+/** A completed delivery is the predecessor for a new change, not a fresh approval subject. */
+export const currentDirectProductionProposalIsLive = (ctx: OwnerContext): boolean => {
+  const state = appBuilderWorkflowState.get();
+  const progress = directProductionProgressState.get();
+  if (progress?.stage !== "live" || !("proposal" in state)) {
+    return false;
+  }
+  const grant = currentDirectProductionGrant(ctx, { appId: state.appSpec.appId });
+  return grant !== undefined && progress.grantDigest === grant.digest;
+};
+
 export const requestDirectProductionGrant = (
   ctx: OwnerContext,
   input: GrantRequest,

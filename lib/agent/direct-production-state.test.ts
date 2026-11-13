@@ -518,6 +518,21 @@ const markReviewed = () => {
   });
 };
 
+const installReviewedRevisionOutcome = () => {
+  const state = appBuilderWorkflowState.get();
+  if (state.phase !== "planned") {
+    throw new Error("The fixture requires a planned revision.");
+  }
+  // SAFETY: The release tool reads only the reviewed phase and the existing proposal/backend binding.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Unrelated review artifacts are not used in this fixture.
+  const reviewed = {
+    ...state,
+    phase: "reviewed",
+    appBackendKind: "generated-postgres",
+  } as Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
+  appBuilderWorkflowState.update(() => reviewed);
+};
+
 const retainPriorPublication = (grant: ReturnType<typeof installPriorProduction>) => {
   installPlan("kernel", { phase: "applied", appliedPaths: [appliedCuePath] });
   markReviewed();
@@ -608,6 +623,49 @@ describe("direct Production Build authority", () => {
       expect(classifyAccess).not.toHaveBeenCalled();
       expect(repositoryAccessReceiptState.get()).toEqual(accessBefore);
       expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
+    });
+  });
+
+  it.each([{}, { destination: { repository: ARRUSTED_PRODUCTION_REPOSITORY } }])(
+    "requires a new plan instead of exposing the live revision as a new release (%j)",
+    async (input) => {
+      await contextStorage.run(new ContextContainer(), async () => {
+        const live = installPriorNotesSchema();
+        classifyAccess.mockReset().mockResolvedValue(readyAccess);
+        installReviewedRevisionOutcome();
+        expect(currentDirectProductionGrant(releaseContext, live.subject)).toEqual(live);
+        const result = await releaseAppProduction.execute(input, releaseContext);
+        expect(result).toMatchObject({ status: "production-revision-plan-required" });
+        expect(result).not.toHaveProperty("directProduction");
+        expect(classifyAccess).not.toHaveBeenCalled();
+        expect(currentDirectProductionGrant(releaseContext, live.subject)).toEqual(live);
+      });
+    },
+  );
+
+  it("can review an unfinished delivery and a newly planned successor", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const original = installPriorNotesSchema();
+      installReviewedRevisionOutcome();
+      directProductionProgressState.update(() => ({
+        grantDigest: original.digest,
+        stage: "setup",
+      }));
+      expect(await releaseAppProduction.execute({}, releaseContext)).toMatchObject({
+        status: "review-production-release",
+        directProduction: original.subject,
+      });
+    });
+    await contextStorage.run(new ContextContainer(), async () => {
+      const original = installPriorNotesSchema();
+      const successor = installNotesAppSourceRevision();
+      expect(await releaseAppProduction.execute({}, releaseContext)).toMatchObject({
+        status: "review-production-release",
+        directProduction: {
+          proposalDigest: successor.proposal.digest,
+          revision: { priorGrantDigest: original.digest },
+        },
+      });
     });
   });
 
