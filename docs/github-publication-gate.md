@@ -657,11 +657,15 @@ Builder applies the checked addition after the provider activates that exact
 merged revision, then observes the app URL.
 For an already merged schema revision, the delivery read checks the saved
 app and repository, the exact merge SHA, and the current protected schema grant.
-When the operator confirms the revision is live and its schema is installed,
-Builder returns the app URL and settles that release without offering another
-delivery call. A stale delivery request for that revision is refused before
-it captures write authority. Pending or unavailable readback still allows the
-existing continuation under the original authorization and merge receipt.
+When the operator confirms that the exact grant's schema is installed, Builder
+settles the database update without offering another delivery call. This remains
+true if the Production alias now serves a different deployment. Builder reports
+the latest observed app availability and only confirms the requested revision is
+live when that exact merge is active. A stale request for an installed update
+is refused before it captures write authority. If installation remains pending
+or unconfirmed, Builder retains the original continuation and merge receipt.
+A confirmed installed predecessor can anchor a new revision when the owned app
+also responds at its saved Production entry.
 
 For a plan acquired from Arrusted's default branch, `release-app-production`
 reads the verified repository and installation already bound to the plan.

@@ -25,6 +25,7 @@ import {
 } from "../../lib/agent/approved-build-continuation-runtime";
 import {
   directProductionProgressState,
+  directProductionDeliverySettled,
   recordDirectProductionProgress,
 } from "../../lib/agent/direct-production-progress";
 import { hasCurrentProductBehaviorPreview } from "../../lib/agent/product-behavior-state";
@@ -93,7 +94,7 @@ const record = async (ctx: HookContext, forced?: "working" | "blocked") => {
     releaseFinished:
       progress !== null &&
       progress.grantDigest === grant?.digest &&
-      [liveStage, activationUnavailable].includes(progress.stage),
+      (directProductionDeliverySettled(progress.stage) || progress.stage === activationUnavailable),
     adapterSessionId: ctx.session.id,
     repositoryAccess: repositoryAccessReceiptState.get(),
 
@@ -164,7 +165,9 @@ export default defineHook({
           // A standalone status read cannot mark an unmerged release as live.
           const canRecord =
             result.toolName !== observeProductionTool ||
-            (current?.grantDigest === grant.digest && current.stage === activationUnavailable);
+            (current?.grantDigest === grant.digest &&
+              (current.stage === activationUnavailable ||
+                current.stage === "schema-settled-availability-unconfirmed"));
           if (canRecord) {
             recordDirectProductionProgress(grant.digest, stage);
           }

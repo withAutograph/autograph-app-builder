@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createDirectProductionGrant } from "../agent/direct-production-authorization";
 import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
 import {
+  appliedRepositoryProductionSchemaForGrant,
   createRepositoryProductionIntentBoundSetup,
   createRepositoryProductionSignupLeaseGuard,
   assertNoConflictingProductionSetup,
@@ -258,6 +259,66 @@ describe("schema-only Production continuation", () => {
       projectRepositoryProductionSchemaNativeStatus(withProof, true, isReady),
     ).resolves.toEqual(withProof);
     expect(isReady).toHaveBeenCalledTimes(2);
+  });
+
+  it("projects schema setup independently of the currently active merge only for opted-in reads", async () => {
+    const superseded: RepositoryProductionNativeStatus = {
+      version: 1,
+      appId: scope.appId,
+      observedAt: "2026-11-12T18:00:00Z",
+      status: "available",
+      deployment: { state: "active" },
+      app: { state: "sign-in-required", url: "https://apps.example/requests" },
+      requestedRevision: "awaiting-activation",
+    };
+    const isReady = vi.fn(async () => true);
+    await expect(
+      projectRepositoryProductionSchemaNativeStatus(superseded, undefined, isReady),
+    ).resolves.toEqual(superseded);
+    expect(isReady).not.toHaveBeenCalled();
+    await expect(
+      projectRepositoryProductionSchemaNativeStatus(superseded, undefined, isReady, true),
+    ).resolves.toEqual({ ...superseded, schemaSetupSettled: true });
+    isReady.mockResolvedValueOnce(false);
+    await expect(
+      projectRepositoryProductionSchemaNativeStatus(superseded, undefined, isReady, true),
+    ).resolves.toEqual(superseded);
+    await expect(
+      projectRepositoryProductionSchemaNativeStatus(superseded, true, isReady),
+    ).resolves.toEqual(superseded);
+    expect(isReady).toHaveBeenCalledTimes(2);
+  });
+
+  it("requires the applied schema and the exact grant, app and resource binding", () => {
+    const row = fixture().row();
+    const grantDigest = "a".repeat(64);
+    const evidence = {
+      kind: "repository-production-schema-predecessor-v1",
+      grantDigest,
+      resourceId: row.record.resource?.resourceId ?? "missing",
+      prior: { sessionId: oldIntent.sessionId, storage: oldIntent.storage },
+      candidate: revised.storage,
+    };
+    row.record.intent = revised;
+    row.record.workerCheckpoints.push(evidence);
+    const found = { scope, intent: revised };
+    row.record.effects["install-schema"] = { state: "pending", attemptId: randomUUID() };
+    expect(appliedRepositoryProductionSchemaForGrant(row, found, grantDigest)).toBe(false);
+    row.record.effects["install-schema"] = { state: "applied" };
+    expect(appliedRepositoryProductionSchemaForGrant(row, found, grantDigest)).toBe(true);
+    expect(appliedRepositoryProductionSchemaForGrant(row, found, "b".repeat(64))).toBe(false);
+    expect(
+      appliedRepositoryProductionSchemaForGrant(
+        row,
+        { ...found, scope: { ...scope, appId: "another-app" } },
+        grantDigest,
+      ),
+    ).toBe(false);
+    expect(
+      appliedRepositoryProductionSchemaForGrant(row, { ...found, intent: oldIntent }, grantDigest),
+    ).toBe(false);
+    row.record.workerCheckpoints = [{ ...evidence, resourceId: "another-resource" }];
+    expect(appliedRepositoryProductionSchemaForGrant(row, found, grantDigest)).toBe(false);
   });
 
   it("requires the canonical reviewed grant before reporting a schema revision settled", () => {

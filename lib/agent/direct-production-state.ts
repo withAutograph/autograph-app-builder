@@ -26,6 +26,8 @@ import { ownedDraftPublicationHistory } from "./github-draft-publication-lineage
 import { currentGitHubPrDeliveryAuthorityProjection } from "./github-pr-delivery-authority-state";
 import {
   directProductionProgressState,
+  directProductionDeliverySettled,
+  hasAvailableDirectProductionPredecessor,
   recordDirectProductionProgress,
 } from "./direct-production-progress";
 import { readPrivateApplyAuthority } from "./private-apply-authority";
@@ -203,7 +205,10 @@ const revisionPredecessor = (proposalDigest: string): DirectProductionGrant | un
       : undefined;
   }
   const progress = directProductionProgressState.get();
-  return progress?.stage === "live" && progress.grantDigest === grant.digest ? grant : undefined;
+  return hasAvailableDirectProductionPredecessor(progress?.stage) &&
+    progress?.grantDigest === grant.digest
+    ? grant
+    : undefined;
 };
 
 const isExistingPresentationEdit = (change: TargetIterationChange, appPath: string): boolean => {
@@ -642,14 +647,15 @@ export const currentDirectProductionGrant = (
 };
 
 /** A completed delivery is the predecessor for a new change, not a fresh approval subject. */
-export const currentDirectProductionProposalIsLive = (ctx: OwnerContext): boolean => {
+export const currentDirectProductionProposalIsDelivered = (ctx: OwnerContext): boolean => {
   const state = appBuilderWorkflowState.get();
   const progress = directProductionProgressState.get();
-  if (progress?.stage !== "live" || !("proposal" in state)) {
+  const delivered = directProductionDeliverySettled(progress?.stage);
+  if (!delivered || !("proposal" in state)) {
     return false;
   }
   const grant = currentDirectProductionGrant(ctx, { appId: state.appSpec.appId });
-  return grant !== undefined && progress.grantDigest === grant.digest;
+  return grant !== undefined && progress?.grantDigest === grant.digest;
 };
 
 export const requestDirectProductionGrant = (

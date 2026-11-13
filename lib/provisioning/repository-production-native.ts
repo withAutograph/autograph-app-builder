@@ -159,14 +159,34 @@ export const projectRepositoryProductionSchemaNativeStatus = async (
   observed: RepositoryProductionNativeStatus,
   includeActivationProof: true | undefined,
   isSchemaReady: () => Promise<boolean>,
+  includeSchemaSettlement?: true,
 ): Promise<RepositoryProductionNativeStatus> => {
-  if (includeActivationProof === true || observed.requestedRevision !== "live") {
+  if (includeActivationProof === true) {
     return observed;
   }
-  return (await isSchemaReady())
-    ? observed
-    : { ...observed, requestedRevision: "awaiting-activation" };
+  const revisionLive = observed.requestedRevision === "live";
+  if (!revisionLive && includeSchemaSettlement !== true) {
+    return observed;
+  }
+  if (await isSchemaReady()) {
+    return includeSchemaSettlement === true ? { ...observed, schemaSetupSettled: true } : observed;
+  }
+  return revisionLive ? { ...observed, requestedRevision: "awaiting-activation" } : observed;
 };
+
+export const appliedRepositoryProductionSchemaForGrant = (
+  row: RepositoryProductionRow | undefined,
+  found: { scope: RepositoryProductionScope; intent: RepositoryProductionIntent },
+  grantDigest: string,
+): boolean =>
+  row !== undefined &&
+  [
+    isDeepStrictEqual(row.record.scope, found.scope),
+    row.record.intent.sessionId === found.intent.sessionId,
+    isDeepStrictEqual(row.record.intent.storage, found.intent.storage),
+    row.record.effects["install-schema"].state === "applied",
+    retainedRepositoryProductionSchemaPredecessor(row, grantDigest) !== undefined,
+  ].every(Boolean);
 
 /** The schema-only approval leaves the saved creator selection as-is. */
 export const resolveRepositoryProductionPlanRecipient = async (input: {
@@ -1384,6 +1404,13 @@ export const createRepositoryProductionNativeHandler =
                 return true;
               }
               const found = await resolve(owner);
+              const sameObservedApp =
+                observed.appId === found.scope.appId &&
+                observed.destination?.repositoryId === found.scope.repositoryId &&
+                observed.destination.repositoryFullName === found.scope.repositoryFullName;
+              if (expectedSchemaGrantDigest !== undefined && !sameObservedApp) {
+                return false;
+              }
               const row = await store.read(found.scope);
               await found.assertCurrentOwner();
               if (expectedSchemaGrantDigest !== undefined) {
@@ -1397,15 +1424,9 @@ export const createRepositoryProductionNativeHandler =
                   return false;
                 }
               }
-              return (
-                row !== undefined &&
-                isDeepStrictEqual(row.record.scope, found.scope) &&
-                row.record.intent.sessionId === found.intent.sessionId &&
-                isDeepStrictEqual(row.record.intent.storage, found.intent.storage) &&
-                row.record.effects["install-schema"].state === "applied" &&
-                retainedRepositoryProductionSchemaPredecessor(row, grant.digest) !== undefined
-              );
+              return appliedRepositoryProductionSchemaForGrant(row, found, grant.digest);
             },
+            expectedSchemaGrantDigest === undefined ? undefined : true,
           );
         },
         readDeliveryStatus: async (owner, target) => {

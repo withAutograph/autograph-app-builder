@@ -42,6 +42,7 @@ export const repositoryProductionNativeStatusSchema = z
       url: publicAppUrl.optional(),
     }),
     requestedRevision: z.enum(["unassessed", "awaiting-activation", "live"]),
+    schemaSetupSettled: z.literal(true).optional(),
     serviceIssue: z
       .enum(["configuration", "provider-access", "provider-read", "domain-binding", "gateway-read"])
       .optional(),

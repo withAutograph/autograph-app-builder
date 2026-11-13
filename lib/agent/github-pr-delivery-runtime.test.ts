@@ -44,7 +44,7 @@ vi.mock("./direct-production-progress", () => ({
   recordDirectProductionProgress: mocks.recordProgress,
 }));
 vi.mock("./app-production-observation", () => ({
-  readLiveMergedAppProduction: mocks.liveProduction,
+  readSettledMergedAppProductionSchema: mocks.liveProduction,
 }));
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: mocks.runtimeForSession,
@@ -381,9 +381,14 @@ it("offers the existing schema continuation after merge when protected status ha
   expect(mocks.recordProgress).not.toHaveBeenCalled();
 });
 
-it.each(["current", "superseded"] as const)(
-  "settles an exact live schema revision only while the reviewed grant remains %s",
-  async (review) => {
+it.each([
+  ["available", "live", "live", false],
+  ["available", "awaiting-activation", "schema-settled", false],
+  ["service-unavailable", "unassessed", "schema-settled-availability-unconfirmed", false],
+  ["available", "live", "live", true],
+] as const)(
+  "settles protected setup with app status %s, revision %s, stage %s, and replaced review %s",
+  async (status, requestedRevision, stage, reviewReplaced) => {
     const { inspect, observation, proposal, reviewedTarget, runtime } = fixture();
     const mutate = vi.fn();
     const mergeCommitSha = "f".repeat(40);
@@ -404,10 +409,14 @@ it.each(["current", "superseded"] as const)(
         repositoryFullName: target.repositoryFullName,
       },
       observedAt: "2026-11-13T11:00:00Z",
-      status: "available",
-      deployment: { state: "active" },
-      app: { state: "responding", url: "https://apps.example/demo" },
-      requestedRevision: "live",
+      status,
+      deployment: { state: status === "available" ? "active" : "service-unavailable" },
+      app:
+        status === "available"
+          ? { state: "responding", url: "https://apps.example/demo" }
+          : { state: "service-unavailable" },
+      requestedRevision,
+      schemaSetupSettled: true,
     };
     const state = {
       appSpec: { appId: target.appId },
@@ -422,7 +431,7 @@ it.each(["current", "superseded"] as const)(
     inspect.mockResolvedValue({ ...observation, draft: false, state: "merged", mergeCommitSha });
     mocks.directGrant.mockReturnValue(grant);
     mocks.liveProduction.mockImplementation(async () => {
-      if (review === "superseded") {
+      if (reviewReplaced) {
         mocks.getState.mockReturnValue({
           ...state,
           githubDraftProposal: { proposal: { ...proposal, digest: "0".repeat(64) } },
@@ -443,12 +452,12 @@ it.each(["current", "superseded"] as const)(
       mergeCommitSha,
       grant.digest,
     );
-    if (review === "current") {
-      expect(result).toHaveProperty("nativeProduction", nativeProduction);
-      expect(mocks.recordProgress).toHaveBeenCalledExactlyOnceWith(grant.digest, "live");
-    } else {
+    if (reviewReplaced) {
       expect(result).not.toHaveProperty("nativeProduction");
       expect(mocks.recordProgress).not.toHaveBeenCalled();
+    } else {
+      expect(result).toHaveProperty("nativeProduction", nativeProduction);
+      expect(mocks.recordProgress).toHaveBeenCalledExactlyOnceWith(grant.digest, stage);
     }
     expect(mutate).not.toHaveBeenCalled();
     expect(mocks.production).not.toHaveBeenCalled();

@@ -1148,6 +1148,28 @@ describe("direct Production Build authority", () => {
     });
   });
 
+  it.each(["schema-settled", "schema-settled-availability-unconfirmed"] as const)(
+    "only reuses the protected predecessor when the same app is available (%s)",
+    (stage) => {
+      contextStorage.run(new ContextContainer(), () => {
+        const original = installPriorNotesSchema();
+        directProductionProgressState.update(() => ({ grantDigest: original.digest, stage }));
+        recordDirectProductionProgress(original.digest, "schema-update-pending");
+        expect(directProductionProgressState.get()).toEqual({
+          grantDigest: original.digest,
+          stage,
+        });
+        installNotesAppSourceRevision();
+        const successor = directProductionSubjectForPlan(releaseContext);
+        if (stage === "schema-settled") {
+          expect(successor).toMatchObject({ revision: { priorGrantDigest: original.digest } });
+        } else {
+          expect(successor).toBeUndefined();
+        }
+      });
+    },
+  );
+
   it("restores earlier live evidence only after reading the exact owned merge and native revision", async () => {
     await contextStorage.run(new ContextContainer(), async () => {
       const previous = installPriorProduction("setup");

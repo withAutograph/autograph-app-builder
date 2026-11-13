@@ -108,17 +108,18 @@ export async function approveGitHubPrDelivery(
         return { reason: "The reviewed draft revision could not be verified.", type: "denied" };
       }
       if (resumableSchema && observed.mergeCommitSha !== undefined) {
-        const { readLiveMergedAppProduction } = await import("./app-production-observation");
-        const live = await readLiveMergedAppProduction(
+        const { readSettledMergedAppProductionSchema } =
+          await import("./app-production-observation");
+        const settled = await readSettledMergedAppProductionSchema(
           productionTarget,
           ctx,
           observed.mergeCommitSha,
           directGrant.digest,
         );
-        if (live !== undefined) {
+        if (settled !== undefined) {
           return {
             reason:
-              "This reviewed revision is already live. Use the app’s Production status to check availability.",
+              "This reviewed revision’s database update is complete. Use the app’s Production status to check current availability.",
             type: "denied",
           };
         }
