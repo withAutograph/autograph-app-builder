@@ -635,7 +635,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.d.ts b/dist/src/execu
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.d.ts
-@@ -0,0 +1,179 @@
+@@ -0,0 +1,192 @@
 +import type { World, WorkflowRun, StepWithoutData, Event } from "#compiled/@workflow/world/index.js";
 +import type { PayloadKey } from "#compiled/@workflow/core/serialization/encryption.js";
 +import type { DurableSession, DurableSessionState } from "#execution/durable-session-store.js";
@@ -653,12 +653,25 @@ new file mode 100644
 +  readonly ownerRunId: string;
 +  readonly logicalSessionId: string;
 +}
++/** Private evidence from the exact owned child, never a new result or execution grant. */
++export interface CancelledWorkflowEffectWitness {
++  readonly toolName: string;
++  readonly callId: string;
++  readonly turnId: string;
++  readonly turnSequence: number;
++  readonly logicalSessionId: string;
++  readonly checkpointOwnerRunId: string;
++  readonly toolInput: unknown;
++  readonly serializedContext: Readonly<Record<string, unknown>>;
++  readonly completedSteps: readonly { readonly name: string; readonly args: unknown; readonly output: unknown }[];
++}
 +export interface CollectTerminalRecoveryCandidateInput {
 +  readonly binding: NativeRecoveryOwnerBinding;
 +  /** Trusted execution-transfer preflight only; waiting state is never permission to execute. */
 +  readonly allowParked?: boolean;
 +  /** Re-resolve current owner/membership and the canonical source binding. Called before private I/O. */
 +  readonly authorizeOwner: (binding: NativeRecoveryOwnerBinding) => Promise<void>;
++  readonly verifyCancelledWorkflowEffects?: (witness: CancelledWorkflowEffectWitness) => Promise<boolean>;
 +}
 +declare const privateCandidateBrand: unique symbol;
 +/** In-process capability only. JSON serialization does not reveal its private payload. */
@@ -819,7 +832,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,1043 @@
+@@ -0,0 +1,1124 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
@@ -1273,6 +1286,7 @@ new file mode 100644
 +    }
 +
 +    const cancelledWorkflowReceipts = new Set();
++    const settledCancelledWorkflowEffects = new Set();
 +    const certifiedCancelledCalls = new Set();
 +    if (latest.cancellation !== undefined &&
 +      cancellationInbox.some((item) => item?.payload?.kind === "outcome" &&
@@ -1308,9 +1322,9 @@ new file mode 100644
 +              nativeFunction(parentStep.stepName) !== "cancelDescendantTurnsStep" ||
 +              parentStep.status !== "completed" || parentStep.input === undefined) continue;
 +            boundary = "parent_cleanup_snapshot_mismatch";
-+            const input = (await dependencies.hydrateStepArguments(parentStep.input, run.runId, key))?.args?.[0];
-+            if (!isDeepStrictEqual(input?.sessionState, settle.sessionState) ||
-+              !isDeepStrictEqual(input?.serializedContext, settle.serializedContext)) continue;
++            const cleanupInput = (await dependencies.hydrateStepArguments(parentStep.input, run.runId, key))?.args?.[0];
++            if (!isDeepStrictEqual(cleanupInput?.sessionState, settle.sessionState) ||
++              !isDeepStrictEqual(cleanupInput?.serializedContext, settle.serializedContext)) continue;
 +            const session = dependencies.readDurableSession(settle.sessionState);
 +            const registered = getBlockingWorkflowToolRuns(session.state, latest.cancellation.turnId);
 +            for (const item of receipts) {
@@ -1334,6 +1348,30 @@ new file mode 100644
 +              if (childWitness.boundary === "proven") {
 +                cancelledWorkflowReceipts.add(item.eventId);
 +                certifiedCancelledCalls.add(from.callId);
++                if (from.toolName === "finish-github-pr-delivery" &&
++                  typeof input.verifyCancelledWorkflowEffects === "function" &&
++                  childWitness.readDeliverySteps !== undefined) {
++                  let effectBoundary = "missing_completed_steps";
++                  try {
++                    const completedSteps = await childWitness.readDeliverySteps();
++                    if (completedSteps !== undefined) {
++                      await authorizeOwner(binding);
++                      const settled = await input.verifyCancelledWorkflowEffects({
++                        toolName: from.toolName, callId: from.callId,
++                        turnId: from.turnId, turnSequence: from.sequence,
++                        logicalSessionId: binding.logicalSessionId, checkpointOwnerRunId: run.runId,
++                        toolInput: from.input, serializedContext: latest.serializedContext,
++                        completedSteps,
++                      });
++                      await authorizeOwner(binding);
++                      effectBoundary = settled === true ? "proven" : "application_evidence_mismatch";
++                      if (settled === true) settledCancelledWorkflowEffects.add(item.eventId);
++                    }
++                  } catch {
++                    effectBoundary = "evidence_unavailable";
++                  }
++                  try { console.info(JSON.stringify({ event: "builder.cancelled_delivery_effects", boundary: effectBoundary })); } catch {}
++                }
 +              }
 +              boundary = childWitness.boundary;
 +            }
@@ -1442,6 +1480,7 @@ new file mode 100644
 +      cancellationInbox,
 +      consumedWorkflowSteps,
 +      cancelledWorkflowReceipts,
++      settledCancelledWorkflowEffects,
 +      issues,
 +    };
 +    await authorizeOwner(binding);
@@ -1499,7 +1538,8 @@ new file mode 100644
 +  let stage = "child_binding";
 +  const stageChanged = (value) => { stage = value; };
 +  try {
-+    return { boundary: await proveCancelledWorkflowCallback(input, stageChanged) };
++    const witness = await proveCancelledWorkflowCallback(input, stageChanged);
++    return typeof witness === "string" ? { boundary: witness } : witness;
 +  } catch (error) {
 +    return { boundary: "child_witness_unavailable",
 +      failedRead: { stage, errorCategory: witnessErrorCategory(error) } };
@@ -1562,7 +1602,7 @@ new file mode 100644
 +      if (!["completed", "failed", "cancelled"].includes(step.status)) return "child_step_unknown";
 +      // These states prove closure only. Only a completed callback may
 +      // establish delivery; a failed or cancelled sibling proves no effect.
-+      childSteps.set(step.stepId, { name: nativeFunction(step.stepName), status: step.status });
++      childSteps.set(step.stepId, { name: nativeFunction(step.stepName), fullName: step.stepName, status: step.status });
 +    }
 +    if (!page.hasMore) break;
 +    if (!page.cursor || stepCursors.has(page.cursor)) return "child_step_pagination";
@@ -1577,6 +1617,15 @@ new file mode 100644
 +  const created = new Map();
 +  const started = new Set();
 +  const trailingTerminals = new Set();
++  const deliveryPrefix = "step//./lib/agent/github-pr-delivery-step//";
++  const deliveryStepName = (name) => {
++    if (name === `${deliveryPrefix}continueGitHubPrDelivery:eve-authorization`)
++      return "continueGitHubPrDelivery";
++    if (name === `${deliveryPrefix}continueGitHubProductionSchema:eve-authorization`)
++      return "continueGitHubProductionSchema";
++  };
++  const deliveryCompletions = new Map();
++  let deliveryEventsIncomplete = false;
 +  const callbacks = [];
 +  const eventCursors = new Set();
 +  cursor = undefined;
@@ -1593,6 +1642,17 @@ new file mode 100644
 +      if (slot <= lastSlot) return "child_event_order";
 +      lastSlot = slot;
 +      if (event.eventType === "noop") continue;
++      if (from.toolName === "finish-github-pr-delivery" && event.eventType.startsWith("step_")) {
++        const step = childSteps.get(event.correlationId);
++        const eventName = event.eventData?.stepName;
++        if (deliveryStepName(eventName) !== undefined && eventName !== step?.fullName)
++          deliveryEventsIncomplete = true;
++        if (deliveryStepName(step?.fullName) !== undefined && event.eventType === "step_completed") {
++          if (deliveryCompletions.has(event.correlationId) || terminalSlot !== undefined)
++            deliveryEventsIncomplete = true;
++          deliveryCompletions.set(event.correlationId, slot);
++        }
++      }
 +      if (terminalSlot !== undefined) {
 +        // Workflow can settle an already-started sibling after the run's
 +        // terminal event. It cannot supply or replace the callback proof.
@@ -1655,7 +1715,41 @@ new file mode 100644
 +    if (isDeepStrictEqual(args, [item.token, envelope, { ifPresent: true }])) matches++;
 +  }
 +  await authorizeChildRead();
-+  return matches === 1 ? "proven" : "child_callback_unproven";
++  if (matches !== 1) return "child_callback_unproven";
++  if (from.toolName !== "finish-github-pr-delivery") return "proven";
++  const readDeliverySteps = async () => {
++    if (deliveryEventsIncomplete) return;
++    const readOnlyObserver = "step//./lib/agent/observe-app-production-step//observeMergedAppProductionStep:eve-authorization";
++    if ([...childSteps.values()].some(({ fullName }) => typeof fullName !== "string" ||
++      (fullName.startsWith("step//./") && fullName !== readOnlyObserver && deliveryStepName(fullName) === undefined))) return;
++    const completed = [];
++    for (const [id, metadata] of childSteps) {
++      const name = deliveryStepName(metadata.fullName);
++      if (name === undefined) continue;
++      const start = created.get(id);
++      const end = deliveryCompletions.get(id);
++      if (metadata.status !== "completed" || start === undefined || end === undefined ||
++        start >= end || end >= terminalSlot || end >= cancelSlot) return;
++      completed.push({ id, name, fullName: metadata.fullName, start, end });
++    }
++    if (completed.length === 0) return;
++    completed.sort((a, b) => a.end - b.end);
++    const results = [];
++    for (const [index, witness] of completed.entries()) {
++      // The delivery workflow awaits each provider step before scheduling the next.
++      if (index > 0 && completed[index - 1].end >= witness.start) return;
++      await authorizeChildRead();
++      const step = await world.steps.get(childId, witness.id, { resolveData: "all" });
++      if (step.runId !== childId || step.stepId !== witness.id || step.stepName !== witness.fullName ||
++        step.status !== "completed" || step.input === undefined || step.output === undefined) return;
++      const args = (await dependencies.hydrateStepArguments(step.input, childId, childKey))?.args;
++      const output = await dependencies.hydrateStepReturnValue(step.output, childId, childKey);
++      results.push({ name: witness.name, args, output });
++    }
++    await authorizeChildRead();
++    return results;
++  };
++  return { boundary: "proven", readDeliverySteps };
 +}
 +
 +/** Read a finite, unchanged prefix without following an unclosed terminal stream. */
@@ -2942,7 +3036,7 @@ diff --git a/dist/src/execution/session/recovery-reconciliation.js b/dist/src/ex
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-reconciliation.js
-@@ -0,0 +1,914 @@
+@@ -0,0 +1,930 @@
 +import { activeTurnId } from "#harness/active-turn-id.js";
 +import { createRuntimeToolResultFromValue } from "#harness/action-result-helpers.js";
 +import { createActionPartialEvent, createActionResultEvent } from "#protocol/message.js";
@@ -3512,6 +3606,21 @@ new file mode 100644
 +  const committed = committedResultIds(session.history);
 +  const hasInput = payload.nativeEvents.some((event) =>
 +    sameTurn(event) && (event.type === "input.requested" || event.type.startsWith("approval.")));
++  const hasSettledDeliveryEffects = (action, request) => {
++    if (action.kind !== "tool-call" || action.toolName !== "finish-github-pr-delivery") return false;
++    const witnesses = payload.cancellationInbox.filter((item) => {
++      if (item === null || !payload.settledCancelledWorkflowEffects?.has(item.eventId) ||
++        !payload.cancelledWorkflowReceipts?.has(item.eventId) || item.payload?.kind !== "outcome") return false;
++      const from = item.payload.from;
++      return isBoundWorkflowRef(payload, from) && from.callId === action.callId &&
++        from.toolName === action.toolName && from.turnId === turnId && from.sequence === sequence &&
++        from.stepIndex === request.data.stepIndex && isDeepStrictEqual(from.input, action.input);
++    });
++    const dispatches = payload.nativeEvents.flatMap((event) =>
++      event.type === "actions.requested" ? (event.data.actions ?? []) : [])
++      .filter((other) => other.callId === action.callId);
++    return witnesses.length === 1 && dispatches.length === 1;
++  };
 +  const isReadOnlyStatus = (action) =>
 +    action.kind === "tool-call" && action.toolName === "observe-app-production" &&
 +    typeof action.input?.appId === "string" &&
@@ -3528,7 +3637,8 @@ new file mode 100644
 +    }
 +    if (event.type !== "actions.requested") continue;
 +    for (const action of event.data.actions ?? []) {
-+      if (!committed.has(action.callId) && (index >= cancel || hasInput || !isReadOnlyStatus(action))) {
++      if (!committed.has(action.callId) && (index >= cancel || hasInput ||
++        (!isReadOnlyStatus(action) && !hasSettledDeliveryEffects(action, event)))) {
 +        reportUncommittedAction("settled_cancellation", action.toolName, {
 +          stoppedChild: payload.cancellationInbox.some((item) =>
 +            item !== null && payload.cancelledWorkflowReceipts?.has(item.eventId) &&
@@ -4036,11 +4146,11 @@ diff --git a/dist/src/execution/session/terminal-recovery.d.ts b/dist/src/execut
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.d.ts
-@@ -0,0 +1,147 @@
+@@ -0,0 +1,149 @@
 +import type { SessionAuthContext } from "#channel/types.js";
 +import type { SessionCheckpoint } from "#execution/session/handoff.js";
 +import type { TerminalRecoveryWorkflowEntryInput } from "#execution/session/entry-input.js";
-+import type { PrivateNativeRecoveryCandidate, PrivateNativeRecoveryPayload, CollectTerminalRecoveryCandidateInput, TerminalRecoveryCandidateResult } from "#execution/session/recovery-candidate.js";
++import type { CancelledWorkflowEffectWitness, PrivateNativeRecoveryCandidate, PrivateNativeRecoveryPayload, CollectTerminalRecoveryCandidateInput, TerminalRecoveryCandidateResult } from "#execution/session/recovery-candidate.js";
 +
 +export interface TerminalRecoveryDescriptor {
 +  readonly version: 1;
@@ -4105,6 +4215,8 @@ new file mode 100644
 +export interface TerminalRecoveryPorts {
 +  authorizeSourceObservation?(input: { auth: SessionAuthContext; source: NativeSourceObservation }): Promise<{ readonly ownerRunId: string; readonly logicalSessionId: string }>;
 +  authorize(input: TerminalRecoveryAuthorityInput): Promise<void>;
++  /** Recognizes committed effects for one exact cancelled child without reauthorizing it. */
++  verifyCancelledWorkflowEffects?(input: TerminalRecoveryAuthorityInput & CancelledWorkflowEffectWitness): Promise<boolean>;
 +  visitRecoveryPredecessors?(input: TerminalRecoveryAuthorityInput, visit: (window: TerminalRecoveryPredecessorWindow) => Promise<"continue" | "stop">): Promise<void>;
 +  /** Authorizes exact retained calls using app-owned call-bound repeatability proof; missing or failed decisions grant no calls. */
 +  authorizeRepeatableRecoveryCalls?(input: TerminalRecoveryRepeatableCallsInput): Promise<readonly string[] | undefined>;
@@ -4471,7 +4583,7 @@ diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/executio
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,801 @@
+@@ -0,0 +1,807 @@
 +import { deriveTerminalRecoveryResumePhase } from "#execution/session/recovery-resume-phase.js";
 +export { deriveTerminalRecoveryResumePhase };
 +import { createHash } from "node:crypto";
@@ -4654,6 +4766,7 @@ new file mode 100644
 +    preparing("candidate_collect");
 +    const collected = await dependencies.collect({
 +      binding: { ownerRunId: descriptor.sourceOwnerRunId, logicalSessionId: descriptor.logicalSessionId },
++      verifyCancelledWorkflowEffects: cancelledWorkflowEffectsPort(input),
 +      authorizeOwner: async (binding) => {
 +        preparing("candidate_authorization");
 +        if (binding.ownerRunId !== descriptor.sourceOwnerRunId || binding.logicalSessionId !== descriptor.logicalSessionId) throw new Error("Recovery source binding changed.");
@@ -5020,6 +5133,11 @@ new file mode 100644
 +  if (result.kind === "ready") return { ...result, stopMayHaveOccurred };
 +  return stopMayHaveOccurred ? { ...result, kind: "uncertain" } : result;
 +}
++function cancelledWorkflowEffectsPort({ auth, descriptor, ports }) {
++  if (descriptor.executionTransfer?.kind !== "idle-checkpoint" ||
++    typeof ports.verifyCancelledWorkflowEffects !== "function") return undefined;
++  return (witness) => ports.verifyCancelledWorkflowEffects({ ...witness, auth, descriptor });
++}
 +async function quiesceOwnedLineage(input, dependencies, markStopMayHaveOccurred, parkedRecoveryBinding) {
 +  const { auth, descriptor, ports } = input;
 +  if (descriptor.executionTransfer === undefined || dependencies.inspectSource === undefined || dependencies.stopSource === undefined || dependencies.readStopReceipt === undefined || dependencies.collectLineagePreflight === undefined || dependencies.readLineagePreflight === undefined || dependencies.reconcileLineagePreflight === undefined || dependencies.readLogicalInboxOwner === undefined) return { kind: "unavailable", reason: "live-transfer-unsupported" };
@@ -5029,7 +5147,7 @@ new file mode 100644
 +  const reason = `Builder native execution transfer ${descriptor.operationId}`;
 +  const preflight = async () => {
 +    await authorize();
-+    const result = await dependencies.collectLineagePreflight({ binding, authorizeOwner: async (observed) => { if (observed.ownerRunId !== binding.ownerRunId || observed.logicalSessionId !== binding.logicalSessionId) throw new Error("Execution transfer binding changed."); await authorize(); } });
++    const result = await dependencies.collectLineagePreflight({ binding, verifyCancelledWorkflowEffects: cancelledWorkflowEffectsPort(input), authorizeOwner: async (observed) => { if (observed.ownerRunId !== binding.ownerRunId || observed.logicalSessionId !== binding.logicalSessionId) throw new Error("Execution transfer binding changed."); await authorize(); } });
 +    if (result.kind !== "preflight") return result;
 +    const reconciled = await dependencies.reconcileLineagePreflight(result.preflight);
 +    if (reconciled.kind !== "ready") return reconciled;

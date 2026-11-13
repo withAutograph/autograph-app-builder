@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { authorizeRepeatableDraftReconciliationCalls } from "./native-recovery-repeatable-draft-reconciliation";
 import { observePrivateApplyRecoveryCandidate } from "./native-recovery-apply-observation";
+import { verifySettledGitHubDelivery } from "./native-recovery-github-delivery-witness";
 import {
   draftReviewedLineageContextKey,
   draftReviewedWorkflowContextKey,
@@ -659,6 +660,17 @@ export function createHostedNativeRecoveryBinding(
     // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     observeRecoveryHolderBinding: (call: RecoveryHolderCall) =>
       get().observeRecoveryHolderBinding(call),
+    verifyCancelledWorkflowEffects: async (
+      input: Parameters<typeof verifySettledGitHubDelivery>[0] & RecoveryCall,
+    ) =>
+      await Promise.resolve(
+        verifySettledGitHubDelivery(input, {
+          ...principalFor(input),
+          sourceOwnerRunId: input.descriptor.sourceOwnerRunId,
+          sourceAdapterGeneration: input.descriptor.sourceAdapterGeneration,
+          parentCancellationRevision: input.descriptor.parentCancellationRevision,
+        }),
+      ),
     // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     authorizeRepeatableRecoveryCalls: (
       input: Parameters<typeof authorizeRepeatablePrivateApplyCalls>[0] & RecoveryCall,

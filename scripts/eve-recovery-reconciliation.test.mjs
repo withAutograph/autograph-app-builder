@@ -459,6 +459,23 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
       key,
     ),
   };
+  const deliveryStepName =
+    "step//./lib/agent/github-pr-delivery-step//continueGitHubPrDelivery:eve-authorization";
+  const deliveryStep =
+    evidence.delivery === undefined
+      ? undefined
+      : {
+          runId,
+          stepId: "prior-delivery-effect",
+          stepName: deliveryStepName,
+          status: evidence.delivery.status ?? completedStatus,
+          input: await serialization.dehydrateStepArguments(
+            { args: [workflowReportRun.input], closureVars: [] },
+            runId,
+            key,
+          ),
+          output: await serialization.dehydrateStepReturnValue(workflowReportUpdate, runId, key),
+        };
   const { pagedSteps } = evidence;
   const siblingStep =
     pagedSteps === undefined
@@ -473,13 +490,28 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
     nativeWorldEvent(runId, slot, eventType, correlationId, eventData);
   const siblingEvent = (slot, eventType) =>
     childEvent(slot, eventType, siblingStep.stepId, { stepName: siblingStep.stepName });
+  const deliveryEvents =
+    deliveryStep === undefined
+      ? []
+      : [
+          childEvent(1, "step_started", deliveryStep.stepId, { stepName: deliveryStepName }),
+          ...(evidence.delivery.omitCompletion === true
+            ? []
+            : [
+                childEvent(2, "step_completed", deliveryStep.stepId, {
+                  stepName: deliveryStepName,
+                }),
+              ]),
+        ];
+  const offset = deliveryEvents.length === 0 ? 0 : 2;
   const childEvents = [
-    ...(siblingStep === undefined ? [] : [siblingEvent(1, "step_started")]),
-    childEvent(2, "hook_created", childControlHookId, { token: childControlToken }),
+    ...deliveryEvents,
+    ...(siblingStep === undefined ? [] : [siblingEvent(1 + offset, "step_started")]),
+    childEvent(2 + offset, "hook_created", childControlHookId, { token: childControlToken }),
     ...(evidence.omitControl === true
       ? []
       : [
-          childEvent(3, "hook_received", childControlHookId, {
+          childEvent(3 + offset, "hook_received", childControlHookId, {
             token: childControlToken,
             payload: await serialization.dehydrateStepReturnValue(
               { kind: "cancel", reason: childCancelReason },
@@ -488,13 +520,21 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
             ),
           }),
         ]),
-    childEvent(4, "step_started", childResumeStepId, { stepName: childResumeStep.stepName }),
-    childEvent(5, "step_completed", childResumeStepId, { stepName: childResumeStep.stepName }),
-    ...(pagedSteps?.failureBeforeRun === true ? [siblingEvent(6, "step_failed")] : []),
-    childEvent(7, "run_completed", undefined, {}),
-    ...(pagedSteps?.failureAfterRun === true ? [siblingEvent(8, "step_failed")] : []),
+    childEvent(4 + offset, "step_started", childResumeStepId, {
+      stepName: childResumeStep.stepName,
+    }),
+    childEvent(5 + offset, "step_completed", childResumeStepId, {
+      stepName: childResumeStep.stepName,
+    }),
+    ...(pagedSteps?.failureBeforeRun === true ? [siblingEvent(6 + offset, "step_failed")] : []),
+    childEvent(7 + offset, "run_completed", undefined, {}),
+    ...(pagedSteps?.failureAfterRun === true ? [siblingEvent(8 + offset, "step_failed")] : []),
     ...(pagedSteps?.unrelatedLateEvent === true
-      ? [childEvent(9, "step_failed", "unknown-child-step", { stepName: "step//eve//unknownStep" })]
+      ? [
+          childEvent(9 + offset, "step_failed", "unknown-child-step", {
+            stepName: "step//eve//unknownStep",
+          }),
+        ]
       : []),
   ];
   const { runs, events, steps } = world;
@@ -522,7 +562,10 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
     async list(request) {
       assert.equal(request.runId, runId);
       if (pagedSteps === undefined) {
-        return await Promise.resolve({ data: [childResumeStep], hasMore: false });
+        return await Promise.resolve({
+          data: deliveryStep === undefined ? [childResumeStep] : [deliveryStep, childResumeStep],
+          hasMore: false,
+        });
       }
 
       const { pagination } = request;
@@ -537,10 +580,15 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
 
       return { data: [siblingStep], hasMore: false };
     },
-    get: async (id, stepId, options) =>
-      id === runId && stepId === childResumeStepId
-        ? childResumeStep
-        : await steps.get(id, stepId, options),
+    async get(id, stepId, options) {
+      if (id === runId && stepId === childResumeStepId) {
+        return childResumeStep;
+      }
+      if (id === runId && stepId === deliveryStep?.stepId) {
+        return deliveryStep;
+      }
+      return await steps.get(id, stepId, options);
+    },
   };
 };
 
@@ -1160,6 +1208,24 @@ const fixture = async (options = {}) => {
           },
         ]
       : []),
+    ...(options.cancelledOutcome?.delivery === undefined
+      ? []
+      : [
+          {
+            type: "actions.requested",
+            data: {
+              ...batchEvent,
+              actions: [
+                {
+                  callId: workflowReportRun.callId,
+                  kind: "tool-call",
+                  toolName: workflowReportRun.toolName,
+                  input: options.cancelledOutcome.delivery.dispatchInput ?? workflowReportRun.input,
+                },
+              ],
+            },
+          },
+        ]),
     ...(workflowReport?.partialAfterCancellation === true ? [] : reportEvents),
     ...(workflowOutcome === undefined || workflowOutcome.omitNativeResult === true
       ? []
@@ -1254,6 +1320,7 @@ const fixture = async (options = {}) => {
   const collected = await collect({
     allowParked: options.allowParked === true,
     binding: { ownerRunId: boundOwnerRunId, logicalSessionId },
+    verifyCancelledWorkflowEffects: options.verifyCancelledWorkflowEffects,
     authorizeOwner: async (currentBinding) => {
       assert.deepEqual(currentBinding, { logicalSessionId, ownerRunId: boundOwnerRunId });
       assert.ok(Object.isFrozen(currentBinding));
@@ -1877,6 +1944,55 @@ test("a proven descendant cancellation notice does not resolve an unrelated disp
     encrypted: true,
     cancelledOutcome: { pagedSteps: { requests: [], secondStatus: "cancelled" } },
     uncommittedDispatch: true,
+  });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "uncertain");
+  assert.equal(result.reason, uncommittedActionDispatchReason);
+});
+
+test("idle transfer retains a cancelled delivery after exact child effects are verified", async () => {
+  const read = [];
+  const f = await settledIdleFixture({
+    encrypted: true,
+    cancelledOutcome: { delivery: {} },
+    verifyCancelledWorkflowEffects: async (witness) => {
+      read.push(witness);
+      return await Promise.resolve(true);
+    },
+  });
+  assert.equal(read.length, 1);
+  assert.equal(read[0].callId, workflowReportRun.callId);
+  assert.equal(read[0].turnSequence, workflowReportRun.sequence);
+  assert.equal(read[0].logicalSessionId, logicalSessionId);
+  assert.deepEqual(read[0].toolInput, workflowReportRun.input);
+  assert.deepEqual(read[0].completedSteps, [
+    {
+      name: "continueGitHubPrDelivery",
+      args: [workflowReportRun.input],
+      output: workflowReportUpdate,
+    },
+  ]);
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "ready");
+  assert.deepEqual(result.checkpointCore, f.settled);
+  assert.equal(result.replayInput, undefined);
+  assert.equal(result.carriedInbox, undefined);
+});
+
+test.each([
+  { name: "the verifier refuses", delivery: {}, verify: false },
+  {
+    name: "the dispatch input differs",
+    delivery: { dispatchInput: { other: true } },
+    verify: true,
+  },
+  { name: "the effect step failed", delivery: { status: "failed" }, verify: true },
+  { name: "the completion event is missing", delivery: { omitCompletion: true }, verify: true },
+])("idle transfer keeps delivery fenced when $name", async ({ delivery, verify }) => {
+  const f = await settledIdleFixture({
+    encrypted: true,
+    cancelledOutcome: { delivery },
+    verifyCancelledWorkflowEffects: async () => await Promise.resolve(verify),
   });
   const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
   assert.equal(result.kind, "uncertain");
