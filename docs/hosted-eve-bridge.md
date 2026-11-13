@@ -254,7 +254,8 @@ A refusal reports only a fixed witness category and, if a read threw, the
 fixed read stage and error class. It never logs the payload, identifier, or
 provider error text. A verified notice proves
 the child stopped; it does not prove its previous effects were absent or grant
-permission to retry them.
+permission to retry them. An unresolved action still refuses transfer and
+reports only its fixed tool category and the check that refused it.
 Other internal inbox messages without settlement proof still prevent transfer. Recovery reports a fixed
 message category to operations without recording payloads or arbitrary message
 kinds. That category provides no authority to discard or replay the message.
