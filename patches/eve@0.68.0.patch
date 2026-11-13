@@ -670,7 +670,7 @@ new file mode 100644
 +    readonly args: unknown;
 +    readonly output: unknown;
 +  }[];
-+  readonly readCommittedDelivery?: (callId: string) => { readonly toolInput: unknown; readonly result: unknown } | undefined;
++  readonly readCommittedDelivery?: (callId: string) => Promise<{ readonly toolInput: unknown; readonly result: unknown } | undefined>;
 +}
 +export interface CollectTerminalRecoveryCandidateInput {
 +  readonly binding: NativeRecoveryOwnerBinding;
@@ -839,7 +839,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,1240 @@
+@@ -0,0 +1,1331 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
@@ -1381,7 +1381,8 @@ new file mode 100644
 +                        toolInput: from.input, serializedContext: latest.serializedContext,
 +                        completedSteps,
 +                        readCommittedDelivery: (callId) => readEarlierCommittedDelivery({
-+                          callId, from, nativeEvents, candidates: unique, latest, dependencies,
++                          callId, from, nativeEvents, candidates: unique, latest, settlementInput: settle,
++                          dependencies, world, handoffChain: owner.chain, binding, authorizeOwner,
 +                        }),
 +                      });
 +                      await authorizeOwner(binding);
@@ -1807,7 +1808,10 @@ new file mode 100644
 +}
 +
 +/** Keep earlier proof bounded to the one exact call referenced by the child. */
-+function readEarlierCommittedDelivery({ callId, from, nativeEvents, candidates, latest, dependencies }) {
++async function readEarlierCommittedDelivery({
++  callId, from, nativeEvents, candidates, latest, settlementInput,
++  dependencies, world, handoffChain, binding, authorizeOwner,
++}) {
 +  const refuse = (boundary) => {
 +    try { console.info(JSON.stringify({ event: "builder.cancelled_delivery_history", boundary })); } catch {}
 +  };
@@ -1828,7 +1832,8 @@ new file mode 100644
 +  const [result] = results;
 +  const { turnId, sequence, stepIndex } = request.event.data;
 +  const outcome = result.event.data;
-+  if (request.index >= result.index || !Number.isSafeInteger(sequence) || sequence >= from.sequence ||
++  if (request.index >= result.index || !Number.isSafeInteger(sequence) || sequence < 0 || sequence >= from.sequence ||
++    !Number.isSafeInteger(stepIndex) || stepIndex < 0 || typeof turnId !== "string" || turnId.length === 0 ||
 +    request.action.kind !== "tool-call" || request.action.toolName !== from.toolName ||
 +    outcome.turnId !== turnId || outcome.sequence !== sequence || outcome.stepIndex !== stepIndex ||
 +    outcome.status !== "completed" || outcome.result?.kind !== "tool-result" ||
@@ -1857,13 +1862,26 @@ new file mode 100644
 +  };
 +  const latestHistory = retainedHistory(latest);
 +  if (latestHistory === "conflicting") return refuse("prior_latest_history_conflict");
++  const isEarlierCommit = (checkpoint) => {
++    const emission = checkpoint.sessionState.emissionState;
++    // Coordination emits the result at the requested step, then adopts it
++    // in the already-advanced cursor. The turn sequence advances at epilogue.
++    const sameTurn = emission.sequence === sequence && emission.turnId === turnId &&
++      Number.isSafeInteger(emission.stepIndex) && emission.stepIndex > stepIndex;
++    const laterTurn = Number.isSafeInteger(emission.sequence) &&
++      emission.sequence > sequence && emission.sequence <= from.sequence;
++    return (sameTurn || laterTurn) && retainedHistory(checkpoint) === "matches";
++  };
 +  const earlier = candidates.some((checkpoint) =>
-+    checkpoint.origin.slot < latest.origin.slot &&
-+    checkpoint.kind === "committed-turn-output" &&
-+    checkpoint.sessionState.emissionState.sequence > sequence &&
-+    checkpoint.sessionState.emissionState.sequence <= from.sequence &&
-+    retainedHistory(checkpoint) === "matches");
-+  if (!earlier) return refuse("prior_committed_checkpoint");
++    checkpoint.origin.slot < latest.origin.slot && checkpoint.kind === "committed-turn-output" &&
++    isEarlierCommit(checkpoint));
++  // A verified Stop settlement preserves successful earlier tool history.
++  // An exact pair in its input and output proves adoption even if the
++  // intermediate turn was committed by a preceding physical owner.
++  const adoptedAtSettlement = !earlier && latestHistory === "matches" &&
++    latest.kind === "committed-cancelled-turn-output" &&
++    latest.cancellation?.sequence === from.sequence && latest.cancellation.turnId === from.turnId &&
++    retainedHistory(settlementInput) === "matches";
 +  // Compaction may remove the older call and result from the latest prompt.
 +  // An earlier exact durable commit remains evidence; do not accept a
 +  // contradictory retained copy or an absence with no native compaction.
@@ -1872,7 +1890,80 @@ new file mode 100644
 +    event.data?.sessionId === latest.sessionState.sessionId &&
 +    Number.isSafeInteger(event.data.sequence) && event.data.sequence >= sequence &&
 +    event.data.sequence <= from.sequence)) return refuse("prior_history_without_compaction");
++  if (!earlier && !adoptedAtSettlement) {
++    let historical;
++    try {
++      historical = await hasEarlierHandoffDeliveryCheckpoint({
++        world, dependencies, handoffChain, binding, authorizeOwner, matches: isEarlierCommit,
++      });
++    } catch {
++      return refuse("prior_handoff_checkpoint_unavailable");
++    }
++    if (!historical) return refuse(
++      latestHistory === "absent" ? "prior_compacted_checkpoint_missing" : "prior_committed_checkpoint",
++    );
++  }
 +  return { toolInput: request.action.input, result: outcome.result.output };
++}
++
++/** Only the already-verified in-generation parents of this shared stream are eligible. */
++export async function hasEarlierHandoffDeliveryCheckpoint({
++  world, dependencies, handoffChain, binding, authorizeOwner, matches,
++}) {
++  const guarded = async (operation) => {
++    await authorizeOwner(binding);
++    const value = await operation();
++    await authorizeOwner(binding);
++    return value;
++  };
++  for (const edge of [...handoffChain].reverse()) {
++    const first = edge.events.find((event) => event.runId === edge.parentRunId &&
++      event.correlationId === edge.startStepId &&
++      ["step_created", "step_started"].includes(event.eventType));
++    if (first === undefined) throw new Error("Historical delivery cutoff unavailable.");
++    const cutoff = dependencies.requireEventSlot(first.eventId);
++    const names = new Map(edge.events
++      .filter((event) => event.runId === edge.parentRunId &&
++        dependencies.requireEventSlot(event.eventId) < cutoff &&
++        typeof event.correlationId === "string" && typeof event.eventData?.stepName === "string")
++      .map((event) => [event.correlationId, nativeFunction(event.eventData.stepName)]));
++    let parent;
++    let parentKey;
++    for (const event of [...edge.events].reverse()) {
++      const { correlationId: stepId, runId } = event;
++      if (runId !== edge.parentRunId || event.eventType !== "step_completed" ||
++        typeof stepId !== "string" || dependencies.requireEventSlot(event.eventId) >= cutoff) continue;
++      let name = names.get(stepId);
++      if (name === undefined) {
++        const metadata = await guarded(() => world.steps.get(runId, stepId, { resolveData: "none" }));
++        if (metadata.runId !== runId || metadata.stepId !== stepId)
++          throw new Error("Historical delivery step identity differs.");
++        name = nativeFunction(metadata.stepName);
++      }
++      if (name !== "turnStep") continue;
++      const step = await guarded(() => world.steps.get(runId, stepId, { resolveData: "all" }));
++      if (step.runId !== runId || step.stepId !== stepId || nativeFunction(step.stepName) !== name ||
++        step.status !== "completed" || step.output === undefined)
++        throw new Error("Historical delivery step is unavailable.");
++      if (parent === undefined) {
++        parent = await guarded(() => world.runs.get(runId, { resolveData: "all" }));
++        if (parent.runId !== runId || (parent.expiredAt !== undefined &&
++          new Date(parent.expiredAt).getTime() <= dependencies.now()))
++          throw new Error("Historical delivery owner is unavailable.");
++        parentKey = await guarded(() => dependencies.resolveRunEncryptionKey(world, parent));
++      }
++      const output = await guarded(() => dependencies.hydrateStepReturnValue(step.output, runId, parentKey));
++      if (output?.action === "done" && output.sessionState === undefined &&
++        output.serializedContext === undefined) continue;
++      if (!isRecord(output?.sessionState) || !isRecord(output.serializedContext) ||
++        output.sessionState.sessionId !== binding.logicalSessionId ||
++        output.serializedContext["eve.sessionId"] !== binding.logicalSessionId ||
++        dependencies.readDurableSession(output.sessionState).sessionId !== binding.logicalSessionId)
++        throw new Error("Historical delivery checkpoint logical identity differs.");
++      if (matches(output)) return true;
++    }
++  }
++  return false;
 +}
 +
 +/** Read a finite, unchanged prefix without following an unclosed terminal stream. */
