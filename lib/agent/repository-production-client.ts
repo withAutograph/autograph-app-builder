@@ -29,6 +29,7 @@ import { retainManagedProductionDeliveryRequirement } from "./production-deliver
 import {
   repositoryProductionExpectedMergeShaSchema,
   repositoryProductionNativeStatusSchema,
+  repositoryProductionSchemaGrantDigestSchema,
 } from "../provisioning/repository-production-native-status-contract";
 
 const setupSchema = z.object({
@@ -67,6 +68,7 @@ interface RepositoryProductionRequestExtras {
   repositoryFullName?: string;
   reviewedHeadSha?: string;
   expectedMergeSha?: string;
+  expectedSchemaGrantDigest?: string;
   includeActivationProof?: true;
   schemaActivation?: RepositoryProductionSchemaActivation;
   approvalReference?: RepositoryProductionApprovalReference;
@@ -172,6 +174,7 @@ export const createRepositoryProductionClient = (input: {
       (action === nativeStatusAction && extra.expectedMergeSha !== undefined);
     if (
       withRevision &&
+      extra.expectedSchemaGrantDigest === undefined &&
       response.status === 400 &&
       (await repositoryProductionErrorCode(response.clone())) === "request_invalid"
     ) {
@@ -277,6 +280,7 @@ export const createRepositoryProductionClient = (input: {
       appId: string,
       expectedMergeSha?: string,
       includeActivationProof?: true,
+      expectedSchemaGrantDigest?: string,
     ) => {
       const extra: RepositoryProductionRequestExtras = {};
       if (expectedMergeSha !== undefined) {
@@ -284,6 +288,10 @@ export const createRepositoryProductionClient = (input: {
         if (includeActivationProof === true) {
           extra.includeActivationProof = includeActivationProof;
         }
+      }
+      if (expectedSchemaGrantDigest !== undefined) {
+        extra.expectedSchemaGrantDigest =
+          repositoryProductionSchemaGrantDigestSchema.parse(expectedSchemaGrantDigest);
       }
       const result = await send(
         appId,
@@ -316,7 +324,9 @@ export const createRepositoryProductionClient = (input: {
 };
 
 /** Workload-authenticated calls retain the canonical Builder owner and session. */
-export const repositoryProductionClientForContext = async (ctx: WorkflowStepToolContext) => {
+export const repositoryProductionClientForContext = async (
+  ctx: Pick<WorkflowStepToolContext, "abortSignal" | "callId" | "session">,
+) => {
   const value = process.env.REPOSITORY_PRODUCTION_OPERATOR_URL;
   if (value === undefined || value === "") {
     throw new Error("protected_operator_required");

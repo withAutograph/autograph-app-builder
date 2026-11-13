@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { RepositoryProductionDeliveryStatus } from "../provisioning/repository-production-delivery";
+import type { RepositoryProductionNativeStatus } from "../provisioning/repository-production-native-status-contract";
 
 import readDelivery from "../../agent/tools/read_github_pr_delivery";
 import { GITHUB_PUBLICATION_VERSION } from "../repository/github-publication";
@@ -21,6 +22,8 @@ const mocks = vi.hoisted(() => ({
   getCandidate: vi.fn(() => null),
   runtimeForSession: vi.fn(),
   directGrant: vi.fn(),
+  liveProduction: vi.fn(),
+  recordProgress: vi.fn<(grantDigest: string, stage: string) => void>(),
   production:
     vi.fn<
       (target: {
@@ -37,6 +40,12 @@ vi.mock("./draft-reconciliation-state", () => ({
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T): T => tool }));
 vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: mocks.getState } }));
 vi.mock("./direct-production-state", () => ({ currentDirectProductionGrant: mocks.directGrant }));
+vi.mock("./direct-production-progress", () => ({
+  recordDirectProductionProgress: mocks.recordProgress,
+}));
+vi.mock("./app-production-observation", () => ({
+  readLiveMergedAppProduction: mocks.liveProduction,
+}));
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: mocks.runtimeForSession,
 }));
@@ -49,6 +58,8 @@ vi.mock("./github-production-delivery-readiness", () => ({
 }));
 beforeEach(() => {
   mocks.directGrant.mockReset();
+  mocks.liveProduction.mockReset();
+  mocks.recordProgress.mockReset();
   mocks.production.mockReset();
   // oxlint-disable-next-line eslint/require-await -- This controlled service port resolves without provider work.
   mocks.production.mockImplementation(async ({ appId, repositoryId, repositoryFullName }) => ({
@@ -338,7 +349,7 @@ it("selects the reconciled revision only when GitHub proves the retained commit"
   ).resolves.toBeNull();
 });
 
-it("offers the existing approved schema delivery after merge without attempting GitHub or setup writes", async () => {
+it("offers the existing schema continuation after merge when protected status has not confirmed it live", async () => {
   const { inspect, observation, proposal, reviewedTarget, runtime } = fixture();
   const mutate = vi.fn();
   mocks.getState.mockReturnValue({
@@ -358,6 +369,7 @@ it("offers the existing approved schema delivery after merge without attempting 
   const ctx = { session: { auth: {} } } as never;
   await expect(readDelivery.execute({}, ctx)).resolves.not.toHaveProperty("nextCall");
   mocks.directGrant.mockReturnValue({
+    digest: "6".repeat(64),
     subject: { revision: { schemaChange: { kind: "add-optional-text-field" } } },
   });
   await expect(readDelivery.execute({}, ctx)).resolves.toMatchObject({
@@ -366,4 +378,79 @@ it("offers the existing approved schema delivery after merge without attempting 
   });
   expect(mutate).not.toHaveBeenCalled();
   expect(mocks.production).not.toHaveBeenCalled();
+  expect(mocks.recordProgress).not.toHaveBeenCalled();
 });
+
+it.each(["current", "superseded"] as const)(
+  "settles an exact live schema revision only while the reviewed grant remains %s",
+  async (review) => {
+    const { inspect, observation, proposal, reviewedTarget, runtime } = fixture();
+    const mutate = vi.fn();
+    const mergeCommitSha = "f".repeat(40);
+    const grant = {
+      digest: "6".repeat(64),
+      subject: { revision: { schemaChange: { kind: "add-optional-text-field" } } },
+    };
+    const target = {
+      appId: "demo",
+      repositoryId: reviewedTarget.repositoryId,
+      repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
+    };
+    const nativeProduction: RepositoryProductionNativeStatus = {
+      version: 1,
+      ...target,
+      destination: {
+        repositoryId: target.repositoryId,
+        repositoryFullName: target.repositoryFullName,
+      },
+      observedAt: "2026-11-13T11:00:00Z",
+      status: "available",
+      deployment: { state: "active" },
+      app: { state: "responding", url: "https://apps.example/demo" },
+      requestedRevision: "live",
+    };
+    const state = {
+      appSpec: { appId: target.appId },
+      githubDraftProposal: { proposal },
+      phase: "reviewed",
+    };
+    mocks.getState.mockReturnValue(state);
+    mocks.runtimeForSession.mockResolvedValue({
+      ...runtime,
+      runPublishedPullRequestEffect: mutate,
+    });
+    inspect.mockResolvedValue({ ...observation, draft: false, state: "merged", mergeCommitSha });
+    mocks.directGrant.mockReturnValue(grant);
+    mocks.liveProduction.mockImplementation(async () => {
+      if (review === "superseded") {
+        mocks.getState.mockReturnValue({
+          ...state,
+          githubDraftProposal: { proposal: { ...proposal, digest: "0".repeat(64) } },
+        });
+      }
+      return await Promise.resolve(nativeProduction);
+    });
+    // SAFETY: Runtime and prerequisite reads are controlled; the tool owns approval construction.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Supply the used session field.
+    const ctx = { session: { auth: {} } } as never;
+    const result = await readDelivery.execute({}, ctx);
+    expect(result).toMatchObject({ state: "merged", mergeCommitSha });
+    expect(result).not.toHaveProperty("approval");
+    expect(result).not.toHaveProperty("nextCall");
+    expect(mocks.liveProduction).toHaveBeenCalledExactlyOnceWith(
+      target,
+      ctx,
+      mergeCommitSha,
+      grant.digest,
+    );
+    if (review === "current") {
+      expect(result).toHaveProperty("nativeProduction", nativeProduction);
+      expect(mocks.recordProgress).toHaveBeenCalledExactlyOnceWith(grant.digest, "live");
+    } else {
+      expect(result).not.toHaveProperty("nativeProduction");
+      expect(mocks.recordProgress).not.toHaveBeenCalled();
+    }
+    expect(mutate).not.toHaveBeenCalled();
+    expect(mocks.production).not.toHaveBeenCalled();
+  },
+);

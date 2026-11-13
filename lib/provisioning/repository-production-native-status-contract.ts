@@ -12,6 +12,7 @@ const publicAppUrl = z.url().refine((value) => {
 export const repositoryProductionExpectedMergeShaSchema = z
   .string()
   .regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
+export const repositoryProductionSchemaGrantDigestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
 
 /** Current app availability and activation of an expected merge are independent observations. */
 export const repositoryProductionNativeStatusSchema = z

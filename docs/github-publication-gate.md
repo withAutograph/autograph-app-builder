@@ -655,6 +655,13 @@ update on the existing database. Protected setup binds the exact reviewed
 source to the installed release and verifies the transition before merge.
 Builder applies the checked addition after the provider activates that exact
 merged revision, then observes the app URL.
+For an already merged schema revision, the delivery read checks the saved
+app and repository, the exact merge SHA, and the current protected schema grant.
+When the operator confirms the revision is live and its schema is installed,
+Builder returns the app URL and settles that release without offering another
+delivery call. A stale delivery request for that revision is refused before
+it captures write authority. Pending or unavailable readback still allows the
+existing continuation under the original authorization and merge receipt.
 
 For a plan acquired from Arrusted's default branch, `release-app-production`
 reads the verified repository and installation already bound to the plan.

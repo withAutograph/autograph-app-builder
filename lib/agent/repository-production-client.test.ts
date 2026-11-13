@@ -41,6 +41,7 @@ const repository = { repositoryId: "123", repositoryFullName: "example/repo" };
 type RequestTarget = Partial<typeof repository> & {
   reviewedHeadSha?: string;
   expectedMergeSha?: string;
+  expectedSchemaGrantDigest?: string;
 };
 const reviewedTarget = { ...repository, reviewedHeadSha: "a".repeat(40) };
 const status = {
@@ -185,6 +186,21 @@ describe("native Production revision transport", () => {
       2,
       new URL("https://operator.test/v1/repository-production"),
       expect.objectContaining({ body: f.requestBody({}, "native-status") }),
+    );
+  });
+
+  it("does not fall back to an ordinary read when the operator cannot check the expected schema grant", async () => {
+    const f = deliveryClient();
+    const expectedSchemaGrantDigest = "e".repeat(64);
+    f.fetch.mockResolvedValueOnce(Response.json({ code: "request_invalid" }, { status: 400 }));
+    await expect(
+      f.client.nativeStatus(status.appId, expectedMergeSha, undefined, expectedSchemaGrantDigest),
+    ).rejects.toThrow();
+    expect(f.fetch).toHaveBeenCalledExactlyOnceWith(
+      new URL("https://operator.test/v1/repository-production"),
+      expect.objectContaining({
+        body: f.requestBody({ expectedMergeSha, expectedSchemaGrantDigest }, "native-status"),
+      }),
     );
   });
 });

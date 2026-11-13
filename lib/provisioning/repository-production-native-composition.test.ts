@@ -1,12 +1,15 @@
 /* oxlint-disable eslint/require-await -- In-memory ports retain asynchronous setup and lease contracts. */
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import { createDirectProductionGrant } from "../agent/direct-production-authorization";
+import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
 import {
   createRepositoryProductionIntentBoundSetup,
   createRepositoryProductionSignupLeaseGuard,
   assertNoConflictingProductionSetup,
   completeRepositoryProductionInvitation,
   projectRepositoryProductionSchemaNativeStatus,
+  repositoryProductionSchemaNativeStatusGrantMatches,
   readRepositoryProductionCreatorAccess,
   resolveRepositoryProductionPlanRecipient,
 } from "./repository-production-native";
@@ -255,6 +258,69 @@ describe("schema-only Production continuation", () => {
       projectRepositoryProductionSchemaNativeStatus(withProof, true, isReady),
     ).resolves.toEqual(withProof);
     expect(isReady).toHaveBeenCalledTimes(2);
+  });
+
+  it("requires the canonical reviewed grant before reporting a schema revision settled", () => {
+    const currentSpec = {
+      appId: scope.appId,
+      appSpecDigest: "a".repeat(64),
+      proposalDigest: "b".repeat(64),
+      sessionId: "saved-session",
+      workspaceId: "build-workspace",
+    };
+    const grant = createDirectProductionGrant({
+      callId: "build-schema-call",
+      toolName: "apply_app_creation",
+      subject: {
+        version: 1,
+        appId: currentSpec.appId,
+        appSpecDigest: currentSpec.appSpecDigest,
+        proposalDigest: currentSpec.proposalDigest,
+        sessionId: currentSpec.sessionId,
+        buildWorkspaceId: currentSpec.workspaceId,
+        authority: scope.authority,
+        repositoryId: scope.repositoryId,
+        repositoryFullName: "withAutograph/arrusted-development",
+        installationId: "123",
+        baseBranch: "main",
+        storageKind: "postgres",
+        revision: {
+          priorGrantDigest: "c".repeat(64),
+          priorProposalDigest: "d".repeat(64),
+          schemaChange: {
+            kind: "add-optional-text-field",
+            priorCueSha256: "e".repeat(64),
+            candidateCueSha256: "f".repeat(64),
+          },
+        },
+      },
+    });
+    const decision: ApprovedBuildDecision = {
+      version: 1,
+      adapterSessionId: currentSpec.sessionId,
+      turnId: "turn",
+      turnSequence: 1,
+      workflowPhase: "reviewed",
+      decision: "working",
+      currentSpec,
+      directProduction: grant,
+    };
+    expect(repositoryProductionSchemaNativeStatusGrantMatches(decision, grant.digest)).toBe(true);
+    expect(repositoryProductionSchemaNativeStatusGrantMatches(decision, "0".repeat(64))).toBe(
+      false,
+    );
+    expect(
+      repositoryProductionSchemaNativeStatusGrantMatches(
+        { ...decision, workflowPhase: "applied" },
+        grant.digest,
+      ),
+    ).toBe(false);
+    expect(
+      repositoryProductionSchemaNativeStatusGrantMatches(
+        { ...decision, currentSpec: { ...currentSpec, proposalDigest: "0".repeat(64) } },
+        grant.digest,
+      ),
+    ).toBe(false);
   });
 });
 
