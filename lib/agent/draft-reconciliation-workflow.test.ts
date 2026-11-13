@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import editCandidate from "../../agent/tools/edit_github_draft_pr_candidate";
 import sealReconciliation from "../../agent/tools/seal_github_draft_pr_reconciliation";
 import { DraftCandidateCreationUncertainError } from "../repository/sandbox-draft-reconciliation";
-import type * as sandboxDraftSchemaRelease from "../repository/sandbox-draft-schema-release";
+import type { draftSchemaReleaseId } from "../repository/sandbox-draft-schema-release";
 import type { assertExactWorkflowState } from "./workflow-state";
 import {
   draftReconciliationCompletions,
@@ -72,7 +72,7 @@ vi.mock("../repository/sandbox-draft-reconciliation", () => ({
 }));
 
 vi.mock("../repository/sandbox-draft-schema-release", async (importOriginal) => ({
-  ...(await importOriginal<typeof sandboxDraftSchemaRelease>()),
+  ...(await importOriginal<{ draftSchemaReleaseId: typeof draftSchemaReleaseId }>()),
   discardUnissuedDraftSchemaRelease: mocks.discardSchema,
 }));
 
