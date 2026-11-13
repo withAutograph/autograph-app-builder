@@ -4,8 +4,11 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { test, vi } from "vitest";
+import { verifySettledGitHubDelivery } from "../lib/eve/native-recovery-github-delivery-witness";
+import { createCancelledDeliveryWitnessFixture } from "../lib/eve/native-recovery-github-delivery-witness.test-fixture";
 
 const toolResultKind = "tool-result";
+const actionsRequestedKind = "actions.requested";
 const originalDeferredCallId = "original-deferred";
 const originalRequestId = "original-request";
 const turnStepName = "step//eve//turnStep";
@@ -368,11 +371,12 @@ const workflowReportRun = {
   input: {
     baseBranch: "main",
     headSha: "a".repeat(40),
-    name: "fixture-repository",
-    owner: "fixture-owner",
+    name: "arrusted-development",
+    owner: "withAutograph",
     proposalDigest: "b".repeat(64),
     pullRequestNumber: 1,
     repositoryId: "1",
+    installationId: "2",
   },
   runId: "wrun_owned_delivery",
   sequence: emission.sequence,
@@ -381,6 +385,12 @@ const workflowReportRun = {
   turnId: originalTurnId,
 };
 const workflowReportUpdate = { status: "merged", mergeCommitSha: "c".repeat(40) };
+const historicalDeliveryCallId = "original-committed-delivery";
+const historicalDeliveryEvent = { sequence: 0, stepIndex: 1, turnId: "older-delivery-turn" };
+const historicalDeliveryResult = {
+  ...workflowReportUpdate,
+  nativeProduction: { status: "available", requestedRevision: "live" },
+};
 const workflowOutcomeStepId = "release-owned-workflow-invocation";
 const cancelDescendantStepId = "cancel-owned-workflow";
 const childResumeStepId = "send-owned-cancelled-outcome";
@@ -459,6 +469,31 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
       key,
     ),
   };
+  const { delivery } = evidence;
+  const retainedDeliverySteps = delivery?.completedSteps ?? [
+    {
+      name: "continueGitHubPrDelivery",
+      args: [workflowReportRun.input],
+      output: workflowReportUpdate,
+    },
+  ];
+  const deliverySteps =
+    delivery === undefined
+      ? []
+      : await Promise.all(
+          retainedDeliverySteps.map(async (step, index) => ({
+            runId,
+            stepId: `prior-delivery-effect-${index}`,
+            stepName: `step//./lib/agent/github-pr-delivery-step//${step.name}:eve-authorization`,
+            status: delivery.status ?? completedStatus,
+            input: await serialization.dehydrateStepArguments(
+              { args: step.args, closureVars: [] },
+              runId,
+              key,
+            ),
+            output: await serialization.dehydrateStepReturnValue(step.output, runId, key),
+          })),
+        );
   const { pagedSteps } = evidence;
   const siblingStep =
     pagedSteps === undefined
@@ -473,13 +508,30 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
     nativeWorldEvent(runId, slot, eventType, correlationId, eventData);
   const siblingEvent = (slot, eventType) =>
     childEvent(slot, eventType, siblingStep.stepId, { stepName: siblingStep.stepName });
+  const deliveryEvents = deliverySteps.flatMap((step, index) => {
+    const slot = 1 + index * 2;
+    const eventData = { stepName: step.stepName };
+    const started = childEvent(slot, "step_started", step.stepId, eventData);
+    return delivery.omitCompletion === true
+      ? [started]
+      : [started, childEvent(slot + 1, "step_completed", step.stepId, eventData)];
+  });
+  const offset = deliverySteps.length * 2;
   const childEvents = [
-    ...(siblingStep === undefined ? [] : [siblingEvent(1, "step_started")]),
-    childEvent(2, "hook_created", childControlHookId, { token: childControlToken }),
+    ...deliveryEvents,
+    ...(siblingStep === undefined ? [] : [siblingEvent(1 + offset, "step_started")]),
+    ...(delivery?.unlistedAuthoredStep === true
+      ? [
+          childEvent(1 + offset, "step_started", "unlisted-effect-step", {
+            stepName: "step//./lib/agent/github-pr-delivery-step//unknownEffect:eve-authorization",
+          }),
+        ]
+      : []),
+    childEvent(2 + offset, "hook_created", childControlHookId, { token: childControlToken }),
     ...(evidence.omitControl === true
       ? []
       : [
-          childEvent(3, "hook_received", childControlHookId, {
+          childEvent(3 + offset, "hook_received", childControlHookId, {
             token: childControlToken,
             payload: await serialization.dehydrateStepReturnValue(
               { kind: "cancel", reason: childCancelReason },
@@ -488,13 +540,21 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
             ),
           }),
         ]),
-    childEvent(4, "step_started", childResumeStepId, { stepName: childResumeStep.stepName }),
-    childEvent(5, "step_completed", childResumeStepId, { stepName: childResumeStep.stepName }),
-    ...(pagedSteps?.failureBeforeRun === true ? [siblingEvent(6, "step_failed")] : []),
-    childEvent(7, "run_completed", undefined, {}),
-    ...(pagedSteps?.failureAfterRun === true ? [siblingEvent(8, "step_failed")] : []),
+    childEvent(4 + offset, "step_started", childResumeStepId, {
+      stepName: childResumeStep.stepName,
+    }),
+    childEvent(5 + offset, "step_completed", childResumeStepId, {
+      stepName: childResumeStep.stepName,
+    }),
+    ...(pagedSteps?.failureBeforeRun === true ? [siblingEvent(6 + offset, "step_failed")] : []),
+    childEvent(7 + offset, "run_completed", undefined, {}),
+    ...(pagedSteps?.failureAfterRun === true ? [siblingEvent(8 + offset, "step_failed")] : []),
     ...(pagedSteps?.unrelatedLateEvent === true
-      ? [childEvent(9, "step_failed", "unknown-child-step", { stepName: "step//eve//unknownStep" })]
+      ? [
+          childEvent(9 + offset, "step_failed", "unknown-child-step", {
+            stepName: "step//eve//unknownStep",
+          }),
+        ]
       : []),
   ];
   const { runs, events, steps } = world;
@@ -522,7 +582,10 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
     async list(request) {
       assert.equal(request.runId, runId);
       if (pagedSteps === undefined) {
-        return await Promise.resolve({ data: [childResumeStep], hasMore: false });
+        return await Promise.resolve({
+          data: [...deliverySteps, childResumeStep],
+          hasMore: false,
+        });
       }
 
       const { pagination } = request;
@@ -537,10 +600,16 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
 
       return { data: [siblingStep], hasMore: false };
     },
-    get: async (id, stepId, options) =>
-      id === runId && stepId === childResumeStepId
-        ? childResumeStep
-        : await steps.get(id, stepId, options),
+    async get(id, stepId, options) {
+      if (id === runId && stepId === childResumeStepId) {
+        return childResumeStep;
+      }
+      const deliveryStep = deliverySteps.find((entry) => entry.stepId === stepId);
+      if (id === runId && deliveryStep !== undefined) {
+        return deliveryStep;
+      }
+      return await steps.get(id, stepId, options);
+    },
   };
 };
 
@@ -609,6 +678,32 @@ const addSettledCancellation = async ({
     ...source,
     history: [source.history[0]],
   });
+  if (cancelledOutcome?.delivery?.historicalResult !== undefined) {
+    active.history.push(
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: historicalDeliveryCallId,
+            toolName: workflowReportRun.toolName,
+            input: workflowReportRun.input,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: toolResultKind,
+            toolCallId: historicalDeliveryCallId,
+            toolName: workflowReportRun.toolName,
+            output: { type: "json", value: historicalDeliveryResult },
+          },
+        ],
+      },
+    );
+  }
   if (beforeCancellationSend === true) {
     active.continuationToken = "old-turn-inbox";
   }
@@ -954,6 +1049,7 @@ const fixture = async (options = {}) => {
       "eve.sessionId": logicalSessionId,
       "eve.auth": { principalId: originalOwnerId },
       "fixture.privateContext": { original: true },
+      ...options.cancelledOutcome?.delivery?.serializedContext,
     },
     sessionState: createDurableSessionState({ session: source }),
   };
@@ -1106,7 +1202,39 @@ const fixture = async (options = {}) => {
             workflowReport.partialUpdate ?? workflowReportUpdate,
           ),
         ];
+  const historicalNativeDelivery =
+    options.cancelledOutcome?.delivery?.historicalResult === undefined
+      ? []
+      : [
+          {
+            type: actionsRequestedKind,
+            data: {
+              ...historicalDeliveryEvent,
+              actions: [
+                {
+                  callId: historicalDeliveryCallId,
+                  kind: "tool-call",
+                  toolName: workflowReportRun.toolName,
+                  input: workflowReportRun.input,
+                },
+              ],
+            },
+          },
+          stampMessageStreamEvent(
+            createActionResultEvent({
+              ...historicalDeliveryEvent,
+              rejected: false,
+              result: {
+                kind: toolResultKind,
+                callId: historicalDeliveryCallId,
+                toolName: workflowReportRun.toolName,
+                output: options.cancelledOutcome.delivery.historicalResult,
+              },
+            }),
+          ),
+        ];
   const nativeEvents = [
+    ...historicalNativeDelivery,
     ...(cancellationSendEvidence === undefined
       ? []
       : [
@@ -1141,7 +1269,7 @@ const fixture = async (options = {}) => {
     options.interruptedObservation !== undefined
       ? [
           {
-            type: "actions.requested",
+            type: actionsRequestedKind,
             data: {
               ...emission,
               actions: [
@@ -1160,6 +1288,24 @@ const fixture = async (options = {}) => {
           },
         ]
       : []),
+    ...(options.cancelledOutcome?.delivery === undefined
+      ? []
+      : [
+          {
+            type: actionsRequestedKind,
+            data: {
+              ...batchEvent,
+              actions: [
+                {
+                  callId: workflowReportRun.callId,
+                  kind: "tool-call",
+                  toolName: workflowReportRun.toolName,
+                  input: options.cancelledOutcome.delivery.dispatchInput ?? workflowReportRun.input,
+                },
+              ],
+            },
+          },
+        ]),
     ...(workflowReport?.partialAfterCancellation === true ? [] : reportEvents),
     ...(workflowOutcome === undefined || workflowOutcome.omitNativeResult === true
       ? []
@@ -1254,6 +1400,7 @@ const fixture = async (options = {}) => {
   const collected = await collect({
     allowParked: options.allowParked === true,
     binding: { ownerRunId: boundOwnerRunId, logicalSessionId },
+    verifyCancelledWorkflowEffects: options.verifyCancelledWorkflowEffects,
     authorizeOwner: async (currentBinding) => {
       assert.deepEqual(currentBinding, { logicalSessionId, ownerRunId: boundOwnerRunId });
       assert.ok(Object.isFrozen(currentBinding));
@@ -1881,6 +2028,113 @@ test("a proven descendant cancellation notice does not resolve an unrelated disp
   const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
   assert.equal(result.kind, "uncertain");
   assert.equal(result.reason, uncommittedActionDispatchReason);
+});
+
+const cancelledDeliveryWitnessFixture = () =>
+  createCancelledDeliveryWitnessFixture({
+    callId: workflowReportRun.callId,
+    turnId: workflowReportRun.turnId,
+    turnSequence: workflowReportRun.sequence,
+    logicalSessionId,
+    checkpointOwnerRunId: ownerRunId,
+    sourceOwnerRunId: ownerRunId,
+    toolInput: workflowReportRun.input,
+  });
+
+test.each([
+  { name: "keeps the reviewed app ready to resume", unlistedAuthoredStep: false },
+  { name: "stays fenced with an unlisted authored child step", unlistedAuthoredStep: true },
+])("exact cancelled child delivery $name", async ({ unlistedAuthoredStep }) => {
+  const retainedDelivery = cancelledDeliveryWitnessFixture();
+  const read = [];
+  const f = await settledIdleFixture({
+    encrypted: true,
+    cancelledOutcome: {
+      delivery: {
+        unlistedAuthoredStep,
+        completedSteps: retainedDelivery.witness.completedSteps,
+        serializedContext: retainedDelivery.context,
+      },
+    },
+    verifyCancelledWorkflowEffects: async (witness) => {
+      read.push(witness);
+      return await Promise.resolve(verifySettledGitHubDelivery(witness, retainedDelivery.owner));
+    },
+  });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  if (unlistedAuthoredStep) {
+    assert.equal(read.length, 0);
+    assert.equal(result.kind, "uncertain");
+    assert.equal(result.reason, uncommittedActionDispatchReason);
+    return;
+  }
+  assert.equal(read.length, 1);
+  assert.equal(read[0].callId, workflowReportRun.callId);
+  assert.equal(read[0].turnSequence, workflowReportRun.sequence);
+  assert.equal(read[0].logicalSessionId, logicalSessionId);
+  assert.deepEqual(read[0].toolInput, workflowReportRun.input);
+  assert.deepEqual(read[0].completedSteps, retainedDelivery.witness.completedSteps);
+  assert.equal(result.kind, "ready");
+  assert.deepEqual(result.checkpointCore, f.settled);
+  assert.equal(result.replayInput, undefined);
+  assert.equal(result.carriedInbox, undefined);
+});
+
+test.each([
+  { name: "the verifier refuses", delivery: {}, verify: false },
+  {
+    name: "the dispatch input differs",
+    delivery: { dispatchInput: { other: true } },
+    verify: true,
+  },
+  { name: "the effect step failed", delivery: { status: "failed" }, verify: true },
+  { name: "the completion event is missing", delivery: { omitCompletion: true }, verify: true },
+])("idle transfer keeps delivery fenced when $name", async ({ delivery, verify }) => {
+  const f = await settledIdleFixture({
+    encrypted: true,
+    cancelledOutcome: { delivery },
+    verifyCancelledWorkflowEffects: async () => await Promise.resolve(verify),
+  });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "uncertain");
+  assert.equal(result.reason, uncommittedActionDispatchReason);
+});
+
+test.each([
+  { name: "exact committed earlier result", nativeResult: historicalDeliveryResult, ready: true },
+  {
+    name: "earlier result absent from committed history",
+    nativeResult: { ...historicalDeliveryResult, mergeCommitSha: "e".repeat(40) },
+    ready: false,
+  },
+])("settled delivery uses only the $name", async ({ nativeResult, ready }) => {
+  const witnessFixture = cancelledDeliveryWitnessFixture();
+  const f = await settledIdleFixture({
+    encrypted: true,
+    cancelledOutcome: {
+      delivery: {
+        historicalResult: nativeResult,
+        completedSteps: witnessFixture.witness.completedSteps,
+      },
+    },
+    verifyCancelledWorkflowEffects: async (witness) => {
+      assert.equal(witness.readCommittedDelivery(witness.callId), undefined);
+      const retained = witness.readCommittedDelivery(historicalDeliveryCallId);
+      if (retained === undefined) {
+        return await Promise.resolve(false);
+      }
+      assert.deepEqual(retained.toolInput, workflowReportRun.input);
+      assert.deepEqual(retained.result, historicalDeliveryResult);
+      return await Promise.resolve(true);
+    },
+  });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, ready ? "ready" : "uncertain");
+  if (ready) {
+    assert.equal(result.replayInput, undefined);
+  } else {
+    assert.equal(result.reason, uncommittedActionDispatchReason);
+  }
 });
 
 test("idle transfer preserves a genuine send queued after the cancellation checkpoint", async () => {

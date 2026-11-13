@@ -256,6 +256,20 @@ provider error text. A verified notice proves
 the child stopped; it does not prove its previous effects were absent or grant
 permission to retry them. An unresolved action still refuses transfer and
 reports only its fixed tool category and the check that refused it.
+For idle recovery of a stopped GitHub delivery, the same verified child can
+also supply completed delivery effects. Builder requires the captured reviewed
+call and grant, the exact completed merge, and, for a schema revision, the
+completed protected schema step for that merge. A provider-only activation
+read, a merge progress report, or a later unsettled write cannot supply the
+proof. The preflight and final checkpoint reads verify it independently.
+Recovery preserves the cancelled result in history and never reruns the merge,
+restores approval for the stopped action, or replays its input.
+If a later check read an already merged revision, its child can reference the
+original call's receipt. Recovery requires that same exact committed live
+result and tenant-scoped merge journal. A later schema step can be accounted for
+without its result only when its exact input reused that older receipt and the
+cancellation revision had already advanced before the later call started. The
+protected operator rejects that stale receipt before any schema write.
 Other internal inbox messages without settlement proof still prevent transfer. Recovery reports a fixed
 message category to operations without recording payloads or arbitrary message
 kinds. That category provides no authority to discard or replay the message.
