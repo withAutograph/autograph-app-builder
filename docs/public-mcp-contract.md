@@ -129,6 +129,11 @@ native stream publishes `session.waiting` so clients can observe that inbox wait
 an unactivated candidate publishes nothing. The server derives this resume phase
 from native state and verifies it again after stopping the source;
 a public status or stale approval control cannot select it.
+Native recovery recognizes a completed cancellation's paired output as a
+distinct checkpoint. It verifies the matching native turn cancellation and
+command, then keeps later queued input and unresolved effects intact.
+An interrupted read-only app status check can be left cancelled without
+repeating it; a tool that may have changed state still requires effect proof.
 Builder fences source mutations. A separate opaque read-only preflight may inspect
 running handoff ancestors using the retained activation, checkpoint and inbox
 proofs. It cannot boot a child. Builder proves effect closure across the complete

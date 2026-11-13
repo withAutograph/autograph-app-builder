@@ -9,6 +9,7 @@ const toolResultKind = "tool-result";
 const originalDeferredCallId = "original-deferred";
 const originalRequestId = "original-request";
 const turnStepName = "step//eve//turnStep";
+const uncommittedActionDispatchReason = "uncommitted-action-dispatch";
 const uncommittedActionResultReason = "uncommitted-action-result";
 const unconsumedNativeInboxReason = "unconsumed-native-inbox-input";
 
@@ -16,6 +17,7 @@ const originalTurnId = "turn-original";
 const childDeploymentId = "child-deployment";
 const originalNativeCallId = "original-native";
 const originalOwnerId = "original-owner";
+const fixtureAppId = "fixture-app";
 const completedStatus = "completed";
 const eventsListOperation = "events.list";
 
@@ -39,7 +41,7 @@ const { reconcileTerminalRecoveryCandidate } = await load(
 const { createDurableSessionState, readDurableSession } = await load(
   "execution/durable-session-store.js",
 );
-const { setPendingCoordinationBatch, resolvePendingCoordination } =
+const { clearPendingCoordinationBatch, setPendingCoordinationBatch, resolvePendingCoordination } =
   await load("harness/coordination.js");
 const serialization = await load("compiled/@workflow/core/serialization.js");
 const { ContextContainer, contextStorage } = await load("context/container.js");
@@ -313,12 +315,14 @@ const fixtureKey = (encrypted) =>
   encrypted === true
     ? serialization.deriveRunPayloadKeys(new Uint8Array(32).fill(3))
     : Promise.resolve();
-const appendHistoricalInbox = async (events, event, output, suffix) => {
+const appendHistoricalInbox = async (events, event, output, suffix, terminal = true) => {
   if (suffix === undefined || suffix.length === 0) {
     return;
   }
   const encoded = await Promise.all(suffix.map((payload) => output(payload)));
-  events.pop();
+  if (terminal) {
+    events.pop();
+  }
   events.push(
     ...encoded.map((payload, index) =>
       event(13 + index, "hook_received", "command-hook", {
@@ -326,8 +330,97 @@ const appendHistoricalInbox = async (events, event, output, suffix) => {
         payload,
       }),
     ),
-    event(13 + suffix.length, "run_cancelled"),
   );
+  if (terminal) {
+    events.push(event(13 + suffix.length, "run_cancelled"));
+  }
+};
+
+const settledCancelStepId = "settled-turn-cancellation";
+
+const addSettledCancellation = async ({
+  args,
+  events,
+  event,
+  output,
+  source,
+  sourcePair,
+  steps,
+  beforeCancellationSend,
+  stopDuringTurnStep,
+}) => {
+  const active = clearPendingCoordinationBatch({
+    ...source,
+    history: [source.history[0]],
+  });
+  if (beforeCancellationSend === true) {
+    active.continuationToken = "old-turn-inbox";
+  }
+  const before = { ...sourcePair, sessionState: createDurableSessionState({ session: active }) };
+  const idle = {
+    ...active,
+    state: {
+      ...active.state,
+      "eve.harness.emission": { ...emission, sequence: 2, stepIndex: 0, turnId: "" },
+    },
+  };
+  if (beforeCancellationSend === true) {
+    idle.continuationToken = "new-idle-inbox";
+  }
+  const settled = {
+    ...sourcePair,
+    sessionState: createDurableSessionState({ session: idle }),
+  };
+  const priorInbox = "turn-step-input-inbox";
+  if (stopDuringTurnStep === true) {
+    steps.get("prior").input = await args({
+      ...before,
+      sessionState: createDurableSessionState({
+        session: { ...active, continuationToken: priorInbox },
+      }),
+    });
+  }
+  steps.get("prior").output = await output({
+    action: stopDuringTurnStep === true ? "cancelled" : "park",
+    ...before,
+  });
+  steps.set(settledCancelStepId, {
+    runId: ownerRunId,
+    stepId: settledCancelStepId,
+    stepName: "step//eve//settleCancelledTurnStep",
+    status: completedStatus,
+    input: await args(before),
+    output: await output(settled),
+  });
+  const cancelReceipt = event(
+    stopDuringTurnStep === true ? 4 : 5,
+    "hook_received",
+    "command-hook",
+    {
+      token: `eve:session:${logicalSessionId}:inbox`,
+      payload: await output({ kind: "cancel", turnId: originalTurnId }),
+    },
+  );
+  const queuedSendSlot = stopDuringTurnStep === true ? 5 : 6;
+  const queuedSend =
+    beforeCancellationSend === true
+      ? event(queuedSendSlot, "hook_received", "old-continuation", {
+          token: stopDuringTurnStep === true ? priorInbox : "old-turn-inbox",
+          payload: await output({ kind: "send", payload: { message: "still queued" } }),
+        })
+      : undefined;
+  const afterPriorStepStart = events.findIndex((entry) => entry.eventId === eventId(3)) + 1;
+  events.splice(
+    afterPriorStepStart,
+    events.length - afterPriorStepStart,
+    ...(stopDuringTurnStep === true ? [] : [event(4, "step_completed", "prior")]),
+    cancelReceipt,
+    ...(queuedSend === undefined ? [] : [queuedSend]),
+    ...(stopDuringTurnStep === true ? [event(6, "step_completed", "prior")] : []),
+    event(7, "step_started", settledCancelStepId),
+    event(8, "step_completed", settledCancelStepId),
+  );
+  return settled;
 };
 
 const collectorFor = (options) =>
@@ -562,15 +655,33 @@ const fixture = async (options = {}) => {
     event(11, "hook_received", "ordinary-hook", inboxEventData),
     event(12, options.runStatus === "cancelled" ? "run_cancelled" : "run_completed"),
   );
-  await appendHistoricalInbox(events, event, output, options.inboxSuffix);
+  const settled =
+    options.settledCancellation === true
+      ? await addSettledCancellation({
+          args,
+          events,
+          event,
+          output,
+          source,
+          sourcePair,
+          steps,
+          beforeCancellationSend: options.beforeCancellationSend,
+          stopDuringTurnStep: options.stopDuringTurnStep,
+        })
+      : undefined;
+  await appendHistoricalInbox(events, event, output, options.inboxSuffix, settled === undefined);
   const nativeEvents = [
-    { type: "action.result", data: { ...batchEvent, result: actualRuntimeResult } },
+    ...(settled === undefined
+      ? [{ type: "action.result", data: { ...batchEvent, result: actualRuntimeResult } }]
+      : []),
     ...(options.uncommittedWrite === true
       ? [
           {
             type: "action.result",
             data: {
-              ...emission,
+              ...(settled === undefined
+                ? emission
+                : { sequence: 2, stepIndex: 0, turnId: "following-turn" }),
               result: {
                 kind: toolResultKind,
                 callId: originalNativeCallId,
@@ -581,7 +692,7 @@ const fixture = async (options = {}) => {
           },
         ]
       : []),
-    ...(options.uncommittedDispatch === true
+    ...(options.uncommittedDispatch === true || options.interruptedObservation !== undefined
       ? [
           {
             type: "actions.requested",
@@ -591,15 +702,18 @@ const fixture = async (options = {}) => {
                 {
                   callId: "new-uncommitted-write",
                   kind: "tool-call",
-                  toolName: "native",
-                  input: {},
+                  toolName:
+                    options.interruptedObservation === undefined
+                      ? "native"
+                      : "observe-app-production",
+                  input: options.interruptedObservation ?? {},
                 },
               ],
             },
           },
         ]
       : []),
-    ...(options.cancelled === true
+    ...(options.cancelled === true || settled !== undefined
       ? [{ type: "turn.cancelled", data: { sequence: 1, turnId: originalTurnId } }]
       : []),
   ];
@@ -676,6 +790,7 @@ const fixture = async (options = {}) => {
     latestPair,
     nativeEvents,
     originalGrant,
+    settled,
     readOperations,
     source,
     sourcePair,
@@ -792,7 +907,7 @@ test("denial is retained and never executes the denied native call", async () =>
 
 for (const { options, reason } of [
   { options: { uncommittedWrite: true }, reason: uncommittedActionResultReason },
-  { options: { uncommittedDispatch: true }, reason: "uncommitted-action-dispatch" },
+  { options: { uncommittedDispatch: true }, reason: uncommittedActionDispatchReason },
   { options: { failedTurn: true }, reason: "failed-turn-effects-unreconciled" },
   { options: { delivery: true }, reason: "delivery-consumption-unreconciled" },
   { options: { missingResult: true }, reason: "coordination-results-incomplete" },
@@ -885,7 +1000,7 @@ for (const options of [
 }
 for (const { options, reason } of [
   { options: { cancelled: true }, reason: "cancelled-turn-replay" },
-  { options: { uncommittedDispatch: true }, reason: "uncommitted-action-dispatch" },
+  { options: { uncommittedDispatch: true }, reason: uncommittedActionDispatchReason },
   { options: { uncommittedWrite: true }, reason: uncommittedActionResultReason },
 ]) {
   test(`provider cancellation grants no replay authority for ${reason}`, async () => {
@@ -895,6 +1010,110 @@ for (const { options, reason } of [
     assert.equal(result.reason, reason);
   });
 }
+
+const settledIdleFixture = async (options = {}) =>
+  await fixture({
+    ...options,
+    settledCancellation: true,
+    runStatus: "running",
+    collectFactory: createOwnedLineagePreflightCollector,
+    expectedKind: "preflight",
+  });
+
+test("idle transfer uses the paired output that settled the native cancellation", async () => {
+  const f = await settledIdleFixture();
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "ready");
+  assert.equal(result.provenance.selectedOrigin.stepId, settledCancelStepId);
+  assert.equal(result.provenance.selectedOrigin.kind, "committed-cancelled-turn-output");
+  assert.equal(result.provenance.coveredNativeEventIds.includes(eventId(5)), true);
+  assert.equal(result.replayInput, undefined);
+  assert.equal(result.carriedInbox, undefined);
+  assert.deepEqual(result.checkpointCore, f.settled);
+  const { deriveTerminalRecoveryResumePhase } = await load(
+    "execution/session/recovery-resume-phase.js",
+  );
+  assert.equal(await deriveTerminalRecoveryResumePhase(result), "await-input");
+});
+
+test("idle transfer can recover a Stop received inside the producing turn step", async () => {
+  const f = await settledIdleFixture({
+    interruptedObservation: { appId: fixtureAppId },
+    stopDuringTurnStep: true,
+  });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "ready");
+  assert.equal(result.provenance.selectedOrigin.stepId, settledCancelStepId);
+  assert.equal(result.provenance.coveredNativeEventIds.includes(eventId(4)), true);
+  assert.equal(result.replayInput, undefined);
+  assert.equal(result.carriedInbox, undefined);
+  assert.deepEqual(result.checkpointCore, f.settled);
+});
+
+test("idle transfer rejects a queued Send received inside the producing turn step", async () => {
+  const f = await settledIdleFixture({ beforeCancellationSend: true, stopDuringTurnStep: true });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
+});
+
+test("idle transfer preserves a genuine send queued after the cancellation checkpoint", async () => {
+  const queued = {
+    kind: "send",
+    requestId: "new-native-request",
+    auth: { principalId: originalOwnerId },
+    payload: { message: "new accepted intent" },
+    delivery: { originalEvidence: true },
+  };
+  const f = await settledIdleFixture({ inboxSuffix: [queued] });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "ready");
+  assert.deepEqual(
+    result.carriedInbox.map((entry) => entry.payload),
+    [queued],
+  );
+  const { deriveTerminalRecoveryResumePhase } = await load(
+    "execution/session/recovery-resume-phase.js",
+  );
+  assert.equal(await deriveTerminalRecoveryResumePhase(result), undefined);
+});
+
+test("a queued send on the previous continuation is not consumed by cancellation", async () => {
+  const f = await settledIdleFixture({ beforeCancellationSend: true });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
+});
+
+test("a later uncommitted native result still blocks the settled cancellation checkpoint", async () => {
+  const f = await settledIdleFixture({ uncommittedWrite: true });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "uncertain");
+  assert.equal(result.reason, uncommittedActionResultReason);
+});
+
+test("an unknown dispatched action in the cancelled turn still prevents idle recovery", async () => {
+  const f = await settledIdleFixture({ uncommittedDispatch: true });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "uncertain");
+  assert.equal(result.reason, uncommittedActionDispatchReason);
+});
+
+test("settled cancellation can retain an interrupted read-only Production observation", async () => {
+  const f = await settledIdleFixture({ interruptedObservation: { appId: fixtureAppId } });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "ready");
+  assert.equal(result.provenance.selectedOrigin.stepId, settledCancelStepId);
+  assert.equal(result.replayInput, undefined);
+  assert.equal(result.carriedInbox, undefined);
+});
+
+test("an interrupted Production observation with another input remains uncertain", async () => {
+  const f = await settledIdleFixture({
+    interruptedObservation: { appId: fixtureAppId, other: "unsupported" },
+  });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "uncertain");
+  assert.equal(result.reason, uncommittedActionDispatchReason);
+});
 
 const acceptedSuffix = () => [
   { kind: "cancel", turnId: originalTurnId },

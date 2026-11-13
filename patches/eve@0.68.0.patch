@@ -635,7 +635,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.d.ts b/dist/src/execu
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.d.ts
-@@ -0,0 +1,176 @@
+@@ -0,0 +1,179 @@
 +import type { World, WorkflowRun, StepWithoutData, Event } from "#compiled/@workflow/world/index.js";
 +import type { PayloadKey } from "#compiled/@workflow/core/serialization/encryption.js";
 +import type { DurableSession, DurableSessionState } from "#execution/durable-session-store.js";
@@ -672,6 +672,7 @@ new file mode 100644
 +  | "completed-terminal-turn-input"
 +  | "failed-turn-input"
 +  | "committed-turn-output"
++  | "committed-cancelled-turn-output"
 +  | "validated-recovery-input";
 +export interface NativeRecoveryOrigin {
 +  readonly eventId: string;
@@ -684,6 +685,7 @@ new file mode 100644
 +  readonly serializedContext: Record<string, unknown>;
 +  readonly sessionState: DurableSessionState;
 +  readonly incoming?: TurnStepPayload;
++  readonly cancellation?: { readonly sequence: number; readonly turnId: string; readonly priorContinuationToken?: string };
 +}
 +export type NativeRecoveryUncertaintyReason =
 +  | "native-step-input-unreadable"
@@ -725,6 +727,7 @@ new file mode 100644
 +  /** Actual persisted protocol events, including results; these do not imply authored-state commit. */
 +  readonly nativeEvents: readonly MessageStreamEvent[];
 +  readonly carriedInbox: readonly NativeRecoveryInboxEvent[];
++  readonly cancellationInbox?: readonly (NativeRecoveryInboxEvent | null)[];
 +  readonly issues: readonly {
 +    readonly reason: NativeRecoveryUncertaintyReason;
 +    readonly stepId?: string;
@@ -816,9 +819,11 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,665 @@
+@@ -0,0 +1,725 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
++import { activeTurnId } from "#harness/active-turn-id.js";
++import { isDeepStrictEqual } from "node:util";
 +import {
 +  sessionCommandHookToken,
 +  sessionInboxHookToken,
@@ -997,6 +1002,7 @@ new file mode 100644
 +    }
 +    const relevantSteps = new Set([
 +      "turnStep",
++      "settleCancelledTurnStep",
 +      "terminateChildSessionsStep",
 +      "dispatchCoordinationStep",
 +    ]);
@@ -1038,10 +1044,10 @@ new file mode 100644
 +          issues.push({ reason: "native-step-output-unreadable", stepId });
 +        }
 +      }
-+      const completedTerminalError = name === "turnStep" && retained.output?.action === "done";
++      const completedTerminalOutput = name === "turnStep" && ["done", "cancelled"].includes(retained.output?.action);
 +      if (
 +        step.input !== undefined &&
-+        (name !== "turnStep" || step.status === "failed" || completedTerminalError)
++        (name !== "turnStep" || step.status === "failed" || completedTerminalOutput)
 +      ) {
 +        try {
 +          retained.arguments = history.stepArguments(await dependencies.hydrateStepArguments(step.input, run.runId, key));
@@ -1051,7 +1057,7 @@ new file mode 100644
 +      }
 +      return retained;
 +    };
-+    const addCandidate = (kind, value, origin) => {
++    const addCandidate = (kind, value, origin, cancellation) => {
 +      if (!isRecord(value) || !isRecord(value.serializedContext) || !isRecord(value.sessionState))
 +        return;
 +      let session;
@@ -1072,6 +1078,7 @@ new file mode 100644
 +        origin,
 +        serializedContext: value.serializedContext,
 +        sessionState: value.sessionState,
++        ...(cancellation === undefined ? {} : { cancellation }),
 +        ...(["failed-turn-input", "completed-terminal-turn-input"].includes(kind)
 +          ? { incoming: value.input }
 +          : {}),
@@ -1118,6 +1125,31 @@ new file mode 100644
 +          );
 +        }
 +        addCandidate("committed-turn-output", retained.output, origin);
++      } else if (
++        name === "settleCancelledTurnStep" &&
++        event.eventType === "step_completed" &&
++        retained.step.status === "completed"
++      ) {
++        const before = argument?.sessionState?.emissionState;
++        const after = retained.output?.sessionState?.emissionState;
++        const prior = argument?.sessionState === undefined
++          ? undefined
++          : dependencies.readDurableSession(argument.sessionState);
++        if (
++          prior?.sessionId === binding.logicalSessionId &&
++          argument.sessionState.sessionId === prior.sessionId &&
++          argument.serializedContext?.["eve.sessionId"] === prior.sessionId &&
++          Number.isSafeInteger(before?.sequence) &&
++          after?.sequence === before.sequence + 1 &&
++          after.stepIndex === 0 &&
++          after.turnId === ""
++        ) {
++          addCandidate("committed-cancelled-turn-output", retained.output, origin, {
++            sequence: before.sequence,
++            turnId: activeTurnId(before),
++            priorContinuationToken: prior.continuationToken,
++          });
++        }
 +      }
 +    }
 +
@@ -1132,6 +1164,7 @@ new file mode 100644
 +      "completed-terminal-turn-input": 1,
 +      "failed-turn-input": 2,
 +      "committed-turn-output": 3,
++      "committed-cancelled-turn-output": 3,
 +    };
 +    candidates.sort(
 +      (left, right) => rank[left.kind] - rank[right.kind] || right.origin.slot - left.origin.slot,
@@ -1149,7 +1182,27 @@ new file mode 100644
 +    // Preserve accepted, uncommitted command envelopes as inert private evidence.
 +    // Only the activated recovery owner may admit them through the ordinary inbox.
 +    const carriedInbox = [];
-+    const latest = [...unique].sort((left, right) => right.origin.slot - left.origin.slot)[0];
++    const [latest, previous] = [...unique].sort((left, right) => right.origin.slot - left.origin.slot);
++    let previousSlot = latest.cancellation === undefined ? latest.origin.slot : previous?.origin.slot ?? 0;
++    let producerToken;
++    if (latest.cancellation !== undefined && previous?.kind === "committed-turn-output") {
++      const emission = previous.sessionState.emissionState;
++      // Stop can reach the running producer before its output is committed.
++      // Include only that producer's step, never an earlier turn's inbox.
++      const settlementInput = steps.get(latest.origin.stepId)?.arguments?.args?.[0];
++      const producer = steps.get(previous.origin.stepId);
++      const producerInput = producer?.arguments?.args?.[0];
++      if (producer?.output?.action === "cancelled" &&
++        producerInput?.sessionState?.sessionId === binding.logicalSessionId &&
++        producerInput.serializedContext?.["eve.sessionId"] === binding.logicalSessionId &&
++        emission?.sequence === latest.cancellation.sequence &&
++        activeTurnId(emission) === latest.cancellation.turnId &&
++        isDeepStrictEqual(previous.sessionState, settlementInput?.sessionState) &&
++        isDeepStrictEqual(previous.serializedContext, settlementInput?.serializedContext)) {
++        previousSlot = inputOrigins.get(previous.origin.stepId)?.slot ?? previousSlot;
++        producerToken = dependencies.readDurableSession(producerInput.sessionState).continuationToken;
++      }
++    }
 +    const latestSession = dependencies.readDurableSession(latest.sessionState);
 +    const command = sessionCommandHookToken(binding.logicalSessionId);
 +    const inboxTokens = new Set([command, sessionInboxHookToken(command)]);
@@ -1160,14 +1213,21 @@ new file mode 100644
 +      inboxTokens.add(latestSession.continuationToken);
 +      inboxTokens.add(sessionInboxHookToken(latestSession.continuationToken));
 +    }
++    for (const token of [latest.cancellation?.priorContinuationToken, producerToken]) {
++      if (typeof token === "string" && token.length > 0) {
++        inboxTokens.add(token);
++        inboxTokens.add(sessionInboxHookToken(token));
++      }
++    }
 +    const hookTokens = new Map(
 +      events
 +        .filter(({ event }) => event.eventType === "hook_created")
 +        .map(({ event }) => [event.correlationId, event.eventData?.token]),
 +    );
++    const cancellationInbox = [];
 +    for (const { event, slot } of events) {
 +      if (
-+        slot <= latest.origin.slot ||
++        slot <= previousSlot ||
 +        event.eventType !== "hook_received" ||
 +        !inboxTokens.has(event.eventData?.token ?? hookTokens.get(event.correlationId))
 +      )
@@ -1189,16 +1249,18 @@ new file mode 100644
 +          run.runId,
 +          key,
 +        );
-+        carriedInbox.push({
++        const item = {
 +          runId: run.runId,
 +          eventId: event.eventId,
 +          correlationId: event.correlationId,
 +          slot,
 +          payload,
-+        });
++        };
++        (slot <= latest.origin.slot ? cancellationInbox : carriedInbox).push(item);
 +      } catch {
 +        // Absence of an exact retained envelope can never waive the inbox guard.
 +        issues.push({ reason: "native-inbox-payload-unreadable" });
++        if (slot <= latest.origin.slot) cancellationInbox.push(null);
 +      }
 +    }
 +
@@ -1246,6 +1308,7 @@ new file mode 100644
 +      steps: [...steps.values()],
 +      nativeEvents,
 +      carriedInbox,
++      cancellationInbox,
 +      issues,
 +    };
 +    await authorizeOwner(binding);
@@ -2561,7 +2624,7 @@ diff --git a/dist/src/execution/session/recovery-reconciliation.js b/dist/src/ex
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-reconciliation.js
-@@ -0,0 +1,597 @@
+@@ -0,0 +1,643 @@
 +import { activeTurnId } from "#harness/active-turn-id.js";
 +import { decodeSessionInboxPayload } from "#execution/session-inbox/protocol.js";
 +import { proposeRetrospectiveCancelledToolHistory } from "#execution/session/recovery-cancelled-tool-history.js";
@@ -2853,6 +2916,48 @@ new file mode 100644
 +  }
 +}
 +
++/** A cancellation settles its exact Stop, never an unproved effect or queued Send. */
++function assessSettledCancellation(payload, candidate, session) {
++  const { sequence, turnId } = candidate.cancellation;
++  if (!payload.cancellationInbox?.length) return uncertain("unconsumed-native-inbox-input");
++  for (const item of payload.cancellationInbox) {
++    try {
++      const command = item === null ? undefined : decodeSessionInboxPayload(item.payload);
++      if (command?.kind !== "cancel" || command.turnId !== turnId ||
++        Object.keys(item.payload).some((key) => key !== "kind" && key !== "turnId"))
++        return uncertain("unconsumed-native-inbox-input");
++    } catch {
++      return uncertain("unconsumed-native-inbox-input");
++    }
++  }
++  const sameTurn = (event) =>
++    event.data?.turnId === turnId && event.data.sequence === sequence;
++  const cancel = payload.nativeEvents.findIndex((event) => event.type === "turn.cancelled" && sameTurn(event));
++  if (cancel < 0) return uncertain("cancelled-turn-replay");
++  const committed = committedResultIds(session.history);
++  const hasInput = payload.nativeEvents.some((event) =>
++    sameTurn(event) && (event.type === "input.requested" || event.type.startsWith("approval.")));
++  const isReadOnlyStatus = (action) =>
++    action.kind === "tool-call" && action.toolName === "observe-app-production" &&
++    typeof action.input?.appId === "string" &&
++    action.input.appId.length <= 92 &&
++    /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(action.input.appId) &&
++    Object.keys(action.input).length === 1;
++  for (const [index, event] of payload.nativeEvents.entries()) {
++    if (!sameTurn(event)) continue;
++    if (event.type === "action.result" || event.type === "action.partial") {
++      const id = event.data.result?.callId;
++      if (typeof id !== "string" || !committed.has(id))
++        return uncertain("uncommitted-action-result", id);
++    }
++    if (event.type !== "actions.requested") continue;
++    for (const action of event.data.actions ?? []) {
++      if (!committed.has(action.callId) && (index >= cancel || hasInput || !isReadOnlyStatus(action)))
++        return uncertain("uncommitted-action-dispatch", action.callId);
++    }
++  }
++}
++
 +function assessProtocolCompletion(payload, session) {
 +  const transcript = parts(session.history);
 +  const results = callIds(session.history, "tool-result");
@@ -3048,6 +3153,10 @@ new file mode 100644
 +    }
 +  }
 +  if (!approvalTranscriptAvailable(session)) return uncertain("approval-transcript-unavailable");
++  if (latest.cancellation !== undefined) {
++    const unresolved = assessSettledCancellation(payload, latest, session);
++    if (unresolved !== undefined) return unresolved;
++  }
 +  // Protocol closure is not an authored effect commit. Inspect the complete
 +  // retained frontier, including outcomes older than the selected input.
 +  const cancelledCallIds = new Set(
@@ -3357,7 +3466,7 @@ new file mode 100644
 +  readonly executionTransfer?: { readonly kind: "pending-approval" | "idle-checkpoint"; readonly sourceCheckpointDigest: string };
 +}
 +export interface TerminalRecoveryProvenance {
-+  readonly kind: "terminal-finalizer-input" | "completed-terminal-turn-input" | "failed-turn-input" | "committed-turn-output" | "validated-recovery-input";
++  readonly kind: "terminal-finalizer-input" | "completed-terminal-turn-input" | "failed-turn-input" | "committed-turn-output" | "committed-cancelled-turn-output" | "validated-recovery-input";
 +  /** Physical owner of checkpoint coordinates; absent on legacy receipts. */
 +  readonly checkpointOwnerRunId?: string;
 +  readonly sourceStepId: string;
@@ -3490,7 +3599,7 @@ diff --git a/dist/src/execution/session/historical-checkpoints.js b/dist/src/exe
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/historical-checkpoints.js
-@@ -0,0 +1,277 @@
+@@ -0,0 +1,278 @@
 +import { resolveTerminalCheckpointOwner } from "#execution/session/recovery-owner-provenance.js";
 +
 +const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -3532,8 +3641,9 @@ new file mode 100644
 +        const step = await guarded(authorize, () => world.steps.get(runId, cutoff.stepId, { resolveData: "all" }));
 +        if (step.runId !== runId || step.stepId !== cutoff.stepId) throw new Error("Historical cutoff step identity differs.");
 +        let selected;
-+        if (receiptKind === "committed-turn-output") {
-+          if (nameOf(step.stepName) !== "turnStep" || step.status !== "completed" || boundary.eventType !== "step_completed" || step.output === undefined) throw new Error("Historical committed cutoff unavailable.");
++        if (["committed-turn-output", "committed-cancelled-turn-output"].includes(receiptKind)) {
++          const expectedName = receiptKind === "committed-turn-output" ? "turnStep" : "settleCancelledTurnStep";
++          if (nameOf(step.stepName) !== expectedName || step.status !== "completed" || boundary.eventType !== "step_completed" || step.output === undefined) throw new Error("Historical committed cutoff unavailable.");
 +          selected = await guarded(authorize, () => deps.hydrateStepReturnValue(step.output, runId, key));
 +        } else if (receiptKind === "validated-recovery-input") {
 +          if (nameOf(step.stepName) !== "validateTerminalRecoveryCheckpointStep" || step.status !== "completed" || boundary.eventType !== "step_completed" || step.input === undefined) throw new Error("Historical validated recovery cutoff unavailable.");
@@ -3629,13 +3739,13 @@ new file mode 100644
 +              if (metadata.runId !== runId || metadata.stepId !== stepId || typeof metadata.stepName !== "string") throw new Error("Historical step identity differs.");
 +              name = nameOf(metadata.stepName);
 +            }
-+            if (name === "turnStep" && ["step_completed", "step_failed"].includes(event.eventType) || name === "terminateChildSessionsStep") {
++            if (name === "turnStep" && ["step_completed", "step_failed"].includes(event.eventType) || name === "settleCancelledTurnStep" && event.eventType === "step_completed" || name === "terminateChildSessionsStep") {
 +              const step = await guarded(authorize, () => world.steps.get(runId, stepId, { resolveData: "all" }));
 +              if (step.runId !== runId || step.stepId !== stepId || nameOf(step.stepName) !== name) throw new Error("Historical hydrated step identity differs.");
 +              if (name === "turnStep" && event.eventType === "step_failed" && step.status !== "failed") throw new Error("Historical failed step changed.");
 +              finishedSteps.add(stepId);
 +              let needsInput = name === "terminateChildSessionsStep" || event.eventType === "step_failed";
-+              if (name === "turnStep" && event.eventType === "step_completed") {
++              if (["turnStep", "settleCancelledTurnStep"].includes(name) && event.eventType === "step_completed") {
 +                if (step.status !== "completed" || step.output === undefined) throw new Error("Historical completed output unavailable.");
 +                const output = await guarded(authorize, () => deps.hydrateStepReturnValue(step.output, runId, key));
 +                projected.push({ checkpoint: project(output, origin, true), uncertainOrigin: false });
@@ -3849,7 +3959,7 @@ new file mode 100644
 +  } catch (error) { if (error instanceof NativeInspectionFailure) throw error; throw new NativeInspectionFailure(stage, error, run?.status); }
 +}
 +
-+const candidateKinds = ["terminal-finalizer-input", "completed-terminal-turn-input", "failed-turn-input", "committed-turn-output", "validated-recovery-input"];
++const candidateKinds = ["terminal-finalizer-input", "completed-terminal-turn-input", "failed-turn-input", "committed-turn-output", "committed-cancelled-turn-output", "validated-recovery-input"];
 +const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 +
 +export function parseTerminalRecoveryDescriptor(value, operationId) {
