@@ -470,10 +470,23 @@ const reviewedDraftReconciliation = (state: ProposedWorkflow) => {
     : null;
 };
 
+const candidateReviewMismatch = "candidate-review-mismatch";
+const approvedReleaseMismatch = "approved-release-mismatch";
+const readAnchoredMerge = "read-anchored-merge";
+
+type ReconciliationCandidateFailure =
+  | "candidate-unsealed"
+  | "candidate-compile-unavailable"
+  | typeof candidateReviewMismatch
+  | "schema-predecessor-mismatch"
+  | "candidate-file-scope"
+  | "candidate-schema-unchanged";
+
 const directDraftReconciliationScope = (
   state: ProposedWorkflow,
   subject: DirectProductionSubject,
   failedGrant: DirectProductionGrant,
+  onFailure?: (reason: ReconciliationCandidateFailure) => void,
 ) => {
   const reviewBinding = reviewedDraftReconciliation(state);
   const { revision } = subject;
@@ -483,6 +496,7 @@ const directDraftReconciliationScope = (
     revision?.schemaChange === undefined ||
     previous?.schemaChange === undefined
   ) {
+    onFailure?.(candidateReviewMismatch);
     return null;
   }
   if (
@@ -490,27 +504,37 @@ const directDraftReconciliationScope = (
     failedGrant.subject.appSpecDigest !== subject.appSpecDigest ||
     !matchesRevisionPredecessor(subject, failedGrant.subject)
   ) {
+    onFailure?.(candidateReviewMismatch);
     return null;
   }
   const { candidate, proposal, originPublicationDigest } = reviewBinding;
   if (proposal === undefined) {
+    onFailure?.("candidate-unsealed");
     return null;
   }
   const completion = draftReconciliationCompletions
     .get()
     .find(({ proposal: retained }) => isDeepStrictEqual(retained, proposal));
   const compilation = candidate.validation?.compilation;
+  if (completion?.preparation !== "sealed-before-approval") {
+    onFailure?.("candidate-unsealed");
+    return null;
+  }
   if (
-    // oxlint-disable-next-line sonarjs/expression-complexity -- The original owned review and new sealed compiler capture must bind the same candidate.
-    completion?.preparation !== "sealed-before-approval" ||
     compilation?.release.status !== "published" ||
-    proposal.returnToDraft === true ||
-    candidate.conflicts.length > 0 ||
-    candidate.dependencyCatalog !== undefined ||
-    !isDeepStrictEqual(candidate.review, completion.review) ||
-    !isDeepStrictEqual(compilation, completion.compilation) ||
-    currentDraftCandidateSource(state, candidate) === undefined
+    !isDeepStrictEqual(compilation, completion.compilation)
   ) {
+    onFailure?.("candidate-compile-unavailable");
+    return null;
+  }
+  const reviewCurrent = [
+    proposal.returnToDraft !== true,
+    candidate.conflicts.length === 0,
+    candidate.dependencyCatalog === undefined,
+    isDeepStrictEqual(candidate.review, completion.review),
+  ].every(Boolean);
+  if (!reviewCurrent || currentDraftCandidateSource(state, candidate) === undefined) {
+    onFailure?.(candidateReviewMismatch);
     return null;
   }
   const { review, appReview } = completion;
@@ -542,6 +566,7 @@ const directDraftReconciliationScope = (
     previous.schemaChange.priorCueSha256 === revision.schemaChange.priorCueSha256,
   ].every(Boolean);
   if (!matches) {
+    onFailure?.(candidateReviewMismatch);
     return null;
   }
   const appPath = `apps/${subject.appId}`;
@@ -571,7 +596,16 @@ const directDraftReconciliationScope = (
     candidateCueSha256 !== undefined &&
     candidateCueSha256 !== revision.schemaChange.candidateCueSha256 &&
     candidateCueSha256 !== revision.schemaChange.priorCueSha256;
-  if (!correctBase || !sameFileScope || !correctedBytes) {
+  if (!correctBase) {
+    onFailure?.("schema-predecessor-mismatch");
+    return null;
+  }
+  if (!sameFileScope) {
+    onFailure?.("candidate-file-scope");
+    return null;
+  }
+  if (!correctedBytes) {
+    onFailure?.("candidate-schema-unchanged");
     return null;
   }
   const corrected = directProductionSubjectSchema.safeParse({
@@ -591,7 +625,11 @@ const directDraftReconciliationScope = (
       },
     },
   });
-  return corrected.success ? { subject: corrected.data, proposal, originPublicationDigest } : null;
+  if (!corrected.success) {
+    onFailure?.(candidateReviewMismatch);
+    return null;
+  }
+  return { subject: corrected.data, proposal, originPublicationDigest };
 };
 
 const sameSubject = (first: DirectProductionSubject | undefined, second: DirectProductionSubject) =>
@@ -644,7 +682,11 @@ interface RevisionObservationPorts {
   observeProduction?: typeof observeMergedAppProduction;
 }
 
-const priorRevisionDelivery = (state: ProposedWorkflow, priorGrant: DirectProductionGrant) => {
+const priorRevisionDelivery = (
+  state: ProposedWorkflow,
+  priorGrant: DirectProductionGrant,
+  purpose: "restore-predecessor" | typeof readAnchoredMerge = "restore-predecessor",
+) => {
   const prior = priorGrant.subject;
   const [owner = "", name = ""] = prior.repositoryFullName.split("/");
   const history = ownedDraftPublicationHistory({
@@ -668,7 +710,7 @@ const priorRevisionDelivery = (state: ProposedWorkflow, priorGrant: DirectProduc
   const marker = prior.revision?.reconciliation;
   const delivery = calls.findLast((call) =>
     [
-      call.cancelled !== true,
+      call.cancelled !== true || purpose === readAnchoredMerge,
       call.directProductionGrantDigest === priorGrant.digest,
       call.subject.appId === prior.appId,
       call.subject.appSpecDigest === prior.appSpecDigest,
@@ -737,34 +779,66 @@ interface ReconciliationObservationPorts {
   >;
 }
 
+export type ProductionReconciliationFailure =
+  | ReconciliationCandidateFailure
+  | "candidate-review-unavailable"
+  | "prior-approved-revision-unavailable"
+  | typeof approvedReleaseMismatch
+  | "prior-delivery-unavailable"
+  | "release-selection-changed"
+  | "github-draft-mismatch"
+  | "github-origin-mismatch"
+  | "github-base-mismatch"
+  | "github-installation-mismatch"
+  | "github-prior-merge-mismatch"
+  | "github-read-unavailable";
+
 /** A new combined decision can replace the grant for an exact still-draft schema revision. */
 export const prepareDirectProductionDraftReconciliation = async (
   ctx: ToolContext,
   ports: ReconciliationObservationPorts = {},
-): Promise<void> => {
+): Promise<ProductionReconciliationFailure | null> => {
   ctx.abortSignal.throwIfAborted();
   const state = appBuilderWorkflowState.get();
   const { grant } = authorization.get();
+  const candidate = draftReconciliationState.get();
   if (
-    state.phase !== "reviewed" ||
-    reviewedDraftReconciliation(state) === null ||
-    grant?.subject.revision?.schemaChange === undefined
+    !("proposal" in state) ||
+    grant?.subject.revision?.schemaChange === undefined ||
+    candidate?.appId !== state.appSpec.appId
   ) {
-    return;
+    return null;
+  }
+  if (state.phase !== "reviewed" || reviewedDraftReconciliation(state) === null) {
+    return "candidate-review-unavailable";
+  }
+  if (grant.subject.proposalDigest !== state.proposal.digest) {
+    return approvedReleaseMismatch;
   }
   const predecessor = revisionPredecessor(state.proposal.digest);
-  const subject = subjectForProposal(ctx, state, [], predecessor);
-  if (predecessor === undefined || subject === undefined) {
-    return;
+  if (predecessor === undefined) {
+    return "prior-approved-revision-unavailable";
   }
-  const corrected = directDraftReconciliationScope(state, subject, grant);
-  const prior = priorRevisionDelivery(state, predecessor);
-  if (corrected === null || prior === null) {
-    return;
+  const subject = subjectForProposal(ctx, state, [], predecessor);
+  if (subject === undefined) {
+    return approvedReleaseMismatch;
+  }
+  let candidateFailure: ReconciliationCandidateFailure = candidateReviewMismatch;
+  const corrected = directDraftReconciliationScope(state, subject, grant, (reason) => {
+    candidateFailure = reason;
+  });
+  if (corrected === null) {
+    return candidateFailure;
+  }
+  // A new approved revision already retained this predecessor. A stopped older
+  // Finish call locates its immutable PR only; GitHub must still prove the merge.
+  const prior = priorRevisionDelivery(state, predecessor, readAnchoredMerge);
+  if (prior === null) {
+    return "prior-delivery-unavailable";
   }
   const approvedRepair = grant.subject.revision.reconciliation;
   if (approvedRepair === undefined && !sameSubject(subject, grant.subject)) {
-    return;
+    return approvedReleaseMismatch;
   }
   if (approvedRepair !== undefined) {
     const repaired = corrected.subject.revision?.reconciliation;
@@ -774,8 +848,11 @@ export const prepareDirectProductionDraftReconciliation = async (
       repaired?.pullRequestNumber === approvedRepair.pullRequestNumber,
       repaired?.expectedHeadSha === approvedRepair.expectedHeadSha,
     ].every(Boolean);
-    if (!matchesDraft || sameSubject(grant.subject, corrected.subject)) {
-      return;
+    if (!matchesDraft) {
+      return "github-origin-mismatch";
+    }
+    if (sameSubject(grant.subject, corrected.subject)) {
+      return null;
     }
   }
   authorization.update((current) =>
@@ -787,7 +864,7 @@ export const prepareDirectProductionDraftReconciliation = async (
     return (
       isDeepStrictEqual(appBuilderWorkflowState.get(), state) &&
       isDeepStrictEqual(authorization.get().grant, grant) &&
-      isDeepStrictEqual(priorRevisionDelivery(state, predecessor), prior) &&
+      isDeepStrictEqual(priorRevisionDelivery(state, predecessor, readAnchoredMerge), prior) &&
       isDeepStrictEqual(directDraftReconciliationScope(state, subject, grant), corrected)
     );
   };
@@ -797,7 +874,7 @@ export const prepareDirectProductionDraftReconciliation = async (
       { selectedInstallationId: subject.installationId },
     );
     if (!isCurrent()) {
-      return;
+      return "release-selection-changed";
     }
     const [owned, origin, previous] = await Promise.all([
       runtime.inspectExistingDraftReconciliationSource({
@@ -811,7 +888,7 @@ export const prepareDirectProductionDraftReconciliation = async (
       observePriorRevisionPullRequest(runtime, prior),
     ]);
     if (!isCurrent()) {
-      return;
+      return "release-selection-changed";
     }
     const { draft, base, publishedHeadSha } = owned;
     const draftMatches = [
@@ -828,14 +905,25 @@ export const prepareDirectProductionDraftReconciliation = async (
       draft.headSha === proposal.expectedHeadSha,
       draft.headTree === proposal.expectedHeadTree,
       publishedHeadSha === proposal.expectedHeadSha,
+    ].every(Boolean);
+    if (!draftMatches) {
+      return "github-draft-mismatch";
+    }
+    const originMatches = [
       origin?.proposalDigest === corrected.originPublicationDigest,
       origin?.digest === proposal.priorPublicationDigest,
       origin?.branchSha === proposal.expectedHeadSha,
       origin?.branchTree === proposal.expectedHeadTree,
-      base.headSha === proposal.expectedBaseSha,
-      base.headTree === proposal.expectedBaseTree,
-      base.installationIdentityDigest === proposal.installationIdentityDigest,
     ].every(Boolean);
+    if (!originMatches) {
+      return "github-origin-mismatch";
+    }
+    if (base.headSha !== proposal.expectedBaseSha || base.headTree !== proposal.expectedBaseTree) {
+      return "github-base-mismatch";
+    }
+    if (base.installationIdentityDigest !== proposal.installationIdentityDigest) {
+      return "github-installation-mismatch";
+    }
     const merged = previous?.reviewedTarget;
     const predecessorMerged = [
       previous?.state === "merged",
@@ -847,14 +935,17 @@ export const prepareDirectProductionDraftReconciliation = async (
       merged?.baseBranch === proposal.baseBranch,
       merged?.pullRequestNumber !== proposal.pullRequestNumber,
     ].every(Boolean);
-    if (draftMatches && predecessorMerged) {
-      authorization.update((current) => ({
-        ...current,
-        reconciliation: { failedGrantDigest: grant.digest, subject: corrected.subject },
-      }));
+    if (!predecessorMerged) {
+      return "github-prior-merge-mismatch";
     }
+    authorization.update((current) => ({
+      ...current,
+      reconciliation: { failedGrantDigest: grant.digest, subject: corrected.subject },
+    }));
+    return null;
   } catch {
     ctx.abortSignal.throwIfAborted();
+    return "github-read-unavailable";
   }
 };
 
