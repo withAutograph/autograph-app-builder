@@ -371,6 +371,15 @@ const addSettledCancellation = async ({
     ...sourcePair,
     sessionState: createDurableSessionState({ session: idle }),
   };
+  const priorInbox = "turn-step-input-inbox";
+  if (stopDuringTurnStep === true) {
+    steps.get("prior").input = await args({
+      ...before,
+      sessionState: createDurableSessionState({
+        session: { ...active, continuationToken: priorInbox },
+      }),
+    });
+  }
   steps.get("prior").output = await output({
     action: stopDuringTurnStep === true ? "cancelled" : "park",
     ...before,
@@ -396,7 +405,7 @@ const addSettledCancellation = async ({
   const queuedSend =
     beforeCancellationSend === true
       ? event(queuedSendSlot, "hook_received", "old-continuation", {
-          token: "old-turn-inbox",
+          token: stopDuringTurnStep === true ? priorInbox : "old-turn-inbox",
           payload: await output({ kind: "send", payload: { message: "still queued" } }),
         })
       : undefined;

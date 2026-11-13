@@ -819,7 +819,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,717 @@
+@@ -0,0 +1,725 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
@@ -1044,10 +1044,10 @@ new file mode 100644
 +          issues.push({ reason: "native-step-output-unreadable", stepId });
 +        }
 +      }
-+      const completedTerminalError = name === "turnStep" && retained.output?.action === "done";
++      const completedTerminalOutput = name === "turnStep" && ["done", "cancelled"].includes(retained.output?.action);
 +      if (
 +        step.input !== undefined &&
-+        (name !== "turnStep" || step.status === "failed" || completedTerminalError)
++        (name !== "turnStep" || step.status === "failed" || completedTerminalOutput)
 +      ) {
 +        try {
 +          retained.arguments = history.stepArguments(await dependencies.hydrateStepArguments(step.input, run.runId, key));
@@ -1184,16 +1184,23 @@ new file mode 100644
 +    const carriedInbox = [];
 +    const [latest, previous] = [...unique].sort((left, right) => right.origin.slot - left.origin.slot);
 +    let previousSlot = latest.cancellation === undefined ? latest.origin.slot : previous?.origin.slot ?? 0;
++    let producerToken;
 +    if (latest.cancellation !== undefined && previous?.kind === "committed-turn-output") {
 +      const emission = previous.sessionState.emissionState;
 +      // Stop can reach the running producer before its output is committed.
 +      // Include only that producer's step, never an earlier turn's inbox.
 +      const settlementInput = steps.get(latest.origin.stepId)?.arguments?.args?.[0];
-+      if (emission?.sequence === latest.cancellation.sequence &&
++      const producer = steps.get(previous.origin.stepId);
++      const producerInput = producer?.arguments?.args?.[0];
++      if (producer?.output?.action === "cancelled" &&
++        producerInput?.sessionState?.sessionId === binding.logicalSessionId &&
++        producerInput.serializedContext?.["eve.sessionId"] === binding.logicalSessionId &&
++        emission?.sequence === latest.cancellation.sequence &&
 +        activeTurnId(emission) === latest.cancellation.turnId &&
 +        isDeepStrictEqual(previous.sessionState, settlementInput?.sessionState) &&
 +        isDeepStrictEqual(previous.serializedContext, settlementInput?.serializedContext)) {
 +        previousSlot = inputOrigins.get(previous.origin.stepId)?.slot ?? previousSlot;
++        producerToken = dependencies.readDurableSession(producerInput.sessionState).continuationToken;
 +      }
 +    }
 +    const latestSession = dependencies.readDurableSession(latest.sessionState);
@@ -1206,10 +1213,11 @@ new file mode 100644
 +      inboxTokens.add(latestSession.continuationToken);
 +      inboxTokens.add(sessionInboxHookToken(latestSession.continuationToken));
 +    }
-+    const priorToken = latest.cancellation?.priorContinuationToken;
-+    if (typeof priorToken === "string" && priorToken.length > 0) {
-+      inboxTokens.add(priorToken);
-+      inboxTokens.add(sessionInboxHookToken(priorToken));
++    for (const token of [latest.cancellation?.priorContinuationToken, producerToken]) {
++      if (typeof token === "string" && token.length > 0) {
++        inboxTokens.add(token);
++        inboxTokens.add(sessionInboxHookToken(token));
++      }
 +    }
 +    const hookTokens = new Map(
 +      events
