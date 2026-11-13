@@ -1163,12 +1163,15 @@ test("an internal workflow receipt stays fenced and its private contents are not
       results: [{ ...actualRuntimeResult, output: { note: "private fixture value" } }],
     },
   });
-  const diagnostic = vi.spyOn(console, "info").mockImplementation(() => undefined);
+  const records = [];
+  const diagnostic = vi.spyOn(console, "info").mockImplementation((record) => {
+    records.push(record);
+  });
   try {
     const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
     assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
-    assert.deepEqual(diagnostic.mock.calls, [
-      [JSON.stringify({ event: "builder.cancellation_inbox_refusal", boundary: "runtime_action_result" })],
+    assert.deepEqual(records, [
+      JSON.stringify({ event: "builder.cancellation_inbox_refusal", boundary: "runtime_action_result" }),
     ]);
   } finally {
     diagnostic.mockRestore();
