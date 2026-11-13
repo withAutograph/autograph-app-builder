@@ -126,6 +126,40 @@ describe("verifySettledGitHubDeliveryWithPriorReceipt", () => {
     expect(readReceipt).toHaveBeenCalledExactlyOnceWith(priorMergeReceipt.intentDigest);
   });
 
+  it("requires the prior completed epoch and exact journal for a final post-Stop schema step", async () => {
+    const { witness, context, capturedCall, priorCapturedCall, priorMergeReceipt } = fixture({
+      priorMerge: true,
+    });
+    const [merge, schema] = witness.completedSteps;
+    const lateWitness = {
+      ...witness,
+      completedSteps: [merge, { ...schema, afterStop: true }] as const,
+    };
+    const readReceipt = vi.fn(async () => await Promise.resolve(priorMergeReceipt));
+    expect(verifySettledGitHubDelivery(lateWitness, owner)).toBe(false);
+    await expect(verifySettledGitHubDeliveryWithPriorReceipt(lateWitness, owner)).resolves.toBe(
+      false,
+    );
+    await expect(
+      verifySettledGitHubDeliveryWithPriorReceipt(
+        {
+          ...lateWitness,
+          serializedContext: {
+            ...context,
+            [callKey]: [{ ...priorCapturedCall, owner: capturedCall.owner }, capturedCall],
+          },
+        },
+        owner,
+        readReceipt,
+      ),
+    ).resolves.toBe(false);
+    expect(readReceipt).not.toHaveBeenCalled();
+    await expect(
+      verifySettledGitHubDeliveryWithPriorReceipt(lateWitness, owner, readReceipt),
+    ).resolves.toBe(true);
+    expect(readReceipt).toHaveBeenCalledExactlyOnceWith(priorMergeReceipt.intentDigest);
+  });
+
   it("does not trust an earlier live result when its original Ready receipt is unavailable", async () => {
     const { witness, priorMergeReceipt } = fixture({ priorMerge: true });
     const unrelatedReceipt = createGitHubPrEffectReceipt({

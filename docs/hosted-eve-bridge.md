@@ -275,6 +275,11 @@ Recovery verifies the original start, absence of a later attempt, terminal
 step identity, and the protected result. A failed step or a provider-only
 result does not prove installation. Recovery logs a fixed evidence category
 when those facts cannot be verified.
+When cleanup scheduled the final schema check after Stop, recovery may use
+it only as part of the exact repeat-delivery proof above. The earlier committed
+result and merge receipt must prove it reused authority that had already
+expired before the repeat began. A post-Stop merge, later step, or incomplete
+child remains unproven.
 Other internal inbox messages without settlement proof still prevent transfer. Recovery reports a fixed
 message category to operations without recording payloads or arbitrary message
 kinds. That category provides no authority to discard or replay the message.

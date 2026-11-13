@@ -28,6 +28,7 @@ const completedStepSchema = z.strictObject({
   args: z.unknown(),
   output: z.unknown(),
   status: z.enum(["completed", "failed", "cancelled"]).optional(),
+  afterStop: z.literal(true).optional(),
 });
 const committedDeliverySchema = z.strictObject({
   status: z.literal("merged"),
