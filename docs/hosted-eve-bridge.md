@@ -243,7 +243,9 @@ A cooperative cancellation notice without a result may be accounted for only
 within that same stopped turn. The exact parent Stop and completed descendant
 cancellation must bind the registered child and the settlement input. The
 child's retained entry, control receipt, completed callback, and terminal
-state must prove that exact notice. The parent may persist the notice after
+state must prove that exact notice. Native step inspection uses the provider's
+default page size and follows every cursor before accepting the proof.
+The parent may persist the notice after
 descendant cleanup completes but before its cancellation checkpoint commits.
 A refusal reports only a fixed witness category and, if a read threw, the
 fixed read stage and error class. It never logs the payload, identifier, or

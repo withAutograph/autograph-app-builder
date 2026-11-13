@@ -501,9 +501,34 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
         : await events.get(id, event, options),
   };
   world.steps = {
-    list: async ({ runId: id }) => {
-      assert.equal(id, runId);
-      return await Promise.resolve({ data: [childResumeStep], hasMore: false });
+    async list(request) {
+      assert.equal(request.runId, runId);
+      const { pagedSteps } = evidence;
+      if (pagedSteps === undefined) {
+        return await Promise.resolve({ data: [childResumeStep], hasMore: false });
+      }
+
+      const { pagination } = request;
+      if (Object.hasOwn(pagination, "limit")) {
+        throw new WorkflowWorldError("Explicit page size is unsupported", { status: 400 });
+      }
+      const { cursor } = pagination;
+      pagedSteps.requests.push(request);
+      if (cursor === undefined) {
+        return { data: [childResumeStep], hasMore: true, cursor: "next-child-steps" };
+      }
+
+      return {
+        data: [
+          {
+            runId,
+            stepId: "separate-child-step",
+            stepName: "step//eve//separateChildStep",
+            status: pagedSteps.secondStatus,
+          },
+        ],
+        hasMore: false,
+      };
     },
     get: async (id, stepId, options) =>
       id === runId && stepId === childResumeStepId
@@ -1766,6 +1791,36 @@ test("a failed child run read logs only fixed diagnostics and still blocks recov
     diagnostic.mockRestore();
   }
 });
+
+for (const secondStatus of [completedStatus, "pending"]) {
+  test(`descendant cancellation inspects both default-sized step pages with a ${secondStatus} later step`, async () => {
+    const requests = [];
+    const f = await settledIdleFixture({
+      encrypted: true,
+      cancelledOutcome: { pagedSteps: { requests, secondStatus } },
+    });
+    const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+    assert.deepEqual(requests, [
+      {
+        runId: workflowReportRun.runId,
+        pagination: { sortOrder: "asc" },
+        resolveData: "none",
+      },
+      {
+        runId: workflowReportRun.runId,
+        pagination: { sortOrder: "asc", cursor: "next-child-steps" },
+        resolveData: "none",
+      },
+    ]);
+    if (secondStatus === completedStatus) {
+      assert.equal(result.kind, "ready");
+      assert.equal(result.replayInput, undefined);
+      assert.equal(result.carriedInbox, undefined);
+    } else {
+      assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
+    }
+  });
+}
 
 test("a proven descendant cancellation notice does not resolve an unrelated dispatched write", async () => {
   const f = await settledIdleFixture({
