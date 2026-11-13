@@ -42,6 +42,18 @@ const transitionContractSchema = z.looseObject({
   version: z.string(),
   predecessors: z.array(z.looseObject({ version: z.string(), schema: z.json() })),
 });
+const compatibilityProofSchema = z.looseObject({
+  predecessorCompatibility: z.strictObject({
+    kind: z.literal("optional-text-addition-v1"),
+    predecessors: z.array(
+      z.strictObject({
+        artifactSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+        schema: z.json(),
+        field: z.strictObject({ modelId: z.string(), fieldId: z.string() }),
+      }),
+    ),
+  }),
+});
 const transitionPlanSchema = z.looseObject({
   app_id: z.string(),
   customer_id: z.string(),
@@ -66,6 +78,8 @@ interface SchemaRelease {
   releaseId: string;
   manifestSha256: string;
 }
+const releaseCompilerScript = ".config/mise/scripts/repository/schema-release.ts";
+const runtimeHashes = z.object({ operations: digest, bindings: digest, server_bindings: digest });
 const unavailable = () => new Error("repository_production_schema_revision_unverified");
 const sha256 = (bytes: Buffer) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 
@@ -95,11 +109,11 @@ const readRelease = (appId: string, release: SchemaRelease, cueSha256: string) =
   }
   const sources = { ...manifest.sources };
   Reflect.deleteProperty(sources, cuePath);
-  return { artifact, compiler: manifest.compiler, sources };
+  return { artifact, manifest, sources };
 };
 
 type Artifact = z.infer<typeof artifactSchema>;
-const withoutOptionalTextField = (prior: Artifact, next: Artifact): Artifact => {
+const projectOptionalTextAddition = (prior: Artifact, next: Artifact) => {
   const additions = next.schema.models.flatMap((model) => {
     const before = prior.schema.models.find(({ id }) => id === model.id);
     return model.kind !== "entity" || before === undefined
@@ -117,7 +131,7 @@ const withoutOptionalTextField = (prior: Artifact, next: Artifact): Artifact => 
     throw unavailable();
   }
   const { model, field } = addition;
-  return {
+  const projection: Artifact = {
     ...next,
     schema: {
       ...next.schema,
@@ -143,6 +157,7 @@ const withoutOptionalTextField = (prior: Artifact, next: Artifact): Artifact => 
       ),
     },
   };
+  return { projection, modelId: model, fieldId: field.id };
 };
 
 /** Check compiled data semantics and the exact approved CUE inputs before applying any DDL. */
@@ -164,13 +179,34 @@ export const assertOptionalTextProductionTransition = (input: {
       JSON.parse(candidate.files["transition-plan.json"].toString()),
     );
     const { customer_id: customerId } = previous.artifact.schema;
+    const { projection, modelId, fieldId } = projectOptionalTextAddition(
+      previous.artifact,
+      next.artifact,
+    );
+    const previousHash = sha256(prior.files["app-artifact.json"]).slice("sha256:".length);
+    const { files } = candidate;
+    const hashes = runtimeHashes.parse(next.manifest.hashes);
+    const { predecessorCompatibility } = compatibilityProofSchema.parse(
+      JSON.parse(files["operation-manifest.json"].toString()),
+    );
+    // This repository compiler step emits the compatibility evidence. All other
+    // manifest inputs and the normalized schema still have to match exactly.
+    Reflect.deleteProperty(previous.sources, releaseCompilerScript);
+    Reflect.deleteProperty(next.sources, releaseCompilerScript);
     const compatible = [
       prior.releaseId !== candidate.releaseId,
-      isDeepStrictEqual(previous.compiler, next.compiler),
+      isDeepStrictEqual(previous.manifest.compiler, next.manifest.compiler),
       isDeepStrictEqual(previous.sources, next.sources),
-      isDeepStrictEqual(
-        previous.artifact,
-        withoutOptionalTextField(previous.artifact, next.artifact),
+      isDeepStrictEqual(previous.artifact, projection),
+      hashes.operations === sha256(files["operation-manifest.json"]),
+      hashes.bindings === sha256(files["data-operations.ts"]),
+      hashes.server_bindings === sha256(files["data-server.ts"]),
+      predecessorCompatibility.predecessors.some(
+        (entry) =>
+          entry.artifactSha256 === previousHash &&
+          entry.field.modelId === modelId &&
+          entry.field.fieldId === fieldId &&
+          isDeepStrictEqual(entry.schema, previous.artifact.schema),
       ),
       transition.app_id === appId,
       transition.customer_id === customerId,

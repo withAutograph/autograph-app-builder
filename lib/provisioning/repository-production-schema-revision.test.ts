@@ -49,18 +49,41 @@ const release = (
   cueSha256: string,
   options: {
     retirements?: string[];
+    runtimeProof?: "missing" | "wrong-field" | "wrong-artifact";
+    sharedSource?: string;
     predecessors?: { version: string; schema: typeof beforeArtifact.schema }[];
   } = {},
 ) => {
   const { schema } = artifact;
   const coordinate = { app_id: appId, customer_id: schema.customer_id, version: schema.version };
+  const manifest =
+    schema.version === beforeVersion || options.runtimeProof === "missing"
+      ? {}
+      : {
+          predecessorCompatibility: {
+            kind: "optional-text-addition-v1",
+            predecessors: [
+              {
+                artifactSha256:
+                  options.runtimeProof === "wrong-artifact"
+                    ? "0".repeat(64)
+                    : hex(json(beforeArtifact)),
+                schema: beforeArtifact.schema,
+                field: {
+                  modelId: "entry",
+                  fieldId: options.runtimeProof === "wrong-field" ? "title" : textField.id,
+                },
+              },
+            ],
+          },
+        };
   const files: GeneratedAppReleaseFiles = {
     "app-artifact.json": json(artifact),
     "cue-to-sql-source-map.json": json({}),
     "data-operations.md": Buffer.alloc(0),
     "data-operations.ts": Buffer.alloc(0),
     "data-server.ts": Buffer.alloc(0),
-    "operation-manifest.json": json({}),
+    "operation-manifest.json": json(manifest),
     "release-manifest.json": Buffer.alloc(0),
     "runtime-coverage.json": json({}),
     "sql-bundle.sql": Buffer.from("generated SQL"),
@@ -77,12 +100,19 @@ const release = (
     app: appId,
     schema_version: schema.version,
     compiler: { version: "1" },
-    sources: { [`apps/${appId}/schema/${appId}.cue`]: `sha256:${cueSha256}` },
+    sources: {
+      [`apps/${appId}/schema/${appId}.cue`]: `sha256:${cueSha256}`,
+      ".config/mise/scripts/repository/schema-release.ts": `sha256:${cueSha256}`,
+      "packages/schema-compiler/cue/app-manifest.cue": `sha256:${options.sharedSource ?? priorCueSha256}`,
+    },
     hashes: {
       schema: `sha256:${hex(files["app-artifact.json"])}`,
       plan: `sha256:${hex(files["transition-plan.json"])}`,
       transition_contract: `sha256:${hex(files["transition-contract.json"])}`,
       bundle: `sha256:${hex(files["sql-bundle.sql"])}`,
+      operations: `sha256:${hex(files["operation-manifest.json"])}`,
+      bindings: `sha256:${hex(files["data-operations.ts"])}`,
+      server_bindings: `sha256:${hex(files["data-server.ts"])}`,
     },
   });
   return { files, releaseId: schema.version, manifestSha256: hex(files["release-manifest.json"]) };
@@ -123,6 +153,26 @@ describe("Exact optional text schema transition", () => {
     }).toThrow(rejection);
     expect(() => {
       verify(release(candidateArtifact(), candidateCueSha256, { predecessors: [] }));
+    }).toThrow(rejection);
+  });
+
+  it.each(["missing", "wrong-field", "wrong-artifact"] as const)(
+    "rejects runtime compatibility evidence that is %s",
+    (runtimeProof) => {
+      expect(() => {
+        verify(release(candidateArtifact(), candidateCueSha256, { runtimeProof }));
+      }).toThrow(rejection);
+    },
+  );
+
+  it("preserves the other reviewed compiler inputs and bindings", () => {
+    expect(() => {
+      verify(release(candidateArtifact(), candidateCueSha256, { sharedSource: "0".repeat(64) }));
+    }).toThrow(rejection);
+    const candidate = release(candidateArtifact(), candidateCueSha256);
+    candidate.files["data-operations.ts"] = Buffer.from("different runtime bindings");
+    expect(() => {
+      verify(candidate);
     }).toThrow(rejection);
   });
 
