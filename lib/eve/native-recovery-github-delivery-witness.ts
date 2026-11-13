@@ -80,7 +80,12 @@ export interface CancelledGitHubDeliveryWitness {
   readonly completedSteps: readonly z.input<typeof completedStepSchema>[];
   readonly readCommittedDelivery?: (
     callId: string,
-  ) => { toolInput: unknown; result: unknown } | undefined;
+  ) => CommittedDelivery | undefined | Promise<CommittedDelivery | undefined>;
+}
+
+interface CommittedDelivery {
+  readonly toolInput: unknown;
+  readonly result: unknown;
 }
 
 export type PriorMergeReceiptReader = (
@@ -364,9 +369,9 @@ export const verifySettledGitHubDeliveryWithPriorReceipt = async (
     return refuse("prior_epoch_mismatch");
   }
 
-  let committed: ReturnType<NonNullable<CancelledGitHubDeliveryWitness["readCommittedDelivery"]>>;
+  let committed: CommittedDelivery | undefined;
   try {
-    committed = witness.readCommittedDelivery(proof.deliveryCallId);
+    committed = await witness.readCommittedDelivery(proof.deliveryCallId);
   } catch {
     return refuse("prior_history_unavailable");
   }

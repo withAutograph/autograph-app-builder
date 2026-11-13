@@ -283,8 +283,14 @@ child remains unproven.
 An app-owned evidence refusal records only the fixed check that failed. It
 does not include tool input, release or account identifiers, or journal data.
 If a native compaction event removed an earlier delivery from the current
-prompt, recovery can read its exact completed checkpoint and native result.
-A contradictory retained call or result still refuses transfer.
+prompt, recovery can read its exact native result and the completed checkpoint
+that persisted it. That checkpoint may advance the step within the same turn
+before the turn sequence advances. When the exact pair is still retained,
+matching it in both the verified Stop settlement input and output also proves
+adoption across a change of execution owner. If the pair was compacted after a
+native handoff, recovery can find the completed checkpoint in a verified parent
+before its handoff began. It searches only owners of the same native session
+stream. A contradictory retained call or result still refuses transfer.
 Other internal inbox messages without settlement proof still prevent transfer. Recovery reports a fixed
 message category to operations without recording payloads or arbitrary message
 kinds. That category provides no authority to discard or replay the message.

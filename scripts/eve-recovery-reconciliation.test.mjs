@@ -30,6 +30,8 @@ const completedStatus = "completed";
 const afterChildTerminal = "after-terminal";
 const afterChildStop = "after-stop";
 const eventsListOperation = "events.list";
+const sessionOwnerWorkflow = "session-owner";
+const unrelatedDeliveryRunId = "wrun_unrelated_delivery";
 
 const require = createRequire(import.meta.url);
 const eve = path.resolve(
@@ -98,7 +100,7 @@ const actualRuntimeResult = {
   output: { value: "actual-native-outcome" },
 };
 
-const attachHandoffWorld = async ({ options, sourcePair, world, events, steps }) => {
+const attachHandoffWorld = async ({ options, sourcePair, world, events, steps, priorDelivery }) => {
   const boundOwnerRunId = options.handoff === true ? logicalSessionId : ownerRunId;
   const readOperations = [];
   if (options.handoff !== true) {
@@ -107,6 +109,7 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
   {
     const anchorRunId = boundOwnerRunId;
     const token = `${anchorRunId}:handoff`;
+    const parentDeliveryPlacement = options.handoffDeliveryCheckpoint;
     const checkpoint = {
       ...sourcePair,
       serializedContext: { ...sourcePair.serializedContext, "eve.sessionId": logicalSessionId },
@@ -154,18 +157,33 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
       "signalSessionOwnerActivationStep",
       { token, activation: { kind: "active" } },
     );
+    const deliveryEvents = (slot) => [
+      nativeWorldEvent(priorDelivery.runId, slot, "step_started", priorDelivery.stepId, {
+        stepName: priorDelivery.stepName,
+      }),
+      nativeWorldEvent(priorDelivery.runId, slot + 1, "step_completed", priorDelivery.stepId, {
+        stepName: priorDelivery.stepName,
+      }),
+    ];
+    const cutoffOffset = parentDeliveryPlacement === "before" ? 2 : 0;
     const parentEvents = [
-      nativeWorldEvent(anchorRunId, 1, "hook_created", "handoff-hook", { token }),
-      nativeWorldEvent(anchorRunId, 2, "step_started", startStep.stepId, {
+      ...(cutoffOffset === 0 ? [] : deliveryEvents(1)),
+      nativeWorldEvent(anchorRunId, 1 + cutoffOffset, "hook_created", "handoff-hook", { token }),
+      nativeWorldEvent(anchorRunId, 2 + cutoffOffset, "step_started", startStep.stepId, {
         stepName: startStep.stepName,
       }),
-      nativeWorldEvent(anchorRunId, 3, "step_completed", startStep.stepId, {
+      nativeWorldEvent(anchorRunId, 3 + cutoffOffset, "step_completed", startStep.stepId, {
         stepName: startStep.stepName,
       }),
-      nativeWorldEvent(anchorRunId, 4, "hook_received", "handoff-hook", {
+      nativeWorldEvent(anchorRunId, 4 + cutoffOffset, "hook_received", "handoff-hook", {
         payload: await serialization.dehydrateStepReturnValue({ kind: "active" }, anchorRunId),
       }),
-      nativeWorldEvent(anchorRunId, 5, "run_completed"),
+      ...(parentDeliveryPlacement === "after" ? deliveryEvents(5) : []),
+      nativeWorldEvent(
+        anchorRunId,
+        5 + (parentDeliveryPlacement === "after" ? 2 : cutoffOffset),
+        "run_completed",
+      ),
     ];
     if (options.parentFrontierUnknown === true) {
       parentEvents.push(
@@ -202,7 +220,7 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
           runId: anchorRunId,
           status: options.anchorStatus ?? completedStatus,
           deploymentId: "anchor-deployment",
-          workflowName: "session-owner",
+          workflowName: sessionOwnerWorkflow,
           input: await serialization.dehydrateWorkflowArguments([{ kind: "initial" }], anchorRunId),
         },
       ],
@@ -212,11 +230,23 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
           runId: ownerRunId,
           status: options.runStatus ?? "cancelled",
           deploymentId: childDeploymentId,
-          workflowName: "session-owner",
+          workflowName: sessionOwnerWorkflow,
           input: await serialization.dehydrateWorkflowArguments([childEntry], ownerRunId),
         },
       ],
     ]);
+    if (parentDeliveryPlacement === "unrelated") {
+      runs.set(unrelatedDeliveryRunId, {
+        runId: unrelatedDeliveryRunId,
+        status: completedStatus,
+        deploymentId: "unrelated-deployment",
+        workflowName: sessionOwnerWorkflow,
+        input: await serialization.dehydrateWorkflowArguments(
+          [{ kind: "initial" }],
+          unrelatedDeliveryRunId,
+        ),
+      });
+    }
     if (options.finalStatusTransition === true) {
       let reads = 0;
       Object.defineProperty(runs.get(ownerRunId), "status", {
@@ -249,13 +279,19 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
       };
     }
     let parentScans = 0;
+    const eventsForRun = (runId) => {
+      if (runId === anchorRunId) {
+        return parentEvents;
+      }
+      return runId === unrelatedDeliveryRunId ? deliveryEvents(1) : childEvents;
+    };
     // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     world.events.list = ({ runId, resolveData }) => {
       readOperations.push([eventsListOperation, runId, resolveData]);
       if (runId === anchorRunId) {
         parentScans += 1;
       }
-      const data = runId === anchorRunId ? parentEvents : childEvents;
+      const data = eventsForRun(runId);
       const drifted = options.parentScanDrift === true && runId === anchorRunId && parentScans > 1;
       const observed = drifted ? [...data, { ...data.at(-1), eventId: eventId(99) }] : data;
       return Promise.resolve({
@@ -278,16 +314,14 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
     // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     world.events.get = (runId, id) => {
       readOperations.push(["events.get", runId]);
-      return Promise.resolve(
-        (runId === anchorRunId ? parentEvents : childEvents).find((event) => event.eventId === id),
-      );
+      return Promise.resolve(eventsForRun(runId).find((event) => event.eventId === id));
     };
     // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     world.steps.get = (runId, id) => {
       readOperations.push(["steps.get", runId]);
       return Promise.resolve(
-        [startStep, validation, activation].find(
-          (step) => step.runId === runId && step.stepId === id,
+        [startStep, validation, activation, priorDelivery].find(
+          (step) => step?.runId === runId && step.stepId === id,
         ) ?? steps.get(id),
       );
     };
@@ -392,9 +426,66 @@ const workflowReportRun = {
 const workflowReportUpdate = { status: "merged", mergeCommitSha: "c".repeat(40) };
 const historicalDeliveryCallId = "original-committed-delivery";
 const historicalDeliveryEvent = { sequence: 0, stepIndex: 1, turnId: "older-delivery-turn" };
+const settlementOnly = "settlement-only";
+const settlementOutputOnly = "settlement-output-only";
 const historicalDeliveryResult = {
   ...workflowReportUpdate,
   nativeProduction: { status: "available", requestedRevision: "live" },
+};
+const historicalDeliveryMessages = () => [
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "tool-call",
+        toolCallId: historicalDeliveryCallId,
+        toolName: workflowReportRun.toolName,
+        input: workflowReportRun.input,
+      },
+    ],
+  },
+  {
+    role: "tool",
+    content: [
+      {
+        type: toolResultKind,
+        toolCallId: historicalDeliveryCallId,
+        toolName: workflowReportRun.toolName,
+        output: { type: "json", value: historicalDeliveryResult },
+      },
+    ],
+  },
+];
+const historicalHandoffDeliveryStep = async ({ key, placement, source, sourcePair }) => {
+  if (placement === undefined) {
+    return null;
+  }
+  const runId = placement === "unrelated" ? unrelatedDeliveryRunId : logicalSessionId;
+  const output = {
+    action: "park",
+    ...sourcePair,
+    sessionState: createDurableSessionState({
+      session: {
+        ...source,
+        history: [source.history[0], ...historicalDeliveryMessages()],
+        state: {
+          ...source.state,
+          "eve.harness.emission": {
+            ...emission,
+            ...historicalDeliveryEvent,
+            stepIndex: historicalDeliveryEvent.stepIndex + 1,
+          },
+        },
+      },
+    }),
+  };
+  return {
+    runId,
+    stepId: "historical-delivery-step",
+    stepName: turnStepName,
+    status: completedStatus,
+    output: await serialization.dehydrateStepReturnValue(output, runId, key),
+  };
 };
 const workflowOutcomeStepId = "release-owned-workflow-invocation";
 const cancelDescendantStepId = "cancel-owned-workflow";
@@ -429,7 +520,7 @@ const ownedDeliveryState = (session) => {
   });
 };
 
-const attachCancelledWorkflowChild = async (world, key, evidence) => {
+const attachCancelledWorkflowChild = async (world, key, evidence, deploymentId) => {
   if (evidence === undefined) {
     return;
   }
@@ -454,6 +545,7 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
     runId,
     workflowName: "workflow//eve//workflowToolRunWorkflow",
     status: evidence.runStatus ?? completedStatus,
+    deploymentId,
     input: await serialization.dehydrateWorkflowArguments([runInput], runId, key),
   };
   const childResumeStep = {
@@ -712,31 +804,11 @@ const addSettledCancellation = async ({
     ...source,
     history: [source.history[0]],
   });
-  if (cancelledOutcome?.delivery?.historicalResult !== undefined) {
-    active.history.push(
-      {
-        role: "assistant",
-        content: [
-          {
-            type: "tool-call",
-            toolCallId: historicalDeliveryCallId,
-            toolName: workflowReportRun.toolName,
-            input: workflowReportRun.input,
-          },
-        ],
-      },
-      {
-        role: "tool",
-        content: [
-          {
-            type: toolResultKind,
-            toolCallId: historicalDeliveryCallId,
-            toolName: workflowReportRun.toolName,
-            output: { type: "json", value: historicalDeliveryResult },
-          },
-        ],
-      },
-    );
+  const delivery = cancelledOutcome?.delivery;
+  const historicalMessages =
+    delivery?.historicalResult === undefined ? [] : historicalDeliveryMessages();
+  if (delivery?.priorDeliveryPlacement !== settlementOutputOnly) {
+    active.history.push(...historicalMessages);
   }
   if (beforeCancellationSend === true) {
     active.continuationToken = "old-turn-inbox";
@@ -761,19 +833,33 @@ const addSettledCancellation = async ({
     ...sourcePair,
     sessionState: createDurableSessionState({ session: settledActive }),
   };
-  const compacted = cancelledOutcome?.delivery?.compacted;
+  if (delivery?.priorDeliveryPlacement === settlementOutputOnly) {
+    settledHistory = [settledHistory[0], ...historicalMessages, ...settledHistory.slice(1)];
+  }
+  const compacted = delivery?.compacted;
   if (compacted !== undefined) {
-    const retained = settledHistory.filter(
-      (message) =>
-        !Array.isArray(message.content) ||
-        message.content.some((part) => part.toolCallId === historicalDeliveryCallId) !== true,
-    );
+    const withoutHistoricalDelivery = (history) =>
+      history.filter(
+        (message) =>
+          !Array.isArray(message.content) ||
+          message.content.some((part) => part.toolCallId === historicalDeliveryCallId) !== true,
+      );
+    const retained = withoutHistoricalDelivery(settledHistory);
     const marker = {
       role: "user",
       kind: "context.compaction",
       content: "[fixture compaction checkpoint]",
     };
     settledHistory = [retained[0], marker, ...retained.slice(1)];
+    if (
+      delivery.priorDeliveryCheckpoint !== undefined ||
+      delivery.historicalCheckpointInParent === true
+    ) {
+      const history = withoutHistoricalDelivery(settledActive.history);
+      before.sessionState = createDurableSessionState({
+        session: { ...settledActive, history: [history[0], marker, ...history.slice(1)] },
+      });
+    }
     if (compacted === "conflicting") {
       settledHistory.push({
         role: "tool",
@@ -816,9 +902,21 @@ const addSettledCancellation = async ({
     action: stopDuringTurnStep === true ? "cancelled" : "park",
     ...before,
   };
-  if (compacted !== undefined) {
+  if (compacted !== undefined || delivery?.priorDeliveryPlacement === settlementOnly) {
+    const priorEmission = delivery?.priorDeliveryCheckpoint;
     priorOutput.sessionState = createDurableSessionState({
-      session: { ...settledActive, history: priorCommittedHistory },
+      session: {
+        ...settledActive,
+        history:
+          delivery?.priorDeliveryPlacement === settlementOnly ||
+          delivery?.historicalCheckpointInParent === true
+            ? [priorCommittedHistory[0]]
+            : priorCommittedHistory,
+        state: {
+          ...settledActive.state,
+          "eve.harness.emission": { ...emission, ...priorEmission },
+        },
+      },
     });
   }
   steps.get("prior").output = await output(priorOutput);
@@ -1445,8 +1543,19 @@ const fixture = async (options = {}) => {
     sourcePair,
     steps,
     world,
+    priorDelivery: await historicalHandoffDeliveryStep({
+      key,
+      placement: options.handoffDeliveryCheckpoint,
+      source,
+      sourcePair,
+    }),
   });
-  await attachCancelledWorkflowChild(world, key, options.cancelledOutcome);
+  await attachCancelledWorkflowChild(
+    world,
+    key,
+    options.cancelledOutcome,
+    options.handoff === true ? childDeploymentId : undefined,
+  );
   const snapshotKey = await attachNativeSnapshot(world, nativeEvents, options.snapshot);
   let authorized = false;
   const collect = collectorFor(options)({
@@ -2221,8 +2330,8 @@ test.each([
       },
     },
     verifyCancelledWorkflowEffects: async (witness) => {
-      assert.equal(witness.readCommittedDelivery(witness.callId), undefined);
-      const retained = witness.readCommittedDelivery(historicalDeliveryCallId);
+      assert.equal(await witness.readCommittedDelivery(witness.callId), undefined);
+      const retained = await witness.readCommittedDelivery(historicalDeliveryCallId);
       if (retained === undefined) {
         return await Promise.resolve(false);
       }
@@ -2238,6 +2347,131 @@ test.each([
   } else {
     assert.equal(result.reason, uncommittedActionDispatchReason);
   }
+});
+
+const sameTurnDelivery = {
+  priorDeliveryCheckpoint: { ...historicalDeliveryEvent, stepIndex: 2 },
+  compacted: "marked",
+};
+
+test.each([
+  { name: "a same-turn checkpoint after the result step", delivery: sameTurnDelivery, ready: true },
+  {
+    name: "a same-turn checkpoint at the result step",
+    delivery: {
+      ...sameTurnDelivery,
+      priorDeliveryCheckpoint: { ...sameTurnDelivery.priorDeliveryCheckpoint, stepIndex: 1 },
+    },
+    ready: false,
+  },
+  {
+    name: "a checkpoint from another turn with the same sequence",
+    delivery: {
+      ...sameTurnDelivery,
+      priorDeliveryCheckpoint: {
+        ...sameTurnDelivery.priorDeliveryCheckpoint,
+        turnId: "different-older-turn",
+      },
+    },
+    ready: false,
+  },
+  {
+    name: "the exact pair in both cancellation settlement snapshots",
+    delivery: { priorDeliveryPlacement: settlementOnly },
+    ready: true,
+  },
+  {
+    name: "an unproven pair present only in cancellation settlement output",
+    delivery: { priorDeliveryPlacement: settlementOutputOnly },
+    ready: false,
+  },
+])("earlier delivery recovery checks $name", async ({ delivery, ready }) => {
+  const { witness } = cancelledDeliveryWitnessFixture();
+  const reads = [];
+  const f = await settledIdleFixture({
+    encrypted: true,
+    cancelledOutcome: {
+      delivery: {
+        historicalResult: historicalDeliveryResult,
+        completedSteps: witness.completedSteps,
+        ...delivery,
+      },
+    },
+    verifyCancelledWorkflowEffects: async (evidence) => {
+      const prior = await evidence.readCommittedDelivery(historicalDeliveryCallId);
+      reads.push(prior);
+      return await Promise.resolve(prior !== undefined);
+    },
+  });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  if (ready) {
+    assert.deepEqual(reads, [
+      { toolInput: workflowReportRun.input, result: historicalDeliveryResult },
+    ]);
+    assert.equal(result.kind, "ready");
+    assert.equal(result.replayInput, undefined);
+    assert.equal(result.carriedInbox, undefined);
+  } else {
+    assert.deepEqual(reads, [undefined]);
+    assert.equal(result.kind, "uncertain");
+    assert.equal(result.reason, uncommittedActionDispatchReason);
+  }
+});
+
+test.each([
+  { placement: "before", ready: true },
+  { placement: "unrelated", ready: false },
+])(
+  "a compacted delivery reads a checkpoint $placement the verified handoff",
+  async ({ placement, ready }) => {
+    const { witness } = cancelledDeliveryWitnessFixture();
+    const reads = [];
+    const f = await settledIdleFixture({
+      encrypted: true,
+      snapshot: true,
+      handoff: true,
+      handoffDeliveryCheckpoint: placement,
+      cancelledOutcome: {
+        delivery: {
+          historicalResult: historicalDeliveryResult,
+          historicalCheckpointInParent: true,
+          compacted: "marked",
+          completedSteps: witness.completedSteps,
+        },
+      },
+      verifyCancelledWorkflowEffects: async (evidence) => {
+        const prior = await evidence.readCommittedDelivery(historicalDeliveryCallId);
+        reads.push(prior);
+        return prior !== undefined;
+      },
+    });
+    const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+    if (ready) {
+      assert.deepEqual(reads, [
+        { toolInput: workflowReportRun.input, result: historicalDeliveryResult },
+      ]);
+      assert.equal(result.kind, "ready");
+      assert.equal(result.replayInput, undefined);
+    } else {
+      assert.deepEqual(reads, [undefined]);
+      assert.equal(result.kind, "uncertain");
+      assert.equal(result.reason, uncommittedActionDispatchReason);
+      assert.ok(f.readOperations.every(([, runId]) => runId !== unrelatedDeliveryRunId));
+    }
+  },
+);
+
+test("a completed delivery checkpoint after handoff cannot authorize recovery", async () => {
+  const f = await fixture({
+    allowParked: true,
+    encrypted: true,
+    snapshot: true,
+    handoff: true,
+    handoffDeliveryCheckpoint: "after",
+    collectFactory: createOwnedLineagePreflightCollector,
+    expectedUnavailable: true,
+  });
+  assert.equal(f.collected.reason, "handoff-parent-frontier-uncertain");
 });
 
 test.each([
