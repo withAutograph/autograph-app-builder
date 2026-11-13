@@ -4,6 +4,8 @@ import type { GitHubPrDeliveryApproval } from "../agent/github-pr-delivery-appro
 import { APP_BUILDER_WORKFLOW_STATE_KEY } from "../agent/workflow-state";
 import type { RepositoryProductionSchemaActivation } from "../provisioning/repository-production-delivery";
 import type { RepositoryProductionNativeStatus } from "../provisioning/repository-production-native-status-contract";
+import { createGitHubPrEffectReceipt } from "../repository/github-pr-effect-journal";
+import type { GitHubPrEffectReceipt } from "../repository/github-pr-effect-journal";
 import { tenantKeyFor } from "./hosted-auth";
 import type {
   CancelledGitHubDeliveryOwner,
@@ -66,13 +68,14 @@ export const createCancelledDeliveryWitnessFixture = (
     checkpointOwnerRunId?: string;
     sourceOwnerRunId?: string;
     toolInput?: GitHubPrDeliveryApproval;
+    priorMerge?: true;
   } = {},
 ) => {
   const fixtureOwner = {
     ...owner,
     sourceOwnerRunId: options.sourceOwnerRunId ?? owner.sourceOwnerRunId,
   };
-  const fixtureApproval = options.toolInput ?? approval;
+  const fixtureApproval: GitHubPrDeliveryApproval = options.toolInput ?? approval;
   const { installationId } = fixtureApproval;
   if (installationId === undefined) {
     throw new Error("A retained delivery fixture requires a connected repository.");
@@ -119,7 +122,38 @@ export const createCancelledDeliveryWitnessFixture = (
       },
     },
   });
-  const schemaActivation = { deliveryCallId: fixtureCallId, mergeIntentDigest: "5".repeat(64) };
+  const priorDeliveryCallId = "earlier-committed-github-delivery";
+  const priorApproval = {
+    ...fixtureApproval,
+    readyAt: fixtureApproval.readyAt ?? "2026-11-13T09:00:00Z",
+  };
+  const mergeReceipt = createGitHubPrEffectReceipt({
+    status: "succeeded",
+    approvedByCallId: priorDeliveryCallId,
+    intent: {
+      kind: "pr-merge",
+      publicationDigest: priorApproval.proposalDigest,
+      installationIdentityDigest: "6".repeat(64),
+      repositoryId: priorApproval.repositoryId,
+      owner: priorApproval.owner,
+      name: priorApproval.name,
+      pullRequestNumber: priorApproval.pullRequestNumber,
+      headSha: priorApproval.headSha,
+      baseBranch: priorApproval.baseBranch,
+      readyAt: priorApproval.readyAt,
+    },
+    evidence: { kind: "pr-merge", mergeCommitSha: mergeSha },
+  });
+  if (mergeReceipt.status !== "succeeded" || mergeReceipt.intent.kind !== "pr-merge") {
+    throw new Error("A prior merge fixture requires a successful merge receipt.");
+  }
+  const priorMergeReceipt: Extract<GitHubPrEffectReceipt, { status: "succeeded" }> & {
+    intent: Extract<GitHubPrEffectReceipt["intent"], { kind: "pr-merge" }>;
+  } = { ...mergeReceipt, intent: mergeReceipt.intent };
+  const schemaActivation =
+    options.priorMerge === true
+      ? { deliveryCallId: priorDeliveryCallId, mergeIntentDigest: priorMergeReceipt.intentDigest }
+      : { deliveryCallId: fixtureCallId, mergeIntentDigest: "5".repeat(64) };
   const completedStep = (
     name: string,
     output: MergedDeliveryStep | RepositoryProductionNativeStatus,
@@ -167,6 +201,29 @@ export const createCancelledDeliveryWitnessFixture = (
     },
     requirements: [],
   };
+  const priorCapturedCall = {
+    ...capturedCall,
+    callId: priorDeliveryCallId,
+    turnId: "earlier-completed-delivery-turn",
+    turnSequence: capturedCall.turnSequence - 1,
+    owner: { ...capturedCall.owner, cancellationRevision: 0 },
+    inputDigest: githubPrDeliveryInputDigest(priorApproval),
+  };
+  Reflect.deleteProperty(priorCapturedCall, "cancelled");
+  const nativeProduction: RepositoryProductionNativeStatus = {
+    version: 1,
+    appId,
+    observedAt: "2026-11-13T10:00:00Z",
+    status: "available",
+    destination: fixtureDestination,
+    deployment: { state: "active" },
+    app: { state: "sign-in-required", url: "https://apps.example/fixture-label-log" },
+    requestedRevision: "live",
+  };
+  const committedDelivery = {
+    toolInput: priorApproval,
+    result: { status: "merged", mergeCommitSha: mergeSha, nativeProduction },
+  };
   const context = {
     "eve.sessionId": fixtureSessionId,
     [APP_BUILDER_WORKFLOW_STATE_KEY]: {
@@ -178,10 +235,10 @@ export const createCancelledDeliveryWitnessFixture = (
       githubDraftProposal: { proposal: { digest: fixtureApproval.proposalDigest, reviewDigest } },
       publishedGitHubDraftProposalDigest: fixtureApproval.proposalDigest,
     },
-    [callKey]: [capturedCall],
+    [callKey]: options.priorMerge === true ? [priorCapturedCall, capturedCall] : [capturedCall],
     [directKey]: { grant, revisionAnchor: { proposalDigest: candidateDigest, priorGrant } },
   };
-  const witness = {
+  const witness: CancelledGitHubDeliveryWitness = {
     toolName,
     callId: fixtureCallId,
     turnId: fixtureTurnId,
@@ -197,21 +254,30 @@ export const createCancelledDeliveryWitnessFixture = (
         nativeProductionTarget: { ...fixtureDestination, appId },
         schemaActivation,
       }),
-      completedStep(
-        "continueGitHubProductionSchema",
-        {
-          version: 1,
-          appId,
-          observedAt: "2026-11-13T10:00:00Z",
-          status: "available",
-          destination: fixtureDestination,
-          deployment: { state: "active" },
-          app: { state: "sign-in-required", url: "https://apps.example/fixture-label-log" },
-          requestedRevision: "live",
-        },
-        { ...schemaActivation, mergeSha, reviewedHeadSha: fixtureApproval.headSha },
-      ),
+      completedStep("continueGitHubProductionSchema", nativeProduction, {
+        ...schemaActivation,
+        mergeSha,
+        reviewedHeadSha: fixtureApproval.headSha,
+      }),
     ],
-  } satisfies CancelledGitHubDeliveryWitness;
-  return { capturedCall, context, witness, grant, priorGrant, owner: fixtureOwner };
+  };
+  const retainedWitness =
+    options.priorMerge === true
+      ? {
+          ...witness,
+          readCommittedDelivery: (id: string) =>
+            id === priorDeliveryCallId ? committedDelivery : undefined,
+        }
+      : witness;
+  return {
+    capturedCall,
+    context,
+    witness: retainedWitness,
+    grant,
+    priorGrant,
+    owner: fixtureOwner,
+    priorCapturedCall,
+    priorMergeReceipt,
+    committedDelivery,
+  };
 };

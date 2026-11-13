@@ -635,7 +635,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.d.ts b/dist/src/execu
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.d.ts
-@@ -0,0 +1,192 @@
+@@ -0,0 +1,198 @@
 +import type { World, WorkflowRun, StepWithoutData, Event } from "#compiled/@workflow/world/index.js";
 +import type { PayloadKey } from "#compiled/@workflow/core/serialization/encryption.js";
 +import type { DurableSession, DurableSessionState } from "#execution/durable-session-store.js";
@@ -663,7 +663,13 @@ new file mode 100644
 +  readonly checkpointOwnerRunId: string;
 +  readonly toolInput: unknown;
 +  readonly serializedContext: Readonly<Record<string, unknown>>;
-+  readonly completedSteps: readonly { readonly name: string; readonly args: unknown; readonly output: unknown }[];
++  readonly completedSteps: readonly {
++    readonly name: string;
++    readonly status?: "completed" | "failed" | "cancelled";
++    readonly args: unknown;
++    readonly output: unknown;
++  }[];
++  readonly readCommittedDelivery?: (callId: string) => { readonly toolInput: unknown; readonly result: unknown } | undefined;
 +}
 +export interface CollectTerminalRecoveryCandidateInput {
 +  readonly binding: NativeRecoveryOwnerBinding;
@@ -832,12 +838,13 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,1132 @@
+@@ -0,0 +1,1201 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
 +import { getBlockingWorkflowToolRuns } from "#harness/workflow-tool-runs.js";
 +import { isDeepStrictEqual } from "node:util";
++import { parseJsonObject } from "#shared/json.js";
 +import {
 +  sessionCommandHookToken,
 +  sessionInboxHookToken,
@@ -1285,6 +1292,14 @@ new file mode 100644
 +      }
 +    }
 +
++    const nativeEvents = [];
++    try {
++      for await (const event of dependencies.readNativeEvents(binding.ownerRunId))
++        nativeEvents.push(event);
++    } catch {
++      issues.push({ reason: "native-stream-incomplete" });
++    }
++
 +    const cancelledWorkflowReceipts = new Set();
 +    const settledCancelledWorkflowEffects = new Set();
 +    const certifiedCancelledCalls = new Set();
@@ -1362,6 +1377,9 @@ new file mode 100644
 +                        logicalSessionId: binding.logicalSessionId, checkpointOwnerRunId: run.runId,
 +                        toolInput: from.input, serializedContext: latest.serializedContext,
 +                        completedSteps,
++                        readCommittedDelivery: (callId) => readEarlierCommittedDelivery({
++                          callId, from, nativeEvents, candidates: unique, latest, dependencies,
++                        }),
 +                      });
 +                      await authorizeOwner(binding);
 +                      effectBoundary = settled === true ? "proven" : "application_evidence_mismatch";
@@ -1433,13 +1451,6 @@ new file mode 100644
 +      }
 +    }
 +
-+    const nativeEvents = [];
-+    try {
-+      for await (const event of dependencies.readNativeEvents(binding.ownerRunId))
-+        nativeEvents.push(event);
-+    } catch {
-+      issues.push({ reason: "native-stream-incomplete" });
-+    }
 +    // A result emitted during a failed step is real evidence, but is not proof
 +    // that the step's authored-state mutations committed. Never infer or replay.
 +    for (const { step } of steps.values()) {
@@ -1626,6 +1637,7 @@ new file mode 100644
 +      return "continueGitHubProductionSchema";
 +  };
 +  const deliveryCompletions = new Map();
++  const deliveryUnsuccessful = new Set();
 +  let deliveryEventsIncomplete = false;
 +  const callbacks = [];
 +  const eventCursors = new Set();
@@ -1651,6 +1663,8 @@ new file mode 100644
 +          deliveryEventsIncomplete = true;
 +        if (deliveryStepName(step?.fullName) !== undefined &&
 +          eventName !== undefined && eventName !== step.fullName) deliveryEventsIncomplete = true;
++        if (deliveryStepName(step?.fullName) !== undefined && event.eventType === "step_failed")
++          deliveryUnsuccessful.add(event.correlationId);
 +        if (deliveryStepName(step?.fullName) !== undefined && event.eventType === "step_completed") {
 +          if (deliveryCompletions.has(event.correlationId) || terminalSlot !== undefined)
 +            deliveryEventsIncomplete = true;
@@ -1730,10 +1744,14 @@ new file mode 100644
 +      const name = deliveryStepName(metadata.fullName);
 +      if (name === undefined) continue;
 +      const start = created.get(id);
++      if (start === undefined || start >= cancelSlot) return;
 +      const end = deliveryCompletions.get(id);
-+      if (metadata.status !== "completed" || start === undefined || end === undefined ||
-+        start >= end || end >= terminalSlot || end >= cancelSlot) return;
-+      completed.push({ id, name, fullName: metadata.fullName, start, end });
++      if (metadata.status === "completed") {
++        if (end === undefined || start >= end || end >= terminalSlot || end >= cancelSlot) return;
++      } else if (name !== "continueGitHubProductionSchema" || end !== undefined ||
++        (metadata.status === "failed" && !deliveryUnsuccessful.has(id))) return;
++      completed.push({ id, name, fullName: metadata.fullName, status: metadata.status,
++        start, end: end ?? terminalSlot });
 +    }
 +    if (completed.length === 0) return;
 +    completed.sort((a, b) => a.end - b.end);
@@ -1744,20 +1762,77 @@ new file mode 100644
 +      await authorizeChildRead();
 +      const step = await world.steps.get(childId, witness.id, { resolveData: "all" });
 +      if (step.runId !== childId || step.stepId !== witness.id || step.stepName !== witness.fullName ||
-+        step.status !== "completed" || step.input === undefined || step.output === undefined) return;
++        step.status !== witness.status || step.input === undefined ||
++        (step.status === "completed" && step.output === undefined)) return;
 +      const args = (await dependencies.hydrateStepArguments(step.input, childId, childKey))?.args;
 +      const context = args?.[0]?.context;
 +      if (context?.callId !== from.callId || context.toolName !== from.toolName ||
 +        context.session?.id !== binding.logicalSessionId || context.session.ownerRunId !== parentRun.runId ||
 +        context.session.ownerAnchorRunId !== from.ownerAnchorRunId ||
 +        context.session.turn?.id !== from.turnId || context.session.turn.sequence !== from.sequence) return;
-+      const output = await dependencies.hydrateStepReturnValue(step.output, childId, childKey);
-+      results.push({ name: witness.name, args, output });
++      const output = step.status === "completed" ?
++        await dependencies.hydrateStepReturnValue(step.output, childId, childKey) : undefined;
++      results.push({ name: witness.name, args, output,
++        ...(step.status === "completed" ? {} : { status: step.status }) });
 +    }
 +    await authorizeChildRead();
 +    return results;
 +  };
 +  return { boundary: "proven", readDeliverySteps };
++}
++
++/** Keep earlier proof bounded to the one exact call referenced by the child. */
++function readEarlierCommittedDelivery({ callId, from, nativeEvents, candidates, latest, dependencies }) {
++  if (typeof callId !== "string" || callId.length === 0 || callId === from.callId) return;
++  const requests = [];
++  const results = [];
++  for (const [index, event] of nativeEvents.entries()) {
++    if (event.type === "actions.requested") {
++      for (const action of event.data.actions ?? []) {
++        if (action.callId === callId) requests.push({ index, event, action });
++      }
++    } else if (event.type === "action.result" && event.data.result?.callId === callId) {
++      results.push({ index, event });
++    }
++  }
++  if (requests.length !== 1 || results.length !== 1) return;
++  const [request] = requests;
++  const [result] = results;
++  const { turnId, sequence, stepIndex } = request.event.data;
++  const outcome = result.event.data;
++  if (request.index >= result.index || !Number.isSafeInteger(sequence) || sequence >= from.sequence ||
++    request.action.kind !== "tool-call" || request.action.toolName !== from.toolName ||
++    outcome.turnId !== turnId || outcome.sequence !== sequence || outcome.stepIndex !== stepIndex ||
++    outcome.status !== "completed" || outcome.result?.kind !== "tool-result" ||
++    outcome.result.toolName !== from.toolName || outcome.result.isError === true) return;
++  // The parent history must retain the same assistant call and actual result.
++  // An emitted result by itself is not an authored-state commit.
++  const matchHistory = (checkpoint) => {
++    const history = dependencies.readDurableSession(checkpoint.sessionState).history;
++    const called = [];
++    const returned = [];
++    for (const [index, message] of history.entries()) {
++      for (const part of Array.isArray(message.content) ? message.content : []) {
++        if (part.toolCallId !== callId) continue;
++        if (part.type === "tool-call") called.push({ index, message, part });
++        if (part.type === "tool-result") returned.push({ index, message, part });
++      }
++    }
++    return called.length === 1 && returned.length === 1 && called[0].index < returned[0].index &&
++      called[0].message.role === "assistant" && called[0].part.providerExecuted !== true &&
++      called[0].part.toolName === from.toolName &&
++      isDeepStrictEqual(parseJsonObject(called[0].part.input), request.action.input) &&
++      returned[0].message.role === "tool" && returned[0].part.toolName === from.toolName &&
++      returned[0].part.output?.type === "json" &&
++      isDeepStrictEqual(returned[0].part.output.value, outcome.result.output);
++  };
++  if (!matchHistory(latest) || !candidates.some((checkpoint) =>
++    checkpoint.origin.slot < latest.origin.slot &&
++    checkpoint.kind === "committed-turn-output" &&
++    checkpoint.sessionState.emissionState.sequence > sequence &&
++    checkpoint.sessionState.emissionState.sequence <= from.sequence &&
++    matchHistory(checkpoint))) return;
++  return { toolInput: request.action.input, result: outcome.result.output };
 +}
 +
 +/** Read a finite, unchanged prefix without following an unclosed terminal stream. */

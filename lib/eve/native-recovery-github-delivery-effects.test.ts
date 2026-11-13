@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { z } from "zod";
-import { hasSettledGitHubDeliveryEffects } from "./native-recovery-github-delivery-effects";
+import {
+  hasSettledGitHubDeliveryEffects,
+  readSettledGitHubDeliveryRepeat,
+} from "./native-recovery-github-delivery-effects";
 
 type Json = z.infer<ReturnType<typeof z.json>>;
 
@@ -167,5 +170,126 @@ describe("retained GitHub delivery effects", () => {
         schema({ ...live, destination: { ...destination, repositoryId: "101" } }),
       ]),
     ).toBe(false);
+  });
+});
+
+describe("repeat GitHub delivery effects", () => {
+  const prior = { ...schemaActivation, deliveryCallId: "earlier-delivery" };
+  const priorActivation = { ...activation, ...prior };
+  const repeatApproval = { ...approval, readyAt };
+  const repeatMerge = step("continueGitHubPrDelivery", { ...merged, schemaActivation: prior }, [
+    repeatApproval,
+    null,
+  ]);
+  const repeatSchema = (output: Json, reviewedActivation = priorActivation) =>
+    step("continueGitHubProductionSchema", output, [repeatApproval, null, reviewedActivation]);
+  const readRepeat = (
+    completedSteps: Parameters<typeof readSettledGitHubDeliveryRepeat>[0]["completedSteps"],
+    overrides: Partial<Parameters<typeof readSettledGitHubDeliveryRepeat>[0]> = {},
+  ) =>
+    readSettledGitHubDeliveryRepeat({
+      callId,
+      logicalSessionId,
+      appId,
+      toolInput: repeatApproval,
+      schemaChangeExpected: true,
+      completedSteps,
+      ...overrides,
+    });
+
+  it("identifies the exact older merge receipt after one completed read of the merged PR", () => {
+    expect(readRepeat([repeatMerge])).toEqual({ ...prior, mergeSha: mergeCommitSha, readyAt });
+    expect(
+      readRepeat([delivery({ ...merged, schemaActivation: prior })], { toolInput: approval }),
+    ).toEqual({ ...prior, mergeSha: mergeCommitSha });
+    expect(prove([delivery({ ...merged, schemaActivation: prior })])).toBe(false);
+  });
+
+  it("binds schema polling to the retained activation for the same earlier merge", () => {
+    const providerPending = {
+      ...pending,
+      deployment: { ...pending.deployment, requestedRevisionActive: true },
+    };
+    expect(readRepeat([repeatMerge, repeatSchema(providerPending)])).toEqual({
+      ...prior,
+      mergeSha: mergeCommitSha,
+      readyAt,
+    });
+    expect(readRepeat([repeatMerge, repeatSchema(pending), repeatSchema(live)])).toEqual({
+      ...prior,
+      mergeSha: mergeCommitSha,
+      readyAt,
+    });
+    expect(readRepeat([repeatMerge, repeatSchema(live), repeatSchema(pending)])).toBeNull();
+    expect(
+      readRepeat([repeatMerge, repeatSchema({ ...live, deployment: providerPending.deployment })]),
+    ).toBeNull();
+  });
+
+  it.each(["failed", "cancelled"] as const)(
+    "permits one final exact %s schema step with no output",
+    (status) => {
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Native terminal steps keep the output property without a value.
+      const terminal = { ...repeatSchema(pending), status, output: undefined };
+      expect(readRepeat([repeatMerge, repeatSchema(pending), terminal])).toEqual({
+        ...prior,
+        mergeSha: mergeCommitSha,
+        readyAt,
+      });
+      expect(readRepeat([repeatMerge, terminal, repeatSchema(pending)])).toBeNull();
+      expect(readRepeat([repeatMerge, terminal, terminal])).toBeNull();
+      expect(readRepeat([repeatMerge, { ...repeatSchema(live), status }])).toBeNull();
+      expect(
+        readRepeat([{ ...terminal, name: repeatMerge.name, args: repeatMerge.args }]),
+      ).toBeNull();
+      expect(
+        readRepeat([
+          repeatMerge,
+          {
+            ...terminal,
+            args: repeatSchema(pending, { ...priorActivation, reviewedHeadSha: "e".repeat(40) })
+              .args,
+          },
+        ]),
+      ).toBeNull();
+    },
+  );
+
+  it("rejects a current, unconfirmed or repeated merge, a Ready step, and any unknown effect", () => {
+    const waiting = step("continueGitHubPrDelivery", { status: "waiting-for-checks", readyAt }, [
+      repeatApproval,
+      null,
+    ]);
+    expect(readRepeat([waiting, repeatMerge])).toBeNull();
+    expect(readRepeat([repeatMerge, repeatMerge])).toBeNull();
+    expect(
+      readRepeat([step("continueGitHubPrDelivery", mergedWithSchema, [repeatApproval, null])]),
+    ).toBeNull();
+    expect(readRepeat([{ ...repeatMerge, output: { kind: "result", output: {} } }])).toBeNull();
+    expect(
+      readRepeat([repeatMerge, { ...repeatSchema(pending), name: "unknown-step" }]),
+    ).toBeNull();
+    expect(readRepeat([repeatMerge], { schemaChangeExpected: false })).toBeNull();
+  });
+
+  it("rejects a different child call, application, repository or reviewed approval", () => {
+    const otherContext = { ...context, callId: prior.deliveryCallId };
+    const [wrapper] = repeatMerge.args;
+    expect(
+      readRepeat([{ ...repeatMerge, args: [{ ...wrapper, context: otherContext }] }]),
+    ).toBeNull();
+    expect(readRepeat([repeatMerge], { appId: "another-app" })).toBeNull();
+    expect(
+      readRepeat([repeatMerge], { toolInput: { ...repeatApproval, repositoryId: "101" } }),
+    ).toBeNull();
+    expect(
+      readRepeat([repeatMerge, repeatSchema({ ...pending, appId: "another-app" })]),
+    ).toBeNull();
+    expect(
+      readRepeat([
+        repeatMerge,
+        repeatSchema(pending, { ...priorActivation, mergeSha: "e".repeat(40) }),
+      ]),
+    ).toBeNull();
   });
 });

@@ -3,7 +3,8 @@ import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { authorizeRepeatableDraftReconciliationCalls } from "./native-recovery-repeatable-draft-reconciliation";
 import { observePrivateApplyRecoveryCandidate } from "./native-recovery-apply-observation";
-import { verifySettledGitHubDelivery } from "./native-recovery-github-delivery-witness";
+import { verifySettledGitHubDeliveryWithPriorReceipt } from "./native-recovery-github-delivery-witness";
+import { createPostgresGitHubPrEffectStore } from "../repository/postgres-github-pr-effect-store";
 import {
   draftReviewedLineageContextKey,
   draftReviewedWorkflowContextKey,
@@ -661,16 +662,25 @@ export function createHostedNativeRecoveryBinding(
     observeRecoveryHolderBinding: (call: RecoveryHolderCall) =>
       get().observeRecoveryHolderBinding(call),
     verifyCancelledWorkflowEffects: async (
-      input: Parameters<typeof verifySettledGitHubDelivery>[0] & RecoveryCall,
-    ) =>
-      await Promise.resolve(
-        verifySettledGitHubDelivery(input, {
-          ...principalFor(input),
+      input: Parameters<typeof verifySettledGitHubDeliveryWithPriorReceipt>[0] & RecoveryCall,
+    ) => {
+      const principal = principalFor(input);
+      const { issuer, audience, workspaceId, ownerUserId } = principal;
+      return await verifySettledGitHubDeliveryWithPriorReceipt(
+        input,
+        {
+          ...principal,
           sourceOwnerRunId: input.descriptor.sourceOwnerRunId,
           sourceAdapterGeneration: input.descriptor.sourceAdapterGeneration,
           parentCancellationRevision: input.descriptor.parentCancellationRevision,
-        }),
-      ),
+        },
+        async (digest) =>
+          await createPostgresGitHubPrEffectStore(
+            openHostedPostgresDatabase(environment.DATABASE_URL ?? ""),
+            { issuer, audience, workspaceId, ownerUserId },
+          ).read(digest),
+      );
+    },
     // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     authorizeRepeatableRecoveryCalls: (
       input: Parameters<typeof authorizeRepeatablePrivateApplyCalls>[0] & RecoveryCall,

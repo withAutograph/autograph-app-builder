@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { APP_BUILDER_WORKFLOW_STATE_KEY } from "../agent/workflow-state";
-import { verifySettledGitHubDelivery } from "./native-recovery-github-delivery-witness";
+import { createGitHubPrEffectReceipt } from "../repository/github-pr-effect-journal";
+import {
+  verifySettledGitHubDelivery,
+  verifySettledGitHubDeliveryWithPriorReceipt,
+} from "./native-recovery-github-delivery-witness";
+import type { PriorMergeReceiptReader } from "./native-recovery-github-delivery-witness";
 import {
   approval,
   callKey,
@@ -107,5 +112,133 @@ describe("verifySettledGitHubDelivery", () => {
         owner,
       ),
     ).toBe(false);
+  });
+});
+
+describe("verifySettledGitHubDeliveryWithPriorReceipt", () => {
+  it("accepts an exact completed earlier merge for a stopped repeat of the same delivery", async () => {
+    const { witness, priorMergeReceipt } = fixture({ priorMerge: true });
+    const readReceipt = vi.fn(async () => await Promise.resolve(priorMergeReceipt));
+    expect(verifySettledGitHubDelivery(witness, owner)).toBe(false);
+    await expect(
+      verifySettledGitHubDeliveryWithPriorReceipt(witness, owner, readReceipt),
+    ).resolves.toBe(true);
+    expect(readReceipt).toHaveBeenCalledExactlyOnceWith(priorMergeReceipt.intentDigest);
+  });
+
+  it("does not trust an earlier live result when its original Ready receipt is unavailable", async () => {
+    const { witness, priorMergeReceipt } = fixture({ priorMerge: true });
+    const unrelatedReceipt = createGitHubPrEffectReceipt({
+      status: "succeeded",
+      approvedByCallId: priorMergeReceipt.approvedByCallId,
+      intent: { ...priorMergeReceipt.intent, pullRequestNumber: 43 },
+      evidence: priorMergeReceipt.evidence,
+    });
+    const journal = new Map([[unrelatedReceipt.intentDigest, unrelatedReceipt]]);
+    const readReceipt = vi.fn<PriorMergeReceiptReader>(
+      async (digest) => await Promise.resolve(journal.get(digest)),
+    );
+
+    await expect(
+      verifySettledGitHubDeliveryWithPriorReceipt(witness, owner, readReceipt),
+    ).resolves.toBe(false);
+    expect(readReceipt).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a canonical receipt for a different delivery call or Ready cycle", async () => {
+    const { witness, priorMergeReceipt } = fixture({ priorMerge: true });
+    const changedCall = createGitHubPrEffectReceipt({
+      status: "succeeded",
+      approvedByCallId: witness.callId,
+      intent: priorMergeReceipt.intent,
+      evidence: priorMergeReceipt.evidence,
+    });
+    const changedReadyCycle = createGitHubPrEffectReceipt({
+      status: "succeeded",
+      approvedByCallId: priorMergeReceipt.approvedByCallId,
+      intent: { ...priorMergeReceipt.intent, readyAt: "2026-11-13T09:05:00Z" },
+      evidence: priorMergeReceipt.evidence,
+    });
+    await Promise.all(
+      [changedCall, changedReadyCycle].map(async (receipt) => {
+        await expect(
+          verifySettledGitHubDeliveryWithPriorReceipt(
+            witness,
+            owner,
+            async () => await Promise.resolve(receipt),
+          ),
+        ).resolves.toBe(false);
+      }),
+    );
+  });
+
+  it("checks the earlier call and live result before reading the merge journal", async () => {
+    const {
+      witness,
+      context,
+      capturedCall,
+      priorCapturedCall,
+      priorMergeReceipt,
+      committedDelivery,
+    } = fixture({
+      priorMerge: true,
+    });
+    const readReceipt = vi.fn(async () => await Promise.resolve(priorMergeReceipt));
+    const missingEarlierTurn = {
+      ...witness,
+      serializedContext: {
+        ...context,
+        [callKey]: [
+          { ...priorCapturedCall, turnSequence: capturedCall.turnSequence },
+          capturedCall,
+        ],
+      },
+    };
+    const missingEarlierFence = {
+      ...witness,
+      serializedContext: {
+        ...context,
+        [callKey]: [{ ...priorCapturedCall, owner: capturedCall.owner }, capturedCall],
+      },
+    };
+    const invalidCommitted = [
+      missingEarlierTurn,
+      missingEarlierFence,
+      {
+        ...witness,
+        readCommittedDelivery: () => ({
+          ...committedDelivery,
+          toolInput: { ...committedDelivery.toolInput, headSha: mergeSha },
+        }),
+      },
+      {
+        ...witness,
+        readCommittedDelivery: () => ({
+          ...committedDelivery,
+          result: { ...committedDelivery.result, schemaUpdatePending: true },
+        }),
+      },
+      {
+        ...witness,
+        readCommittedDelivery: () => ({
+          ...committedDelivery,
+          result: {
+            ...committedDelivery.result,
+            nativeProduction: {
+              ...committedDelivery.result.nativeProduction,
+              deployment: { state: "active", requestedRevisionActive: true },
+            },
+          },
+        }),
+      },
+    ];
+    await Promise.all(
+      invalidCommitted.map(async (candidate) => {
+        await expect(
+          verifySettledGitHubDeliveryWithPriorReceipt(candidate, owner, readReceipt),
+        ).resolves.toBe(false);
+      }),
+    );
+    expect(readReceipt).not.toHaveBeenCalled();
   });
 });

@@ -57,6 +57,7 @@ interface CompletedDeliveryStep {
   readonly name: string;
   readonly args: unknown;
   readonly output: unknown;
+  readonly status?: "completed" | "failed" | "cancelled";
 }
 
 interface DeliveryEffectEvidence {
@@ -68,25 +69,44 @@ interface DeliveryEffectEvidence {
   readonly completedSteps: readonly CompletedDeliveryStep[];
 }
 
-const readStep = (
+type Approval = z.infer<typeof githubPrDeliveryApprovalSchema>;
+
+const readStepArguments = (
   step: CompletedDeliveryStep,
   input: DeliveryEffectEvidence,
-  approval: z.infer<typeof githubPrDeliveryApprovalSchema>,
+  approval: Approval,
 ) => {
   const [wrapper] = stepArgumentsSchema.safeParse(step.args).data ?? [];
-  const result = stepOutputSchema.safeParse(step.output).data;
-  if (wrapper === undefined || result === undefined) {
-    return null;
-  }
   if (
+    wrapper === undefined ||
     wrapper.context.callId !== input.callId ||
     wrapper.context.session.id !== input.logicalSessionId ||
     !isDeepStrictEqual(wrapper.args[0], approval)
   ) {
     return null;
   }
-  return { argument: wrapper.args[2], output: result.output };
+  return wrapper.args;
 };
+
+const readStep = (
+  step: CompletedDeliveryStep,
+  input: DeliveryEffectEvidence,
+  approval: Approval,
+) => {
+  if (step.status !== undefined && step.status !== "completed") {
+    return null;
+  }
+  const args = readStepArguments(step, input, approval);
+  const result = stepOutputSchema.safeParse(step.output).data;
+  return args === null || result === undefined
+    ? null
+    : { argument: args[2], output: result.output };
+};
+
+const deliveryDestination = (approval: Approval) => ({
+  repositoryId: approval.repositoryId,
+  repositoryFullName: `${approval.owner}/${approval.name}`,
+});
 
 /** Check the retained writes of a natively bound child without creating a tool result or replay authority. */
 export const hasSettledGitHubDeliveryEffects = (input: DeliveryEffectEvidence): boolean => {
@@ -97,10 +117,7 @@ export const hasSettledGitHubDeliveryEffects = (input: DeliveryEffectEvidence): 
   ) {
     return false;
   }
-  const destination = {
-    repositoryId: approval.repositoryId,
-    repositoryFullName: `${approval.owner}/${approval.name}`,
-  };
+  const destination = deliveryDestination(approval);
   let merge: z.infer<typeof mergedSchema> | undefined;
   let waitingForChecks: string | undefined;
   let lastSchemaResult: z.infer<typeof repositoryProductionNativeStatusSchema> | undefined;
@@ -177,4 +194,77 @@ export const hasSettledGitHubDeliveryEffects = (input: DeliveryEffectEvidence): 
     lastSchemaResult.deployment.requestedRevisionActive === undefined &&
     isDeepStrictEqual(lastSchemaResult.destination, destination)
   );
+};
+
+export interface PriorGitHubDeliveryProof {
+  readonly deliveryCallId: string;
+  readonly mergeIntentDigest: string;
+  readonly mergeSha: string;
+  readonly readyAt?: string;
+}
+
+/** Identify an earlier merge receipt to verify against committed session history and the journal. */
+export const readSettledGitHubDeliveryRepeat = (
+  input: DeliveryEffectEvidence,
+): PriorGitHubDeliveryProof | null => {
+  const approval = githubPrDeliveryApprovalSchema.safeParse(input.toolInput).data;
+  const [mergeStep, ...schemaSteps] = input.completedSteps;
+  if (!input.schemaChangeExpected || approval === undefined || mergeStep?.name !== deliveryStep) {
+    return null;
+  }
+  if (
+    approval.reconciliationDigest !== undefined ||
+    (approval.sessionId !== undefined && approval.sessionId !== input.logicalSessionId)
+  ) {
+    return null;
+  }
+  const observedMerge = readStep(mergeStep, input, approval);
+  if (observedMerge === null || observedMerge.argument !== undefined) {
+    return null;
+  }
+  const merge = mergedSchema.safeParse(observedMerge.output).data;
+  const destination = deliveryDestination(approval);
+  if (
+    merge?.schemaActivation === undefined ||
+    merge.schemaActivation.deliveryCallId === input.callId ||
+    !isDeepStrictEqual(merge.nativeProductionTarget, { ...destination, appId: input.appId })
+  ) {
+    return null;
+  }
+  const activation = {
+    ...merge.schemaActivation,
+    mergeSha: merge.mergeCommitSha,
+    reviewedHeadSha: approval.headSha,
+  };
+  for (const [index, step] of schemaSteps.entries()) {
+    const args = readStepArguments(step, input, approval);
+    if (step.name !== schemaStep || !isDeepStrictEqual(args?.[2], activation)) {
+      return null;
+    }
+    const last = index === schemaSteps.length - 1;
+    if (step.status === "cancelled" || step.status === "failed") {
+      if (!last || step.output !== undefined) {
+        return null;
+      }
+      continue;
+    }
+    const result = readStep(step, input, approval);
+    const status = repositoryProductionNativeStatusSchema.safeParse(result?.output).data;
+    if (status?.appId !== input.appId || !isDeepStrictEqual(status.destination, destination)) {
+      return null;
+    }
+    const waiting =
+      status.requestedRevision === "awaiting-activation" &&
+      (status.status === "pending" || status.status === "available");
+    const live =
+      last &&
+      status.requestedRevision === "live" &&
+      status.deployment.requestedRevisionActive === undefined;
+    if (!waiting && !live) {
+      return null;
+    }
+  }
+  return approval.readyAt === undefined
+    ? { ...merge.schemaActivation, mergeSha: merge.mergeCommitSha }
+    : { ...merge.schemaActivation, mergeSha: merge.mergeCommitSha, readyAt: approval.readyAt };
 };
