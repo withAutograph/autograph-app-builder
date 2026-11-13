@@ -819,7 +819,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,725 @@
+@@ -0,0 +1,731 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
@@ -1226,12 +1226,18 @@ new file mode 100644
 +    );
 +    const cancellationInbox = [];
 +    for (const { event, slot } of events) {
-+      if (
-+        slot <= previousSlot ||
-+        event.eventType !== "hook_received" ||
-+        !inboxTokens.has(event.eventData?.token ?? hookTokens.get(event.correlationId))
-+      )
++      if (slot <= previousSlot || event.eventType !== "hook_received") continue;
++      const token = event.eventData?.token ?? hookTokens.get(event.correlationId);
++      if (!inboxTokens.has(token)) {
++        // Older owned inbox aliases can remain claimed after a rotation.
++        // Never count an unbound reserved inbox receipt as settled.
++        if (latest.cancellation !== undefined && typeof token === "string" &&
++          (token.startsWith("eve:inbox:v1:") || token.startsWith("eve:session:"))) {
++          if (slot <= latest.origin.slot) cancellationInbox.push(null);
++          else issues.push({ reason: "native-inbox-payload-unreadable" });
++        }
 +        continue;
++      }
 +      await authorizeOwner(binding);
 +      try {
 +        const full = await world.events.get(run.runId, event.eventId, { resolveData: "all" });
@@ -2624,7 +2630,7 @@ diff --git a/dist/src/execution/session/recovery-reconciliation.js b/dist/src/ex
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-reconciliation.js
-@@ -0,0 +1,643 @@
+@@ -0,0 +1,692 @@
 +import { activeTurnId } from "#harness/active-turn-id.js";
 +import { decodeSessionInboxPayload } from "#execution/session-inbox/protocol.js";
 +import { proposeRetrospectiveCancelledToolHistory } from "#execution/session/recovery-cancelled-tool-history.js";
@@ -2816,9 +2822,14 @@ new file mode 100644
 +  return { entries: retained, ids };
 +}
 +
-+function assessEffects(payload, source, session, incoming, carriedInboxIds) {
++function assessEffects(payload, source, session, incoming, carriedInboxIds, settledCancellation) {
 +  if (payload.issues.some((issue) => issue.reason === "native-stream-incomplete"))
 +    return uncertain("native-stream-incomplete");
++  if (settledCancellation &&
++    payload.issues.some((issue) => issue.reason === "native-inbox-payload-unreadable")) {
++    reportCancellationInboxRefusal("unbound_or_unreadable_inbox");
++    return uncertain("unconsumed-native-inbox-input");
++  }
 +  // A failed turn has no committed authored-state return. A finalizer input
 +  // merely preserves its pre-step cursor; it cannot certify those effects.
 +  for (const issue of payload.issues) {
@@ -2870,8 +2881,10 @@ new file mode 100644
 +    if (
 +      inboxTokens.has(event.eventData?.token ?? hookTokens.get(event.correlationId)) &&
 +      !carriedInboxIds?.has(event.eventId)
-+    )
++    ) {
++      if (settledCancellation) reportCancellationInboxRefusal("uncovered_frontier");
 +      return uncertain("unconsumed-native-inbox-input");
++    }
 +  }
 +  const committedResults = committedResultIds(session.history);
 +  const pendingHumanInput = new Set(
@@ -2916,24 +2929,62 @@ new file mode 100644
 +  }
 +}
 +
++function reportCancellationInboxRefusal(boundary) {
++  // Operational evidence is categorical only: never print an inbox payload or identity.
++  try { console.info(JSON.stringify({ event: "builder.cancellation_inbox_refusal", boundary })); } catch {}
++}
++
 +/** A cancellation settles its exact Stop, never an unproved effect or queued Send. */
 +function assessSettledCancellation(payload, candidate, session) {
 +  const { sequence, turnId } = candidate.cancellation;
-+  if (!payload.cancellationInbox?.length) return uncertain("unconsumed-native-inbox-input");
-+  for (const item of payload.cancellationInbox) {
-+    try {
-+      const command = item === null ? undefined : decodeSessionInboxPayload(item.payload);
-+      if (command?.kind !== "cancel" || command.turnId !== turnId ||
-+        Object.keys(item.payload).some((key) => key !== "kind" && key !== "turnId"))
-+        return uncertain("unconsumed-native-inbox-input");
-+    } catch {
-+      return uncertain("unconsumed-native-inbox-input");
-+    }
-+  }
 +  const sameTurn = (event) =>
 +    event.data?.turnId === turnId && event.data.sequence === sequence;
 +  const cancel = payload.nativeEvents.findIndex((event) => event.type === "turn.cancelled" && sameTurn(event));
 +  if (cancel < 0) return uncertain("cancelled-turn-replay");
++  const started = new Set(payload.nativeEvents.slice(0, cancel).flatMap((event) =>
++    event.type === "turn.started" && sameTurn(event) ? event.meta?.deliveryIds ?? [] : []));
++  const ended = new Set(payload.nativeEvents[cancel].meta?.deliveryIds ?? []);
++  const consumed = new Set();
++  let matchedStop = false;
++  const inboxUncertain = (boundary) => {
++    reportCancellationInboxRefusal(boundary);
++    return uncertain("unconsumed-native-inbox-input");
++  };
++  if (!payload.cancellationInbox?.length) return inboxUncertain("no_inbox_receipts");
++  for (const item of payload.cancellationInbox) {
++    try {
++      const command = item === null ? undefined : decodeSessionInboxPayload(item.payload);
++      if (command?.kind === "cancel") {
++        if (command.turnId !== turnId ||
++          Object.keys(item.payload).some((key) => key !== "kind" && key !== "turnId"))
++          return inboxUncertain("unmatched_stop");
++        matchedStop = true;
++        continue;
++      }
++      // The channel stamps each admitted delivery on both ends of its turn.
++      // An envelope is covered only when every distinct payload was admitted
++      // to this exact cancelled turn; unknown IDs never certify queued work.
++      if (command?.kind !== "deliver" || matchedStop) return inboxUncertain("unsupported_command");
++      const metadata = command.deliveryMetadata;
++      if (!Array.isArray(metadata) || metadata.length === 0 ||
++        metadata.length !== command.payloads.length)
++        return inboxUncertain("unbound_delivery");
++      const indexes = new Set();
++      for (const entry of metadata) {
++        const id = entry?.deliveryId;
++        const index = entry?.payloadIndex;
++        if (!Number.isSafeInteger(index) || index < 0 || index >= command.payloads.length ||
++          indexes.has(index) || typeof id !== "string" || id.length === 0 ||
++          consumed.has(id) || !started.has(id) || !ended.has(id))
++          return inboxUncertain("delivery_not_proven_consumed");
++        indexes.add(index);
++        consumed.add(id);
++      }
++    } catch {
++      return inboxUncertain("unreadable_command");
++    }
++  }
++  if (!matchedStop) return inboxUncertain("no_matching_stop");
 +  const committed = committedResultIds(session.history);
 +  const hasInput = payload.nativeEvents.some((event) =>
 +    sameTurn(event) && (event.type === "input.requested" || event.type.startsWith("approval.")));
@@ -3182,9 +3233,13 @@ new file mode 100644
 +    session,
 +    incomingSource?.incoming,
 +    carriedInbox?.ids,
++    latest.cancellation !== undefined,
 +  );
 +  if (effectUncertainty !== undefined) return effectUncertainty;
-+  if (carriedInbox === undefined) return uncertain("unconsumed-native-inbox-input");
++  if (carriedInbox === undefined) {
++    if (latest.cancellation !== undefined) reportCancellationInboxRefusal("unproven_newer_suffix");
++    return uncertain("unconsumed-native-inbox-input");
++  }
 +  const cancelledHistory = proposeRetrospectiveCancelledToolHistory(payload, latest, session);
 +  if (cancelledHistory.kind === "uncertain") return cancelledHistory;
 +  if (cancelledHistory.kind === "restored")

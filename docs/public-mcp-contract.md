@@ -132,6 +132,9 @@ a public status or stale approval control cannot select it.
 Native recovery recognizes a completed cancellation's paired output as a
 distinct checkpoint. It verifies the matching native turn cancellation and
 command, then keeps later queued input and unresolved effects intact.
+An inbox delivery inside that checkpoint is covered only if the same native
+turn stamps its exact delivery ID on both start and cancellation. Missing
+stamps, unreadable input and unbound inbox receipts still stop recovery.
 An interrupted read-only app status check can be left cancelled without
 repeating it; a tool that may have changed state still requires effect proof.
 Builder fences source mutations. A separate opaque read-only preflight may inspect
