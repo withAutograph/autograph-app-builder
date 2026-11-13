@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import editCandidate from "../../agent/tools/edit_github_draft_pr_candidate";
 import sealReconciliation from "../../agent/tools/seal_github_draft_pr_reconciliation";
 import { DraftCandidateCreationUncertainError } from "../repository/sandbox-draft-reconciliation";
+import type { draftSchemaReleaseId } from "../repository/sandbox-draft-schema-release";
 import type { assertExactWorkflowState } from "./workflow-state";
 import {
   draftReconciliationCompletions,
@@ -18,6 +19,9 @@ const mocks = vi.hoisted(() => ({
   states: new Map<string, unknown>(),
   inspect: vi.fn(),
   create: vi.fn(),
+  discardSchema: vi.fn(),
+  inspectOwnedDraft: vi.fn(),
+  readOwnedDraft: vi.fn(),
   read: vi.fn(),
   replace: vi.fn(),
   restore: vi.fn(),
@@ -27,7 +31,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("eve/tools", () => ({ defineTool: <T>(value: T): T => value }));
 vi.mock("./deployment-github-publication-runtime", () => ({
-  githubPublicationRuntimeForSession: () => ({ sealExistingDraftReconciliation: mocks.seal }),
+  githubPublicationRuntimeForSession: () => ({
+    inspectExistingDraftReconciliationSource: mocks.inspectOwnedDraft,
+    readSucceededDraftPublication: mocks.readOwnedDraft,
+    sealExistingDraftReconciliation: mocks.seal,
+  }),
 }));
 vi.mock("eve/context", () => ({
   defineState: (name: string, initial: () => unknown) => ({
@@ -61,6 +69,11 @@ vi.mock("../repository/sandbox-draft-reconciliation", () => ({
   readDraftReconciliationCandidateFilePage: mocks.read,
   replaceDraftReconciliationCandidateText: mocks.replace,
   restoreDraftReconciliationCandidateFile: mocks.restore,
+}));
+
+vi.mock("../repository/sandbox-draft-schema-release", async (importOriginal) => ({
+  ...(await importOriginal<{ draftSchemaReleaseId: typeof draftSchemaReleaseId }>()),
+  discardUnissuedDraftSchemaRelease: mocks.discardSchema,
 }));
 
 const context = {
@@ -119,6 +132,64 @@ describe("draft reconciliation publication review", () => {
       repositoryId: "1",
     });
   });
+
+  it.each(["current", "moved", "uncertain"] as const)(
+    "uses only the exact owned open draft and retires stale proof when the cut may have moved (%s)",
+    async (mode) => {
+      const path = "apps/spend-review/schema/release/2026-11-16.v2";
+      mocks.candidate = { ...mocks.candidate, repositoryId: "1", proposal: { digest } };
+      mocks.workflow = { ...mocks.workflow, publishedGitHubDraftProposalDigest: digest };
+      const original = mocks.candidate;
+      mocks.readOwnedDraft.mockResolvedValue({ pullRequestId: "57", idempotencyKey: digest });
+      mocks.inspectOwnedDraft.mockResolvedValue({
+        draft: {
+          state: "open",
+          draft: true,
+          repositoryId: "1",
+          number: 1500,
+          pullRequestId: "57",
+          verifiedBuilderOrigin: { marker: digest },
+          headSha: sha,
+          headTree: sha,
+        },
+        base: { headSha: mode === "moved" ? "c".repeat(40) : sha, headTree: sha },
+        publishedHeadSha: sha,
+      });
+      mocks.discardSchema.mockImplementation(
+        async (input: { assertCurrent: () => void; markUncertain: () => void }) => {
+          input.assertCurrent();
+          if (mode === "uncertain") {
+            input.markUncertain();
+            throw new Error("sandbox response lost");
+          }
+          return await Promise.resolve({ path });
+        },
+      );
+      const attempted = editCandidate.execute(
+        { kind: "discard_unissued_schema_release", releaseId: "2026-11-16.v2" },
+        context,
+      );
+      if (mode === "moved") {
+        await expect(attempted).rejects.toThrow("owned draft or its base has changed");
+        expect(mocks.discardSchema).not.toHaveBeenCalled();
+        expect(mocks.candidate).toBe(original);
+        return;
+      }
+      await (mode === "uncertain"
+        ? expect(attempted).rejects.toThrow("sandbox response lost")
+        : expect(attempted).resolves.toMatchObject({ path, status: "candidate_edited" }));
+      expect(mocks.discardSchema).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prepared: original,
+          releaseId: "2026-11-16.v2",
+          validatedTree: sha,
+        }),
+      );
+      expect(mocks.candidate).not.toHaveProperty("proposal");
+      expect(mocks.candidate).not.toHaveProperty("validation");
+      expect(mocks.candidate).not.toHaveProperty("review");
+    },
+  );
 
   it("returns bounded candidate pages with continuation without invalidating review", async () => {
     const retained = mocks.candidate;

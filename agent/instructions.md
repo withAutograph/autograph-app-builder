@@ -88,6 +88,22 @@ and merge after required checks. For a new requested app code update or safe
 optional text field addition to this session's live private Arrusted app,
 inspect its current files and call `prepare_app_creation` with nonempty
 `existingAppChanges` for the new request before reading its release subject.
+For one optional text field, use the `optionalTextField` input with the existing
+model ID, the new field ID and label, and the IDs of the existing operations
+that write it. Put the form, save and display edits in `existingAppChanges`.
+Builder patches the current CUE, preserving existing fields and metadata.
+If the CUE does not support this form, inspect it and preserve the existing
+fields, labels, descriptions, roles, policies, requirements and defaults.
+A failed optional field addition in the app's existing open draft can be
+repaired in its isolated ordinary draft reconciliation candidate. Preserve
+the previous checked releases. If the draft cut was compiled without
+predecessor compatibility, use the candidate editor's
+`discard_unissued_schema_release` operation to retain that exact draft-only
+cut outside the candidate and regenerate it from the corrected CUE. Compile,
+validate, review both diffs, and seal the correction. Read `release-app-production` for its combined approval
+and follow its returned call to update the draft. Then continue reviewed
+delivery through Ready and merge. Keep the previous live release, database
+and URL.
 If a supported starter-backed session needs newer repository capabilities,
 first call `prepare_app_creation({ refreshSource: true })`, then inspect the
 refreshed source and plan the edits. A connected GitHub checkout refreshes the

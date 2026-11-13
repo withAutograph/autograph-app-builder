@@ -578,7 +578,11 @@ submits a CUE schema. Pass the subject unchanged with the complete
 For a new Production update requested for this session's already live private
 Arrusted app, inspect the app's current files and call `prepare_app_creation`
 with nonempty `existingAppChanges` that implement the new request. Include
-complete replacement content for each changed file. If a supported
+complete replacement content for each changed file. For one optional text
+field, supply `optionalTextField` with the existing model and write-operation
+IDs, plus the new field ID and label. Keep the CUE out of the generic file
+edits when using this input. Builder preserves the existing CUE and freezes
+the schema and UI changes together. If a supported
 starter-backed session needs newer repository capabilities, call
 `prepare_app_creation({ refreshSource: true })` by itself before inspection.
 A connected GitHub checkout refreshes the shared compiler during approved
@@ -597,6 +601,14 @@ native activation under the same approval, keeping existing data and access. Use
 If the user asks to release after private Build, use that subject with
 `release-app-production` to show one release approval. Follow the exact sealed
 publication, protected setup and reviewed merge continuations under that approval.
+For a failed optional text addition still in its owned draft, prepare an
+ordinary reconciliation of that draft. Preserve the base schema and
+previous checked releases. If the unissued cut has stale compatibility
+evidence, move it aside with the candidate editor and regenerate it from the
+corrected CUE. Compile, validate and seal the corrected revision. Read and approve the `release-app-production`
+subject for the sealed correction and follow its returned continuation.
+This approval covers the exact correction, reviewed delivery and schema
+addition on the existing database.
 For an existing repository with native deployment, use its reviewed PR delivery. After the approved merge,
 `finish-github-pr-delivery` follows the managed destination's provider-owned
 activation. Share the observed public app URL when available and state what

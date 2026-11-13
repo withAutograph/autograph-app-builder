@@ -434,7 +434,8 @@ it retains that fact so losing the endpoint/profile cannot bypass preparation.
 Frontend-only apps keep `storage:none`; their applicable shared Auth setup never
 allocates a business database. Source-only revisions reuse the same completed
 setup and data. An eligible combined Production approval also covers a checked
-optional text field addition on the existing database. Protected preparation
+optional text field addition on the existing database. Keep existing field
+metadata, requirements, roles, policies and data intact. Protected preparation
 verifies the exact installed predecessor before merge. The delivery workflow
 applies the checked addition once the provider activates that merge, preserving
 existing fields, records, access and runtime credentials. The setup plan keeps

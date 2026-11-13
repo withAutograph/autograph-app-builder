@@ -30,6 +30,8 @@ import {
   REPOSITORY_RELEASE_GATE,
 } from "../repository/github-publication";
 import type { DraftPullRequestProposal } from "../repository/github-publication";
+import { createReconciliationReviewReceipt } from "../repository/github-draft-reconciliation";
+import type { ExistingDraftReconciliationProposal } from "../repository/github-draft-reconciliation";
 import {
   repositoryProductionApprovalInput,
   repositoryProductionApprovalReference,
@@ -46,10 +48,16 @@ import {
   currentDirectProductionGrant,
   currentPlannedDirectProductionAuthoring,
   directProductionSubjectForPlan,
+  prepareDirectProductionDraftReconciliation,
   recordDirectProductionGrant,
   requestDirectProductionGrant,
   restoreDirectProductionRevisionPredecessor,
 } from "./direct-production-state";
+import {
+  draftReconciliationState,
+  retainDraftReconciliationCompletion,
+} from "./draft-reconciliation-state";
+import type { DraftReconciliationCompletion } from "./draft-reconciliation-state";
 import {
   readPrivateApplyAuthority,
   recordApprovedPrivateApply,
@@ -192,7 +200,13 @@ const installPlan = (
     workspace: { workspaceId: buildWorkspaceId, workspaceDigest: "b".repeat(64) },
   };
   if (sourceKind === "existing-repository") {
-    Object.assign(workflow, { githubSource: { repository: repo, resolvedRef: "refs/heads/main" } });
+    Object.assign(workflow, {
+      githubSource: {
+        repository: repo,
+        resolvedRef: "refs/heads/main",
+        digest: sha256("verified fixture source"),
+      },
+    });
   }
   // SAFETY: Drafting and approval use the supplied scope and applied source paths.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The fixture omits unrelated workflow receipts.
@@ -596,6 +610,205 @@ const retainPriorPublication = (grant: ReturnType<typeof installPriorProduction>
     grant.digest,
   );
   return { proposal, target };
+};
+
+const correctedCue = `${afterNotesCue}\n`;
+
+const retainSealedSchemaCorrection = (drift: "none" | "predecessor" | "outside-app" = "none") => {
+  const prior = installPriorProduction();
+  const publication = retainPriorPublication(prior);
+  installPlan("kernel");
+  installNotesRevision();
+  const failed = approveFixtureProduction("original-schema-build", "setup");
+  installReviewedRevisionOutcome();
+  const workflow = appBuilderWorkflowState.get();
+  if (workflow.phase !== "reviewed" || workflow.githubSource === undefined) {
+    throw new Error("Expected an existing app and its reviewed draft.");
+  }
+  const original = {
+    proposalDigest: sha256("failed revision draft proposal"),
+    receiptDigest: sha256("failed revision draft publication receipt"),
+    reviewDigest: sha256("failed revision review"),
+    changeSetDigest: sha256("failed revision reviewed files"),
+  };
+  const appReview = {
+    appSpecDigest: workflow.appSpec.digest,
+    changeSetDigest: original.changeSetDigest,
+    digest: original.reviewDigest,
+  };
+  appBuilderWorkflowState.update(() => ({
+    ...workflow,
+    reviewReceipt: { ...workflow.reviewReceipt, ...appReview },
+    publishedGitHubDraftProposalDigest: original.proposalDigest,
+  }));
+  const releaseId = "fixture-release-v2";
+  const resolvedTree = "5".repeat(40);
+  const headSha = "3".repeat(40);
+  const headTree = "4".repeat(40);
+  const branchName = "builder/schema-revision";
+  const pullRequestNumber = 1822;
+  const correction = revisionEdit(
+    appliedCuePath,
+    drift === "predecessor" ? "other live schema" : beforeNotesCue,
+    correctedCue,
+  );
+  const appSourceEdit = revisionEdit(
+    drift === "outside-app" ? `apps/${appId}/app/data/context.ts` : revisionPage,
+    "before",
+    "after",
+  );
+  const review = createReconciliationReviewReceipt({
+    appId,
+    baseSha: repo.headSha,
+    baseTree: repo.headTree,
+    headSha,
+    headTree,
+    resolvedTree,
+    version: 1,
+    headChanges: [{ ...correction, kind: "modified" }],
+    baseChanges: [
+      { ...correction, kind: "modified" },
+      { ...appSourceEdit, kind: "modified" },
+      {
+        path: `apps/${appId}/schema/release/${releaseId}/transition-plan.json`,
+        after: { digest: sha256("compiled release plan"), mode: "644" },
+        kind: "added",
+      },
+    ],
+  });
+  const proposal: ExistingDraftReconciliationProposal = {
+    version: 1,
+    intendedOutcome: "reconcile-existing-draft-pull-request",
+    installationIdentityDigest: publication.proposal.installationIdentityDigest,
+    repositoryId: repo.repositoryId,
+    owner: repo.owner,
+    name: repo.name,
+    pullRequestNumber,
+    pullRequestId: "pull-request-node",
+    branchName,
+    baseBranch: repo.defaultBranch,
+    expectedHeadSha: headSha,
+    expectedHeadTree: headTree,
+    expectedBaseSha: repo.headSha,
+    expectedBaseTree: repo.headTree,
+    resolvedTree,
+    reviewDigest: review.digest,
+    approvedPaths: review.approvedPaths,
+    baseChangesDigest: sha256(JSON.stringify(review.baseChanges)),
+    headChangesDigest: sha256(JSON.stringify(review.headChanges)),
+    originMarker: "same-draft",
+    priorPublicationDigest: original.receiptDigest,
+    idempotencyKey: "corrected-draft",
+    digest: sha256("sealed corrected draft proposal"),
+  };
+  const githubSourceDigest = workflow.githubSource.digest;
+  const root = "/private/candidate";
+  const compilation: DraftReconciliationCompletion["compilation"] = {
+    context: {
+      authority: failed.subject.authority,
+      target: { appId, sessionId },
+    },
+    release: {
+      status: "published",
+      selection: {
+        appId,
+        appSpecDigest: failed.subject.appSpecDigest,
+        artifactRef: `_protected-operator/artifacts/generated-release/${appId}/${sha256("artifact")}`,
+        manifestSha256: sha256("corrected manifest"),
+        releaseId,
+        schemaSha256: sha256("corrected schema"),
+        version: 1,
+      },
+    },
+  };
+  const completion: DraftReconciliationCompletion = {
+    preparation: "sealed-before-approval",
+    proposal,
+    review,
+    appReview,
+    appId,
+    githubSourceDigest,
+    root,
+    compilation,
+  };
+  retainDraftReconciliationCompletion(completion);
+  draftReconciliationState.update(() => ({
+    appId,
+    repositoryId: proposal.repositoryId,
+    pullRequestNumber,
+    githubSourceDigest,
+    originalReviewDigest: appReview.digest,
+    root,
+    workspaceRoot: "/private",
+    headSha,
+    headTree,
+    baseSha: repo.headSha,
+    baseTree: repo.headTree,
+    conflicts: [],
+    review,
+    proposal,
+    validation: {
+      resolvedTree,
+      commands: [{ command: "app compile", exitCode: 0 }],
+      validatedByCallId: "checked-corrected-source",
+      compilation,
+    },
+    version: 1,
+  }));
+  const origin = {
+    digest: original.receiptDigest,
+    proposalDigest: original.proposalDigest,
+    branchSha: headSha,
+    branchTree: headTree,
+  };
+  const owned = {
+    draft: {
+      repositoryId: repo.repositoryId,
+      headRepositoryId: repo.repositoryId,
+      baseRepositoryId: repo.repositoryId,
+      owner: repo.owner,
+      name: repo.name,
+      number: pullRequestNumber,
+      pullRequestId: proposal.pullRequestId,
+      draft: true,
+      state: "open",
+      headBranch: branchName,
+      headSha,
+      headTree,
+      baseBranch: repo.defaultBranch,
+      verifiedBuilderOrigin: { marker: proposal.originMarker, authorId: "3", appId: "4" },
+    },
+    base: {
+      ...repo,
+      installationIdentityDigest: proposal.installationIdentityDigest,
+    },
+    publishedHeadSha: headSha,
+  };
+  const readSucceededDraftPublication = vi.fn().mockResolvedValue(origin);
+  const inspectExistingDraftReconciliationSource = vi.fn().mockResolvedValue(owned);
+  const inspectPublishedPullRequest = vi.fn().mockResolvedValue({
+    state: "merged",
+    draft: false,
+    reviewedRevision: true,
+    reviewedTarget: publication.target,
+    mergeCommitSha: "6".repeat(40),
+  });
+  const publicationRead = vi.fn().mockResolvedValue({
+    readSucceededDraftPublication,
+    inspectExistingDraftReconciliationSource,
+    inspectPublishedPullRequest,
+  });
+  return {
+    failed,
+    original,
+    owned,
+    prior,
+    proposal,
+    readSucceededDraftPublication,
+    inspectExistingDraftReconciliationSource,
+    inspectPublishedPullRequest,
+    ports: { publication: publicationRead },
+  };
 };
 
 describe("direct Production Build authority", () => {
@@ -1232,6 +1445,166 @@ describe("direct Production Build authority", () => {
         revision: { priorGrantDigest: previous.digest },
       });
       expect(readPrivateApplyAuthority().pending).toEqual([]);
+    });
+  });
+
+  it("requires one fresh Production approval for the exact checked correction to the same draft", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const fixture = retainSealedSchemaCorrection();
+      const oldSubject = fixture.failed.subject;
+      expect(currentDirectProductionGrant(releaseContext, oldSubject)).toBeUndefined();
+      await prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports);
+      const subject = requiredSubject(directProductionSubjectForPlan(releaseContext));
+      const { proposal, original } = fixture;
+      expect(fixture.readSucceededDraftPublication).toHaveBeenCalledWith(original.proposalDigest);
+      expect(subject).toMatchObject({
+        appId,
+        proposalDigest: oldSubject.proposalDigest,
+        revision: {
+          priorGrantDigest: fixture.prior.digest,
+          schemaChange: { ...notesSchemaChange, candidateCueSha256: sha256(correctedCue) },
+          reconciliation: {
+            originPublicationDigest: original.proposalDigest,
+            originPublicationReceiptDigest: original.receiptDigest,
+            digest: proposal.digest,
+            reviewDigest: proposal.reviewDigest,
+            pullRequestNumber: proposal.pullRequestNumber,
+            expectedHeadSha: proposal.expectedHeadSha,
+            expectedBaseSha: proposal.expectedBaseSha,
+            resolvedTree: proposal.resolvedTree,
+          },
+        },
+      });
+
+      const toolInput = { directProduction: subject };
+      expect(await authoredReleaseApproval()({ ...releaseContext, toolInput })).toBe(
+        "user-approval",
+      );
+      expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
+      expect(await releaseAppProduction.execute(toolInput, releaseContext)).toMatchObject({
+        status: "production-release-approved",
+        nextCall: {
+          tool: "reconcile_github_draft_pr",
+          input: {
+            expectedProposalDigest: proposal.digest,
+            approvalReceipt: { phase: "draft_update", subjectDigest: proposal.digest },
+          },
+        },
+      });
+      const repaired = currentDirectProductionGrant(releaseContext, subject);
+      expect(repaired).toMatchObject({ toolName: "release-app-production", subject });
+      if (repaired === undefined) {
+        throw new Error("Expected the exact approved repair grant.");
+      }
+      expect(repaired.digest).not.toBe(fixture.failed.digest);
+      draftReconciliationState.update((current) =>
+        current === null ? current : { ...current, publishedReconciliation: proposal },
+      );
+      expect(currentDirectProductionGrant(releaseContext, subject)).toEqual(repaired);
+      draftReconciliationState.update(() => null);
+      expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
+      recordDirectProductionProgress(repaired.digest, "schema-settled");
+      installPlan();
+      installHeadingRevision();
+      expect(directProductionSubjectForPlan(releaseContext)?.revision).toEqual({
+        priorGrantDigest: repaired.digest,
+        priorProposalDigest: repaired.subject.proposalDigest,
+      });
+    });
+  });
+
+  it.each(["predecessor", "outside-app"] as const)(
+    "does not offer a correction when the sealed candidate changes %s",
+    async (drift) => {
+      await contextStorage.run(new ContextContainer(), async () => {
+        const fixture = retainSealedSchemaCorrection(drift);
+        await prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports);
+        expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
+        expect(fixture.inspectExistingDraftReconciliationSource).not.toHaveBeenCalled();
+      });
+    },
+  );
+
+  it("requires another exact decision if the base moves before the approved correction is published", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const fixture = retainSealedSchemaCorrection();
+      await prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports);
+      const first = requiredSubject(directProductionSubjectForPlan(releaseContext));
+      const firstInput = { directProduction: first };
+      expect(await authoredReleaseApproval()({ ...releaseContext, toolInput: firstInput })).toBe(
+        "user-approval",
+      );
+      await releaseAppProduction.execute(firstInput, releaseContext);
+
+      const candidate = draftReconciliationState.get();
+      if (candidate?.review === undefined || candidate.validation?.compilation === undefined) {
+        throw new Error("Expected a checked draft candidate.");
+      }
+      const newBase = "9".repeat(40);
+      const review = {
+        ...candidate.review,
+        baseSha: newBase,
+        digest: sha256("review against advanced base"),
+      };
+      const proposal = {
+        ...fixture.proposal,
+        expectedBaseSha: newBase,
+        digest: sha256("sealed against advanced base"),
+        reviewDigest: review.digest,
+      };
+      retainDraftReconciliationCompletion({
+        preparation: "sealed-before-approval",
+        proposal,
+        review,
+        appReview: {
+          appSpecDigest: first.appSpecDigest,
+          changeSetDigest: fixture.original.changeSetDigest,
+          digest: candidate.originalReviewDigest,
+        },
+        appId,
+        githubSourceDigest: candidate.githubSourceDigest,
+        root: candidate.root,
+        compilation: candidate.validation.compilation,
+      });
+      draftReconciliationState.update(() => ({ ...candidate, baseSha: newBase, review, proposal }));
+      expect(currentDirectProductionGrant(releaseContext, first)).toBeUndefined();
+      fixture.inspectExistingDraftReconciliationSource.mockResolvedValue({
+        ...fixture.owned,
+        base: { ...fixture.owned.base, headSha: newBase },
+      });
+      await prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports);
+      const renewed = requiredSubject(directProductionSubjectForPlan(releaseContext));
+      expect(renewed.revision?.reconciliation).toMatchObject({
+        digest: proposal.digest,
+        expectedBaseSha: newBase,
+      });
+      expect(
+        await authoredReleaseApproval()({
+          ...releaseContext,
+          callId: "release-corrected-draft-on-new-base",
+          toolInput: { directProduction: renewed },
+        }),
+      ).toBe("user-approval");
+      expect(currentDirectProductionGrant(releaseContext, renewed)).toBeUndefined();
+    });
+  });
+
+  it.each([
+    { draft: { draft: false } },
+    { draft: { headSha: "9".repeat(40) } },
+    { base: { headSha: "9".repeat(40) } },
+  ])("withholds the card after the open draft or base drifts (%j)", async (drift) => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const fixture = retainSealedSchemaCorrection();
+      await prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports);
+      expect(directProductionSubjectForPlan(releaseContext)).toBeDefined();
+      fixture.inspectExistingDraftReconciliationSource.mockResolvedValue({
+        ...fixture.owned,
+        draft: { ...fixture.owned.draft, ...drift.draft },
+        base: { ...fixture.owned.base, ...drift.base },
+      });
+      await prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports);
+      expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
     });
   });
 

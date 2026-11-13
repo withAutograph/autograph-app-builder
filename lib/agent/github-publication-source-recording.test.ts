@@ -2,6 +2,7 @@
 /* oxlint-disable sonarjs/no-internal-api-use -- Direct tool calls run in their own installed Eve session context. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { isDeepStrictEqual } from "node:util";
+import type { defineState } from "eve/context";
 import {
   ContextContainer,
   contextStorage,
@@ -79,6 +80,7 @@ const hooks = vi.hoisted(() => {
   return {
     sandbox: vi.fn(),
     assertApproval: vi.fn(),
+    readGrant: vi.fn(),
     assertOwner: vi.fn<() => Promise<void>>(),
     applied: vi.fn(),
     completions,
@@ -122,6 +124,25 @@ const hooks = vi.hoisted(() => {
 });
 
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T) => tool }));
+vi.mock("./direct-production-state", () => ({ currentDirectProductionGrant: hooks.readGrant }));
+vi.mock("eve/context", async (importOriginal) => {
+  const original = await importOriginal<{ defineState: typeof defineState }>();
+  return {
+    ...original,
+    defineState: <T>(name: string, initial: () => T) => {
+      if (name !== "autograph-app-builder.direct-production-reconciliation-calls.v1") {
+        return original.defineState(name, initial);
+      }
+      let state = initial();
+      return {
+        get: () => state,
+        update: (change: (value: T) => T) => {
+          state = change(state);
+        },
+      };
+    },
+  };
+});
 vi.mock("./approval-receipt", async (importOriginal) => ({
   ...(await importOriginal<{ approvalReceiptSchema: typeof ActualApprovalReceiptSchema }>()),
   approvalTargetFromDraftProposal: () => ({}),
@@ -275,6 +296,7 @@ describe("publication records actual source for its compiled app release", () =>
     hooks.sandbox.mockResolvedValue({});
     hooks.record.mockReset().mockResolvedValue({ status: "recorded" });
     hooks.assertApproval.mockReset();
+    hooks.readGrant.mockReset();
     // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires an explicit resolved value for its Promise<void> mock.
     hooks.assertOwner.mockReset().mockResolvedValue(undefined);
     hooks.applied.mockReset().mockResolvedValue({ applied: false });

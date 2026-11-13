@@ -604,6 +604,7 @@ export interface GitHubPublicationRuntime {
     review: ReconciliationReviewReceipt;
     contentSource: GitHubDraftPullRequestContentSource;
     recovery?: DraftInspectionRecoveryInput;
+    assertEffectCurrent?: () => void;
   }) => Promise<ExistingDraftObservation>;
 }
 
@@ -868,13 +869,13 @@ export function composeGitHubPublicationRuntime(input: {
     async inspectRepository(request) {
       return await adapter.inspectRepository(request);
     },
-    async reconcileExistingDraft(proposal, content, recovery) {
+    async reconcileExistingDraft(proposal, content, recovery, assertEffectCurrent) {
       if (adapter.reconcileExistingDraft === undefined) {
         throw new Error(
           "GitHub draft reconciliation is unavailable. Upgrade the GitHub provider before updating this PR.",
         );
       }
-      return await adapter.reconcileExistingDraft(proposal, content, recovery);
+      return await adapter.reconcileExistingDraft(proposal, content, recovery, assertEffectCurrent);
     },
   };
   // oxlint-disable-next-line eslint/sort-keys -- Keep runtime methods grouped by their original publication flow.
@@ -1868,13 +1869,17 @@ export function composeGitHubPublicationRuntime(input: {
     async reconcileExistingDraft(request) {
       const { contentSource, proposal, review } = request;
       const recovery = ownedDraftRecovery(request.recovery);
-      return await reconcileExistingDraft({
+      const effect: Parameters<typeof reconcileExistingDraft>[0] = {
         adapter: draftReconciliationAdapter,
         contentSource,
         proposal,
         recovery,
         review,
-      });
+      };
+      if (request.assertEffectCurrent !== undefined) {
+        effect.assertEffectCurrent = request.assertEffectCurrent;
+      }
+      return await reconcileExistingDraft(effect);
     },
   };
 }

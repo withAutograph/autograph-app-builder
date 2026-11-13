@@ -139,7 +139,7 @@ it("uses the original Production grant only for the exact current reviewed GitHu
     ...mocks.getState(),
     githubDestinationReview: { installation: { installationId } },
   });
-  mocks.readGrant.mockReturnValue({ digest: grantDigest });
+  mocks.readGrant.mockReturnValue({ digest: grantDigest, subject: {} });
   mocks.inspect.mockResolvedValue(observe({ draft: true }));
 
   await expect(approve(approved)).resolves.toBe("approved");
@@ -233,6 +233,45 @@ it("requires provider proof of the retained reconciliation before approving its 
       reviewedTarget,
     }),
   );
+});
+
+it("uses the same Production approval only for its sealed correction and exact updated head", async () => {
+  const installationId = "10";
+  const digest = "7".repeat(64);
+  const reconciliation = { digest: "e".repeat(64) };
+  const reconciled = { ...approval, installationId, reconciliationDigest: reconciliation.digest };
+  mocks.getState.mockReturnValue({
+    ...mocks.getState(),
+    githubDestinationReview: { installation: { installationId } },
+  });
+  mocks.getCandidate.mockReturnValue({
+    appId: "example-app",
+    originalReviewDigest: "original-review",
+    githubSourceDigest: "selected-source",
+    publishedReconciliation: reconciliation,
+  });
+  mocks.readGrant.mockReturnValue({
+    digest,
+    subject: {
+      revision: {
+        reconciliation: {
+          digest: reconciliation.digest,
+          originPublicationDigest: approval.proposalDigest,
+          pullRequestNumber: approval.pullRequestNumber,
+        },
+      },
+    },
+  });
+  mocks.inspectReconciled.mockResolvedValue(reconciled.headSha);
+  mocks.inspect.mockResolvedValue(observe({ draft: true }));
+  await expect(approve({ ...approval, installationId })).resolves.toMatchObject({ type: "denied" });
+  await expect(approve({ ...reconciled, pullRequestNumber: 999 })).resolves.toMatchObject({
+    type: "denied",
+  });
+  await expect(approve(reconciled)).resolves.toBe("approved");
+  expect(mocks.captureAuthority).toHaveBeenCalledExactlyOnceWith(reconciled, expect.anything(), {
+    directProductionGrantDigest: digest,
+  });
 });
 
 it("rechecks the approved proposal in the authenticated workflow without a model-carried session ID", async () => {

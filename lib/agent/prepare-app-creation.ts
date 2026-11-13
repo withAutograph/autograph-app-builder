@@ -12,6 +12,8 @@ import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { implementationRouteContext } from "./implementation-route-context";
 import { recordInitialBuildAuthoring } from "./initial-build-authoring";
 import type { ExistingAppChange } from "./existing-app-changes";
+import { addOptionalTextField } from "../repository/optional-text-field";
+import type { OptionalTextField } from "../repository/optional-text-field";
 import {
   resolveAcceptedAppSpecContent,
   resolveAcceptedAppSpecStream,
@@ -45,12 +47,14 @@ const frameworkPlanningOptions = (fixture: boolean, requested?: "latest", accept
 // oxlint-disable-next-line eslint/complexity -- Preserve the existing phase protocol and explicit same-app repair boundary in one producer.
 export const prepareAppCreation = async (
   {
-    existingAppChanges,
+    existingAppChanges: authoredChanges,
     frameworkUpgrade,
+    optionalTextField,
     privateCompute,
   }: {
     existingAppChanges?: ExistingAppChange[];
     frameworkUpgrade?: "latest";
+    optionalTextField?: OptionalTextField;
     privateCompute?: typeof PRIVATE_COMPUTE_PROFILE_ID;
   },
   ctx: ToolContext,
@@ -69,6 +73,31 @@ export const prepareAppCreation = async (
   }
   const sandboxForPlanning = await refreshPlanningSource(ctx);
   const planningState = appBuilderWorkflowState.get();
+  let existingAppChanges = authoredChanges;
+  let schemaPreimage: { digest: string; path: string } | undefined;
+  if (optionalTextField !== undefined) {
+    const { appId } = state.appSpec;
+    const schemaRoot = `apps/${appId}/schema/`;
+    const schemaPath = `${schemaRoot}${appId}.cue`;
+    if (authoredChanges?.some(({ path }) => path.startsWith(schemaRoot)) === true) {
+      throw new Error(
+        "Let Builder author the schema files when using optionalTextField. Include the related app code in existingAppChanges.",
+      );
+    }
+    const bytes = await sandboxForPlanning.readBinaryFile({
+      abortSignal: ctx.abortSignal,
+      path: `repository/${schemaPath}`,
+    });
+    if (bytes === null) {
+      throw new Error(
+        "Adding an optional field this way requires the current schema of an existing app.",
+      );
+    }
+    const source = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+    const { content } = addOptionalTextField(source, optionalTextField);
+    existingAppChanges = [...(authoredChanges ?? []), { content, path: schemaPath }];
+    schemaPreimage = { digest: sha256(source), path: schemaPath };
+  }
   const repair = await inspectExistingAppRepair({
     current: planningState,
     changes: existingAppChanges,
@@ -245,6 +274,7 @@ export const prepareAppCreation = async (
       workflowBeforeProposal = identityState;
     },
     sandbox,
+    schemaPreimage,
     sourceReceipt: current.sourceReceipt,
   });
   if (identityReceipt === undefined) {

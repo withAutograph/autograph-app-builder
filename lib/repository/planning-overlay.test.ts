@@ -468,6 +468,46 @@ describe("planning from the current checkout", () => {
       workingDirectory: "/workspace/repository",
     });
   });
+
+  it("freezes the authored schema only against the exact preimage it used", async () => {
+    const schemaPath = "apps/example/schema/example.cue";
+    const before = Buffer.from("retained CUE");
+    const readBinaryFile = vi.fn<SandboxSession["readBinaryFile"]>().mockResolvedValue(before);
+    const sandbox = createSandbox({
+      readBinaryFile,
+      removePath: vi.fn<SandboxSession["removePath"]>().mockResolvedValue(),
+      run: vi.fn<SandboxSession["run"]>().mockResolvedValue({
+        exitCode: 0,
+        stderr: "",
+        stdout: "644",
+      }),
+      writeTextFile: vi.fn<SandboxSession["writeTextFile"]>().mockResolvedValue(),
+    });
+    const input = {
+      appId: "example",
+      appSpecContent: "Add an optional reference",
+      appSpecDigest: "b".repeat(64),
+      artifactRevision: "a".repeat(64),
+      executor: fixtureTargetCommandExecutor(),
+      existingAppChanges: [{ content: "CUE with the optional field", path: schemaPath }],
+      sandbox,
+      schemaPreimage: {
+        digest: createHash("sha256").update(before).digest("hex"),
+        path: schemaPath,
+      },
+    };
+    await expect(executeTargetIdentityAndPlanning(input)).resolves.toMatchObject({
+      proposal: {
+        iteration: {
+          changes: [{ after: { content: "CUE with the optional field" }, path: schemaPath }],
+        },
+      },
+    });
+    readBinaryFile.mockResolvedValue(Buffer.from("concurrent schema change"));
+    await expect(executeTargetIdentityAndPlanning(input)).rejects.toThrow(
+      "The selected app's schema changed during planning.",
+    );
+  });
   it.each([null, "invalid old inventory"])(
     "retains only accepted scratch input without requiring a source inventory (%s)",
     async (manifest) => {

@@ -57,6 +57,15 @@ export default defineTool({
     }
     const grant = currentDirectProductionGrant(ctx, grantScope);
     const revision = grant?.subject.revision;
+    const approvedRepair = revision?.reconciliation;
+    if (
+      approvedRepair !== undefined &&
+      (approvedRepair.digest !== reconciliation?.digest ||
+        approvedRepair.originPublicationDigest !== proposalDigest ||
+        approvedRepair.pullRequestNumber !== observation.reviewedTarget.pullRequestNumber)
+    ) {
+      return result;
+    }
     const schemaRevision = revision?.schemaChange !== undefined;
     const schemaMergeSha =
       schemaRevision && observation.state === "merged" ? observation.mergeCommitSha : undefined;

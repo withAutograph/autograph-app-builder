@@ -523,6 +523,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
   sourceReceipt?: SourceReceipt;
   environment?: Readonly<Record<string, string | undefined>>;
   onIdentity?: (identity: TargetIdentity) => void | Promise<void>;
+  schemaPreimage?: { digest: string; path: string };
 }) => {
   planningMarker(targetIdentityPlanningMarker, "start");
   const privateCompute =
@@ -580,6 +581,14 @@ export const executeTargetIdentityAndPlanning = async (input: {
     command: `test -d /workspace/repository/${identity.workspacePath}`,
   });
   const existingApplication = existingApplicationResult.exitCode === 0;
+  if (
+    input.schemaPreimage !== undefined &&
+    (!existingApplication || identity.schemaCuePath !== input.schemaPreimage.path)
+  ) {
+    throw new Error(
+      "The selected app's schema changed during planning. Read the current app source and prepare the change again.",
+    );
+  }
   const frameworkUpgrade =
     input.frameworkUpgradeRequested === true ||
     (!existingApplication && input.resolveFrameworkVersions !== undefined)
@@ -615,13 +624,21 @@ export const executeTargetIdentityAndPlanning = async (input: {
       const before = await input.sandbox.readBinaryFile({
         path: `repository/${requested.path}`,
       });
-      const observedMode =
-        before === null
-          ? undefined
-          : // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-            await input.sandbox.run({
-              command: `stat -c %a -- ${repositoryPathArgument(requested.path)}`,
-            });
+      if (
+        requested.path === input.schemaPreimage?.path &&
+        (before === null || sha256(before) !== input.schemaPreimage.digest)
+      ) {
+        throw new Error(
+          "The selected app's schema changed during planning. Read the current app source and prepare the change again.",
+        );
+      }
+      let observedMode: Awaited<ReturnType<SandboxSession["run"]>> | undefined;
+      if (before !== null) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Keep the exact file preimage and mode read paired.
+        observedMode = await input.sandbox.run({
+          command: `stat -c %a -- ${repositoryPathArgument(requested.path)}`,
+        });
+      }
       const mode =
         observedMode?.exitCode === 0 && /^[0-7]{3,4}$/u.test(observedMode.stdout.trim())
           ? observedMode.stdout.trim()

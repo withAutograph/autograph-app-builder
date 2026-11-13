@@ -1,6 +1,10 @@
 /* oxlint-disable unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
-import { currentDraftCandidateSource } from "@/lib/agent/published-draft-repair";
+import {
+  currentDraftCandidateSource,
+  draftCandidateInstallation,
+} from "@/lib/agent/published-draft-repair";
+import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import { defineTool } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { z } from "zod";
@@ -19,6 +23,11 @@ import {
   restoreDraftReconciliationCandidateFile,
 } from "@/lib/repository/sandbox-draft-reconciliation";
 
+import {
+  discardUnissuedDraftSchemaRelease,
+  draftSchemaReleaseId,
+} from "@/lib/repository/sandbox-draft-schema-release";
+
 interface PreservedCandidateSource {
   kind: "preserved-draft-candidate";
   nextAction: string;
@@ -32,31 +41,32 @@ interface CandidatePageMetadata {
 
 export default defineTool({
   description:
-    "Read a current app-owned text file in bounded UTF-8 pages in Builder's isolated draft merge candidate. A read may specify preservedWorkspaceIndex from the candidate's preservedWorkspaces to inspect a retained draft candidate; this never selects an arbitrary root and does not edit preserved work. Retained app-review content remains available through change_set_status with includeContent. Continue with nextCursor and the read source's whole-file digest as expectedDigest; an ordinary file change returns its fresh first page with sourceChanged. Read the current candidate separately before using its digest for an edit. Create a new app-owned text file with kind: create, path and content; creation requires an absent path and never overwrites existing files. Replace one unique exact passage using the current whole-file digest, or restore one app-owned file's exact bytes and mode from the retained draft head. Restore accepts only a path and preserves other repairs. This changes no GitHub branch. Revalidate the complete candidate, review both diffs, and obtain the exact update approval before publication.",
+    "Read a current app-owned text file in bounded UTF-8 pages in Builder's isolated draft merge candidate. A read may specify preservedWorkspaceIndex from the candidate's preservedWorkspaces to inspect a retained draft candidate; this never selects an arbitrary root and does not edit preserved work. Retained app-review content remains available through change_set_status with includeContent. Continue with nextCursor and the read source's whole-file digest as expectedDigest; an ordinary file change returns its fresh first page with sourceChanged. Read the current candidate separately before using its digest for an edit. Create a new app-owned text file with kind: create, path and content; creation requires an absent path and never overwrites existing files. Replace one unique exact passage using the current whole-file digest, or restore one app-owned file's exact bytes and mode from the retained draft head. Restore accepts only a path and preserves other repairs. When a stale generated schema cut in this owned open draft needs recompilation, use discard_unissued_schema_release with its exact releaseId. This retains the old cut privately and preserves all checked releases on the base. Then compile through candidate validation. This changes no GitHub branch. Revalidate the complete candidate, review both diffs, and obtain the exact update approval before publication.",
   async execute(input, ctx) {
     ctx.abortSignal?.throwIfAborted();
     const candidate = structuredClone(draftReconciliationState.get());
     const workflow = structuredClone(appBuilderWorkflowState.get());
     const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
+    const source = currentDraftCandidateSource(state, candidate);
     if (
       candidate === null ||
       state.phase !== "reviewed" ||
-      currentDraftCandidateSource(state, candidate) === undefined ||
+      source === undefined ||
       state.reviewReceipt.digest !== candidate.originalReviewDigest
     ) {
       throw new Error(
         "The prepared draft candidate no longer matches the selected app and source review. Prepare reconciliation again before editing.",
       );
     }
-    const assertCurrentCreation = () => {
+    const assertCurrentCandidate = () => {
       ctx.abortSignal?.throwIfAborted();
       assertExactWorkflowState(
         appBuilderWorkflowState.get(),
         workflow,
-        "creating a draft candidate file",
+        "editing the private draft candidate",
       );
       if (!samePersistedDraftCandidate(draftReconciliationState.get(), candidate)) {
-        throw new Error("The draft candidate changed before its new file could be created.");
+        throw new Error("The draft candidate changed before it could be edited.");
       }
     };
     const sandbox = await getSourceBoundSandbox(ctx);
@@ -99,10 +109,10 @@ export default defineTool({
         status: preserved === undefined ? ("current_file" as const) : ("preserved_file" as const),
       };
     }
-    const invalidateCandidateProof = () => {
+    const invalidateCandidateProof = (path: string) => {
       updateExactDraftReconciliation({
         expected: candidate,
-        operation: `editing ${input.path}`,
+        operation: `editing ${path}`,
         transition: () => {
           const next = { ...candidate };
           delete next.proposal;
@@ -115,12 +125,85 @@ export default defineTool({
         },
       });
     };
+    if (input.kind === "discard_unissued_schema_release") {
+      const { owner, name, repositoryId } = source.repository;
+      const priorPublishedProposalDigest =
+        candidate.publishedOrigin?.publicationProposalDigest ??
+        candidate.publicationScope?.proposal.digest ??
+        state.publishedGitHubDraftProposalDigest ??
+        state.githubDraftProposal?.proposal.digest;
+      if (
+        candidate.kind === "published-draft-repair" ||
+        candidate.appId !== state.appSpec.appId ||
+        candidate.repositoryId !== repositoryId ||
+        priorPublishedProposalDigest === undefined
+      ) {
+        throw new Error("Prepare ordinary reconciliation for this app's owned draft first.");
+      }
+      const installationId =
+        draftCandidateInstallation(candidate)?.selectedInstallationId ??
+        state.githubDestinationReview?.installation.installationId;
+      const runtime = await githubPublicationRuntimeForSession(
+        ctx.session.auth,
+        installationId === undefined ? undefined : { selectedInstallationId: installationId },
+      );
+      const [{ draft, base, publishedHeadSha }, publication] = await Promise.all([
+        runtime.inspectExistingDraftReconciliationSource({
+          name,
+          owner,
+          priorPublishedProposalDigest,
+          pullRequestNumber: candidate.pullRequestNumber,
+          repositoryId,
+        }),
+        runtime.readSucceededDraftPublication?.(priorPublishedProposalDigest),
+      ]);
+      const exactLiveCandidate = [
+        publication !== undefined,
+        draft.state === "open",
+        draft.draft,
+        draft.repositoryId === repositoryId,
+        draft.number === candidate.pullRequestNumber,
+        draft.pullRequestId === publication?.pullRequestId,
+        draft.verifiedBuilderOrigin?.marker === publication?.idempotencyKey,
+        draft.headSha === candidate.headSha,
+        draft.headTree === candidate.headTree,
+        publishedHeadSha === candidate.headSha,
+        base.headSha === candidate.baseSha,
+        base.headTree === candidate.baseTree,
+      ].every(Boolean);
+      if (!exactLiveCandidate) {
+        throw new Error(
+          "The owned draft or its base has changed. Prepare current reconciliation before editing.",
+        );
+      }
+      const releasePath = `apps/${candidate.appId}/schema/release/${input.releaseId}`;
+      const { path } = await discardUnissuedDraftSchemaRelease({
+        abortSignal: ctx.abortSignal,
+        assertCurrent: assertCurrentCandidate,
+        markUncertain: () => {
+          if (samePersistedDraftCandidate(draftReconciliationState.get(), candidate)) {
+            invalidateCandidateProof(releasePath);
+          }
+        },
+        prepared: candidate,
+        releaseId: input.releaseId,
+        sandbox,
+        validatedTree: candidate.validation?.resolvedTree,
+      });
+      invalidateCandidateProof(path);
+      ctx.abortSignal?.throwIfAborted();
+      return {
+        next: "Validate the same candidate to recompile the release, then review both current diffs and seal a fresh update.",
+        path,
+        status: "candidate_edited" as const,
+      };
+    }
     let result: { digest: string; mode?: "644" | "755" };
     try {
       if (input.kind === "create") {
         result = await createDraftReconciliationCandidateFile({
           abortSignal: ctx.abortSignal,
-          assertCurrent: assertCurrentCreation,
+          assertCurrent: assertCurrentCandidate,
           content: input.content,
           path: input.path,
           prepared: candidate,
@@ -148,11 +231,11 @@ export default defineTool({
         error instanceof DraftCandidateCreationUncertainError &&
         samePersistedDraftCandidate(draftReconciliationState.get(), candidate)
       ) {
-        invalidateCandidateProof();
+        invalidateCandidateProof(input.path);
       }
       throw error;
     }
-    invalidateCandidateProof();
+    invalidateCandidateProof(input.path);
     if (input.kind === "create") {
       ctx.abortSignal?.throwIfAborted();
     }
@@ -175,6 +258,10 @@ export default defineTool({
       preservedWorkspaceIndex: z.number().int().nonnegative().optional(),
     }),
     z.strictObject({ kind: z.literal("restore"), path: z.string().min(1) }),
+    z.strictObject({
+      kind: z.literal("discard_unissued_schema_release"),
+      releaseId: draftSchemaReleaseId,
+    }),
     z.strictObject({
       content: z.string(),
       kind: z.literal("create"),

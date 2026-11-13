@@ -5,6 +5,7 @@ import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const gitObjectId = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u);
 
 export const ARRUSTED_PRODUCTION_REPOSITORY = "withAutograph/arrusted-development";
 
@@ -33,12 +34,25 @@ export const directProductionSubjectSchema = z
         priorGrantDigest: digest,
         priorProposalDigest: digest,
         schemaChange: directProductionSchemaChangeSchema.optional(),
+        reconciliation: z
+          .strictObject({
+            digest,
+            originPublicationDigest: digest,
+            originPublicationReceiptDigest: digest,
+            pullRequestNumber: z.number().int().positive(),
+            expectedHeadSha: gitObjectId,
+            expectedBaseSha: gitObjectId,
+            resolvedTree: gitObjectId,
+            reviewDigest: digest,
+          })
+          .optional(),
       })
       .optional(),
   })
   .refine(
     ({ revision, storageKind }) =>
-      revision?.schemaChange === undefined || storageKind === "postgres",
+      (revision?.schemaChange === undefined || storageKind === "postgres") &&
+      (revision?.reconciliation === undefined || revision.schemaChange !== undefined),
     "A schema revision requires the app's existing PostgreSQL database.",
   );
 
@@ -72,10 +86,13 @@ export const createDirectProductionGrant = (
 
 export const describeDirectProductionSubject = (subject: DirectProductionSubject) => {
   if (subject.revision?.schemaChange !== undefined) {
+    const { reconciliation } = subject.revision;
     return [
       `Release this update to ${subject.appId} in ${subject.repositoryFullName}.`,
       "Builder will verify that the checked schema adds one optional text field before updating your existing database. Your saved records, private access, and Production URL are retained.",
-      "Builder opens the reviewed pull request and merges it after required checks pass. The repository’s native deployment then makes the update available.",
+      reconciliation === undefined
+        ? "Builder opens the reviewed pull request and merges it after required checks pass. The repository’s native deployment then makes the update available."
+        : `Builder updates the reviewed draft PR #${reconciliation.pullRequestNumber}, makes it Ready, and merges it after required checks pass. The repository’s native deployment then makes the update available.`,
     ].join(" ");
   }
   if (subject.revision !== undefined) {

@@ -2092,6 +2092,7 @@ export const createGitHubAppHttpProvider = (input: {
       proposal: ExistingDraftReconciliationProposal,
       content: ReconciliationContent,
       recovery?: OwnedDraftInspectionRecovery,
+      assertEffectCurrent?: () => void,
     ) {
       try {
         assertReconciliationContent(proposal, content);
@@ -2169,6 +2170,7 @@ export const createGitHubAppHttpProvider = (input: {
           return { code: reviewedPathChangedCode, path: change.path, status: "rejected" };
         }
       }
+      assertEffectCurrent?.();
       current = await returnOwnedReadyToDraft(proposal, current, accessToken);
       const tree = await createTree({
         accessToken,
@@ -2236,6 +2238,7 @@ export const createGitHubAppHttpProvider = (input: {
       if (decimalProperty(repositoryIdentity.body, "id") !== proposal.repositoryId) {
         return { code: repositoryIdentityChangedCode, status: "rejected" };
       }
+      assertEffectCurrent?.();
       const result = await github({
         authorization: accessToken,
         body: {
