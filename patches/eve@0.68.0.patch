@@ -838,7 +838,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,1201 @@
+@@ -0,0 +1,1218 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
@@ -1368,8 +1368,10 @@ new file mode 100644
 +                  childWitness.readDeliverySteps !== undefined) {
 +                  let effectBoundary = "missing_completed_steps";
 +                  try {
-+                    const completedSteps = await childWitness.readDeliverySteps();
-+                    if (completedSteps !== undefined) {
++                    const readback = await childWitness.readDeliverySteps();
++                    effectBoundary = readback.boundary;
++                    if (readback.boundary === "ready") {
++                      const { completedSteps } = readback;
 +                      await authorizeOwner(binding);
 +                      const settled = await input.verifyCancelledWorkflowEffects({
 +                        toolName: from.toolName, callId: from.callId,
@@ -1638,6 +1640,7 @@ new file mode 100644
 +  };
 +  const deliveryCompletions = new Map();
 +  const deliveryUnsuccessful = new Set();
++  const deliveryAttempts = new Map();
 +  let deliveryEventsIncomplete = false;
 +  const callbacks = [];
 +  const eventCursors = new Set();
@@ -1663,12 +1666,15 @@ new file mode 100644
 +          deliveryEventsIncomplete = true;
 +        if (deliveryStepName(step?.fullName) !== undefined &&
 +          eventName !== undefined && eventName !== step.fullName) deliveryEventsIncomplete = true;
-+        if (deliveryStepName(step?.fullName) !== undefined && event.eventType === "step_failed")
-+          deliveryUnsuccessful.add(event.correlationId);
-+        if (deliveryStepName(step?.fullName) !== undefined && event.eventType === "step_completed") {
-+          if (deliveryCompletions.has(event.correlationId) || terminalSlot !== undefined)
-+            deliveryEventsIncomplete = true;
-+          deliveryCompletions.set(event.correlationId, slot);
++        if (deliveryStepName(step?.fullName) !== undefined) {
++          const { correlationId, eventType } = event;
++          if (eventType === "step_started" || eventType === "step_retrying")
++            deliveryAttempts.set(correlationId, slot);
++          if (eventType === "step_failed") deliveryUnsuccessful.add(correlationId);
++          if (eventType === "step_completed") {
++            if (deliveryCompletions.has(correlationId)) deliveryEventsIncomplete = true;
++            deliveryCompletions.set(correlationId, slot);
++          }
 +        }
 +      }
 +      if (terminalSlot !== undefined) {
@@ -1736,47 +1742,58 @@ new file mode 100644
 +  if (matches !== 1) return "child_callback_unproven";
 +  if (from.toolName !== "finish-github-pr-delivery") return "proven";
 +  const readDeliverySteps = async () => {
-+    if (deliveryEventsIncomplete) return;
++    if (deliveryEventsIncomplete) return { boundary: "child_step_event_inventory" };
 +    if ([...childSteps.values()].some(({ fullName }) => typeof fullName !== "string" ||
-+      (fullName.startsWith("step//./") && fullName !== readOnlyObserver && deliveryStepName(fullName) === undefined))) return;
++      (fullName.startsWith("step//./") && fullName !== readOnlyObserver && deliveryStepName(fullName) === undefined))) return { boundary: "child_step_unknown_authored" };
 +    const completed = [];
 +    for (const [id, metadata] of childSteps) {
 +      const name = deliveryStepName(metadata.fullName);
 +      if (name === undefined) continue;
 +      const start = created.get(id);
-+      if (start === undefined || start >= cancelSlot) return;
++      if (start === undefined) return { boundary: "child_delivery_dispatch_missing" };
++      if (start >= cancelSlot) return { boundary: "child_delivery_dispatch_after_stop" };
 +      const end = deliveryCompletions.get(id);
++      const lastAttempt = deliveryAttempts.get(id);
++      if (lastAttempt !== undefined && lastAttempt >= cancelSlot)
++        return { boundary: "child_delivery_attempt_after_stop" };
 +      if (metadata.status === "completed") {
-+        if (end === undefined || start >= end || end >= terminalSlot || end >= cancelSlot) return;
++        if (end === undefined) return { boundary: "child_delivery_completion_missing" };
++        if (start >= end || (lastAttempt !== undefined && lastAttempt >= end))
++          return { boundary: "child_delivery_completion_order" };
++        // A previously running schema step can settle after the control
++        // receipt. The exact terminal entity/output still has to prove it.
++        // A merge completing after Stop does not use this exception.
++        if (end >= cancelSlot && (name !== "continueGitHubProductionSchema" || !started.has(id)))
++          return { boundary: "child_delivery_completion_after_stop" };
 +      } else if (name !== "continueGitHubProductionSchema" || end !== undefined ||
-+        (metadata.status === "failed" && !deliveryUnsuccessful.has(id))) return;
++        (metadata.status === "failed" && !deliveryUnsuccessful.has(id))) return { boundary: "child_delivery_step_unsettled" };
 +      completed.push({ id, name, fullName: metadata.fullName, status: metadata.status,
 +        start, end: end ?? terminalSlot });
 +    }
-+    if (completed.length === 0) return;
++    if (completed.length === 0) return { boundary: "child_delivery_steps_absent" };
 +    completed.sort((a, b) => a.end - b.end);
 +    const results = [];
 +    for (const [index, witness] of completed.entries()) {
 +      // The delivery workflow awaits each provider step before scheduling the next.
-+      if (index > 0 && completed[index - 1].end >= witness.start) return;
++      if (index > 0 && completed[index - 1].end >= witness.start) return { boundary: "child_delivery_steps_overlap" };
 +      await authorizeChildRead();
 +      const step = await world.steps.get(childId, witness.id, { resolveData: "all" });
 +      if (step.runId !== childId || step.stepId !== witness.id || step.stepName !== witness.fullName ||
 +        step.status !== witness.status || step.input === undefined ||
-+        (step.status === "completed" && step.output === undefined)) return;
++        (step.status === "completed" && step.output === undefined)) return { boundary: "child_delivery_step_payload_missing" };
 +      const args = (await dependencies.hydrateStepArguments(step.input, childId, childKey))?.args;
 +      const context = args?.[0]?.context;
 +      if (context?.callId !== from.callId || context.toolName !== from.toolName ||
 +        context.session?.id !== binding.logicalSessionId || context.session.ownerRunId !== parentRun.runId ||
 +        context.session.ownerAnchorRunId !== from.ownerAnchorRunId ||
-+        context.session.turn?.id !== from.turnId || context.session.turn.sequence !== from.sequence) return;
++        context.session.turn?.id !== from.turnId || context.session.turn.sequence !== from.sequence) return { boundary: "child_delivery_step_context_mismatch" };
 +      const output = step.status === "completed" ?
 +        await dependencies.hydrateStepReturnValue(step.output, childId, childKey) : undefined;
 +      results.push({ name: witness.name, args, output,
 +        ...(step.status === "completed" ? {} : { status: step.status }) });
 +    }
 +    await authorizeChildRead();
-+    return results;
++    return { boundary: "ready", completedSteps: results };
 +  };
 +  return { boundary: "proven", readDeliverySteps };
 +}

@@ -226,6 +226,17 @@ describe("repeat GitHub delivery effects", () => {
     ).toBeNull();
   });
 
+  it("recognizes the exact final stopped status only for a read of an earlier merge", () => {
+    const stopped = { status: "monitoring-stopped", requestedRevision: "unassessed" };
+    expect(readRepeat([repeatMerge, repeatSchema(stopped)])).toEqual({
+      ...prior,
+      mergeSha: mergeCommitSha,
+      readyAt,
+    });
+    expect(readRepeat([repeatMerge, repeatSchema(stopped), repeatSchema(pending)])).toBeNull();
+    expect(readRepeat([repeatMerge, repeatSchema({ ...stopped, extra: true })])).toBeNull();
+  });
+
   it.each(["failed", "cancelled"] as const)(
     "permits one final exact %s schema step with no output",
     (status) => {

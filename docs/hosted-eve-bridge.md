@@ -270,6 +270,11 @@ result and tenant-scoped merge journal. A later schema step can be accounted for
 without its result only when its exact input reused that older receipt and the
 cancellation revision had already advanced before the later call started. The
 protected operator rejects that stale receipt before any schema write.
+A schema step that had already started before Stop can finish during cleanup.
+Recovery verifies the original start, absence of a later attempt, terminal
+step identity, and the protected result. A failed step or a provider-only
+result does not prove installation. Recovery logs a fixed evidence category
+when those facts cannot be verified.
 Other internal inbox messages without settlement proof still prevent transfer. Recovery reports a fixed
 message category to operations without recording payloads or arbitrary message
 kinds. That category provides no authority to discard or replay the message.
