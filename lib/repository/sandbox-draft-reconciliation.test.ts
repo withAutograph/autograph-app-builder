@@ -272,7 +272,7 @@ describe("isolated draft reconciliation", () => {
     git(prepared.root, "add", "--", declarations);
     const inspected = await inspectDraftReconciliation({ prepared, sandbox: f.sandbox });
     expect(inspected.resolvedTree).toBe(originalTree);
-    expect(inspected.baseChanges.some(({ path }) => path === declarations)).toBe(false);
+    expect(inspected.baseChanges.some((change) => change.path === declarations)).toBe(false);
     expect(readFileSync(file, "utf-8")).toBe(generated);
     expect(git(prepared.root, "ls-files", "--", declarations)).toBe("");
 
