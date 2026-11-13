@@ -7,6 +7,7 @@ import type { GitHubPrDeliveryApproval } from "./github-pr-delivery-approval";
 import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contract";
 import type { RepositoryProductionNativeStatus } from "../provisioning/repository-production-native-status-contract";
 import { createRepositoryProductionClient } from "./repository-production-client";
+import { readLiveMergedAppProduction } from "./app-production-observation";
 import finishDelivery from "../../agent/tools/finish-github-pr-delivery";
 import observeProduction from "../../agent/tools/observe-app-production";
 import { HostedOperatorError } from "../provisioning/hosted-operator-contract";
@@ -375,6 +376,39 @@ it("reads the exact historical reconciled merge without replaying Ready or merge
   expect(mocks.continueDelivery).not.toHaveBeenCalled();
   expect(mocks.readAuthority).not.toHaveBeenCalled();
   expect(mocks.sleep).not.toHaveBeenCalled();
+});
+
+it("confirms the same protected merged app only with schema-aware readback", async () => {
+  const schemaGrantDigest = "d".repeat(64);
+  const live = observed("available", "live");
+  const nativeStatus = vi
+    .fn()
+    .mockResolvedValueOnce(live)
+    .mockResolvedValueOnce(observed("available", "awaiting-activation"))
+    .mockResolvedValueOnce({ ...live, destination: { ...live.destination, repositoryId: "101" } })
+    .mockResolvedValueOnce({
+      ...live,
+      deployment: { ...live.deployment, requestedRevisionActive: true },
+    });
+  const prepare = vi.fn();
+  mocks.clientForContext.mockResolvedValue({ nativeStatus, prepare });
+  const ctx = context();
+  const read = async () =>
+    await readLiveMergedAppProduction(
+      nativeProductionTarget,
+      ctx,
+      mergeCommitSha,
+      schemaGrantDigest,
+    );
+
+  await expect(read()).resolves.toEqual(live);
+  await expect(read()).resolves.toBeUndefined();
+  await expect(read()).resolves.toBeUndefined();
+  await expect(read()).resolves.toBeUndefined();
+  expect(nativeStatus.mock.calls).toEqual(
+    Array.from({ length: 4 }, () => [appId, mergeCommitSha, undefined, schemaGrantDigest]),
+  );
+  expect(prepare).not.toHaveBeenCalled();
 });
 
 it.each(["open", "unreviewed", "moved", "foreign-app", "read-failed"] as const)(

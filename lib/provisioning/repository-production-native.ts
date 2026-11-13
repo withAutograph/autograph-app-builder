@@ -148,6 +148,12 @@ const currentRepositoryProductionSchemaGrant = (decision: ApprovedBuildDecision 
   return current ? grant : undefined;
 };
 
+export const repositoryProductionSchemaNativeStatusGrantMatches = (
+  decision: ApprovedBuildDecision | undefined,
+  expectedSchemaGrantDigest: string,
+): boolean =>
+  currentRepositoryProductionSchemaGrant(decision)?.digest === expectedSchemaGrantDigest;
+
 /** Keep the app's availability and the candidate's completed data setup separate. */
 export const projectRepositoryProductionSchemaNativeStatus = async (
   observed: RepositoryProductionNativeStatus,
@@ -1352,13 +1358,27 @@ export const createRepositoryProductionNativeHandler =
             ? await setup(found.scope).status(found.scope, row.record.intent)
             : { operationRef: key(found.scope), state: "setting-up-data" };
         },
-        readNativeStatus: async (owner, expectedMergeSha, includeActivationProof) => {
+        readNativeStatus: async (
+          owner,
+          expectedMergeSha,
+          includeActivationProof,
+          expectedSchemaGrantDigest,
+        ) => {
           const observed = await readNativeStatus(owner, expectedMergeSha, includeActivationProof);
           return await projectRepositoryProductionSchemaNativeStatus(
             observed,
             includeActivationProof,
             async () => {
               const session = await readSession(owner);
+              if (
+                expectedSchemaGrantDigest !== undefined &&
+                !repositoryProductionSchemaNativeStatusGrantMatches(
+                  session.privateBuildDecision,
+                  expectedSchemaGrantDigest,
+                )
+              ) {
+                return false;
+              }
               const grant = currentRepositoryProductionSchemaGrant(session.privateBuildDecision);
               if (grant === undefined) {
                 return true;
@@ -1366,6 +1386,17 @@ export const createRepositoryProductionNativeHandler =
               const found = await resolve(owner);
               const row = await store.read(found.scope);
               await found.assertCurrentOwner();
+              if (expectedSchemaGrantDigest !== undefined) {
+                const latest = await readSession(owner);
+                if (
+                  !repositoryProductionSchemaNativeStatusGrantMatches(
+                    latest.privateBuildDecision,
+                    expectedSchemaGrantDigest,
+                  )
+                ) {
+                  return false;
+                }
+              }
               return (
                 row !== undefined &&
                 isDeepStrictEqual(row.record.scope, found.scope) &&

@@ -7,6 +7,8 @@ import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-githu
 import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { currentDirectProductionGrant } from "@/lib/agent/direct-production-state";
+import { recordDirectProductionProgress } from "@/lib/agent/direct-production-progress";
+import { readLiveMergedAppProduction } from "@/lib/agent/app-production-observation";
 import { resolveGitHubPrDeliverySubject } from "@/lib/agent/github-pr-delivery-subject";
 import {
   readGitHubProductionDeliveryReadiness,
@@ -15,7 +17,7 @@ import {
 
 export default defineTool({
   description:
-    "Read this session's reviewed pull request and required checks. For a first managed Production release, finish data and access setup after draft publication. For an approved revision, verify the existing setup. A merged optional-field revision can resume its already approved database update. Follow the returned nextCall for setup or reviewed delivery using the current release approval. A draft defers checks until Ready. Passing checks or setup do not claim native activation or hosted behavior.",
+    "Read this session's reviewed pull request and required checks. For a first managed Production release, finish data and access setup after draft publication. For an approved revision, verify the existing setup. For a merged optional-field revision, report the confirmed live app or resume the already approved database update. Follow the returned nextCall for setup or reviewed delivery using the current release approval. A draft defers checks until Ready. Passing checks or setup do not claim native activation or hosted behavior.",
   async execute(_input, ctx) {
     const subject = resolveGitHubPrDeliverySubject(
       appBuilderWorkflowState.get(),
@@ -46,17 +48,51 @@ export default defineTool({
       repositoryId: observation.reviewedTarget.repositoryId,
       repositoryFullName: `${observation.reviewedTarget.owner}/${observation.reviewedTarget.name}`,
     };
-    const revision = currentDirectProductionGrant(ctx, targetScope)?.subject.revision;
+    const grantScope: Parameters<typeof currentDirectProductionGrant>[1] = {
+      ...targetScope,
+      baseBranch: observation.reviewedTarget.baseBranch,
+    };
+    if (installation !== undefined) {
+      grantScope.installationId = installation;
+    }
+    const grant = currentDirectProductionGrant(ctx, grantScope);
+    const revision = grant?.subject.revision;
     const schemaRevision = revision?.schemaChange !== undefined;
-    const resumableSchema =
-      schemaRevision && observation.state === "merged" && observation.mergeCommitSha !== undefined;
-    const canContinue = observation.state === "open" || resumableSchema;
-    if (
-      runtime.runPublishedPullRequestEffect === undefined ||
-      !observation.reviewedRevision ||
-      !reconciliationIsReady ||
-      !canContinue
-    ) {
+    const schemaMergeSha =
+      schemaRevision && observation.state === "merged" ? observation.mergeCommitSha : undefined;
+    const canContinue = observation.state === "open" || schemaMergeSha !== undefined;
+    if (!observation.reviewedRevision || !reconciliationIsReady || !canContinue) {
+      return result;
+    }
+    if (grant !== undefined && schemaMergeSha !== undefined) {
+      const nativeProduction = await readLiveMergedAppProduction(
+        targetScope,
+        ctx,
+        schemaMergeSha,
+        grant.digest,
+      );
+      const currentSubject = resolveGitHubPrDeliverySubject(
+        appBuilderWorkflowState.get(),
+        draftReconciliationState.get(),
+      );
+      const reviewMatches = [
+        currentSubject?.appId === subject.appId,
+        currentSubject?.proposalDigest === proposalDigest,
+        currentSubject?.installationId === installation,
+        currentSubject?.reconciliation?.digest === reconciliation?.digest,
+      ].every(Boolean);
+      if (
+        !reviewMatches ||
+        currentDirectProductionGrant(ctx, grantScope)?.digest !== grant.digest
+      ) {
+        return result;
+      }
+      if (nativeProduction !== undefined) {
+        recordDirectProductionProgress(grant.digest, "live");
+        return { ...result, nativeProduction };
+      }
+    }
+    if (runtime.runPublishedPullRequestEffect === undefined) {
       return result;
     }
     if (observation.state === "open") {

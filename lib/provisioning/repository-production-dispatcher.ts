@@ -25,6 +25,7 @@ import type {
 import {
   repositoryProductionExpectedMergeShaSchema,
   repositoryProductionNativeStatusSchema,
+  repositoryProductionSchemaGrantDigestSchema,
 } from "./repository-production-native-status-contract";
 import type { RepositoryProductionNativeStatus } from "./repository-production-native-status-contract";
 import type {
@@ -91,12 +92,20 @@ export const repositoryProductionRequestSchema = z.discriminatedUnion("action", 
       .optional(),
   }),
   z.strictObject({ ...ownerFields, action: z.literal("setup-status") }),
-  z.strictObject({
-    ...ownerFields,
-    action: z.literal("native-status"),
-    expectedMergeSha: repositoryProductionExpectedMergeShaSchema.optional(),
-    includeActivationProof: z.literal(true).optional(),
-  }),
+  z
+    .strictObject({
+      ...ownerFields,
+      action: z.literal("native-status"),
+      expectedMergeSha: repositoryProductionExpectedMergeShaSchema.optional(),
+      includeActivationProof: z.literal(true).optional(),
+      expectedSchemaGrantDigest: repositoryProductionSchemaGrantDigestSchema.optional(),
+    })
+    .refine(
+      (value) =>
+        value.expectedSchemaGrantDigest === undefined ||
+        (value.expectedMergeSha !== undefined && value.includeActivationProof === undefined),
+      "A schema settlement read requires a merged revision and includes schema readback.",
+    ),
   z.strictObject({
     ...ownerFields,
     ...repositoryProductionDeliveryTargetSchema.shape,
@@ -138,6 +147,7 @@ export interface RepositoryProductionHandlerDependencies {
     owner: RepositoryProductionRequestOwner,
     expectedMergeSha?: string,
     includeActivationProof?: true,
+    expectedSchemaGrantDigest?: string,
   ) => Promise<RepositoryProductionNativeStatus>;
   readDeliveryStatus: (
     owner: RepositoryProductionRequestOwner,
@@ -230,11 +240,25 @@ export const createRepositoryProductionHandler =
         if (deps.readNativeStatus === undefined) {
           return reply({ code: "native_status_unavailable" }, 503);
         }
-        const result = repositoryProductionNativeStatusSchema.parse(
-          body.includeActivationProof === true
-            ? await deps.readNativeStatus(owner, body.expectedMergeSha, body.includeActivationProof)
-            : await deps.readNativeStatus(owner, body.expectedMergeSha),
-        );
+        let observed: RepositoryProductionNativeStatus;
+        if (body.expectedSchemaGrantDigest === undefined) {
+          observed =
+            body.includeActivationProof === true
+              ? await deps.readNativeStatus(
+                  owner,
+                  body.expectedMergeSha,
+                  body.includeActivationProof,
+                )
+              : await deps.readNativeStatus(owner, body.expectedMergeSha);
+        } else {
+          observed = await deps.readNativeStatus(
+            owner,
+            body.expectedMergeSha,
+            undefined,
+            body.expectedSchemaGrantDigest,
+          );
+        }
+        const result = repositoryProductionNativeStatusSchema.parse(observed);
         if (result.appId !== owner.appId) {
           return reply({ code: "app_access_denied" }, 403);
         }

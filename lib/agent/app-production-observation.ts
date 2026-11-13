@@ -30,6 +30,11 @@ export interface AppProductionDeliveryTarget {
   repositoryFullName: string;
 }
 
+type AppProductionObservationContext = Pick<
+  WorkflowStepToolContext,
+  "abortSignal" | "callId" | "session"
+>;
+
 const monitoringStopped = (): AppProductionObservation => ({
   status: monitoringStoppedStatus,
   requestedRevision: unassessed,
@@ -54,19 +59,30 @@ const serviceUnavailable = (
 /** An independent saved-session read uses canonical ownership, never old Build or merge state. */
 export const observeAppProduction = async (
   appId: string,
-  ctx: WorkflowStepToolContext,
+  ctx: AppProductionObservationContext,
   expectedMergeSha?: string,
   includeActivationProof?: true,
+  expectedSchemaGrantDigest?: string,
 ): Promise<AppProductionObservation> => {
   ctx.abortSignal.throwIfAborted();
   let clientResolved = false;
   try {
     const client = await repositoryProductionClientForContext(ctx);
     clientResolved = true;
-    const observed =
-      includeActivationProof === true
-        ? await client.nativeStatus(appId, expectedMergeSha, includeActivationProof)
-        : await client.nativeStatus(appId, expectedMergeSha);
+    let observed: RepositoryProductionNativeStatus;
+    if (expectedSchemaGrantDigest === undefined) {
+      observed =
+        includeActivationProof === true
+          ? await client.nativeStatus(appId, expectedMergeSha, includeActivationProof)
+          : await client.nativeStatus(appId, expectedMergeSha);
+    } else {
+      observed = await client.nativeStatus(
+        appId,
+        expectedMergeSha,
+        undefined,
+        expectedSchemaGrantDigest,
+      );
+    }
     ctx.abortSignal.throwIfAborted();
     return observed;
   } catch (error) {
@@ -85,9 +101,10 @@ export const observeAppProduction = async (
 /** Verified immutable merge metadata survives loss of its old Build, review or Ready call. */
 export const observeMergedAppProduction = async (
   target: AppProductionDeliveryTarget,
-  ctx: WorkflowStepToolContext,
+  ctx: AppProductionObservationContext,
   expectedMergeSha?: string,
   includeActivationProof?: true,
+  expectedSchemaGrantDigest?: string,
 ): Promise<AppProductionObservation> => {
   ctx.abortSignal.throwIfAborted();
   const observed = await observeAppProduction(
@@ -95,6 +112,7 @@ export const observeMergedAppProduction = async (
     ctx,
     expectedMergeSha,
     includeActivationProof,
+    expectedSchemaGrantDigest,
   );
   if (observed.status === monitoringStoppedStatus) {
     return observed;
@@ -108,6 +126,27 @@ export const observeMergedAppProduction = async (
     observed.destination.repositoryFullName === target.repositoryFullName
     ? observed
     : monitoringStopped();
+};
+
+/** The ordinary protected observation checks both native activation and the installed schema. */
+export const readLiveMergedAppProduction = async (
+  target: AppProductionDeliveryTarget,
+  ctx: AppProductionObservationContext,
+  mergeSha: string,
+  schemaGrantDigest: string,
+) => {
+  const observed = await observeMergedAppProduction(
+    target,
+    ctx,
+    mergeSha,
+    undefined,
+    schemaGrantDigest,
+  );
+  const isLive =
+    observed.status === "available" &&
+    observed.requestedRevision === "live" &&
+    observed.deployment.requestedRevisionActive === undefined;
+  return isLive && observed.appId === target.appId ? observed : undefined;
 };
 
 const currentReviewedDelivery = () =>

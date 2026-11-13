@@ -44,13 +44,16 @@ export async function approveGitHubPrDelivery(
   const input = ctx.toolInput;
   const { reconciliationDigest, installationId } = input;
   const { currentDirectProductionGrant } = await import("./direct-production-state");
+  const productionTarget = {
+    appId: subject.appId,
+    repositoryId: input.repositoryId,
+    repositoryFullName: `${input.owner}/${input.name}`,
+  };
   const directGrant =
     installationId === undefined || installationId !== subject.installationId
       ? undefined
       : currentDirectProductionGrant(ctx, {
-          appId: subject.appId,
-          repositoryId: input.repositoryId,
-          repositoryFullName: `${input.owner}/${input.name}`,
+          ...productionTarget,
           baseBranch: input.baseBranch,
           installationId,
         });
@@ -103,6 +106,22 @@ export async function approveGitHubPrDelivery(
       ].every(Boolean);
       if (!matchesReviewedRevision) {
         return { reason: "The reviewed draft revision could not be verified.", type: "denied" };
+      }
+      if (resumableSchema && observed.mergeCommitSha !== undefined) {
+        const { readLiveMergedAppProduction } = await import("./app-production-observation");
+        const live = await readLiveMergedAppProduction(
+          productionTarget,
+          ctx,
+          observed.mergeCommitSha,
+          directGrant.digest,
+        );
+        if (live !== undefined) {
+          return {
+            reason:
+              "This reviewed revision is already live. Use the app’s Production status to check availability.",
+            type: "denied",
+          };
+        }
       }
     }
   }

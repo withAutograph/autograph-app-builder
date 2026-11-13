@@ -203,6 +203,41 @@ describe("protected repository Production dispatcher", () => {
     expect(f.deps.resolveSetup).not.toHaveBeenCalled();
   });
 
+  it("passes the expected schema grant only for a schema-aware exact merged revision", async () => {
+    const f = fixture();
+    const native = {
+      version: 1 as const,
+      appId: owner.appId,
+      observedAt: "2026-11-10T15:00:00Z",
+      status: "available" as const,
+      deployment: { state: "active" as const },
+      app: { state: "sign-in-required" as const, url: "https://apps.test/requests" },
+      requestedRevision: "awaiting-activation" as const,
+    };
+    const readNativeStatus = vi.fn().mockResolvedValue(native);
+    Object.assign(f.deps, { readNativeStatus });
+    const body = {
+      version: 1,
+      ...owner,
+      action: "native-status",
+      expectedSchemaGrantDigest: "b".repeat(64),
+    };
+    const expectedMergeSha = "a".repeat(40);
+    expect((await f.send(body)).status).toBe(400);
+    expect((await f.send({ ...body, expectedMergeSha, includeActivationProof: true })).status).toBe(
+      400,
+    );
+    expect((await f.send({ ...body, expectedMergeSha })).status).toBe(200);
+    expect(readNativeStatus).toHaveBeenCalledExactlyOnceWith(
+      owner,
+      expectedMergeSha,
+      undefined,
+      body.expectedSchemaGrantDigest,
+    );
+    expect(f.deps.resolveSetup).not.toHaveBeenCalled();
+    expect(f.prepared).not.toHaveBeenCalled();
+  });
+
   it("reads delivery prerequisites for the exact reviewed repository without preparing or reading People", async () => {
     const f = fixture();
     const target = { repositoryId: "123", repositoryFullName: "example/repo" };
