@@ -239,6 +239,12 @@ effect and does not replay the report. A blocking workflow outcome additionally
 requires its exact registered child, a completed owner cleanup step after the
 receipt, a matching native action result, and the committed tool transcript.
 A cancelled-history placeholder does not establish that a result committed.
+A cooperative cancellation notice without a result may be accounted for only
+within that same stopped turn. The exact parent Stop and completed descendant
+cancellation must bind the registered child and the settlement input. The
+child's retained entry, control receipt, completed callback, and terminal
+state must prove that exact notice. This proves the child stopped; it does
+not prove its previous effects were absent or grant permission to retry them.
 Other internal inbox messages without settlement proof still prevent transfer. Recovery reports a fixed
 message category to operations without recording payloads or arbitrary message
 kinds. That category provides no authority to discard or replay the message.

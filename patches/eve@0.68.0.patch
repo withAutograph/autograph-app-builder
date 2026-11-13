@@ -819,7 +819,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,781 @@
+@@ -0,0 +1,946 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
@@ -1261,6 +1261,7 @@ new file mode 100644
 +          eventId: event.eventId,
 +          correlationId: event.correlationId,
 +          slot,
++          token,
 +          payload,
 +        };
 +        (slot <= latest.origin.slot ? cancellationInbox : carriedInbox).push(item);
@@ -1268,6 +1269,59 @@ new file mode 100644
 +        // Absence of an exact retained envelope can never waive the inbox guard.
 +        issues.push({ reason: "native-inbox-payload-unreadable" });
 +        if (slot <= latest.origin.slot) cancellationInbox.push(null);
++      }
++    }
++
++    const cancelledWorkflowReceipts = new Set();
++    const certifiedCancelledCalls = new Set();
++    if (latest.cancellation !== undefined &&
++      cancellationInbox.some((item) => item?.payload?.kind === "outcome" &&
++        item.payload.result?.status === "cancelled")) {
++      const settle = steps.get(latest.origin.stepId)?.arguments?.args?.[0];
++      const settleStart = inputOrigins.get(latest.origin.stepId)?.slot;
++      const parentStop = cancellationInbox.filter((item) => item?.payload?.kind === "cancel" &&
++        item.payload.turnId === latest.cancellation.turnId &&
++        Object.keys(item.payload).every((key) => key === "kind" || key === "turnId"));
++      if (settle !== undefined && settleStart !== undefined && parentStop.length === 1) {
++        for (const { event, slot } of events) {
++          if (event.eventType !== "step_completed" || slot >= settleStart ||
++            stepNames.get(event.correlationId) !== "cancelDescendantTurnsStep") continue;
++          const start = inputOrigins.get(event.correlationId)?.slot;
++          if (start === undefined || start <= parentStop[0].slot || start >= slot) continue;
++          const receipts = cancellationInbox.filter((item) => item?.payload?.kind === "outcome" &&
++            item.payload.result?.status === "cancelled" && item.slot > start && item.slot < slot);
++          if (receipts.length === 0) continue;
++          await authorizeOwner(binding);
++          try {
++            const parentStep = await world.steps.get(run.runId, event.correlationId, { resolveData: "all" });
++            if (parentStep.runId !== run.runId || parentStep.stepId !== event.correlationId ||
++              nativeFunction(parentStep.stepName) !== "cancelDescendantTurnsStep" ||
++              parentStep.status !== "completed" || parentStep.input === undefined) continue;
++            const input = (await dependencies.hydrateStepArguments(parentStep.input, run.runId, key))?.args?.[0];
++            if (!isDeepStrictEqual(input?.sessionState, settle.sessionState) ||
++              !isDeepStrictEqual(input?.serializedContext, settle.serializedContext)) continue;
++            const session = dependencies.readDurableSession(settle.sessionState);
++            const registered = getBlockingWorkflowToolRuns(session.state, latest.cancellation.turnId);
++            for (const item of receipts) {
++              const from = item.payload.from;
++              if (!isRecord(from) || from.execution !== "blocking" ||
++                typeof from.callId !== "string" || certifiedCancelledCalls.has(from.callId) ||
++                from.ownerRunId !== run.runId || from.turnId !== latest.cancellation.turnId ||
++                from.sequence !== latest.cancellation.sequence) continue;
++              const owners = registered.filter((entry) => entry.address.runId === from.runId &&
++                entry.callId === from.callId && entry.toolName === from.toolName &&
++                entry.origin.turnId === from.turnId && entry.origin.stepIndex === from.stepIndex);
++              if (owners.length !== 1 || typeof owners[0].address.hookToken !== "string") continue;
++              if (await proveCancelledWorkflowCallback({ world, dependencies, binding, authorizeOwner,
++                parentRun: run, owner: owners[0], item, command })) {
++                cancelledWorkflowReceipts.add(item.eventId);
++                certifiedCancelledCalls.add(from.callId);
++              }
++            }
++          } catch {
++            // An unavailable child or invalid parent witness grants no authority.
++          }
++        }
 +      }
 +    }
 +
@@ -1365,6 +1419,7 @@ new file mode 100644
 +      carriedInbox,
 +      cancellationInbox,
 +      consumedWorkflowSteps,
++      cancelledWorkflowReceipts,
 +      issues,
 +    };
 +    await authorizeOwner(binding);
@@ -1394,6 +1449,116 @@ new file mode 100644
 +    });
 +    return { kind: "candidate", candidate: handle, inspection };
 +  };
++}
++
++const descendantCancelReason = "The turn that called the tool was cancelled.";
++
++async function proveCancelledWorkflowCallback({ world, dependencies, binding, authorizeOwner,
++  parentRun, owner, item, command }) {
++  const envelope = item.payload;
++  const from = envelope.from;
++  if (Object.keys(envelope).length !== 3 ||
++    !isDeepStrictEqual(envelope.result, { status: "cancelled", reason: descendantCancelReason }) ||
++    item.token !== sessionInboxHookToken(command)) return false;
++  const childId = owner.address.runId;
++  const controlToken = owner.address.hookToken;
++  await authorizeOwner(binding);
++  const child = await world.runs.get(childId, { resolveData: "all" });
++  if (child.runId !== childId || child.status !== "completed" ||
++    child.workflowName !== "workflow//eve//workflowToolRunWorkflow" || child.input === undefined ||
++    (parentRun.deploymentId !== undefined && child.deploymentId !== parentRun.deploymentId)) return false;
++  const childKey = await dependencies.resolveRunEncryptionKey(world, child);
++  const entries = await dependencies.hydrateWorkflowArguments(child.input, childId, childKey);
++  const entry = Array.isArray(entries) && entries.length === 1 ? entries[0] : undefined;
++  if (!isRecord(entry) || Object.hasOwn(entry, "workflow") ||
++    (entry.execution ?? "blocking") !== "blocking" ||
++    entry.hookToken !== controlToken || entry.owner?.inbox !== item.token ||
++    entry.session?.id !== binding.logicalSessionId || entry.session?.ownerRunId !== parentRun.runId ||
++    entry.session?.ownerAnchorRunId !== from.ownerAnchorRunId ||
++    entry.session?.turn?.id !== from.turnId || entry.session?.turn?.sequence !== from.sequence ||
++    entry.callId !== from.callId || entry.toolName !== from.toolName || entry.stepIndex !== from.stepIndex ||
++    !isDeepStrictEqual(entry.input, from.input)) return false;
++
++  // Closure of the child proves this notice only. It says nothing about whether
++  // earlier app/provider effects happened; the parent effect guards still run.
++  const completed = new Map();
++  const stepCursors = new Set();
++  let cursor;
++  do {
++    await authorizeOwner(binding);
++    const page = await world.steps.list({ runId: childId,
++      pagination: { limit: 128, sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) },
++      resolveData: "none" });
++    for (const step of page.data) {
++      if (step.runId !== childId || step.status !== "completed" || completed.has(step.stepId)) return false;
++      completed.set(step.stepId, nativeFunction(step.stepName));
++    }
++    if (!page.hasMore) break;
++    if (!page.cursor || stepCursors.has(page.cursor)) return false;
++    stepCursors.add(page.cursor);
++    cursor = page.cursor;
++  } while (true);
++
++  let hookId;
++  let cancelSlot;
++  let terminalSlot;
++  let lastSlot = 0;
++  const created = new Map();
++  const callbacks = [];
++  const eventCursors = new Set();
++  cursor = undefined;
++  do {
++    await authorizeOwner(binding);
++    const page = await world.events.list({ runId: childId,
++      pagination: { limit: 128, sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) },
++      resolveData: "none" });
++    for (const event of page.data) {
++      if (event.runId !== childId) return false;
++      const slot = dependencies.requireEventSlot(event.eventId);
++      if (slot <= lastSlot || terminalSlot !== undefined) return false;
++      lastSlot = slot;
++      if (event.eventType === "hook_created" && event.eventData?.token === controlToken) {
++        if (hookId !== undefined || typeof event.correlationId !== "string") return false;
++        hookId = event.correlationId;
++      } else if (event.eventType === "hook_received" && hookId !== undefined &&
++        event.correlationId === hookId && cancelSlot === undefined) {
++        await authorizeOwner(binding);
++        const received = await world.events.get(childId, event.eventId, { resolveData: "all" });
++        if (received.runId !== childId || received.eventId !== event.eventId ||
++          received.eventType !== "hook_received" || received.correlationId !== hookId ||
++          (received.eventData?.token !== undefined && received.eventData.token !== controlToken)) return false;
++        const command = await dependencies.hydrateHookPayload(received.eventData.payload, childId, childKey);
++        if (isDeepStrictEqual(command, { kind: "cancel", reason: descendantCancelReason })) cancelSlot = slot;
++      } else if (event.eventType === "step_created" || event.eventType === "step_started") {
++        if (!created.has(event.correlationId)) created.set(event.correlationId, slot);
++      } else if (event.eventType === "step_completed" &&
++        completed.has(event.correlationId) &&
++        (event.eventData?.stepName === undefined ? completed.get(event.correlationId) :
++          nativeFunction(event.eventData.stepName)) === "resumeHookStep") {
++        callbacks.push({ id: event.correlationId, start: created.get(event.correlationId), slot });
++      } else if (event.eventType === "run_completed") {
++        terminalSlot = slot;
++      }
++    }
++    if (!page.hasMore) break;
++    if (!page.cursor || eventCursors.has(page.cursor)) return false;
++    eventCursors.add(page.cursor);
++    cursor = page.cursor;
++  } while (true);
++  if (cancelSlot === undefined || terminalSlot === undefined) return false;
++  let matches = 0;
++  for (const callback of callbacks) {
++    if (callback.start === undefined || callback.start <= cancelSlot ||
++      callback.start >= callback.slot || callback.slot >= terminalSlot) continue;
++    await authorizeOwner(binding);
++    const step = await world.steps.get(childId, callback.id, { resolveData: "all" });
++    if (step.runId !== childId || step.stepId !== callback.id || step.status !== "completed" ||
++      nativeFunction(step.stepName) !== "resumeHookStep" || step.input === undefined) return false;
++    const args = (await dependencies.hydrateStepArguments(step.input, childId, childKey))?.args;
++    if (isDeepStrictEqual(args, [item.token, envelope, { ifPresent: true }])) matches++;
++  }
++  await authorizeOwner(binding);
++  return matches === 1;
 +}
 +
 +/** Read a finite, unchanged prefix without following an unclosed terminal stream. */
@@ -2680,7 +2845,7 @@ diff --git a/dist/src/execution/session/recovery-reconciliation.js b/dist/src/ex
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-reconciliation.js
-@@ -0,0 +1,878 @@
+@@ -0,0 +1,884 @@
 +import { activeTurnId } from "#harness/active-turn-id.js";
 +import { createRuntimeToolResultFromValue } from "#harness/action-result-helpers.js";
 +import { createActionPartialEvent, createActionResultEvent } from "#protocol/message.js";
@@ -3172,6 +3337,12 @@ new file mode 100644
 +    if (item.payload?.kind === "outcome") {
 +      try {
 +        if (matchCommittedOutcome(payload, item, cancel, session, usedWorkflowSteps, usedResults)) continue;
++        if (item.payload.result?.status === "cancelled" &&
++          payload.cancelledWorkflowReceipts?.has(item.eventId) &&
++          isBoundWorkflowRef(payload, item.payload.from) &&
++          !committedResultIds(session.history).has(item.payload.from.callId) &&
++          !payload.nativeEvents.some((event) => event.type === "action.result" &&
++            event.data?.result?.callId === item.payload.from.callId)) continue;
 +      } catch {
 +        // A malformed or uncommitted outcome grants no authority.
 +      }

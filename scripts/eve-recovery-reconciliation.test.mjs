@@ -59,6 +59,9 @@ const {
   stampMessageStreamEvent,
 } = await load("protocol/message.js");
 const { createRuntimeToolResultFromValue } = await load("harness/action-result-helpers.js");
+const { sessionCommandHookToken, sessionInboxHookToken } = await load(
+  "execution/session-inbox/address.js",
+);
 const { settleCancelledToolHistory } = await load("harness/cancelled-tool-history.js");
 const { registerWorkflowToolRun } = await load("harness/workflow-tool-runs.js");
 const { workflowToolRunOutcomeToToolResult } = await load(
@@ -69,6 +72,13 @@ const { z } = await import("zod");
 const ownerRunId = "wrun_physical_original";
 const logicalSessionId = "wrun_logical_original";
 const eventId = (slot) => `evnt_${String(slot).padStart(26, "0")}`;
+const nativeWorldEvent = (runId, slot, eventType, correlationId, eventData = {}) => ({
+  runId,
+  eventId: eventId(slot),
+  eventType,
+  correlationId,
+  eventData,
+});
 const batchEvent = { sequence: 1, stepIndex: 1, turnId: originalTurnId };
 const emission = { sessionStarted: true, sequence: 1, stepIndex: 2, turnId: originalTurnId };
 const actualRuntimeResult = {
@@ -134,29 +144,22 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
       "signalSessionOwnerActivationStep",
       { token, activation: { kind: "active" } },
     );
-    const typedEvent = (runId, slot, eventType, correlationId, eventData = {}) => ({
-      runId,
-      eventId: eventId(slot),
-      eventType,
-      correlationId,
-      eventData,
-    });
     const parentEvents = [
-      typedEvent(anchorRunId, 1, "hook_created", "handoff-hook", { token }),
-      typedEvent(anchorRunId, 2, "step_started", startStep.stepId, {
+      nativeWorldEvent(anchorRunId, 1, "hook_created", "handoff-hook", { token }),
+      nativeWorldEvent(anchorRunId, 2, "step_started", startStep.stepId, {
         stepName: startStep.stepName,
       }),
-      typedEvent(anchorRunId, 3, "step_completed", startStep.stepId, {
+      nativeWorldEvent(anchorRunId, 3, "step_completed", startStep.stepId, {
         stepName: startStep.stepName,
       }),
-      typedEvent(anchorRunId, 4, "hook_received", "handoff-hook", {
+      nativeWorldEvent(anchorRunId, 4, "hook_received", "handoff-hook", {
         payload: await serialization.dehydrateStepReturnValue({ kind: "active" }, anchorRunId),
       }),
-      typedEvent(anchorRunId, 5, "run_completed"),
+      nativeWorldEvent(anchorRunId, 5, "run_completed"),
     ];
     if (options.parentFrontierUnknown === true) {
       parentEvents.push(
-        typedEvent(anchorRunId, 6, "step_started", "late-effect", {
+        nativeWorldEvent(anchorRunId, 6, "step_started", "late-effect", {
           stepName: "step//eve//dispatchCoordinationStep",
         }),
       );
@@ -164,17 +167,17 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
     const address = await load("execution/session-inbox/address.js");
     const inbox = address.sessionInboxHookToken(address.sessionCommandHookToken(logicalSessionId));
     const childEvents = [
-      typedEvent(ownerRunId, 1, "step_completed", validation.stepId, {
+      nativeWorldEvent(ownerRunId, 1, "step_completed", validation.stepId, {
         stepName: validation.stepName,
       }),
-      typedEvent(ownerRunId, 2, "hook_created", "claimed-inbox", {
+      nativeWorldEvent(ownerRunId, 2, "hook_created", "claimed-inbox", {
         token: inbox,
         metadata: await serialization.dehydrateStepReturnValue(
           { sessionId: logicalSessionId },
           ownerRunId,
         ),
       }),
-      typedEvent(ownerRunId, 3, "step_completed", activation.stepId, {
+      nativeWorldEvent(ownerRunId, 3, "step_completed", activation.stepId, {
         stepName: activation.stepName,
       }),
       ...events.map((event) => ({
@@ -377,6 +380,12 @@ const workflowReportRun = {
 };
 const workflowReportUpdate = { status: "merged", mergeCommitSha: "c".repeat(40) };
 const workflowOutcomeStepId = "release-owned-workflow-invocation";
+const cancelDescendantStepId = "cancel-owned-workflow";
+const childResumeStepId = "send-owned-cancelled-outcome";
+const childControlHookId = "owned-delivery-control-hook";
+const childControlToken = "00000000-0000-4000-8000-000000000001";
+const childCancelReason = "The turn that called the tool was cancelled.";
+const parentInboxToken = sessionInboxHookToken(sessionCommandHookToken(logicalSessionId));
 const workflowOutcomeResult = {
   status: completedStatus,
   output: { ...workflowReportUpdate, nativeProduction: { status: "available" } },
@@ -387,6 +396,111 @@ const defaultWorkflowOutcome = {
   result: workflowOutcomeResult,
 };
 const workflowOutcomeToolResult = workflowToolRunOutcomeToToolResult(defaultWorkflowOutcome);
+const cancelledWorkflowOutcome = {
+  ...defaultWorkflowOutcome,
+  result: { status: "cancelled", reason: childCancelReason },
+};
+
+const ownedDeliveryState = (session) => {
+  const { callId, toolName, turnId, stepIndex, runId } = workflowReportRun;
+  return registerWorkflowToolRun(session, {
+    callId,
+    toolName,
+    origin: { turnId, stepIndex },
+    address: { runId, hookToken: childControlToken },
+    lifetime: "turn",
+  });
+};
+
+const attachCancelledWorkflowChild = async (world, key, evidence) => {
+  if (evidence === undefined) {
+    return;
+  }
+  const { runId, callId, toolName, stepIndex, input, execution } = workflowReportRun;
+  const runInput = {
+    callId,
+    toolName,
+    input,
+    stepIndex,
+    execution,
+    workflowId: "workflow:fixture-owned-delivery",
+    hookToken: childControlToken,
+    owner: { inbox: parentInboxToken },
+    session: {
+      id: logicalSessionId,
+      ownerRunId: evidence.foreignOwner === true ? "wrun_foreign_owner" : ownerRunId,
+      ownerAnchorRunId: logicalSessionId,
+      turn: { id: originalTurnId, sequence: emission.sequence },
+    },
+  };
+  const childRun = {
+    runId,
+    workflowName: "workflow//eve//workflowToolRunWorkflow",
+    status: evidence.runStatus ?? completedStatus,
+    input: await serialization.dehydrateWorkflowArguments([runInput], runId, key),
+  };
+  const childResumeStep = {
+    runId,
+    stepId: childResumeStepId,
+    stepName: "step//eve/execution/tools/workflow/resume-hook-step.js//resumeHookStep",
+    status: completedStatus,
+    input: await serialization.dehydrateStepArguments(
+      {
+        args: [
+          evidence.foreignInbox === true ? "foreign-parent-inbox" : parentInboxToken,
+          evidence.mismatchedOutcome === true ? defaultWorkflowOutcome : cancelledWorkflowOutcome,
+          { ifPresent: true },
+        ],
+        closureVars: [],
+      },
+      runId,
+      key,
+    ),
+  };
+  const childEvent = (slot, eventType, correlationId, eventData) =>
+    nativeWorldEvent(runId, slot, eventType, correlationId, eventData);
+  const childEvents = [
+    childEvent(1, "hook_created", childControlHookId, { token: childControlToken }),
+    ...(evidence.omitControl === true
+      ? []
+      : [
+          childEvent(2, "hook_received", childControlHookId, {
+            token: childControlToken,
+            payload: await serialization.dehydrateStepReturnValue(
+              { kind: "cancel", reason: childCancelReason },
+              runId,
+              key,
+            ),
+          }),
+        ]),
+    childEvent(3, "step_started", childResumeStepId, { stepName: childResumeStep.stepName }),
+    childEvent(4, "step_completed", childResumeStepId, { stepName: childResumeStep.stepName }),
+    childEvent(5, "run_completed", undefined, {}),
+  ];
+  const { runs, events, steps } = world;
+  world.runs = {
+    ...runs,
+    get: async (id, options) => (id === runId ? childRun : await runs.get(id, options)),
+  };
+  world.events = {
+    list: async (options) =>
+      options.runId === runId ? { data: childEvents, hasMore: false } : await events.list(options),
+    get: async (id, event, options) =>
+      id === runId
+        ? childEvents.find(({ eventId: childEventId }) => childEventId === event)
+        : await events.get(id, event, options),
+  };
+  world.steps = {
+    list: async ({ runId: id }) => {
+      assert.equal(id, runId);
+      return await Promise.resolve({ data: [childResumeStep], hasMore: false });
+    },
+    get: async (id, stepId, options) =>
+      id === runId && stepId === childResumeStepId
+        ? childResumeStep
+        : await steps.get(id, stepId, options),
+  };
+};
 
 const workflowOutcomeHistory = (history, evidence) => {
   const { callId, toolName, input } = workflowReportRun;
@@ -447,6 +561,7 @@ const addSettledCancellation = async ({
   stopDuringTurnStep,
   workflowReport,
   workflowOutcome,
+  cancelledOutcome,
 }) => {
   const active = clearPendingCoordinationBatch({
     ...source,
@@ -455,18 +570,30 @@ const addSettledCancellation = async ({
   if (beforeCancellationSend === true) {
     active.continuationToken = "old-turn-inbox";
   }
-  const settledActive =
-    workflowOutcome === undefined
-      ? active
-      : { ...active, history: workflowOutcomeHistory(active.history, workflowOutcome) };
+  let settledActive = active;
+  let settledHistory = active.history;
+  if (workflowOutcome !== undefined) {
+    settledHistory = workflowOutcomeHistory(active.history, workflowOutcome);
+    settledActive = { ...active, history: settledHistory };
+  }
+  if (cancelledOutcome !== undefined) {
+    const pendingHistory = workflowOutcomeHistory(active.history, { result: "pending" });
+    const { callId, toolName } = workflowReportRun;
+    settledActive = { ...active, history: pendingHistory };
+    if (cancelledOutcome.omitRegistration !== true) {
+      settledActive = ownedDeliveryState(settledActive);
+    }
+    settledHistory = settleCancelledToolHistory(pendingHistory, [{ callId, toolName }]);
+  }
   const before = {
     ...sourcePair,
     sessionState: createDurableSessionState({ session: settledActive }),
   };
   const idle = {
-    ...settledActive,
+    ...active,
+    history: settledHistory,
     state: {
-      ...settledActive.state,
+      ...active.state,
       "eve.harness.emission": { ...emission, sequence: 2, stepIndex: 0, turnId: "" },
     },
   };
@@ -599,14 +726,8 @@ const addSettledCancellation = async ({
       }),
     );
     if (workflowOutcome.omitStep !== true) {
-      const { callId, toolName, turnId, stepIndex, runId } = workflowReportRun;
-      const releasing = registerWorkflowToolRun(active, {
-        callId,
-        toolName,
-        origin: { turnId, stepIndex },
-        address: { runId, hookToken: "owned-delivery-control" },
-        lifetime: "turn",
-      });
+      const { runId } = workflowReportRun;
+      const releasing = ownedDeliveryState(active);
       steps.set(workflowOutcomeStepId, {
         runId: ownerRunId,
         stepId: workflowOutcomeStepId,
@@ -628,10 +749,37 @@ const addSettledCancellation = async ({
       );
     }
   }
+  if (cancelledOutcome !== undefined) {
+    const cleanupStart = stopSlot + 1;
+    const outcomeSlot =
+      cancelledOutcome.outsideCleanup === true ? cleanupStart + 3 : cleanupStart + 1;
+    if (cancelledOutcome.omitCleanup !== true) {
+      const cleanupInput = cancelledOutcome.mismatchedPair === true ? sourcePair : before;
+      steps.set(cancelDescendantStepId, {
+        runId: ownerRunId,
+        stepId: cancelDescendantStepId,
+        stepName: "step//eve/execution/cancel-descendant-turns-step.js//cancelDescendantTurnsStep",
+        status: completedStatus,
+        input: await args(cleanupInput),
+        output: await output(),
+      });
+      receipts.push(
+        event(cleanupStart, "step_started", cancelDescendantStepId),
+        event(cleanupStart + 2, "step_completed", cancelDescendantStepId),
+      );
+    }
+    receipts.push(
+      event(outcomeSlot, "hook_received", commandHookId, {
+        token: parentInboxToken,
+        payload: await output(cancelledWorkflowOutcome),
+      }),
+    );
+  }
   receipts.sort((left, right) => left.eventId.localeCompare(right.eventId));
   const afterPriorStepStart = events.findIndex((entry) => entry.eventId === eventId(3)) + 1;
   const reportSettlementSlot = workflowReport === undefined ? 7 : 9;
-  const settlementSlot = workflowOutcome === undefined ? reportSettlementSlot : 12;
+  const outcomeSettlementSlot = workflowOutcome === undefined ? reportSettlementSlot : 12;
+  const settlementSlot = cancelledOutcome === undefined ? outcomeSettlementSlot : stopSlot + 5;
   events.splice(
     afterPriorStepStart,
     events.length - afterPriorStepStart,
@@ -900,6 +1048,7 @@ const fixture = async (options = {}) => {
           stopDuringTurnStep: options.stopDuringTurnStep,
           workflowReport: options.workflowReport,
           workflowOutcome: options.workflowOutcome,
+          cancelledOutcome: options.cancelledOutcome,
         })
       : undefined;
   await appendHistoricalInbox(events, event, output, options.inboxSuffix, settled === undefined);
@@ -1022,6 +1171,7 @@ const fixture = async (options = {}) => {
     steps,
     world,
   });
+  await attachCancelledWorkflowChild(world, key, options.cancelledOutcome);
   const snapshotKey = await attachNativeSnapshot(world, nativeEvents, options.snapshot);
   let authorized = false;
   const collect = collectorFor(options)({
@@ -1504,6 +1654,47 @@ for (const { name, evidence } of [
     assert.equal(result.reason, unconsumedNativeInboxReason);
   });
 }
+
+test("idle transfer accepts only the exact cancellation notice from the owned descendant", async () => {
+  const f = await settledIdleFixture({ encrypted: true, cancelledOutcome: {} });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "ready");
+  assert.equal(result.provenance.selectedOrigin.stepId, settledCancelStepId);
+  assert.equal(result.provenance.coveredNativeEventIds.includes(eventId(7)), true);
+  assert.equal(result.replayInput, undefined);
+  assert.equal(result.carriedInbox, undefined);
+  assert.deepEqual(result.checkpointCore, f.settled);
+});
+
+for (const { name, evidence } of [
+  { name: "missing parent cleanup", evidence: { omitCleanup: true } },
+  { name: "an unrelated parent checkpoint", evidence: { mismatchedPair: true } },
+  { name: "no recorded child ownership", evidence: { omitRegistration: true } },
+  { name: "a notice outside parent cleanup", evidence: { outsideCleanup: true } },
+  { name: "a foreign child owner", evidence: { foreignOwner: true } },
+  { name: "a foreign parent inbox", evidence: { foreignInbox: true } },
+  { name: "no child Stop receipt", evidence: { omitControl: true } },
+  { name: "an unsettled child", evidence: { runStatus: "running" } },
+  { name: "a different child outcome", evidence: { mismatchedOutcome: true } },
+]) {
+  test(`idle transfer refuses a cancelled descendant outcome with ${name}`, async () => {
+    const f = await settledIdleFixture({ encrypted: true, cancelledOutcome: evidence });
+    const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+    assert.equal(result.kind, "uncertain");
+    assert.equal(result.reason, unconsumedNativeInboxReason);
+  });
+}
+
+test("a proven descendant cancellation notice does not resolve an unrelated dispatched write", async () => {
+  const f = await settledIdleFixture({
+    encrypted: true,
+    cancelledOutcome: {},
+    uncommittedDispatch: true,
+  });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "uncertain");
+  assert.equal(result.reason, uncommittedActionDispatchReason);
+});
 
 test("idle transfer preserves a genuine send queued after the cancellation checkpoint", async () => {
   const queued = {
