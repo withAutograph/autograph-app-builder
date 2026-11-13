@@ -1026,7 +1026,7 @@ test("idle transfer uses the paired output that settled the native cancellation"
   assert.equal(result.kind, "ready");
   assert.equal(result.provenance.selectedOrigin.stepId, settledCancelStepId);
   assert.equal(result.provenance.selectedOrigin.kind, "committed-cancelled-turn-output");
-  assert.ok(result.provenance.coveredNativeEventIds.includes(eventId(5)));
+  assert.equal(result.provenance.coveredNativeEventIds.includes(eventId(5)), true);
   assert.equal(result.replayInput, undefined);
   assert.equal(result.carriedInbox, undefined);
   assert.deepEqual(result.checkpointCore, f.settled);
@@ -1044,7 +1044,7 @@ test("idle transfer can recover a Stop received inside the producing turn step",
   const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
   assert.equal(result.kind, "ready");
   assert.equal(result.provenance.selectedOrigin.stepId, settledCancelStepId);
-  assert.ok(result.provenance.coveredNativeEventIds.includes(eventId(4)));
+  assert.equal(result.provenance.coveredNativeEventIds.includes(eventId(4)), true);
   assert.equal(result.replayInput, undefined);
   assert.equal(result.carriedInbox, undefined);
   assert.deepEqual(result.checkpointCore, f.settled);
