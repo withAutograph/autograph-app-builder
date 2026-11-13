@@ -51,7 +51,10 @@ import {
   currentDraftCandidateSource,
   createPublishedDraftRepairSource,
 } from "./published-draft-repair";
-import { freshFixture } from "../eve/test-support/draft-reviewed-recovery";
+import {
+  fixture as connectedFixture,
+  freshFixture,
+} from "../eve/test-support/draft-reviewed-recovery";
 import prepareApp from "../../agent/tools/prepare_app_creation";
 
 interface ControlledDeploymentPorts {
@@ -376,6 +379,22 @@ const retainCandidate = async (f: ReturnType<typeof fixture>) => {
 };
 
 describe("same delivered app source refresh", () => {
+  it("keeps an acquired repository ready to plan and leaves source refresh to approved compilation", async () => {
+    await within(async () => {
+      const f = fixture();
+      const connected = connectedFixture().reviewed;
+      const acquire = vi.fn(f.ports.access.classify);
+      defaultPorts.access = { ...f.ports.access, classify: acquire };
+      appBuilderWorkflowState.update(() => connected);
+      await expect(prepareApp.execute({ refreshSource: true }, f.ctx)).resolves.toMatchObject({
+        appId: connected.appSpec.appId,
+        status: "connected_source_retained",
+      });
+      expect(appBuilderWorkflowState.get()).toEqual(connected);
+      expect(acquire).not.toHaveBeenCalled();
+    });
+  });
+
   it("handles current-source continuation through the normal preparation tool without asking for repository or database details", async () => {
     await within(async () => {
       const f = fixture();

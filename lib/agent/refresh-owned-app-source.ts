@@ -34,11 +34,18 @@ const unavailableAccess = () =>
 export const refreshOwnedAppSource = async (ctx: ToolContext, ports: RefreshPorts = {}) => {
   ctx.abortSignal?.throwIfAborted();
   const current = appBuilderWorkflowState.get();
+  if ("appSpec" in current && current.githubSource !== undefined) {
+    return {
+      appId: current.appSpec.appId,
+      status: "connected_source_retained" as const,
+      guidance:
+        "Keep this app's selected repository and existing source. Inspect its app files and prepare the new changes in this turn. When the approved schema is compiled, Builder refreshes the connected repository's shared compiler automatically. No live app availability check is needed to prepare a change.",
+    };
+  }
   if (
     !["applied", "validation_failed", "validated", "reviewed"].includes(current.phase) ||
     !("applyReceipt" in current) ||
-    current.sourceReceipt.sourceKind !== "fresh-template" ||
-    current.githubSource !== undefined
+    current.sourceReceipt.sourceKind !== "fresh-template"
   ) {
     throw new Error(
       "Refresh the source of this same settled, delivered app; preserve any unfinished operation first.",

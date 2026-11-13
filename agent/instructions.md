@@ -90,7 +90,11 @@ inspect its current files and call `prepare_app_creation` with nonempty
 `existingAppChanges` for the new request before reading its release subject.
 If a supported starter-backed session needs newer repository capabilities,
 first call `prepare_app_creation({ refreshSource: true })`, then inspect the
-refreshed source and plan the edits. Call `release-app-production` on the new
+refreshed source and plan the edits. A connected GitHub checkout refreshes the
+shared compiler during approved schema compilation. If explicit refresh returns
+`connected_source_retained`, inspect and plan against the existing checkout.
+Do not call `observe-app-production` just to plan a requested revision; a
+status read is separate from authoring. Call `release-app-production` on the new
 proposal and pass its subject to `apply_app_creation` with an empty
 implementation file list. Present the combined Build card in the same turn.
 If release preflight returns `production-revision-plan-required`, prepare the

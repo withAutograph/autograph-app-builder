@@ -111,8 +111,16 @@ app's edits. Creators do not select a commit, reconnect a database, or use GitHu
 outside Builder. This is an optional private planning operation, never a
 freshness or release prerequisite.
 
-For a canonical Arrusted app, Builder derives the destination and installation
-from the saved session, revalidates connected read access and the tenant-owned
+An app already acquired from its connected GitHub branch keeps that checkout.
+Builder refreshes the shared compiler during approved schema compilation. An
+explicit refresh returns `connected_source_retained`; the new revision can
+be planned immediately without checking live availability.
+The separate, read-only availability check returns after a short deadline when
+its provider does not respond. It does not stop planning, alter delivery, or
+report an unverified revision as live.
+
+For a starter-backed canonical Arrusted app, Builder derives the destination
+and installation from the saved session, revalidates connected read access and the tenant-owned
 publication, and observes its merge into the current default branch. These
 facts establish source ownership only; they do not select or activate any
 deployment. Builder fetches the observed source using its protected repository
