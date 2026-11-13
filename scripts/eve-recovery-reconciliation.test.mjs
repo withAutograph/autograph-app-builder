@@ -24,6 +24,7 @@ const originalNativeCallId = "original-native";
 const originalOwnerId = "original-owner";
 const fixtureAppId = "fixture-app";
 const completedStatus = "completed";
+const afterChildTerminal = "after-terminal";
 const eventsListOperation = "events.list";
 
 const require = createRequire(import.meta.url);
@@ -512,11 +513,27 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
     const slot = 1 + index * 2;
     const eventData = { stepName: step.stepName };
     const started = childEvent(slot, "step_started", step.stepId, eventData);
-    return delivery.omitCompletion === true
+    return delivery.omitCompletion === true ||
+      (delivery.schemaAfterStop !== undefined && index === deliverySteps.length - 1)
       ? [started]
       : [started, childEvent(slot + 1, "step_completed", step.stepId, eventData)];
   });
   const offset = deliverySteps.length * 2;
+  const lastDelivery = deliverySteps.at(-1);
+  const schemaSettledAfterTerminal = delivery?.schemaAfterStop === afterChildTerminal;
+  const lateSchemaSlot = offset + (schemaSettledAfterTerminal ? 11 : 6);
+  const lateSchemaEvent =
+    delivery?.schemaAfterStop === undefined || lastDelivery === undefined
+      ? undefined
+      : childEvent(lateSchemaSlot, "step_completed", lastDelivery.stepId, {
+          stepName: lastDelivery.stepName,
+        });
+  const lateRetry =
+    delivery?.schemaRetryAfterStop === true && lastDelivery !== undefined
+      ? childEvent(offset + 5, "step_retrying", lastDelivery.stepId, {
+          stepName: lastDelivery.stepName,
+        })
+      : undefined;
   const childEvents = [
     ...deliveryEvents,
     ...(siblingStep === undefined ? [] : [siblingEvent(1 + offset, "step_started")]),
@@ -540,18 +557,21 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
             ),
           }),
         ]),
-    childEvent(4 + offset, "step_started", childResumeStepId, {
+    ...(lateRetry === undefined ? [] : [lateRetry]),
+    ...(lateSchemaEvent === undefined || schemaSettledAfterTerminal ? [] : [lateSchemaEvent]),
+    childEvent(7 + offset, "step_started", childResumeStepId, {
       stepName: childResumeStep.stepName,
     }),
-    childEvent(5 + offset, "step_completed", childResumeStepId, {
+    childEvent(8 + offset, "step_completed", childResumeStepId, {
       stepName: childResumeStep.stepName,
     }),
-    ...(pagedSteps?.failureBeforeRun === true ? [siblingEvent(6 + offset, "step_failed")] : []),
-    childEvent(7 + offset, "run_completed", undefined, {}),
-    ...(pagedSteps?.failureAfterRun === true ? [siblingEvent(8 + offset, "step_failed")] : []),
+    ...(pagedSteps?.failureBeforeRun === true ? [siblingEvent(9 + offset, "step_failed")] : []),
+    childEvent(10 + offset, "run_completed", undefined, {}),
+    ...(lateSchemaEvent === undefined || !schemaSettledAfterTerminal ? [] : [lateSchemaEvent]),
+    ...(pagedSteps?.failureAfterRun === true ? [siblingEvent(11 + offset, "step_failed")] : []),
     ...(pagedSteps?.unrelatedLateEvent === true
       ? [
-          childEvent(9 + offset, "step_failed", "unknown-child-step", {
+          childEvent(12 + offset, "step_failed", "unknown-child-step", {
             stepName: "step//eve//unknownStep",
           }),
         ]
@@ -2131,6 +2151,34 @@ test.each([
   const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
   assert.equal(result.kind, ready ? "ready" : "uncertain");
   if (ready) {
+    assert.equal(result.replayInput, undefined);
+  } else {
+    assert.equal(result.reason, uncommittedActionDispatchReason);
+  }
+});
+
+test.each([
+  { timing: "after-stop", retry: false, ready: true },
+  { timing: afterChildTerminal, retry: false, ready: true },
+  { timing: "after-stop", retry: true, ready: false },
+])("settles a running schema step $timing only without a later retry ($retry)", async (proof) => {
+  const witnessFixture = cancelledDeliveryWitnessFixture();
+  const f = await settledIdleFixture({
+    encrypted: true,
+    cancelledOutcome: {
+      delivery: {
+        completedSteps: witnessFixture.witness.completedSteps,
+        serializedContext: witnessFixture.context,
+        schemaAfterStop: proof.timing,
+        schemaRetryAfterStop: proof.retry,
+      },
+    },
+    verifyCancelledWorkflowEffects: async (witness) =>
+      await Promise.resolve(verifySettledGitHubDelivery(witness, witnessFixture.owner)),
+  });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, proof.ready ? "ready" : "uncertain");
+  if (proof.ready) {
     assert.equal(result.replayInput, undefined);
   } else {
     assert.equal(result.reason, uncommittedActionDispatchReason);

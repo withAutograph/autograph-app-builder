@@ -47,6 +47,10 @@ const stepArgumentsSchema = z.tuple([
     contextIndexes: z.tuple([z.literal(1)]),
   }),
 ]);
+const monitoringStoppedSchema = z.strictObject({
+  status: z.literal("monitoring-stopped"),
+  requestedRevision: z.literal("unassessed"),
+});
 const stepOutputSchema = z.strictObject({
   kind: z.literal("result"),
   output: z.unknown(),
@@ -249,19 +253,22 @@ export const readSettledGitHubDeliveryRepeat = (
       continue;
     }
     const result = readStep(step, input, approval);
-    const status = repositoryProductionNativeStatusSchema.safeParse(result?.output).data;
-    if (status?.appId !== input.appId || !isDeepStrictEqual(status.destination, destination)) {
-      return null;
-    }
-    const waiting =
-      status.requestedRevision === "awaiting-activation" &&
-      (status.status === "pending" || status.status === "available");
-    const live =
-      last &&
-      status.requestedRevision === "live" &&
-      status.deployment.requestedRevisionActive === undefined;
-    if (!waiting && !live) {
-      return null;
+    const stopped = last && monitoringStoppedSchema.safeParse(result?.output).success;
+    if (!stopped) {
+      const status = repositoryProductionNativeStatusSchema.safeParse(result?.output).data;
+      if (status?.appId !== input.appId || !isDeepStrictEqual(status.destination, destination)) {
+        return null;
+      }
+      const waiting =
+        status.requestedRevision === "awaiting-activation" &&
+        (status.status === "pending" || status.status === "available");
+      const live =
+        last &&
+        status.requestedRevision === "live" &&
+        status.deployment.requestedRevisionActive === undefined;
+      if (!waiting && !live) {
+        return null;
+      }
     }
   }
   return approval.readyAt === undefined
