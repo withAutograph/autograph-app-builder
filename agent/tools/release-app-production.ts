@@ -18,6 +18,7 @@ import {
   requestDirectProductionGrant,
   restoreDirectProductionRevisionPredecessor,
 } from "../../lib/agent/direct-production-state";
+import type { ProductionReconciliationFailure } from "../../lib/agent/direct-production-state";
 import { assertApprovedPrivateApplySession } from "../../lib/agent/private-apply-authority";
 import { appBuilderWorkflowState } from "../../lib/agent/workflow-state";
 import { repositoryAccessRuntimeForSession } from "../../lib/agent/deployment-repository-access-runtime";
@@ -25,6 +26,43 @@ import { resolveRepositoryAccessForTool } from "../../lib/agent/repository-acces
 import { parseRepositoryReference } from "../../lib/integrations/repository-access";
 
 const managedReleaseUnavailable = "managed-release-unavailable" as const;
+
+const reconciliationGuidance: Record<ProductionReconciliationFailure, string> = {
+  "candidate-review-unavailable":
+    "Recover the current review for the same owned draft and verify both diffs before sealing the correction.",
+  "candidate-unsealed":
+    "Seal the corrected draft candidate with its current review digest, then read Production approval again.",
+  "candidate-compile-unavailable":
+    "Validate the corrected draft candidate to capture its checked app release, then review and seal it.",
+  "candidate-review-mismatch":
+    "Inspect the current owned draft and exact review. Preserve the private correction; review and seal the same candidate if its review changed.",
+  "schema-predecessor-mismatch":
+    "Check the app schema against the current draft base and the previously approved schema. Preserve existing fields and the private correction.",
+  "candidate-file-scope":
+    "Check the final diff against the base. Preserve the existing app and limit the correction to its reviewed implementation and checked optional-field release.",
+  "candidate-schema-unchanged":
+    "Confirm the private candidate contains the schema correction and regenerate its draft-only checked release if needed. Review and seal the actual changed candidate.",
+  "prior-approved-revision-unavailable":
+    "Preserve this draft. Recover the same app’s previously approved Production revision before requesting another release decision.",
+  "approved-release-mismatch":
+    "Verify this saved app’s accepted revision and Arrusted destination. Preserve the current owned draft.",
+  "prior-delivery-unavailable":
+    "Preserve this draft. Builder could not locate the app’s previous approved delivery in this session.",
+  "release-selection-changed":
+    "Read the current correction and retry the release review from its saved state.",
+  "github-draft-mismatch":
+    "Read the current state of the same owned pull request. Refresh the correction’s review if the draft head moved.",
+  "github-origin-mismatch":
+    "Verify the current pull request against this session’s original owned draft publication. Preserve the saved correction.",
+  "github-base-mismatch":
+    "Refresh the same owned draft against its current base, preserving the correction. Validate, review and seal the new result.",
+  "github-installation-mismatch":
+    "Reverify GitHub access for the same Arrusted repository and refresh the saved draft review.",
+  "github-prior-merge-mismatch":
+    "Verify the previous approved revision’s merge for this same app before requesting the correction’s approval.",
+  "github-read-unavailable":
+    "Retry the read of this same owned draft and its prior delivery when GitHub is available.",
+};
 
 const approvedPrivateBuild = (subject: z.infer<typeof directProductionSubjectSchema>) => {
   const state = appBuilderWorkflowState.get();
@@ -99,9 +137,10 @@ export default defineTool({
       ctx.abortSignal?.throwIfAborted();
       recordFreshTemplateProductionDestination(ctx, starterPlan, access.receipt);
     }
-    if (input.directProduction === undefined) {
-      await prepareDirectProductionDraftReconciliation(ctx);
-    }
+    const reconciliationFailure =
+      input.directProduction === undefined
+        ? await prepareDirectProductionDraftReconciliation(ctx)
+        : null;
     let subject = directProductionSubjectForPlan(ctx);
     if (subject === undefined && input.directProduction === undefined) {
       await restoreDirectProductionRevisionPredecessor(ctx);
@@ -127,6 +166,19 @@ export default defineTool({
       };
     }
     if (subject === undefined) {
+      if (reconciliationFailure !== null) {
+        console.info(
+          JSON.stringify({
+            event: "app_builder.production_draft_correction_blocked",
+            reason: reconciliationFailure,
+          }),
+        );
+        return {
+          status: managedReleaseUnavailable,
+          reason: reconciliationFailure,
+          guidance: reconciliationGuidance[reconciliationFailure],
+        };
+      }
       return starterPlan === undefined
         ? { status: managedReleaseUnavailable }
         : {

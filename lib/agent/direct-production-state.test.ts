@@ -74,7 +74,10 @@ import {
   recordDirectProductionProgress,
 } from "./direct-production-progress";
 import { retainOwnedDraftPublicationSeal } from "./github-draft-publication-lineage";
-import { captureGitHubPrDeliveryCallScope } from "./github-pr-delivery-authority-state";
+import {
+  captureGitHubPrDeliveryCallScope,
+  invalidateGitHubPrDeliveryCallsForTurn,
+} from "./github-pr-delivery-authority-state";
 import type { GitHubPublicationRuntime } from "./github-publication-runtime";
 import type { observeMergedAppProduction } from "./app-production-observation";
 import {
@@ -786,13 +789,19 @@ const retainSealedSchemaCorrection = (drift: "none" | "predecessor" | "outside-a
   };
   const readSucceededDraftPublication = vi.fn().mockResolvedValue(origin);
   const inspectExistingDraftReconciliationSource = vi.fn().mockResolvedValue(owned);
-  const inspectPublishedPullRequest = vi.fn().mockResolvedValue({
+  const priorMerge = {
     state: "merged",
     draft: false,
+    checks: "passed",
+    headSha: publication.target.headSha,
+    baseBranch: publication.target.baseBranch,
     reviewedRevision: true,
     reviewedTarget: publication.target,
     mergeCommitSha: "6".repeat(40),
-  });
+  } as const;
+  const inspectPublishedPullRequest = vi
+    .fn<NonNullable<GitHubPublicationRuntime["inspectPublishedPullRequest"]>>()
+    .mockResolvedValue(priorMerge);
   const publicationRead = vi.fn().mockResolvedValue({
     readSucceededDraftPublication,
     inspectExistingDraftReconciliationSource,
@@ -803,6 +812,8 @@ const retainSealedSchemaCorrection = (drift: "none" | "predecessor" | "outside-a
     original,
     owned,
     prior,
+    priorMerge,
+    priorPublicationDigest: publication.proposal.digest,
     proposal,
     readSucceededDraftPublication,
     inspectExistingDraftReconciliationSource,
@@ -1518,12 +1529,77 @@ describe("direct Production Build authority", () => {
     async (drift) => {
       await contextStorage.run(new ContextContainer(), async () => {
         const fixture = retainSealedSchemaCorrection(drift);
-        await prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports);
+        await expect(
+          prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports),
+        ).resolves.toBe(
+          drift === "predecessor" ? "schema-predecessor-mismatch" : "candidate-file-scope",
+        );
         expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
         expect(fixture.inspectExistingDraftReconciliationSource).not.toHaveBeenCalled();
       });
     },
   );
+
+  it("uses a stopped prior Finish only to read the anchored merge, then requires a fresh correction approval", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const fixture = retainSealedSchemaCorrection();
+      invalidateGitHubPrDeliveryCallsForTurn(releaseContext.session.turn.id);
+      fixture.inspectPublishedPullRequest.mockResolvedValueOnce({
+        ...fixture.priorMerge,
+        state: "open",
+      });
+      await expect(
+        prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports),
+      ).resolves.toBe("github-prior-merge-mismatch");
+      expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
+      await expect(
+        prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports),
+      ).resolves.toBeNull();
+      expect(fixture.inspectPublishedPullRequest).toHaveBeenLastCalledWith(
+        fixture.priorPublicationDigest,
+      );
+      const subject = requiredSubject(directProductionSubjectForPlan(releaseContext));
+      expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
+      expect(
+        await authoredReleaseApproval()({
+          ...releaseContext,
+          toolInput: { directProduction: subject },
+        }),
+      ).toBe("user-approval");
+    });
+  });
+
+  it("reports that the saved correction must be sealed before reading a Production approval", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const fixture = retainSealedSchemaCorrection();
+      draftReconciliationState.update((candidate) => {
+        if (candidate === null) {
+          throw new Error("Expected the current draft candidate.");
+        }
+        const unsealed = { ...candidate };
+        delete unsealed.proposal;
+        return unsealed;
+      });
+      const log = vi.spyOn(console, "info").mockImplementation(() => {});
+      try {
+        await expect(releaseAppProduction.execute({}, releaseContext)).resolves.toMatchObject({
+          status: "managed-release-unavailable",
+          reason: "candidate-unsealed",
+          guidance:
+            "Seal the corrected draft candidate with its current review digest, then read Production approval again.",
+        });
+        expect(log).toHaveBeenCalledWith(
+          JSON.stringify({
+            event: "app_builder.production_draft_correction_blocked",
+            reason: "candidate-unsealed",
+          }),
+        );
+        expect(fixture.inspectExistingDraftReconciliationSource).not.toHaveBeenCalled();
+      } finally {
+        log.mockRestore();
+      }
+    });
+  });
 
   it("requires another exact decision if the base moves before the approved correction is published", async () => {
     await contextStorage.run(new ContextContainer(), async () => {
@@ -1590,9 +1666,9 @@ describe("direct Production Build authority", () => {
   });
 
   it.each([
-    { draft: { draft: false } },
-    { draft: { headSha: "9".repeat(40) } },
-    { base: { headSha: "9".repeat(40) } },
+    { draft: { draft: false }, reason: "github-draft-mismatch" },
+    { draft: { headSha: "9".repeat(40) }, reason: "github-draft-mismatch" },
+    { base: { headSha: "9".repeat(40) }, reason: "github-base-mismatch" },
   ])("withholds the card after the open draft or base drifts (%j)", async (drift) => {
     await contextStorage.run(new ContextContainer(), async () => {
       const fixture = retainSealedSchemaCorrection();
@@ -1603,7 +1679,9 @@ describe("direct Production Build authority", () => {
         draft: { ...fixture.owned.draft, ...drift.draft },
         base: { ...fixture.owned.base, ...drift.base },
       });
-      await prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports);
+      await expect(
+        prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports),
+      ).resolves.toBe(drift.reason);
       expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
     });
   });

@@ -665,7 +665,16 @@ recompile it after verifying the original draft and base. The combined
 approval binds the corrected CUE, both reviewed diffs, and the exact draft
 head, base, app and repository.
 Builder uses it to update that draft, then verifies the new head before Ready
-and merge. A moved head or base requires a new review and approval.
+and merge. If the base moves while the original draft head is unchanged,
+Builder can reseal the correction for a fresh approval. A changed draft head
+uses the ordinary owned-draft recovery process.
+
+The already approved revision retains the live predecessor it extended. If a
+previous delivery was stopped during observation, Builder can use its retained
+call to locate the owned PR and independently verify the exact merge. That
+read grants no authority to repeat the stopped call. When Builder cannot
+prepare the correction's release review, it reports the evidence still needed
+and preserves the candidate and the draft.
 
 Protected setup binds the exact reviewed source to the installed release
 and verifies the transition before merge.
