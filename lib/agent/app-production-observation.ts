@@ -14,6 +14,8 @@ import { draftReconciliationState } from "./draft-reconciliation-state";
 
 const unassessed = "unassessed";
 const monitoringStoppedStatus = "monitoring-stopped";
+const savedObservationTimeoutMs = 15_000;
+const providerRead = "provider-read";
 
 export type AppProductionObservation =
   | RepositoryProductionNativeStatus
@@ -76,7 +78,7 @@ export const observeAppProduction = async (
     ) {
       return monitoringStopped();
     }
-    return serviceUnavailable(appId, clientResolved ? "provider-read" : "configuration");
+    return serviceUnavailable(appId, clientResolved ? providerRead : "configuration");
   }
 };
 
@@ -111,8 +113,7 @@ export const observeMergedAppProduction = async (
 const currentReviewedDelivery = () =>
   resolveGitHubPrDeliverySubject(appBuilderWorkflowState.get(), draftReconciliationState.get());
 
-/** A saved-session status read can recover the reviewed merge from GitHub without replaying delivery. */
-export const observeSavedAppProduction = async (
+const readSavedAppProduction = async (
   appId: string,
   ctx: WorkflowStepToolContext,
 ): Promise<AppProductionObservation> => {
@@ -125,16 +126,19 @@ export const observeSavedAppProduction = async (
         ctx.session.auth,
         installationId === undefined ? undefined : { selectedInstallationId: installationId },
       );
+      ctx.abortSignal.throwIfAborted();
       const reconciledHead =
         reconciliation === undefined
           ? undefined
           : ((await runtime.inspectPublishedReconciliationHead?.(proposalDigest, reconciliation)) ??
             undefined);
+      ctx.abortSignal.throwIfAborted();
       if (reconciliation === undefined || reconciledHead !== undefined) {
         const observed = await runtime.inspectPublishedPullRequest?.(
           proposalDigest,
           reconciledHead,
         );
+        ctx.abortSignal.throwIfAborted();
         if (
           observed?.state === "merged" &&
           observed.reviewedRevision &&
@@ -161,4 +165,39 @@ export const observeSavedAppProduction = async (
     ctx.abortSignal.throwIfAborted();
   }
   return await observeAppProduction(appId, ctx);
+};
+
+/** Bound the optional saved-session read even if one upstream read ignores cancellation. */
+export const observeSavedAppProduction = async (
+  appId: string,
+  ctx: WorkflowStepToolContext,
+): Promise<AppProductionObservation> => {
+  ctx.abortSignal.throwIfAborted();
+  const deadline = new AbortController();
+  const abortSignal = AbortSignal.any([ctx.abortSignal, deadline.signal]);
+  const timer = setTimeout(() => {
+    deadline.abort();
+  }, savedObservationTimeoutMs);
+  const aborted = Promise.withResolvers<null>();
+  const onAbort = () => {
+    aborted.resolve(null);
+  };
+  abortSignal.addEventListener("abort", onAbort, { once: true });
+  try {
+    const observed = await Promise.race([
+      readSavedAppProduction(appId, { ...ctx, abortSignal }),
+      aborted.promise,
+    ]);
+    ctx.abortSignal.throwIfAborted();
+    return observed ?? serviceUnavailable(appId, providerRead);
+  } catch (error) {
+    ctx.abortSignal.throwIfAborted();
+    if (deadline.signal.aborted) {
+      return serviceUnavailable(appId, providerRead);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    abortSignal.removeEventListener("abort", onAbort);
+  }
 };

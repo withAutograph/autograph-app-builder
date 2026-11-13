@@ -581,6 +581,10 @@ with nonempty `existingAppChanges` that implement the new request. Include
 complete replacement content for each changed file. If a supported
 starter-backed session needs newer repository capabilities, call
 `prepare_app_creation({ refreshSource: true })` by itself before inspection.
+A connected GitHub checkout refreshes the shared compiler during approved
+schema compilation. If explicit refresh returns `connected_source_retained`,
+continue inspecting and planning with the saved checkout. A live availability
+read is for a requested status check, and is separate from revision planning.
 Then read the new proposal's subject with `release-app-production` and use it
 with empty `implementationFiles` in `apply_app_creation` to present the
 combined Build card in the same turn. If release preflight returns
