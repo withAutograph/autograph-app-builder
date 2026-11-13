@@ -42,6 +42,8 @@ const createRecoveredBuild = async (store: InMemoryHostedEveStore, appId: string
     status: "failed",
     stage: "needs_attention",
     resumability: "terminal",
+    cancellationRevision: 2,
+    resumedCancellationRevision: 2,
   });
   const initial = {
     version: 1 as const,
@@ -71,7 +73,7 @@ const createRecoveredBuild = async (store: InMemoryHostedEveStore, appId: string
     sourceAdapterGeneration: original.adapterGeneration,
     originalAuthoritySessionId: original.sessionId,
     logicalSessionId: original.adapterSessionId,
-    parentCancellationRevision: 0,
+    parentCancellationRevision: original.cancellationRevision ?? 0,
   };
   const binding = {
     ...descriptor,
@@ -107,6 +109,8 @@ const createRecoveredBuild = async (store: InMemoryHostedEveStore, appId: string
     adapterSessionId: binding.ownerRunId,
     originAdapterSessionId: binding.ownerRunId,
     nativeRecoveryBinding: binding,
+    cancellationRevision: 1,
+    resumedCancellationRevision: 1,
     createdAtEpochMs: at + 3,
     updatedAtEpochMs: at + 3,
     lastProgressAtEpochMs: at + 3,
@@ -147,8 +151,8 @@ const fixture = async () => {
     }),
   });
   const reads: AppAccessOwner[] = [];
-  const read = async (owner: AppAccessOwner): Promise<AppAccessSnapshot> => {
-    const canonical = await readCanonicalAppOwnerSession(
+  const canonicalOwner = async (owner: AppAccessOwner) =>
+    await readCanonicalAppOwnerSession(
       {
         eve: sessions,
         handoffs,
@@ -161,6 +165,8 @@ const fixture = async () => {
         target: { appId: owner.appId, sessionId: owner.sessionId },
       },
     );
+  const read = async (owner: AppAccessOwner): Promise<AppAccessSnapshot> => {
+    const canonical = await canonicalOwner(owner);
     expect(canonical.sessionId).toBe(selected.original.sessionId);
     expect(canonical.adapterSessionId).toBe(selected.child.adapterSessionId);
     reads.push(owner);
@@ -181,6 +187,7 @@ const fixture = async () => {
   );
   const route = createAppAccessRouteHandler({ execute, origin, read, resolveOwner });
   return {
+    canonicalOwner,
     execute,
     reads,
     resolveOwner,
@@ -250,6 +257,29 @@ describe("recovered web app access owner", () => {
     });
     expect(call?.[1]).toEqual(command);
     expect(await response.json()).toMatchObject({ sessionId });
+  });
+
+  it("uses the current worker's cancellation fence while preserving the original session key", async () => {
+    const f = await fixture();
+    const { child, original } = f.selected;
+    const response = await f.route(request(child.sessionId), child.sessionId);
+    expect(response.status).toBe(200);
+    const [owner] = f.reads;
+    if (owner === undefined) {
+      throw new Error("Expected the recovered operator owner.");
+    }
+    await expect(f.canonicalOwner(owner)).resolves.toMatchObject({
+      sessionId: original.sessionId,
+      adapterSessionId: child.adapterSessionId,
+      cancellationRevision: child.cancellationRevision,
+      resumedCancellationRevision: child.resumedCancellationRevision,
+    });
+    await f.sessions.recordCancellationIntent({
+      principal,
+      sessionId: child.sessionId,
+      nowEpochMs: child.updatedAtEpochMs + 1,
+    });
+    await expect(f.canonicalOwner(owner)).rejects.toThrow();
   });
 
   it.each([
