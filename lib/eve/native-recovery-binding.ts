@@ -679,6 +679,11 @@ export function createHostedNativeRecoveryBinding(
             openHostedPostgresDatabase(environment.DATABASE_URL ?? ""),
             { issuer, audience, workspaceId, ownerUserId },
           ).read(digest),
+        (boundary) => {
+          console.info(
+            JSON.stringify({ event: "builder.cancelled_delivery_app_witness", boundary }),
+          );
+        },
       );
     },
     // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.

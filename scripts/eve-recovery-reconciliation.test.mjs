@@ -741,6 +741,7 @@ const addSettledCancellation = async ({
   if (beforeCancellationSend === true) {
     active.continuationToken = "old-turn-inbox";
   }
+  const priorCommittedHistory = active.history;
   let settledActive = active;
   let settledHistory = active.history;
   if (workflowOutcome !== undefined) {
@@ -760,6 +761,33 @@ const addSettledCancellation = async ({
     ...sourcePair,
     sessionState: createDurableSessionState({ session: settledActive }),
   };
+  const compacted = cancelledOutcome?.delivery?.compacted;
+  if (compacted !== undefined) {
+    const retained = settledHistory.filter(
+      (message) =>
+        !Array.isArray(message.content) ||
+        message.content.some((part) => part.toolCallId === historicalDeliveryCallId) !== true,
+    );
+    const marker = {
+      role: "user",
+      kind: "context.compaction",
+      content: "[fixture compaction checkpoint]",
+    };
+    settledHistory = [retained[0], marker, ...retained.slice(1)];
+    if (compacted === "conflicting") {
+      settledHistory.push({
+        role: "tool",
+        content: [
+          {
+            type: toolResultKind,
+            toolCallId: historicalDeliveryCallId,
+            toolName: workflowReportRun.toolName,
+            output: { type: "text", value: "A different retained output." },
+          },
+        ],
+      });
+    }
+  }
   const idle = {
     ...active,
     history: settledHistory,
@@ -784,10 +812,16 @@ const addSettledCancellation = async ({
       }),
     });
   }
-  steps.get("prior").output = await output({
+  const priorOutput = {
     action: stopDuringTurnStep === true ? "cancelled" : "park",
     ...before,
-  });
+  };
+  if (compacted !== undefined) {
+    priorOutput.sessionState = createDurableSessionState({
+      session: { ...settledActive, history: priorCommittedHistory },
+    });
+  }
+  steps.get("prior").output = await output(priorOutput);
   steps.set(settledCancelStepId, {
     runId: ownerRunId,
     stepId: settledCancelStepId,
@@ -1267,8 +1301,23 @@ const fixture = async (options = {}) => {
             }),
           ),
         ];
+  const compactionProven =
+    options.cancelledOutcome?.delivery?.compacted === "marked" ||
+    options.cancelledOutcome?.delivery?.compacted === "conflicting";
   const nativeEvents = [
     ...historicalNativeDelivery,
+    ...(compactionProven
+      ? [
+          {
+            type: "compaction.completed",
+            data: {
+              ...emission,
+              sessionId: logicalSessionId,
+              modelId: "fixture-compaction-model",
+            },
+          },
+        ]
+      : []),
     ...(cancellationSendEvidence === undefined
       ? []
       : [
@@ -2138,17 +2187,36 @@ test.each([
 test.each([
   { name: "exact committed earlier result", nativeResult: historicalDeliveryResult, ready: true },
   {
+    name: "earlier exact result removed by native compaction",
+    nativeResult: historicalDeliveryResult,
+    compacted: "marked",
+    ready: true,
+  },
+  {
+    name: "unmarked disappearance of the earlier exact result",
+    nativeResult: historicalDeliveryResult,
+    compacted: "unmarked",
+    ready: false,
+  },
+  {
+    name: "conflicting latest result after native compaction",
+    nativeResult: historicalDeliveryResult,
+    compacted: "conflicting",
+    ready: false,
+  },
+  {
     name: "earlier result absent from committed history",
     nativeResult: { ...historicalDeliveryResult, mergeCommitSha: "e".repeat(40) },
     ready: false,
   },
-])("settled delivery uses only the $name", async ({ nativeResult, ready }) => {
+])("settled delivery uses only the $name", async ({ nativeResult, compacted, ready }) => {
   const witnessFixture = cancelledDeliveryWitnessFixture();
   const f = await settledIdleFixture({
     encrypted: true,
     cancelledOutcome: {
       delivery: {
         historicalResult: nativeResult,
+        compacted,
         completedSteps: witnessFixture.witness.completedSteps,
       },
     },
