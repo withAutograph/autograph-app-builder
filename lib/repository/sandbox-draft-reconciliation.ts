@@ -1886,6 +1886,52 @@ export const readDraftReconciliationDiff = async (input: {
     .parse(JSON.parse(raw));
 };
 
+// Next regenerates this file during build/typegen. Keep it in the private checkout
+// for local TypeScript, but out of the review tree unless either parent tracked it.
+const excludeGeneratedNextTypesProgram = String.raw`
+const fs = require("node:fs");
+const path = require("node:path");
+const { execFileSync } = require("node:child_process");
+const exclude = () => {
+  const [root, relative, base, head] = process.argv.slice(1);
+  const git = (...args) =>
+    execFileSync("git", ["--no-replace-objects", "--literal-pathspecs", "-C", root, ...args], {encoding: "utf8"});
+  const file = path.join(root, relative);
+  const entry = fs.lstatSync(file, {throwIfNoEntry: false});
+  if (!entry?.isFile() || entry.size > 8192) return;
+  if (fs.realpathSync(file) !== path.join(fs.realpathSync(root), relative)) return;
+  const text = fs.readFileSync(file, "utf8");
+  const lines = text.trimEnd().split(/\r?\n/u);
+  if (lines[0] !== '/// <reference types="next" />' ||
+      lines.at(-2) !== "// NOTE: This file should not be edited" ||
+      !/^\/\/ see https:\/\/nextjs\.org\/docs\/(?:app|pages)\/api-reference\/config\/typescript(?: for more information\.)?$/u.test(lines.at(-1) ?? "")) return;
+  const body = lines.slice(0, -2).filter(Boolean);
+  const generated = body.every(line =>
+    /^\/\/\/ <reference types="next(?:\/(?:image-types\/global|navigation-types\/compat\/navigation))?" \/>$/u.test(line) ||
+    /^import "\.\/[\w./-]+\/types\/(?:routes\.d\.ts|root-params\.d\.ts|cache-life\.d\.ts|validator\.ts|link\.d\.ts)";$/u.test(line)
+  );
+  if (!generated || [base, head].some(ref => git("ls-tree", "-z", ref, "--", relative) !== "")) return;
+  git("update-index", "--force-remove", "--", relative);
+  console.log("excluded");
+};
+exclude();
+`;
+
+const generatedNextTypesExclusion = async (
+  sandbox: SandboxSession,
+  prepared: PreparedDraftReconciliation,
+): Promise<string[]> => {
+  const { appId, root, baseSha, headSha } = prepared;
+  const declaration = `apps/${appId}/next-env.d.ts`;
+  const args = [root, declaration, baseSha, headSha].map(quote).join(" ");
+  const excluded = await checked(
+    sandbox,
+    "exclude the private Next.js generated declarations from review",
+    `node -e ${quote(excludeGeneratedNextTypesProgram)} ${args}`,
+  );
+  return excluded === "excluded" ? [`:(exclude,literal)${declaration}`] : [];
+};
+
 const deltaProgram = String.raw`
 const { spawnSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
@@ -1980,6 +2026,7 @@ export const inspectDraftReconciliation = async (input: {
       `Builder cannot accept reconciliation edit ${outside}: only apps/${prepared.appId}/ may be edited while resolving this draft.`,
     );
   }
+  const nextTypeExclusion = await generatedNextTypesExclusion(sandbox, prepared);
   await checked(
     sandbox,
     "stage resolved app files",
@@ -1990,6 +2037,7 @@ export const inspectDraftReconciliation = async (input: {
       `apps/${prepared.appId}`,
       ...[...catalogPaths].map((path) => `:(literal)${path}`),
       ...dependencyRoots.map((root) => `:(exclude,literal)${root}`),
+      ...nextTypeExclusion,
     ]),
   );
   // Staging must not alter the trusted non-app index (including file modes).
