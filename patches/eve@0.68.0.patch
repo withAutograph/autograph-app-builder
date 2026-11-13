@@ -2630,7 +2630,7 @@ diff --git a/dist/src/execution/session/recovery-reconciliation.js b/dist/src/ex
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-reconciliation.js
-@@ -0,0 +1,692 @@
+@@ -0,0 +1,727 @@
 +import { activeTurnId } from "#harness/active-turn-id.js";
 +import { decodeSessionInboxPayload } from "#execution/session-inbox/protocol.js";
 +import { proposeRetrospectiveCancelledToolHistory } from "#execution/session/recovery-cancelled-tool-history.js";
@@ -2934,6 +2934,35 @@ new file mode 100644
 +  try { console.info(JSON.stringify({ event: "builder.cancellation_inbox_refusal", boundary })); } catch {}
 +}
 +
++// The live inbox recognizes internal receipts before it decodes user commands.
++// Report only a fixed category; payloads, arbitrary discriminants and errors can be private.
++function cancellationInboxFailureKind(payload) {
++  if (payload === null || typeof payload !== "object") return "non_object_payload";
++  if (!Object.hasOwn(payload, "kind")) {
++    if (Object.hasOwn(payload, "aborted") && payload.aborted === true &&
++      Object.keys(payload).every((key) => key === "aborted" || key === "reason"))
++      return "native_abort_packet";
++    return "missing_command_kind";
++  }
++  switch (payload.kind) {
++    case "runtime-action-result": return "runtime_action_result";
++    case "report": return "workflow_report";
++    case "request": return "workflow_request";
++    case "outcome": return "workflow_outcome";
++    case "authorization-callback": return "authorization_callback";
++    case "subagent-input-request": return "subagent_input";
++    case "subagent-authorization-event": return "subagent_authorization";
++    case "send":
++    case "deliver":
++    case "cancel":
++    case "clear":
++    case "compact":
++    case "reset":
++    case "session-timeout": return "invalid_command_envelope";
++    default: return "unknown_message_kind";
++  }
++}
++
 +/** A cancellation settles its exact Stop, never an unproved effect or queued Send. */
 +function assessSettledCancellation(payload, candidate, session) {
 +  const { sequence, turnId } = candidate.cancellation;
@@ -2952,8 +2981,14 @@ new file mode 100644
 +  };
 +  if (!payload.cancellationInbox?.length) return inboxUncertain("no_inbox_receipts");
 +  for (const item of payload.cancellationInbox) {
++    if (item === null) return inboxUncertain("unsupported_command");
++    let command;
 +    try {
-+      const command = item === null ? undefined : decodeSessionInboxPayload(item.payload);
++      command = decodeSessionInboxPayload(item.payload);
++    } catch {
++      return inboxUncertain(cancellationInboxFailureKind(item.payload));
++    }
++    try {
 +      if (command?.kind === "cancel") {
 +        if (command.turnId !== turnId ||
 +          Object.keys(item.payload).some((key) => key !== "kind" && key !== "turnId"))
