@@ -231,8 +231,12 @@ real failed boot and use its normal recovery operation.
 
 An idle recovery can select the committed checkpoint that settled an exact
 Stop. Accepted Sends may be covered only by matching delivery stamps on both
-the start and cancellation of that turn. A retained internal inbox message
-without settlement proof still prevents transfer. Recovery reports a fixed
+the start and cancellation of that turn. Recovery can also account for an
+internal progress report when the same native owner completed the exact
+report-emission step and the retained stream contains its matching progress
+event. This proves display only; it settles no tool result, approval or external
+effect and does not replay the report. Other internal inbox messages without
+settlement proof still prevent transfer. Recovery reports a fixed
 message category to operations without recording payloads or arbitrary message
 kinds. That category provides no authority to discard or replay the message.
 

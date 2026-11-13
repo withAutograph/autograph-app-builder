@@ -819,7 +819,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,731 @@
+@@ -0,0 +1,759 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
@@ -1270,6 +1270,33 @@ new file mode 100644
 +      }
 +    }
 +
++    const emittedReports = [];
++    const oldestReportSlot = cancellationInbox.find((item) => item?.payload?.kind === "report")?.slot;
++    if (oldestReportSlot !== undefined) {
++      for (const { event, slot } of events) {
++        if (slot <= oldestReportSlot || slot >= latest.origin.slot ||
++          event.eventType !== "step_completed" ||
++          stepNames.get(event.correlationId) !== "emitWorkflowToolRunReportStep") continue;
++        const origin = inputOrigins.get(event.correlationId);
++        if (origin === undefined || origin.slot >= slot) continue;
++        await authorizeOwner(binding);
++        try {
++          const step = await world.steps.get(run.runId, event.correlationId, { resolveData: "all" });
++          if (step.runId !== run.runId || step.stepId !== event.correlationId ||
++            nativeFunction(step.stepName) !== "emitWorkflowToolRunReportStep" ||
++            step.status !== "completed" || step.input === undefined) continue;
++          const argument = (await dependencies.hydrateStepArguments(step.input, run.runId, key))?.args?.[0];
++          if (isRecord(argument)) emittedReports.push({
++            startedSlot: origin.slot,
++            from: argument.from,
++            update: argument.update,
++          });
++        } catch {
++          // Unreadable emitter input cannot certify that a particular report ran.
++        }
++      }
++    }
++
 +    const nativeEvents = [];
 +    try {
 +      for await (const event of dependencies.readNativeEvents(binding.ownerRunId))
@@ -1315,6 +1342,7 @@ new file mode 100644
 +      nativeEvents,
 +      carriedInbox,
 +      cancellationInbox,
++      emittedReports,
 +      issues,
 +    };
 +    await authorizeOwner(binding);
@@ -2630,8 +2658,11 @@ diff --git a/dist/src/execution/session/recovery-reconciliation.js b/dist/src/ex
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-reconciliation.js
-@@ -0,0 +1,727 @@
+@@ -0,0 +1,790 @@
 +import { activeTurnId } from "#harness/active-turn-id.js";
++import { createRuntimeToolResultFromValue } from "#harness/action-result-helpers.js";
++import { createActionPartialEvent } from "#protocol/message.js";
++import { parseJsonObject, parseJsonValue } from "#shared/json.js";
 +import { decodeSessionInboxPayload } from "#execution/session-inbox/protocol.js";
 +import { proposeRetrospectiveCancelledToolHistory } from "#execution/session/recovery-cancelled-tool-history.js";
 +import { isCancelledToolHistoryResult } from "#harness/cancelled-tool-history.js";
@@ -2963,6 +2994,55 @@ new file mode 100644
 +  }
 +}
 +
++function record(value) {
++  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
++  const prototype = Object.getPrototypeOf(value);
++  return prototype === Object.prototype || prototype === null;
++}
++
++const reportRefKeys = new Set([
++  "callId", "ownerRunId", "ownerAnchorRunId", "execution", "input",
++  "runId", "sequence", "stepIndex", "toolName", "turnId",
++]);
++
++function matchCompletedReport(payload, item, cancel, usedReports, usedPartials) {
++  const report = item.payload;
++  const from = report.from;
++  if (!record(report) || Object.keys(report).length !== 3 ||
++    !Object.hasOwn(report, "update") || !record(from) ||
++    Object.keys(from).some((key) => !reportRefKeys.has(key)) ||
++    from.ownerRunId !== payload.checkpointOwnerRunId ||
++    (from.ownerAnchorRunId !== undefined &&
++      from.ownerAnchorRunId !== payload.binding.ownerRunId &&
++      from.ownerAnchorRunId !== payload.binding.logicalSessionId) ||
++    !["blocking", "background"].includes(from.execution) ||
++    ![from.runId, from.callId, from.toolName, from.turnId].every(
++      (value) => typeof value === "string" && value.length > 0,
++    ) ||
++    from.runId === from.ownerRunId ||
++    ![from.sequence, from.stepIndex].every((value) => Number.isSafeInteger(value) && value >= 0))
++    return false;
++  if (!isDeepStrictEqual(parseJsonObject(from.input), from.input) ||
++    !isDeepStrictEqual(parseJsonValue(report.update), report.update)) return false;
++
++  const matchingReports = (payload.emittedReports ?? []).filter((proof) =>
++    !usedReports.has(proof) && proof.startedSlot > item.slot &&
++    isDeepStrictEqual(proof.from, from) && isDeepStrictEqual(proof.update, report.update));
++  if (matchingReports.length !== 1) return false;
++  const partial = createActionPartialEvent({
++    result: createRuntimeToolResultFromValue({
++      callId: from.callId, toolName: from.toolName, output: report.update,
++    }),
++    sequence: from.sequence, stepIndex: from.stepIndex, turnId: from.turnId,
++  });
++  const matchingPartials = payload.nativeEvents.slice(0, cancel).filter((event) =>
++    !usedPartials.has(event) && event.type === partial.type && isDeepStrictEqual(event.data, partial.data));
++  if (matchingPartials.length !== 1) return false;
++  usedReports.add(matchingReports[0]);
++  usedPartials.add(matchingPartials[0]);
++  return true;
++}
++
 +/** A cancellation settles its exact Stop, never an unproved effect or queued Send. */
 +function assessSettledCancellation(payload, candidate, session) {
 +  const { sequence, turnId } = candidate.cancellation;
@@ -2974,6 +3054,8 @@ new file mode 100644
 +    event.type === "turn.started" && sameTurn(event) ? event.meta?.deliveryIds ?? [] : []));
 +  const ended = new Set(payload.nativeEvents[cancel].meta?.deliveryIds ?? []);
 +  const consumed = new Set();
++  const usedReports = new Set();
++  const usedPartials = new Set();
 +  let matchedStop = false;
 +  const inboxUncertain = (boundary) => {
 +    reportCancellationInboxRefusal(boundary);
@@ -2982,6 +3064,14 @@ new file mode 100644
 +  if (!payload.cancellationInbox?.length) return inboxUncertain("no_inbox_receipts");
 +  for (const item of payload.cancellationInbox) {
 +    if (item === null) return inboxUncertain("unsupported_command");
++    if (item.payload?.kind === "report") {
++      try {
++        if (matchCompletedReport(payload, item, cancel, usedReports, usedPartials)) continue;
++      } catch {
++        // Malformed progress data grants no authority.
++      }
++      return inboxUncertain("workflow_report_not_proven_emitted");
++    }
 +    let command;
 +    try {
 +      command = decodeSessionInboxPayload(item.payload);
@@ -3032,6 +3122,7 @@ new file mode 100644
 +  for (const [index, event] of payload.nativeEvents.entries()) {
 +    if (!sameTurn(event)) continue;
 +    if (event.type === "action.result" || event.type === "action.partial") {
++      if (usedPartials.has(event)) continue;
 +      const id = event.data.result?.callId;
 +      if (typeof id !== "string" || !committed.has(id))
 +        return uncertain("uncommitted-action-result", id);
