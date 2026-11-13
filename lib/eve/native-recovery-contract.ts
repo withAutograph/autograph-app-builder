@@ -30,6 +30,7 @@ export const nativeRecoveryBindingSchema = nativeRecoveryDescriptorSchema
         "completed-terminal-turn-input",
         "failed-turn-input",
         "committed-turn-output",
+        "committed-cancelled-turn-output",
         "validated-recovery-input",
       ]),
       sourceStepId: z.string().min(1),

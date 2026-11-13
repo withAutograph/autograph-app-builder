@@ -178,6 +178,25 @@ it("finds only the latest review before the exact committed cutoff", async () =>
   assert.equal(values.at(-1).origin.slot, 1);
 });
 
+it("follows a recovery cutoff at the exact settled cancellation checkpoint", async () => {
+  const f = fixture();
+  const cancellationStep = "settleCancelledTurnStep";
+  const [, cutoffEvent] = f.events;
+  cutoffEvent.eventData.stepName = cancellationStep;
+  const saved = f.steps.get(f.cutoff.sourceStepId);
+  saved.stepName = cancellationStep;
+  f.cutoff.kind = "committed-cancelled-turn-output";
+  const values = await run(f);
+  assert.deepEqual(
+    values.map((item) => [item.origin.slot, item.value.phase]),
+    [
+      [2, "validated"],
+      [1, "reviewed"],
+    ],
+  );
+  assert.equal(values.at(-1).value.digest, "original");
+});
+
 it("rejects a foreign logical session before projecting its checkpoint", async () => {
   const f = fixture();
   f.steps.get("cutoff").output.sessionState.snapshot.session.sessionId = "foreign";
