@@ -819,7 +819,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,1021 @@
+@@ -0,0 +1,1043 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
@@ -1543,7 +1543,7 @@ new file mode 100644
 +
 +  // Closure of the child proves this notice only. It says nothing about whether
 +  // earlier app/provider effects happened; the parent effect guards still run.
-+  const completed = new Map();
++  const childSteps = new Map();
 +  const stepCursors = new Set();
 +  let cursor;
 +  do {
@@ -1555,9 +1555,14 @@ new file mode 100644
 +      pagination: { sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) },
 +      resolveData: "none" });
 +    for (const step of page.data) {
-+      if (step.runId !== childId || step.status !== "completed" || completed.has(step.stepId))
-+        return "child_step_unsettled";
-+      completed.set(step.stepId, nativeFunction(step.stepName));
++      if (step.runId !== childId || typeof step.stepId !== "string" || childSteps.has(step.stepId))
++        return "child_step_identity";
++      if (step.status === "pending") return "child_step_pending";
++      if (step.status === "running") return "child_step_running";
++      if (!["completed", "failed", "cancelled"].includes(step.status)) return "child_step_unknown";
++      // These states prove closure only. Only a completed callback may
++      // establish delivery; a failed or cancelled sibling proves no effect.
++      childSteps.set(step.stepId, { name: nativeFunction(step.stepName), status: step.status });
 +    }
 +    if (!page.hasMore) break;
 +    if (!page.cursor || stepCursors.has(page.cursor)) return "child_step_pagination";
@@ -1570,6 +1575,8 @@ new file mode 100644
 +  let terminalSlot;
 +  let lastSlot = 0;
 +  const created = new Map();
++  const started = new Set();
++  const trailingTerminals = new Set();
 +  const callbacks = [];
 +  const eventCursors = new Set();
 +  cursor = undefined;
@@ -1583,8 +1590,22 @@ new file mode 100644
 +      if (event.runId !== childId) return "child_event_identity";
 +      stageChanged("child_event_slot");
 +      const slot = dependencies.requireEventSlot(event.eventId);
-+      if (slot <= lastSlot || terminalSlot !== undefined) return "child_event_order";
++      if (slot <= lastSlot) return "child_event_order";
 +      lastSlot = slot;
++      if (event.eventType === "noop") continue;
++      if (terminalSlot !== undefined) {
++        // Workflow can settle an already-started sibling after the run's
++        // terminal event. It cannot supply or replace the callback proof.
++        const trailingStatus = event.eventType === "step_completed" ? "completed" :
++          event.eventType === "step_failed" ? "failed" : undefined;
++        const metadata = childSteps.get(event.correlationId);
++        if (trailingStatus === undefined || !started.has(event.correlationId) ||
++          trailingTerminals.has(event.correlationId) || metadata?.status !== trailingStatus ||
++          (event.eventData?.stepName !== undefined &&
++            nativeFunction(event.eventData.stepName) !== metadata.name)) return "child_event_order";
++        trailingTerminals.add(event.correlationId);
++        continue;
++      }
 +      if (event.eventType === "hook_created" && event.eventData?.token === controlToken) {
 +        if (hookId !== undefined || typeof event.correlationId !== "string") return "child_control_hook";
 +        hookId = event.correlationId;
@@ -1602,9 +1623,10 @@ new file mode 100644
 +        if (isDeepStrictEqual(command, { kind: "cancel", reason: descendantCancelReason })) cancelSlot = slot;
 +      } else if (event.eventType === "step_created" || event.eventType === "step_started") {
 +        if (!created.has(event.correlationId)) created.set(event.correlationId, slot);
++        if (event.eventType === "step_started") started.add(event.correlationId);
 +      } else if (event.eventType === "step_completed" &&
-+        completed.has(event.correlationId) &&
-+        (event.eventData?.stepName === undefined ? completed.get(event.correlationId) :
++        childSteps.get(event.correlationId)?.status === "completed" &&
++        (event.eventData?.stepName === undefined ? childSteps.get(event.correlationId).name :
 +          nativeFunction(event.eventData.stepName)) === "resumeHookStep") {
 +        callbacks.push({ id: event.correlationId, start: created.get(event.correlationId), slot });
 +      } else if (event.eventType === "run_completed") {

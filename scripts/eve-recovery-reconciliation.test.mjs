@@ -459,14 +459,27 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
       key,
     ),
   };
+  const { pagedSteps } = evidence;
+  const siblingStep =
+    pagedSteps === undefined
+      ? undefined
+      : {
+          runId,
+          stepId: "separate-child-step",
+          stepName: "step//eve//separateChildStep",
+          status: pagedSteps.secondStatus,
+        };
   const childEvent = (slot, eventType, correlationId, eventData) =>
     nativeWorldEvent(runId, slot, eventType, correlationId, eventData);
+  const siblingEvent = (slot, eventType) =>
+    childEvent(slot, eventType, siblingStep.stepId, { stepName: siblingStep.stepName });
   const childEvents = [
-    childEvent(1, "hook_created", childControlHookId, { token: childControlToken }),
+    ...(siblingStep === undefined ? [] : [siblingEvent(1, "step_started")]),
+    childEvent(2, "hook_created", childControlHookId, { token: childControlToken }),
     ...(evidence.omitControl === true
       ? []
       : [
-          childEvent(2, "hook_received", childControlHookId, {
+          childEvent(3, "hook_received", childControlHookId, {
             token: childControlToken,
             payload: await serialization.dehydrateStepReturnValue(
               { kind: "cancel", reason: childCancelReason },
@@ -475,9 +488,14 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
             ),
           }),
         ]),
-    childEvent(3, "step_started", childResumeStepId, { stepName: childResumeStep.stepName }),
-    childEvent(4, "step_completed", childResumeStepId, { stepName: childResumeStep.stepName }),
-    childEvent(5, "run_completed", undefined, {}),
+    childEvent(4, "step_started", childResumeStepId, { stepName: childResumeStep.stepName }),
+    childEvent(5, "step_completed", childResumeStepId, { stepName: childResumeStep.stepName }),
+    ...(pagedSteps?.failureBeforeRun === true ? [siblingEvent(6, "step_failed")] : []),
+    childEvent(7, "run_completed", undefined, {}),
+    ...(pagedSteps?.failureAfterRun === true ? [siblingEvent(8, "step_failed")] : []),
+    ...(pagedSteps?.unrelatedLateEvent === true
+      ? [childEvent(9, "step_failed", "unknown-child-step", { stepName: "step//eve//unknownStep" })]
+      : []),
   ];
   const { runs, events, steps } = world;
   world.runs = {
@@ -503,7 +521,6 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
   world.steps = {
     async list(request) {
       assert.equal(request.runId, runId);
-      const { pagedSteps } = evidence;
       if (pagedSteps === undefined) {
         return await Promise.resolve({ data: [childResumeStep], hasMore: false });
       }
@@ -518,17 +535,7 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
         return { data: [childResumeStep], hasMore: true, cursor: "next-child-steps" };
       }
 
-      return {
-        data: [
-          {
-            runId,
-            stepId: "separate-child-step",
-            stepName: "step//eve//separateChildStep",
-            status: pagedSteps.secondStatus,
-          },
-        ],
-        hasMore: false,
-      };
+      return { data: [siblingStep], hasMore: false };
     },
     get: async (id, stepId, options) =>
       id === runId && stepId === childResumeStepId
@@ -1822,10 +1829,50 @@ for (const secondStatus of [completedStatus, "pending"]) {
   });
 }
 
+for (const { name, sibling } of [
+  { name: "cancelled", sibling: { secondStatus: "cancelled" } },
+  {
+    name: "failed before run completion",
+    sibling: { secondStatus: "failed", failureBeforeRun: true },
+  },
+  {
+    name: "failed after run completion",
+    sibling: { secondStatus: "failed", failureAfterRun: true },
+  },
+]) {
+  test(`idle transfer accepts a proven cancellation notice with a ${name} sibling step`, async () => {
+    const f = await settledIdleFixture({
+      encrypted: true,
+      cancelledOutcome: { pagedSteps: { requests: [], ...sibling } },
+    });
+    const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+    assert.equal(result.kind, "ready");
+    assert.equal(result.replayInput, undefined);
+    assert.equal(result.carriedInbox, undefined);
+    assert.deepEqual(result.checkpointCore, f.settled);
+  });
+}
+
+test("an unrelated late child event still prevents cancellation recovery", async () => {
+  const f = await settledIdleFixture({
+    encrypted: true,
+    cancelledOutcome: {
+      pagedSteps: {
+        requests: [],
+        secondStatus: "failed",
+        failureAfterRun: true,
+        unrelatedLateEvent: true,
+      },
+    },
+  });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
+});
+
 test("a proven descendant cancellation notice does not resolve an unrelated dispatched write", async () => {
   const f = await settledIdleFixture({
     encrypted: true,
-    cancelledOutcome: {},
+    cancelledOutcome: { pagedSteps: { requests: [], secondStatus: "cancelled" } },
     uncommittedDispatch: true,
   });
   const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
