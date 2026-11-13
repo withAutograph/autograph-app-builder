@@ -85,6 +85,13 @@ describe("retained GitHub delivery effects", () => {
     expect(prove([ready, merge(merged)])).toBe(false);
   });
 
+  it("does not treat post-Stop work as the stopped call's own proof", () => {
+    expect(prove([ready, merge(mergedWithSchema), { ...schema(live), afterStop: true }])).toBe(
+      false,
+    );
+    expect(prove([{ ...delivery(merged), afterStop: true }], false)).toBe(false);
+  });
+
   it("requires the final schema-aware read even if the provider has activated the requested revision", () => {
     const providerOnly = {
       ...live,
@@ -235,6 +242,28 @@ describe("repeat GitHub delivery effects", () => {
     });
     expect(readRepeat([repeatMerge, repeatSchema(stopped), repeatSchema(pending)])).toBeNull();
     expect(readRepeat([repeatMerge, repeatSchema({ ...stopped, extra: true })])).toBeNull();
+  });
+
+  it("identifies a repeat with one exact final post-Stop schema step", () => {
+    const stopped = { status: "monitoring-stopped", requestedRevision: "unassessed" };
+    const late = { ...repeatSchema(stopped), afterStop: true } as const;
+    expect(readRepeat([repeatMerge, repeatSchema(pending), late])).toEqual({
+      ...prior,
+      mergeSha: mergeCommitSha,
+      readyAt,
+    });
+    expect(readRepeat([repeatMerge, late, repeatSchema(pending)])).toBeNull();
+    expect(readRepeat([repeatMerge, late, late])).toBeNull();
+    expect(readRepeat([{ ...repeatMerge, afterStop: true }, late])).toBeNull();
+    expect(
+      readRepeat([
+        repeatMerge,
+        {
+          ...late,
+          args: repeatSchema(stopped, { ...priorActivation, mergeSha: "e".repeat(40) }).args,
+        },
+      ]),
+    ).toBeNull();
   });
 
   it.each(["failed", "cancelled"] as const)(

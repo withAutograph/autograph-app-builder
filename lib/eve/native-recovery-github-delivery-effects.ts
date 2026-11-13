@@ -62,6 +62,7 @@ interface CompletedDeliveryStep {
   readonly args: unknown;
   readonly output: unknown;
   readonly status?: "completed" | "failed" | "cancelled";
+  readonly afterStop?: true;
 }
 
 interface DeliveryEffectEvidence {
@@ -126,6 +127,9 @@ export const hasSettledGitHubDeliveryEffects = (input: DeliveryEffectEvidence): 
   let waitingForChecks: string | undefined;
   let lastSchemaResult: z.infer<typeof repositoryProductionNativeStatusSchema> | undefined;
   for (const step of input.completedSteps) {
+    if (step.afterStop === true) {
+      return false;
+    }
     const result = readStep(step, input, approval);
     if (result === null) {
       return false;
@@ -213,7 +217,12 @@ export const readSettledGitHubDeliveryRepeat = (
 ): PriorGitHubDeliveryProof | null => {
   const approval = githubPrDeliveryApprovalSchema.safeParse(input.toolInput).data;
   const [mergeStep, ...schemaSteps] = input.completedSteps;
-  if (!input.schemaChangeExpected || approval === undefined || mergeStep?.name !== deliveryStep) {
+  if (
+    !input.schemaChangeExpected ||
+    approval === undefined ||
+    mergeStep?.name !== deliveryStep ||
+    mergeStep.afterStop === true
+  ) {
     return null;
   }
   if (
@@ -241,11 +250,17 @@ export const readSettledGitHubDeliveryRepeat = (
     reviewedHeadSha: approval.headSha,
   };
   for (const [index, step] of schemaSteps.entries()) {
+    // The earlier committed delivery must account for the only final schema
+    // step admitted after Stop. A later step would be a new unresolved effect.
+    const last = index === schemaSteps.length - 1;
     const args = readStepArguments(step, input, approval);
-    if (step.name !== schemaStep || !isDeepStrictEqual(args?.[2], activation)) {
+    if (
+      step.name !== schemaStep ||
+      (step.afterStop === true && !last) ||
+      !isDeepStrictEqual(args?.[2], activation)
+    ) {
       return null;
     }
-    const last = index === schemaSteps.length - 1;
     if (step.status === "cancelled" || step.status === "failed") {
       if (!last || step.output !== undefined) {
         return null;

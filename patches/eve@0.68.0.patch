@@ -635,7 +635,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.d.ts b/dist/src/execu
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.d.ts
-@@ -0,0 +1,198 @@
+@@ -0,0 +1,199 @@
 +import type { World, WorkflowRun, StepWithoutData, Event } from "#compiled/@workflow/world/index.js";
 +import type { PayloadKey } from "#compiled/@workflow/core/serialization/encryption.js";
 +import type { DurableSession, DurableSessionState } from "#execution/durable-session-store.js";
@@ -666,6 +666,7 @@ new file mode 100644
 +  readonly completedSteps: readonly {
 +    readonly name: string;
 +    readonly status?: "completed" | "failed" | "cancelled";
++    readonly afterStop?: true;
 +    readonly args: unknown;
 +    readonly output: unknown;
 +  }[];
@@ -838,7 +839,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,1218 @@
+@@ -0,0 +1,1225 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
@@ -1751,11 +1752,15 @@ new file mode 100644
 +      if (name === undefined) continue;
 +      const start = created.get(id);
 +      if (start === undefined) return { boundary: "child_delivery_dispatch_missing" };
-+      if (start >= cancelSlot) return { boundary: "child_delivery_dispatch_after_stop" };
 +      const end = deliveryCompletions.get(id);
 +      const lastAttempt = deliveryAttempts.get(id);
-+      if (lastAttempt !== undefined && lastAttempt >= cancelSlot)
-+        return { boundary: "child_delivery_attempt_after_stop" };
++      const afterStop = start >= cancelSlot || (lastAttempt !== undefined && lastAttempt >= cancelSlot);
++      // During its cleanup window the child may start the last schema check.
++      // Only the app's older-receipt proof can establish that this attempt
++      // had already lost write authority before the repeat began.
++      if (afterStop && (name !== "continueGitHubProductionSchema" || start >= terminalSlot ||
++        (lastAttempt !== undefined && lastAttempt >= terminalSlot)))
++        return { boundary: "child_delivery_dispatch_after_stop" };
 +      if (metadata.status === "completed") {
 +        if (end === undefined) return { boundary: "child_delivery_completion_missing" };
 +        if (start >= end || (lastAttempt !== undefined && lastAttempt >= end))
@@ -1767,7 +1772,7 @@ new file mode 100644
 +          return { boundary: "child_delivery_completion_after_stop" };
 +      } else if (name !== "continueGitHubProductionSchema" || end !== undefined ||
 +        (metadata.status === "failed" && !deliveryUnsuccessful.has(id))) return { boundary: "child_delivery_step_unsettled" };
-+      completed.push({ id, name, fullName: metadata.fullName, status: metadata.status,
++      completed.push({ id, name, fullName: metadata.fullName, status: metadata.status, afterStop,
 +        start, end: end ?? terminalSlot });
 +    }
 +    if (completed.length === 0) return { boundary: "child_delivery_steps_absent" };
@@ -1776,6 +1781,8 @@ new file mode 100644
 +    for (const [index, witness] of completed.entries()) {
 +      // The delivery workflow awaits each provider step before scheduling the next.
 +      if (index > 0 && completed[index - 1].end >= witness.start) return { boundary: "child_delivery_steps_overlap" };
++      if (witness.afterStop && index !== completed.length - 1)
++        return { boundary: "child_delivery_steps_after_stop" };
 +      await authorizeChildRead();
 +      const step = await world.steps.get(childId, witness.id, { resolveData: "all" });
 +      if (step.runId !== childId || step.stepId !== witness.id || step.stepName !== witness.fullName ||
@@ -1790,7 +1797,8 @@ new file mode 100644
 +      const output = step.status === "completed" ?
 +        await dependencies.hydrateStepReturnValue(step.output, childId, childKey) : undefined;
 +      results.push({ name: witness.name, args, output,
-+        ...(step.status === "completed" ? {} : { status: step.status }) });
++        ...(step.status === "completed" ? {} : { status: step.status }),
++        ...(witness.afterStop ? { afterStop: true } : {}) });
 +    }
 +    await authorizeChildRead();
 +    return { boundary: "ready", completedSteps: results };
