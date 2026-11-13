@@ -1136,7 +1136,9 @@ const fixture = async (options = {}) => {
           },
         ]
       : []),
-    ...(options.uncommittedDispatch === true || options.interruptedObservation !== undefined
+    ...(options.uncommittedDispatch === true ||
+    options.uncommittedAction !== undefined ||
+    options.interruptedObservation !== undefined
       ? [
           {
             type: "actions.requested",
@@ -1151,6 +1153,7 @@ const fixture = async (options = {}) => {
                       ? "native"
                       : "observe-app-production",
                   input: options.interruptedObservation ?? {},
+                  ...options.uncommittedAction,
                 },
               ],
             },
@@ -1919,6 +1922,39 @@ test("an unknown dispatched action in the cancelled turn still prevents idle rec
   const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
   assert.equal(result.kind, "uncertain");
   assert.equal(result.reason, uncommittedActionDispatchReason);
+});
+
+test("unresolved workflow delivery logs only fixed action facts and still blocks recovery", async () => {
+  const event = "builder.recovery_uncommitted_action";
+  const diagnosticRecords = [];
+  const diagnostic = vi.spyOn(console, "info").mockImplementation((record) => {
+    if (String(record).includes(event)) {
+      diagnosticRecords.push(JSON.parse(record));
+    }
+  });
+  try {
+    const f = await settledIdleFixture({
+      uncommittedAction: {
+        toolName: "finish-github-pr-delivery",
+        input: { privateValue: "secret workflow input fixture" },
+      },
+    });
+    const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+    assert.equal(result.kind, "uncertain");
+    assert.equal(result.reason, uncommittedActionDispatchReason);
+    assert.deepEqual(diagnosticRecords, [
+      {
+        event,
+        frontier: "settled_cancellation",
+        category: "finish_github_pr_delivery",
+        stoppedChild: false,
+        hasInput: false,
+        beforeCancel: true,
+      },
+    ]);
+  } finally {
+    diagnostic.mockRestore();
+  }
 });
 
 test("settled cancellation can retain an interrupted read-only Production observation", async () => {

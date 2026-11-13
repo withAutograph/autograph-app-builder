@@ -2942,7 +2942,7 @@ diff --git a/dist/src/execution/session/recovery-reconciliation.js b/dist/src/ex
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-reconciliation.js
-@@ -0,0 +1,884 @@
+@@ -0,0 +1,914 @@
 +import { activeTurnId } from "#harness/active-turn-id.js";
 +import { createRuntimeToolResultFromValue } from "#harness/action-result-helpers.js";
 +import { createActionPartialEvent, createActionResultEvent } from "#protocol/message.js";
@@ -3138,6 +3138,26 @@ new file mode 100644
 +  return { entries: retained, ids };
 +}
 +
++function reportUncommittedAction(frontier, toolName, details = {}) {
++  const categories = new Map([
++    ["finish-github-pr-delivery", "finish_github_pr_delivery"],
++    ["prepare-app-production", "prepare_app_production"],
++    ["observe-app-production", "observe_app_production"],
++    ["prepare-app-hosted-runtime", "prepare_app_hosted_runtime"],
++    ["release-app-public-release", "release_app_public_release"],
++    ["review-current-product-source", "review_current_product_source"],
++    ["run-app-continuity-tests", "run_app_continuity_tests"],
++  ]);
++  try {
++    console.info(JSON.stringify({
++      event: "builder.recovery_uncommitted_action",
++      frontier,
++      category: categories.get(toolName) ?? "other",
++      ...details,
++    }));
++  } catch {}
++}
++
 +function assessEffects(payload, source, session, incoming, carriedInboxIds, settledCancellation) {
 +  if (payload.issues.some((issue) => issue.reason === "native-stream-incomplete"))
 +    return uncertain("native-stream-incomplete");
@@ -3240,6 +3260,7 @@ new file mode 100644
 +          received.has(action.callId)
 +        )
 +          continue;
++        reportUncommittedAction("native_effect", action.toolName);
 +        return uncertain("uncommitted-action-dispatch", action.callId);
 +      }
 +  }
@@ -3507,8 +3528,16 @@ new file mode 100644
 +    }
 +    if (event.type !== "actions.requested") continue;
 +    for (const action of event.data.actions ?? []) {
-+      if (!committed.has(action.callId) && (index >= cancel || hasInput || !isReadOnlyStatus(action)))
++      if (!committed.has(action.callId) && (index >= cancel || hasInput || !isReadOnlyStatus(action))) {
++        reportUncommittedAction("settled_cancellation", action.toolName, {
++          stoppedChild: payload.cancellationInbox.some((item) =>
++            item !== null && payload.cancelledWorkflowReceipts?.has(item.eventId) &&
++            item.payload?.from?.callId === action.callId),
++          hasInput,
++          beforeCancel: index < cancel,
++        });
 +        return uncertain("uncommitted-action-dispatch", action.callId);
++      }
 +    }
 +  }
 +}
@@ -3552,6 +3581,7 @@ new file mode 100644
 +    if (emittedResults.has(call.toolCallId))
 +      return uncertain("uncommitted-action-result", call.toolCallId);
 +    if (replayable.has(call.toolCallId)) continue;
++    reportUncommittedAction("protocol", call.toolName);
 +    return uncertain("uncommitted-action-dispatch", call.toolCallId);
 +  }
 +}
