@@ -148,6 +148,10 @@ and historical command evidence. Installation failure stays pending with its rea
 cause. Normal source edits can start a new pass using the same package-manager
 cache and installed candidate files; they do not rebuild a sandbox or dependency
 closure. Actual checks and fresh source review remain required after setup.
+Next.js can generate its app-level type declaration during validation. Builder
+keeps the generated file in the private checkout for TypeScript and excludes it
+from the reviewed tree when neither parent tracks it. Tracked declarations and
+authored content remain subject to review.
 Candidate local-runtime preparation uses the same owner-bound durable log capture
 as app checks and tests. `get_validation_log` discovery identifies these attempts
 as `local-preparation`, retaining their exact candidate and invocation identity,

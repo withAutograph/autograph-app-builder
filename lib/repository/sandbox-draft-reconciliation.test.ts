@@ -248,6 +248,61 @@ const importValue = (cwd: string) =>
 const releaseCut = (releaseId: string) => `apps/demo/schema/release/${releaseId}`;
 
 describe("isolated draft reconciliation", () => {
+  it("leaves private Next type generation out of the reviewed tree even after it was staged", async () => {
+    const f = fixture();
+    git(path.join(f.root, "repository"), "config", "core.excludesFile", "/dev/null");
+    const declarations = "apps/demo/next-env.d.ts";
+    const prepared = await prepareDraftReconciliation(candidateFixtureInput(f));
+    const generated = [
+      '/// <reference types="next" />',
+      '/// <reference types="next/image-types/global" />',
+      'import "./.next/types/routes.d.ts";',
+      'import "./.next/types/root-params.d.ts";',
+      "",
+      "// NOTE: This file should not be edited",
+      "// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.",
+      "",
+    ].join("\n");
+    const { resolvedTree: originalTree } = await inspectDraftReconciliation({
+      prepared,
+      sandbox: f.sandbox,
+    });
+    const file = path.join(prepared.root, declarations);
+    writeFileSync(file, generated);
+    git(prepared.root, "add", "--", declarations);
+    const inspected = await inspectDraftReconciliation({ prepared, sandbox: f.sandbox });
+    expect(inspected.resolvedTree).toBe(originalTree);
+    expect(inspected.baseChanges.some((change) => change.path === declarations)).toBe(false);
+    expect(readFileSync(file, "utf-8")).toBe(generated);
+    expect(git(prepared.root, "ls-files", "--", declarations)).toBe("");
+
+    const authored = generated.replace(
+      "// NOTE: This file should not be edited",
+      'declare module "owned-app";\n\n// NOTE: This file should not be edited',
+    );
+    writeFileSync(file, authored);
+    const reviewed = await inspectDraftReconciliation({ prepared, sandbox: f.sandbox });
+    expect(reviewed.baseChanges).toContainEqual(
+      expect.objectContaining({ path: declarations, kind: "added" }),
+    );
+  });
+
+  it("retains Next declarations tracked by a parent in the reviewed diff", async () => {
+    const f = fixture();
+    git(path.join(f.root, "repository"), "config", "core.excludesFile", "/dev/null");
+    const declarations = "apps/demo/next-env.d.ts";
+    const baseSha = advanceFixtureBase(f, { [declarations]: "existing tracked declarations" });
+    const prepared = await prepareDraftReconciliation(candidateFixtureInput(f, baseSha));
+    writeFileSync(
+      path.join(prepared.root, declarations),
+      '/// <reference types="next" />\n\n// NOTE: This file should not be edited\n// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.\n',
+    );
+    const reviewed = await inspectDraftReconciliation({ prepared, sandbox: f.sandbox });
+    expect(reviewed.baseChanges).toContainEqual(
+      expect.objectContaining({ path: declarations, kind: "modified" }),
+    );
+  });
+
   const draftReleaseFixture = async () => {
     const f = fixture();
     const checkout = path.join(f.root, "repository");
