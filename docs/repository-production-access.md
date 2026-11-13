@@ -440,8 +440,12 @@ applies the checked addition once the provider activates that merge, preserving
 existing fields, records, access and runtime credentials. The setup plan keeps
 the saved creator binding. If the setup response is interrupted, Builder
 continues the same approved merged revision and reports it pending until the
-checked schema is applied. Other schema, role or access changes use their usual
-approval.
+checked schema is applied. The checked generated runtime can use the exact
+installed predecessor while the addition is being applied. Existing reads and
+writes keep working during the handoff. Reads expose the new optional field as
+empty until it is available. A write that uses the new field waits for the
+update or reports it pending without discarding the entered value. Other
+schema, role or access changes use their usual approval.
 
 If an older merge preceded its runtime bindings, recover in the same Builder
 session through the ordinary reviewed app repair/revision and provider-owned
