@@ -819,7 +819,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,946 @@
+@@ -0,0 +1,970 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
@@ -1282,47 +1282,65 @@ new file mode 100644
 +      const parentStop = cancellationInbox.filter((item) => item?.payload?.kind === "cancel" &&
 +        item.payload.turnId === latest.cancellation.turnId &&
 +        Object.keys(item.payload).every((key) => key === "kind" || key === "turnId"));
++      let boundary = "missing_parent_stop_or_settlement";
 +      if (settle !== undefined && settleStart !== undefined && parentStop.length === 1) {
++        boundary = "missing_parent_cleanup";
 +        for (const { event, slot } of events) {
 +          if (event.eventType !== "step_completed" || slot >= settleStart ||
 +            stepNames.get(event.correlationId) !== "cancelDescendantTurnsStep") continue;
++          boundary = "parent_cleanup_order";
 +          const start = inputOrigins.get(event.correlationId)?.slot;
 +          if (start === undefined || start <= parentStop[0].slot || start >= slot) continue;
++          // The child can finish after handing its wake to the parent but
++          // before the parent materializes the inbox record. The exact child
++          // callback still has to match; only the parent checkpoint bounds it.
++          boundary = "callback_outside_settlement";
 +          const receipts = cancellationInbox.filter((item) => item?.payload?.kind === "outcome" &&
-+            item.payload.result?.status === "cancelled" && item.slot > start && item.slot < slot);
++            item.payload.result?.status === "cancelled" && item.slot > start &&
++            item.slot < latest.origin.slot);
 +          if (receipts.length === 0) continue;
 +          await authorizeOwner(binding);
++          boundary = "parent_cleanup_unavailable";
 +          try {
 +            const parentStep = await world.steps.get(run.runId, event.correlationId, { resolveData: "all" });
 +            if (parentStep.runId !== run.runId || parentStep.stepId !== event.correlationId ||
 +              nativeFunction(parentStep.stepName) !== "cancelDescendantTurnsStep" ||
 +              parentStep.status !== "completed" || parentStep.input === undefined) continue;
++            boundary = "parent_cleanup_snapshot_mismatch";
 +            const input = (await dependencies.hydrateStepArguments(parentStep.input, run.runId, key))?.args?.[0];
 +            if (!isDeepStrictEqual(input?.sessionState, settle.sessionState) ||
 +              !isDeepStrictEqual(input?.serializedContext, settle.serializedContext)) continue;
 +            const session = dependencies.readDurableSession(settle.sessionState);
 +            const registered = getBlockingWorkflowToolRuns(session.state, latest.cancellation.turnId);
 +            for (const item of receipts) {
++              boundary = "callback_turn_or_owner_mismatch";
 +              const from = item.payload.from;
 +              if (!isRecord(from) || from.execution !== "blocking" ||
 +                typeof from.callId !== "string" || certifiedCancelledCalls.has(from.callId) ||
 +                from.ownerRunId !== run.runId || from.turnId !== latest.cancellation.turnId ||
 +                from.sequence !== latest.cancellation.sequence) continue;
++              boundary = "child_registration_mismatch";
 +              const owners = registered.filter((entry) => entry.address.runId === from.runId &&
 +                entry.callId === from.callId && entry.toolName === from.toolName &&
 +                entry.origin.turnId === from.turnId && entry.origin.stepIndex === from.stepIndex);
 +              if (owners.length !== 1 || typeof owners[0].address.hookToken !== "string") continue;
-+              if (await proveCancelledWorkflowCallback({ world, dependencies, binding, authorizeOwner,
-+                parentRun: run, owner: owners[0], item, command })) {
++              boundary = "child_witness_unavailable";
++              const childBoundary = await proveCancelledWorkflowCallback({
++                world, dependencies, binding, authorizeOwner, parentRun: run,
++                owner: owners[0], item, command,
++              });
++              if (childBoundary === "proven") {
 +                cancelledWorkflowReceipts.add(item.eventId);
 +                certifiedCancelledCalls.add(from.callId);
 +              }
++              boundary = childBoundary;
 +            }
 +          } catch {
 +            // An unavailable child or invalid parent witness grants no authority.
 +          }
 +        }
 +      }
++      try { console.info(JSON.stringify({ event: "builder.cancelled_workflow_witness", boundary })); } catch {}
 +    }
 +
 +    const consumedWorkflowSteps = [];
@@ -1459,14 +1477,16 @@ new file mode 100644
 +  const from = envelope.from;
 +  if (Object.keys(envelope).length !== 3 ||
 +    !isDeepStrictEqual(envelope.result, { status: "cancelled", reason: descendantCancelReason }) ||
-+    item.token !== sessionInboxHookToken(command)) return false;
++    item.token !== sessionInboxHookToken(command)) return "callback_envelope_mismatch";
 +  const childId = owner.address.runId;
 +  const controlToken = owner.address.hookToken;
 +  await authorizeOwner(binding);
 +  const child = await world.runs.get(childId, { resolveData: "all" });
-+  if (child.runId !== childId || child.status !== "completed" ||
-+    child.workflowName !== "workflow//eve//workflowToolRunWorkflow" || child.input === undefined ||
-+    (parentRun.deploymentId !== undefined && child.deploymentId !== parentRun.deploymentId)) return false;
++  if (child.runId !== childId) return "child_identity_mismatch";
++  if (child.status !== "completed") return "child_not_completed";
++  if (child.workflowName !== "workflow//eve//workflowToolRunWorkflow" || child.input === undefined ||
++    (parentRun.deploymentId !== undefined && child.deploymentId !== parentRun.deploymentId))
++    return "child_workflow_mismatch";
 +  const childKey = await dependencies.resolveRunEncryptionKey(world, child);
 +  const entries = await dependencies.hydrateWorkflowArguments(child.input, childId, childKey);
 +  const entry = Array.isArray(entries) && entries.length === 1 ? entries[0] : undefined;
@@ -1477,7 +1497,7 @@ new file mode 100644
 +    entry.session?.ownerAnchorRunId !== from.ownerAnchorRunId ||
 +    entry.session?.turn?.id !== from.turnId || entry.session?.turn?.sequence !== from.sequence ||
 +    entry.callId !== from.callId || entry.toolName !== from.toolName || entry.stepIndex !== from.stepIndex ||
-+    !isDeepStrictEqual(entry.input, from.input)) return false;
++    !isDeepStrictEqual(entry.input, from.input)) return "child_entry_mismatch";
 +
 +  // Closure of the child proves this notice only. It says nothing about whether
 +  // earlier app/provider effects happened; the parent effect guards still run.
@@ -1490,11 +1510,12 @@ new file mode 100644
 +      pagination: { limit: 128, sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) },
 +      resolveData: "none" });
 +    for (const step of page.data) {
-+      if (step.runId !== childId || step.status !== "completed" || completed.has(step.stepId)) return false;
++      if (step.runId !== childId || step.status !== "completed" || completed.has(step.stepId))
++        return "child_step_unsettled";
 +      completed.set(step.stepId, nativeFunction(step.stepName));
 +    }
 +    if (!page.hasMore) break;
-+    if (!page.cursor || stepCursors.has(page.cursor)) return false;
++    if (!page.cursor || stepCursors.has(page.cursor)) return "child_step_pagination";
 +    stepCursors.add(page.cursor);
 +    cursor = page.cursor;
 +  } while (true);
@@ -1513,12 +1534,12 @@ new file mode 100644
 +      pagination: { limit: 128, sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) },
 +      resolveData: "none" });
 +    for (const event of page.data) {
-+      if (event.runId !== childId) return false;
++      if (event.runId !== childId) return "child_event_identity";
 +      const slot = dependencies.requireEventSlot(event.eventId);
-+      if (slot <= lastSlot || terminalSlot !== undefined) return false;
++      if (slot <= lastSlot || terminalSlot !== undefined) return "child_event_order";
 +      lastSlot = slot;
 +      if (event.eventType === "hook_created" && event.eventData?.token === controlToken) {
-+        if (hookId !== undefined || typeof event.correlationId !== "string") return false;
++        if (hookId !== undefined || typeof event.correlationId !== "string") return "child_control_hook";
 +        hookId = event.correlationId;
 +      } else if (event.eventType === "hook_received" && hookId !== undefined &&
 +        event.correlationId === hookId && cancelSlot === undefined) {
@@ -1526,7 +1547,8 @@ new file mode 100644
 +        const received = await world.events.get(childId, event.eventId, { resolveData: "all" });
 +        if (received.runId !== childId || received.eventId !== event.eventId ||
 +          received.eventType !== "hook_received" || received.correlationId !== hookId ||
-+          (received.eventData?.token !== undefined && received.eventData.token !== controlToken)) return false;
++          (received.eventData?.token !== undefined && received.eventData.token !== controlToken))
++          return "child_control_receipt";
 +        const command = await dependencies.hydrateHookPayload(received.eventData.payload, childId, childKey);
 +        if (isDeepStrictEqual(command, { kind: "cancel", reason: descendantCancelReason })) cancelSlot = slot;
 +      } else if (event.eventType === "step_created" || event.eventType === "step_started") {
@@ -1541,11 +1563,12 @@ new file mode 100644
 +      }
 +    }
 +    if (!page.hasMore) break;
-+    if (!page.cursor || eventCursors.has(page.cursor)) return false;
++    if (!page.cursor || eventCursors.has(page.cursor)) return "child_event_pagination";
 +    eventCursors.add(page.cursor);
 +    cursor = page.cursor;
 +  } while (true);
-+  if (cancelSlot === undefined || terminalSlot === undefined) return false;
++  if (cancelSlot === undefined) return "child_cancel_receipt_missing";
++  if (terminalSlot === undefined) return "child_terminal_event_missing";
 +  let matches = 0;
 +  for (const callback of callbacks) {
 +    if (callback.start === undefined || callback.start <= cancelSlot ||
@@ -1553,12 +1576,13 @@ new file mode 100644
 +    await authorizeOwner(binding);
 +    const step = await world.steps.get(childId, callback.id, { resolveData: "all" });
 +    if (step.runId !== childId || step.stepId !== callback.id || step.status !== "completed" ||
-+      nativeFunction(step.stepName) !== "resumeHookStep" || step.input === undefined) return false;
++      nativeFunction(step.stepName) !== "resumeHookStep" || step.input === undefined)
++      return "child_callback_step_mismatch";
 +    const args = (await dependencies.hydrateStepArguments(step.input, childId, childKey))?.args;
 +    if (isDeepStrictEqual(args, [item.token, envelope, { ifPresent: true }])) matches++;
 +  }
 +  await authorizeOwner(binding);
-+  return matches === 1;
++  return matches === 1 ? "proven" : "child_callback_unproven";
 +}
 +
 +/** Read a finite, unchanged prefix without following an unclosed terminal stream. */

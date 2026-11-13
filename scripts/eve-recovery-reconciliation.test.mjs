@@ -750,9 +750,10 @@ const addSettledCancellation = async ({
     }
   }
   if (cancelledOutcome !== undefined) {
-    const cleanupStart = stopSlot + 1;
+    const cleanupStart = stopSlot + (cancelledOutcome.beforeCleanup === true ? 2 : 1);
+    const outcomeAfterStart = cancelledOutcome.afterCleanup === true ? 3 : 1;
     const outcomeSlot =
-      cancelledOutcome.outsideCleanup === true ? cleanupStart + 3 : cleanupStart + 1;
+      cancelledOutcome.beforeCleanup === true ? cleanupStart - 1 : cleanupStart + outcomeAfterStart;
     if (cancelledOutcome.omitCleanup !== true) {
       const cleanupInput = cancelledOutcome.mismatchedPair === true ? sourcePair : before;
       steps.set(cancelDescendantStepId, {
@@ -1666,11 +1667,25 @@ test("idle transfer accepts only the exact cancellation notice from the owned de
   assert.deepEqual(result.checkpointCore, f.settled);
 });
 
+test("idle transfer accepts an exact cancellation notice recorded after cleanup and before settlement", async () => {
+  const f = await settledIdleFixture({
+    encrypted: true,
+    cancelledOutcome: { afterCleanup: true },
+  });
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "ready");
+  assert.equal(result.provenance.selectedOrigin.stepId, settledCancelStepId);
+  assert.equal(result.provenance.coveredNativeEventIds.includes(eventId(9)), true);
+  assert.equal(result.replayInput, undefined);
+  assert.equal(result.carriedInbox, undefined);
+  assert.deepEqual(result.checkpointCore, f.settled);
+});
+
 for (const { name, evidence } of [
   { name: "missing parent cleanup", evidence: { omitCleanup: true } },
   { name: "an unrelated parent checkpoint", evidence: { mismatchedPair: true } },
   { name: "no recorded child ownership", evidence: { omitRegistration: true } },
-  { name: "a notice outside parent cleanup", evidence: { outsideCleanup: true } },
+  { name: "a notice before parent cleanup", evidence: { beforeCleanup: true } },
   { name: "a foreign child owner", evidence: { foreignOwner: true } },
   { name: "a foreign parent inbox", evidence: { foreignInbox: true } },
   { name: "no child Stop receipt", evidence: { omitControl: true } },
@@ -1684,6 +1699,31 @@ for (const { name, evidence } of [
     assert.equal(result.reason, unconsumedNativeInboxReason);
   });
 }
+
+test("a missing child terminal witness logs only its fixed category and still blocks recovery", async () => {
+  const witnessRecords = [];
+  const diagnostic = vi.spyOn(console, "info").mockImplementation((record) => {
+    if (String(record).includes("builder.cancelled_workflow_witness")) {
+      witnessRecords.push(record);
+    }
+  });
+  try {
+    const f = await settledIdleFixture({
+      encrypted: true,
+      cancelledOutcome: { runStatus: "running" },
+    });
+    const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+    assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
+    assert.deepEqual(witnessRecords, [
+      JSON.stringify({
+        event: "builder.cancelled_workflow_witness",
+        boundary: "child_not_completed",
+      }),
+    ]);
+  } finally {
+    diagnostic.mockRestore();
+  }
+});
 
 test("a proven descendant cancellation notice does not resolve an unrelated dispatched write", async () => {
   const f = await settledIdleFixture({
