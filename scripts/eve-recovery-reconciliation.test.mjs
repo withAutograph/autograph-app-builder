@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { test } from "vitest";
+import { test, vi } from "vitest";
 
 const toolResultKind = "tool-result";
 const originalDeferredCallId = "original-deferred";
@@ -13,6 +13,7 @@ const uncommittedActionDispatchReason = "uncommitted-action-dispatch";
 const uncommittedActionResultReason = "uncommitted-action-result";
 const unconsumedNativeInboxReason = "unconsumed-native-inbox-input";
 
+const commandHookId = "command-hook";
 const originalTurnId = "turn-original";
 const childDeploymentId = "child-deployment";
 const originalNativeCallId = "original-native";
@@ -327,7 +328,7 @@ const appendHistoricalInbox = async (events, event, output, suffix, terminal = t
   }
   events.push(
     ...encoded.map((payload, index) =>
-      event(13 + index, "hook_received", "command-hook", {
+      event(13 + index, "hook_received", commandHookId, {
         token: `eve:session:${logicalSessionId}:inbox`,
         payload,
       }),
@@ -349,6 +350,7 @@ const addSettledCancellation = async ({
   sourcePair,
   steps,
   beforeCancellationSend,
+  retainedInboxReceipt,
   cancellationSendEvidence,
   stopDuringTurnStep,
 }) => {
@@ -403,13 +405,21 @@ const addSettledCancellation = async ({
   const cancelReceipt = event(
     sendBeforeStop ? firstReceiptSlot + 1 : firstReceiptSlot,
     "hook_received",
-    "command-hook",
+    commandHookId,
     {
       token: `eve:session:${logicalSessionId}:inbox`,
       payload: await output({ kind: "cancel", turnId: originalTurnId }),
     },
   );
   const receipts = [cancelReceipt];
+  if (retainedInboxReceipt !== undefined) {
+    receipts.push(
+      event(firstReceiptSlot + 1, "hook_received", commandHookId, {
+        token: `eve:session:${logicalSessionId}:inbox`,
+        payload: await retainedInboxReceipt(),
+      }),
+    );
+  }
   if (beforeCancellationSend === true) {
     const queuedSendSlot = sendBeforeStop ? firstReceiptSlot : firstReceiptSlot + 1;
     const command = { kind: "send", payload: { message: "accepted message" } };
@@ -690,6 +700,15 @@ const fixture = async (options = {}) => {
           sourcePair,
           steps,
           beforeCancellationSend: options.beforeCancellationSend,
+          retainedInboxReceipt:
+            options.retainedInboxPayload === undefined
+              ? undefined
+              : async () =>
+                  await serialization.dehydrateWorkflowArguments(
+                    options.retainedInboxPayload,
+                    ownerRunId,
+                    key,
+                  ),
           cancellationSendEvidence: options.cancellationSendEvidence,
           stopDuringTurnStep: options.stopDuringTurnStep,
         })
@@ -1135,6 +1154,32 @@ for (const { name, evidence } of [
     assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
   });
 }
+
+test("an internal workflow receipt stays fenced and its private contents are not logged", async () => {
+  const f = await settledIdleFixture({
+    encrypted: true,
+    retainedInboxPayload: {
+      kind: "runtime-action-result",
+      results: [{ ...actualRuntimeResult, output: { note: "private fixture value" } }],
+    },
+  });
+  const records = [];
+  const diagnostic = vi.spyOn(console, "info").mockImplementation((record) => {
+    records.push(record);
+  });
+  try {
+    const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+    assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
+    assert.deepEqual(records, [
+      JSON.stringify({
+        event: "builder.cancellation_inbox_refusal",
+        boundary: "runtime_action_result",
+      }),
+    ]);
+  } finally {
+    diagnostic.mockRestore();
+  }
+});
 
 test("idle transfer preserves a genuine send queued after the cancellation checkpoint", async () => {
   const queued = {

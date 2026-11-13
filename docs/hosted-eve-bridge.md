@@ -227,6 +227,15 @@ ambiguous evidence leaves the event-based status unchanged. The header adds no
 stream event, cursor, approval or provider action; it lets Builder expose the
 real failed boot and use its normal recovery operation.
 
+### Recovery after stopping a turn
+
+An idle recovery can select the committed checkpoint that settled an exact
+Stop. Accepted Sends may be covered only by matching delivery stamps on both
+the start and cancellation of that turn. A retained internal inbox message
+without settlement proof still prevents transfer. Recovery reports a fixed
+message category to operations without recording payloads or arbitrary message
+kinds. That category provides no authority to discard or replay the message.
+
 ### Recovery of approved publication readback
 
 An interrupted native turn can retain a human-approved `reconcile_github_draft_pr`
