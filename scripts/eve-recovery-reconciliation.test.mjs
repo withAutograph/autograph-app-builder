@@ -47,6 +47,8 @@ const serialization = await load("compiled/@workflow/core/serialization.js");
 const { ContextContainer, contextStorage } = await load("context/container.js");
 const { SessionKey } = await load("context/keys.js");
 const { createToolLoopHarness } = await load("harness/tool-loop.js");
+const { createTurnCancelledEvent, createTurnStartedEvent, stampMessageStreamEvent } =
+  await load("protocol/message.js");
 const { MockLanguageModelV4 } = await import("ai/test");
 const { z } = await import("zod");
 const ownerRunId = "wrun_physical_original";
@@ -347,6 +349,7 @@ const addSettledCancellation = async ({
   sourcePair,
   steps,
   beforeCancellationSend,
+  cancellationSendEvidence,
   stopDuringTurnStep,
 }) => {
   const active = clearPendingCoordinationBatch({
@@ -392,8 +395,13 @@ const addSettledCancellation = async ({
     input: await args(before),
     output: await output(settled),
   });
+  const sendBeforeStop =
+    beforeCancellationSend === true &&
+    cancellationSendEvidence !== undefined &&
+    cancellationSendEvidence.afterStop !== true;
+  const firstReceiptSlot = stopDuringTurnStep === true ? 4 : 5;
   const cancelReceipt = event(
-    stopDuringTurnStep === true ? 4 : 5,
+    sendBeforeStop ? firstReceiptSlot + 1 : firstReceiptSlot,
     "hook_received",
     "command-hook",
     {
@@ -401,21 +409,37 @@ const addSettledCancellation = async ({
       payload: await output({ kind: "cancel", turnId: originalTurnId }),
     },
   );
-  const queuedSendSlot = stopDuringTurnStep === true ? 5 : 6;
-  const queuedSend =
-    beforeCancellationSend === true
-      ? event(queuedSendSlot, "hook_received", "old-continuation", {
-          token: stopDuringTurnStep === true ? priorInbox : "old-turn-inbox",
-          payload: await output({ kind: "send", payload: { message: "still queued" } }),
-        })
-      : undefined;
+  const receipts = [cancelReceipt];
+  if (beforeCancellationSend === true) {
+    const queuedSendSlot = sendBeforeStop ? firstReceiptSlot : firstReceiptSlot + 1;
+    const command = { kind: "send", payload: { message: "accepted message" } };
+    if (cancellationSendEvidence !== undefined) {
+      Object.assign(command, {
+        requestId: originalRequestId,
+        auth: { principalId: originalOwnerId },
+        delivery: {
+          channelKind: "eve",
+          channelName: "eve",
+          deliveryId: cancellationSendEvidence.acceptedId,
+        },
+      });
+    }
+    const queuedSend = event(queuedSendSlot, "hook_received", "old-continuation", {
+      token: stopDuringTurnStep === true ? priorInbox : "old-turn-inbox",
+      payload: await output(command),
+    });
+    if (sendBeforeStop) {
+      receipts.unshift(queuedSend);
+    } else {
+      receipts.push(queuedSend);
+    }
+  }
   const afterPriorStepStart = events.findIndex((entry) => entry.eventId === eventId(3)) + 1;
   events.splice(
     afterPriorStepStart,
     events.length - afterPriorStepStart,
     ...(stopDuringTurnStep === true ? [] : [event(4, "step_completed", "prior")]),
-    cancelReceipt,
-    ...(queuedSend === undefined ? [] : [queuedSend]),
+    ...receipts,
     ...(stopDuringTurnStep === true ? [event(6, "step_completed", "prior")] : []),
     event(7, "step_started", settledCancelStepId),
     event(8, "step_completed", settledCancelStepId),
@@ -666,11 +690,22 @@ const fixture = async (options = {}) => {
           sourcePair,
           steps,
           beforeCancellationSend: options.beforeCancellationSend,
+          cancellationSendEvidence: options.cancellationSendEvidence,
           stopDuringTurnStep: options.stopDuringTurnStep,
         })
       : undefined;
   await appendHistoricalInbox(events, event, output, options.inboxSuffix, settled === undefined);
+  const { cancellationSendEvidence } = options;
+  const cancelledTurn = { sequence: emission.sequence, turnId: originalTurnId };
   const nativeEvents = [
+    ...(cancellationSendEvidence === undefined
+      ? []
+      : [
+          stampMessageStreamEvent(
+            createTurnStartedEvent(cancelledTurn),
+            cancellationSendEvidence.startedIds,
+          ),
+        ]),
     ...(settled === undefined
       ? [{ type: "action.result", data: { ...batchEvent, result: actualRuntimeResult } }]
       : []),
@@ -714,7 +749,14 @@ const fixture = async (options = {}) => {
         ]
       : []),
     ...(options.cancelled === true || settled !== undefined
-      ? [{ type: "turn.cancelled", data: { sequence: 1, turnId: originalTurnId } }]
+      ? [
+          cancellationSendEvidence === undefined
+            ? createTurnCancelledEvent(cancelledTurn)
+            : stampMessageStreamEvent(
+                createTurnCancelledEvent(cancelledTurn),
+                cancellationSendEvidence.cancelledIds,
+              ),
+        ]
       : []),
   ];
   const world = {
@@ -1055,6 +1097,44 @@ test("idle transfer rejects a queued Send received inside the producing turn ste
   const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
   assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
 });
+
+const consumedCancellationSendId = "server-delivery-original";
+
+const settledIdleWithSend = async (overrides = {}) =>
+  await settledIdleFixture({
+    beforeCancellationSend: true,
+    stopDuringTurnStep: true,
+    cancellationSendEvidence: {
+      acceptedId: consumedCancellationSendId,
+      startedIds: [consumedCancellationSendId],
+      cancelledIds: [consumedCancellationSendId],
+      ...overrides,
+    },
+  });
+
+test("matching native delivery stamps cover an accepted Send without replay", async () => {
+  const f = await settledIdleWithSend();
+  const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+  assert.equal(result.kind, "ready");
+  assert.equal(result.provenance.selectedOrigin.stepId, settledCancelStepId);
+  assert.equal(result.provenance.selectedOrigin.kind, "committed-cancelled-turn-output");
+  assert.equal(result.provenance.coveredNativeEventIds.includes(eventId(4)), true);
+  assert.equal(result.replayInput, undefined);
+  assert.equal(result.carriedInbox, undefined);
+});
+
+for (const { name, evidence } of [
+  { name: "an unrelated stamped delivery ID", evidence: { startedIds: ["other-delivery"] } },
+  { name: "a missing terminal delivery stamp", evidence: { cancelledIds: [] } },
+  { name: "a missing accepted delivery ID", evidence: { acceptedId: null } },
+  { name: "receipt after the Stop", evidence: { afterStop: true } },
+]) {
+  test(`idle transfer still refuses a prior Send with ${name}`, async () => {
+    const f = await settledIdleWithSend(evidence);
+    const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+    assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
+  });
+}
 
 test("idle transfer preserves a genuine send queued after the cancellation checkpoint", async () => {
   const queued = {
