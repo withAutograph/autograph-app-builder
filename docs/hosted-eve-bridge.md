@@ -245,7 +245,9 @@ cancellation must bind the registered child and the settlement input. The
 child's retained entry, control receipt, completed callback, and terminal
 state must prove that exact notice. The parent may persist the notice after
 descendant cleanup completes but before its cancellation checkpoint commits.
-A refusal reports only the fixed witness category. A verified notice proves
+A refusal reports only a fixed witness category and, if a read threw, the
+fixed read stage and error class. It never logs the payload, identifier, or
+provider error text. A verified notice proves
 the child stopped; it does not prove its previous effects were absent or grant
 permission to retry them.
 Other internal inbox messages without settlement proof still prevent transfer. Recovery reports a fixed

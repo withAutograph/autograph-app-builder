@@ -12,6 +12,7 @@ const turnStepName = "step//eve//turnStep";
 const uncommittedActionDispatchReason = "uncommitted-action-dispatch";
 const uncommittedActionResultReason = "uncommitted-action-result";
 const unconsumedNativeInboxReason = "unconsumed-native-inbox-input";
+const cancelledWorkflowWitnessEvent = "builder.cancelled_workflow_witness";
 
 const commandHookId = "command-hook";
 const originalTurnId = "turn-original";
@@ -45,6 +46,7 @@ const { createDurableSessionState, readDurableSession } = await load(
 const { clearPendingCoordinationBatch, setPendingCoordinationBatch, resolvePendingCoordination } =
   await load("harness/coordination.js");
 const serialization = await load("compiled/@workflow/core/serialization.js");
+const { WorkflowWorldError } = await load("compiled/@workflow/errors/index.js");
 const reviveWritableReference = (value) =>
   Object.freeze({ kind: "native-recovery-transport-reference", type: "WritableStream", value });
 const transportRevivers = { WritableStream: reviveWritableReference };
@@ -480,7 +482,15 @@ const attachCancelledWorkflowChild = async (world, key, evidence) => {
   const { runs, events, steps } = world;
   world.runs = {
     ...runs,
-    get: async (id, options) => (id === runId ? childRun : await runs.get(id, options)),
+    async get(id, options) {
+      if (id !== runId) {
+        return await runs.get(id, options);
+      }
+      if (evidence.runReadError !== undefined) {
+        throw evidence.runReadError;
+      }
+      return childRun;
+    },
   };
   world.events = {
     list: async (options) =>
@@ -1703,7 +1713,7 @@ for (const { name, evidence } of [
 test("a missing child terminal witness logs only its fixed category and still blocks recovery", async () => {
   const witnessRecords = [];
   const diagnostic = vi.spyOn(console, "info").mockImplementation((record) => {
-    if (String(record).includes("builder.cancelled_workflow_witness")) {
+    if (String(record).includes(cancelledWorkflowWitnessEvent)) {
       witnessRecords.push(record);
     }
   });
@@ -1716,10 +1726,42 @@ test("a missing child terminal witness logs only its fixed category and still bl
     assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
     assert.deepEqual(witnessRecords, [
       JSON.stringify({
-        event: "builder.cancelled_workflow_witness",
+        event: cancelledWorkflowWitnessEvent,
         boundary: "child_not_completed",
       }),
     ]);
+  } finally {
+    diagnostic.mockRestore();
+  }
+});
+
+test("a failed child run read logs only fixed diagnostics and still blocks recovery", async () => {
+  const canary = "private child World response";
+  const failure = new WorkflowWorldError(canary, { status: 503, url: canary, code: canary });
+  const witnessRecords = [];
+  const diagnostic = vi.spyOn(console, "info").mockImplementation((record) => {
+    if (String(record).includes(cancelledWorkflowWitnessEvent)) {
+      witnessRecords.push(record);
+    }
+  });
+  try {
+    const f = await settledIdleFixture({
+      encrypted: true,
+      cancelledOutcome: { runReadError: failure },
+    });
+    const result = await reconcileOwnedLineagePreflight(f.collected.preflight);
+    assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
+    assert.deepEqual(
+      witnessRecords.map((record) => JSON.parse(record)),
+      [
+        {
+          event: cancelledWorkflowWitnessEvent,
+          boundary: "child_witness_unavailable",
+          stage: "child_run_read",
+          errorCategory: "http_unavailable",
+        },
+      ],
+    );
   } finally {
     diagnostic.mockRestore();
   }

@@ -819,7 +819,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,970 @@
+@@ -0,0 +1,1015 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
@@ -1283,6 +1283,7 @@ new file mode 100644
 +        item.payload.turnId === latest.cancellation.turnId &&
 +        Object.keys(item.payload).every((key) => key === "kind" || key === "turnId"));
 +      let boundary = "missing_parent_stop_or_settlement";
++      let failedRead;
 +      if (settle !== undefined && settleStart !== undefined && parentStop.length === 1) {
 +        boundary = "missing_parent_cleanup";
 +        for (const { event, slot } of events) {
@@ -1325,22 +1326,25 @@ new file mode 100644
 +                entry.origin.turnId === from.turnId && entry.origin.stepIndex === from.stepIndex);
 +              if (owners.length !== 1 || typeof owners[0].address.hookToken !== "string") continue;
 +              boundary = "child_witness_unavailable";
-+              const childBoundary = await proveCancelledWorkflowCallback({
++              const childWitness = await readCancelledWorkflowWitness({
 +                world, dependencies, binding, authorizeOwner, parentRun: run,
 +                owner: owners[0], item, command,
 +              });
-+              if (childBoundary === "proven") {
++              failedRead = childWitness.failedRead;
++              if (childWitness.boundary === "proven") {
 +                cancelledWorkflowReceipts.add(item.eventId);
 +                certifiedCancelledCalls.add(from.callId);
 +              }
-+              boundary = childBoundary;
++              boundary = childWitness.boundary;
 +            }
 +          } catch {
 +            // An unavailable child or invalid parent witness grants no authority.
 +          }
 +        }
 +      }
-+      try { console.info(JSON.stringify({ event: "builder.cancelled_workflow_witness", boundary })); } catch {}
++      try {
++        console.info(JSON.stringify({ event: "builder.cancelled_workflow_witness", boundary, ...failedRead }));
++      } catch {}
 +    }
 +
 +    const consumedWorkflowSteps = [];
@@ -1471,8 +1475,39 @@ new file mode 100644
 +
 +const descendantCancelReason = "The turn that called the tool was cancelled.";
 +
++function witnessErrorCategory(error) {
++  if (error === null || typeof error !== "object") return "unknown";
++  const status = error.status ?? error.statusCode;
++  if (status === 401 || status === 403) return "http_unauthorized";
++  if (status === 404 || error.name === "WorkflowRunNotFoundError") return "http_not_found";
++  if (status === 410 || error.name === "RunExpiredError") return "expired";
++  if (status === 429) return "http_throttled";
++  if (typeof status === "number" && status >= 500 && status <= 599) return "http_unavailable";
++  if (error.code === "TIMEOUT" || error.name === "TimeoutError") return "timeout";
++  if (error.code === "TRANSPORT" || error.code === "STREAM_ERROR") return "transport";
++  if (error.code === "SCHEMA_VALIDATION" || error.name === "ZodError") return "schema";
++  if (error.name === "RuntimeDecryptionError") return "decryption";
++  if (error.name === "TypeError" || error.name === "SyntaxError") return "decode";
++  return "unknown";
++}
++
++async function readCancelledWorkflowWitness(input) {
++  let stage = "child_binding";
++  const stageChanged = (value) => { stage = value; };
++  try {
++    return { boundary: await proveCancelledWorkflowCallback(input, stageChanged) };
++  } catch (error) {
++    return { boundary: "child_witness_unavailable",
++      failedRead: { stage, errorCategory: witnessErrorCategory(error) } };
++  }
++}
++
 +async function proveCancelledWorkflowCallback({ world, dependencies, binding, authorizeOwner,
-+  parentRun, owner, item, command }) {
++  parentRun, owner, item, command }, stageChanged) {
++  const authorizeChildRead = async () => {
++    stageChanged("child_authorization");
++    await authorizeOwner(binding);
++  };
 +  const envelope = item.payload;
 +  const from = envelope.from;
 +  if (Object.keys(envelope).length !== 3 ||
@@ -1480,14 +1515,17 @@ new file mode 100644
 +    item.token !== sessionInboxHookToken(command)) return "callback_envelope_mismatch";
 +  const childId = owner.address.runId;
 +  const controlToken = owner.address.hookToken;
-+  await authorizeOwner(binding);
++  await authorizeChildRead();
++  stageChanged("child_run_read");
 +  const child = await world.runs.get(childId, { resolveData: "all" });
 +  if (child.runId !== childId) return "child_identity_mismatch";
 +  if (child.status !== "completed") return "child_not_completed";
 +  if (child.workflowName !== "workflow//eve//workflowToolRunWorkflow" || child.input === undefined ||
 +    (parentRun.deploymentId !== undefined && child.deploymentId !== parentRun.deploymentId))
 +    return "child_workflow_mismatch";
++  stageChanged("child_key_read");
 +  const childKey = await dependencies.resolveRunEncryptionKey(world, child);
++  stageChanged("child_entry_hydrate");
 +  const entries = await dependencies.hydrateWorkflowArguments(child.input, childId, childKey);
 +  const entry = Array.isArray(entries) && entries.length === 1 ? entries[0] : undefined;
 +  if (!isRecord(entry) || Object.hasOwn(entry, "workflow") ||
@@ -1505,7 +1543,8 @@ new file mode 100644
 +  const stepCursors = new Set();
 +  let cursor;
 +  do {
-+    await authorizeOwner(binding);
++    await authorizeChildRead();
++    stageChanged("child_steps_list");
 +    const page = await world.steps.list({ runId: childId,
 +      pagination: { limit: 128, sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) },
 +      resolveData: "none" });
@@ -1529,12 +1568,14 @@ new file mode 100644
 +  const eventCursors = new Set();
 +  cursor = undefined;
 +  do {
-+    await authorizeOwner(binding);
++    await authorizeChildRead();
++    stageChanged("child_events_list");
 +    const page = await world.events.list({ runId: childId,
 +      pagination: { limit: 128, sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) },
 +      resolveData: "none" });
 +    for (const event of page.data) {
 +      if (event.runId !== childId) return "child_event_identity";
++      stageChanged("child_event_slot");
 +      const slot = dependencies.requireEventSlot(event.eventId);
 +      if (slot <= lastSlot || terminalSlot !== undefined) return "child_event_order";
 +      lastSlot = slot;
@@ -1543,12 +1584,14 @@ new file mode 100644
 +        hookId = event.correlationId;
 +      } else if (event.eventType === "hook_received" && hookId !== undefined &&
 +        event.correlationId === hookId && cancelSlot === undefined) {
-+        await authorizeOwner(binding);
++        await authorizeChildRead();
++        stageChanged("child_control_read");
 +        const received = await world.events.get(childId, event.eventId, { resolveData: "all" });
 +        if (received.runId !== childId || received.eventId !== event.eventId ||
 +          received.eventType !== "hook_received" || received.correlationId !== hookId ||
 +          (received.eventData?.token !== undefined && received.eventData.token !== controlToken))
 +          return "child_control_receipt";
++        stageChanged("child_control_hydrate");
 +        const command = await dependencies.hydrateHookPayload(received.eventData.payload, childId, childKey);
 +        if (isDeepStrictEqual(command, { kind: "cancel", reason: descendantCancelReason })) cancelSlot = slot;
 +      } else if (event.eventType === "step_created" || event.eventType === "step_started") {
@@ -1573,15 +1616,17 @@ new file mode 100644
 +  for (const callback of callbacks) {
 +    if (callback.start === undefined || callback.start <= cancelSlot ||
 +      callback.start >= callback.slot || callback.slot >= terminalSlot) continue;
-+    await authorizeOwner(binding);
++    await authorizeChildRead();
++    stageChanged("child_callback_step_read");
 +    const step = await world.steps.get(childId, callback.id, { resolveData: "all" });
 +    if (step.runId !== childId || step.stepId !== callback.id || step.status !== "completed" ||
 +      nativeFunction(step.stepName) !== "resumeHookStep" || step.input === undefined)
 +      return "child_callback_step_mismatch";
++    stageChanged("child_callback_arguments_hydrate");
 +    const args = (await dependencies.hydrateStepArguments(step.input, childId, childKey))?.args;
 +    if (isDeepStrictEqual(args, [item.token, envelope, { ifPresent: true }])) matches++;
 +  }
-+  await authorizeOwner(binding);
++  await authorizeChildRead();
 +  return matches === 1 ? "proven" : "child_callback_unproven";
 +}
 +
