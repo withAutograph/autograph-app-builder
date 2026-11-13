@@ -819,7 +819,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,1015 @@
+@@ -0,0 +1,1021 @@
 +import { readValidatedRecoveryBootCheckpoint } from "#execution/session/recovery-boot-checkpoint.js";
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
@@ -1482,10 +1482,14 @@ new file mode 100644
 +  if (status === 404 || error.name === "WorkflowRunNotFoundError") return "http_not_found";
 +  if (status === 410 || error.name === "RunExpiredError") return "expired";
 +  if (status === 429) return "http_throttled";
++  if (status === 400 || status === 422 || error.code === "INVALID_ARGUMENT")
++    return "http_invalid_request";
++  if (typeof status === "number" && status >= 400 && status <= 499) return "http_client";
 +  if (typeof status === "number" && status >= 500 && status <= 599) return "http_unavailable";
 +  if (error.code === "TIMEOUT" || error.name === "TimeoutError") return "timeout";
 +  if (error.code === "TRANSPORT" || error.code === "STREAM_ERROR") return "transport";
 +  if (error.code === "SCHEMA_VALIDATION" || error.name === "ZodError") return "schema";
++  if (error.code === "PARSE_ERROR") return "decode";
 +  if (error.name === "RuntimeDecryptionError") return "decryption";
 +  if (error.name === "TypeError" || error.name === "SyntaxError") return "decode";
 +  return "unknown";
@@ -1545,8 +1549,10 @@ new file mode 100644
 +  do {
 +    await authorizeChildRead();
 +    stageChanged("child_steps_list");
++    // Match the native source inspection's provider-owned step page size.
++    // Keep following cursors; a default page does not bound the total proof.
 +    const page = await world.steps.list({ runId: childId,
-+      pagination: { limit: 128, sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) },
++      pagination: { sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) },
 +      resolveData: "none" });
 +    for (const step of page.data) {
 +      if (step.runId !== childId || step.status !== "completed" || completed.has(step.stepId))
