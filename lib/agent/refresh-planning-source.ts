@@ -16,6 +16,10 @@ import {
   PlanningReleaseConflictError,
   reconcilePlanningSource,
 } from "../repository/planning-source-reconciliation";
+import {
+  currentDirectProductionGrant,
+  currentDirectProductionProposalIsDelivered,
+} from "./direct-production-state";
 import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import { readConnectedSchemaSavedPredecessor } from "./connected-schema-saved-predecessor";
 import type { PublishedPlanningRelease } from "../repository/planning-source-reconciliation";
@@ -47,7 +51,7 @@ const canRefreshSource = (
 export const refreshPlanningSource = async (
   ctx: ToolContext,
   purpose: "planning" | "schema-compilation" = "planning",
-  options: { approvedSchemaCueSha256?: string | undefined } = {},
+  options: { approvedSchemaCueSha256?: string | undefined; optionalFieldPlanning?: true } = {},
 ) => {
   if (purpose === "planning") {
     const local = await refreshLocalPlanningSource(ctx);
@@ -57,7 +61,15 @@ export const refreshPlanningSource = async (
   }
   const current = appBuilderWorkflowState.get();
   const sandbox = await getSourceBoundSandbox(ctx);
-  if (!canRefreshSource(current, purpose)) {
+  const currentDelivery =
+    options.optionalFieldPlanning === true &&
+    "applyReceipt" in current &&
+    currentDirectProductionProposalIsDelivered(ctx)
+      ? currentDirectProductionGrant(ctx, current.appSpec)
+      : undefined;
+  const reconciliationAnchor = currentDelivery?.subject.revision?.reconciliation;
+  const preserveSourceHead = reconciliationAnchor !== undefined && "applyReceipt" in current;
+  if (!preserveSourceHead && !canRefreshSource(current, purpose)) {
     return sandbox;
   }
   const selected = current.githubSource;
@@ -89,6 +101,54 @@ export const refreshPlanningSource = async (
     owner: selected.repository.owner,
     repositoryId: selected.repository.repositoryId,
   });
+  if (preserveSourceHead) {
+    const releaseId = retainedMergedSchemaReleaseId(
+      current.proposal.digest,
+      current.appSpec.appId,
+      reconciliationAnchor,
+    );
+    if (releaseId === undefined) {
+      throw new Error(
+        "Builder could not verify the saved app’s published schema before planning the new field.",
+      );
+    }
+    const publishedRelease = await readMergedReleaseSourceRecovery({
+      current,
+      ctx,
+      installationId: access.scope.installationId,
+      releaseId,
+      includeSchemaCue: true,
+      reconciliationAnchor,
+    });
+    if (publishedRelease === null || publishedRelease.cueSha256 === undefined) {
+      throw new Error("Builder could not read the verified published schema for this app.");
+    }
+    const credential = await runtime.acquireExistingSourceCredential({
+      installationId: access.scope.installationId,
+      repository: selected.repository,
+      sessionId: ctx.session.id,
+    });
+    ctx.abortSignal.throwIfAborted();
+    assertExactWorkflowState(
+      appBuilderWorkflowState.get(),
+      current,
+      "restore published schema before planning the approved app’s next revision",
+    );
+    await reconcilePlanningSource({
+      adoptPublishedSchemaCue: true,
+      appId: current.appSpec.appId,
+      baseline: baseline?.selection,
+      branchRef: selected.resolvedRef,
+      preserveSourceHead: true,
+      publishedRelease,
+      repository: `https://github.com/${repository}.git`,
+      sandbox,
+      sessionId: ctx.session.id,
+      targetSha: revision.headSha,
+      token: credential.token,
+    });
+    return sandbox;
+  }
   const prepared = await runtime.prepareExistingSource({
     access: observedAccess,
     callId: ctx.callId,

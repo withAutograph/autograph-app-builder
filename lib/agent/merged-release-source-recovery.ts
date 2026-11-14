@@ -1,22 +1,76 @@
 import { createHash } from "node:crypto";
 import type { ToolContext } from "eve/tools";
+import { z } from "zod";
 import { retainedProductionSourceReconciliation } from "./direct-production-state";
 import { draftReconciliationCompletions } from "./draft-reconciliation-state";
 import { githubPublicationRuntimeForSession } from "./deployment-github-publication-runtime";
 import { readExactCompiledOperatorReleaseForSession } from "./compiled-operator-artifacts";
 import type { ImmutableGitHubSourceReceipt } from "../repository/github-publication";
+import type { ExistingDraftReconciliationProposal } from "../repository/github-draft-reconciliation";
+import type { PublishedPlanningRelease } from "../repository/planning-source-reconciliation";
 import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 
+type ReconciliationAnchor = ReturnType<typeof retainedProductionSourceReconciliation>;
+const matchesAnchor = (
+  anchor: NonNullable<ReconciliationAnchor>,
+  proposal: ExistingDraftReconciliationProposal,
+): boolean =>
+  [
+    anchor.digest === proposal.digest,
+    anchor.originPublicationReceiptDigest === proposal.priorPublicationDigest,
+    anchor.resolvedTree === proposal.resolvedTree,
+    anchor.reviewDigest === proposal.reviewDigest,
+    anchor.pullRequestNumber === proposal.pullRequestNumber,
+    anchor.expectedHeadSha === proposal.expectedHeadSha,
+    anchor.expectedBaseSha === proposal.expectedBaseSha,
+  ].every(Boolean);
+
+const compiledManifestSources = z.looseObject({
+  app: z.string(),
+  schema_version: z.string(),
+  sources: z.record(z.string(), z.string()),
+});
+const cueSourceDigest = (
+  bytes: Buffer | undefined,
+  manifestSha256: string,
+  appId: string,
+  releaseId: string,
+): string | null => {
+  if (bytes === undefined || createHash("sha256").update(bytes).digest("hex") !== manifestSha256) {
+    return null;
+  }
+  try {
+    const manifest = compiledManifestSources.safeParse(JSON.parse(bytes.toString("utf-8")));
+    if (
+      !manifest.success ||
+      manifest.data.app !== appId ||
+      manifest.data.schema_version !== releaseId
+    ) {
+      return null;
+    }
+    const source = manifest.data.sources[`apps/${appId}/schema/${appId}.cue`];
+    return /^sha256:(?<digest>[a-f0-9]{64})$/u.exec(source ?? "")?.groups?.digest ?? null;
+  } catch {
+    // A malformed archived manifest cannot prove a CUE source digest.
+    return null;
+  }
+};
+
 /** Locate the exact earlier repair; provider and owned archive checks still follow. */
-export const retainedMergedSchemaReleaseId = (proposalDigest: string, appId: string) => {
-  const anchor = retainedProductionSourceReconciliation(proposalDigest);
+export const retainedMergedSchemaReleaseId = (
+  proposalDigest: string,
+  appId: string,
+  reconciliationAnchor?: ReconciliationAnchor,
+) => {
+  const anchor = reconciliationAnchor ?? retainedProductionSourceReconciliation(proposalDigest);
   const prior = draftReconciliationCompletions
     .get()
     .find(
       (entry) =>
         entry.appId === appId &&
         entry.preparation === "sealed-before-approval" &&
-        entry.proposal.digest === anchor?.digest,
+        anchor !== undefined &&
+        matchesAnchor(anchor, entry.proposal),
     );
   return prior?.compilation.release.status === "published"
     ? prior.compilation.release.selection.releaseId
@@ -33,21 +87,35 @@ export const readMergedReleaseSourceRecovery = async (input: {
   releaseId: string;
   ctx: Pick<ToolContext, "abortSignal" | "callId" | "session">;
   installationId: string;
-}) => {
+  includeSchemaCue?: true;
+  reconciliationAnchor?: ReconciliationAnchor;
+}): Promise<(PublishedPlanningRelease & { cueSha256?: string }) | null> => {
   const { current, releaseId, ctx, installationId } = input;
   const source = current.githubSource;
   const { appId } = current.appSpec;
   const prefix = `apps/${appId}/schema/release/${releaseId}/`;
+  // In delivered-source planning the historical apply belongs to the release
+  // being read. The explicit anchor still has to prove that exact merge below.
+  const readDeliveredSchema =
+    input.includeSchemaCue === true && input.reconciliationAnchor !== undefined;
   if (
     source === undefined ||
-    current.applyReceipt.changes.some(({ path }) => path.startsWith(prefix))
+    (!readDeliveredSchema &&
+      current.applyReceipt.changes.some(({ path }) => path.startsWith(prefix)))
   ) {
     return null;
   }
 
-  const anchor = retainedProductionSourceReconciliation(current.proposal.digest);
+  const anchor =
+    input.reconciliationAnchor ?? retainedProductionSourceReconciliation(current.proposal.digest);
   const matches = draftReconciliationCompletions.get().filter((completion) => {
     const { proposal, compilation } = completion;
+    if (
+      input.reconciliationAnchor !== undefined &&
+      !matchesAnchor(input.reconciliationAnchor, proposal)
+    ) {
+      return false;
+    }
     const sameSource = [
       completion.preparation === "sealed-before-approval",
       completion.appId === appId,
@@ -83,20 +151,16 @@ export const readMergedReleaseSourceRecovery = async (input: {
       continue;
     }
     const { selection } = compilation.release;
-    const anchored =
-      anchor !== undefined &&
-      [
-        anchor.digest === proposal.digest,
-        anchor.originPublicationReceiptDigest === proposal.priorPublicationDigest,
-        anchor.resolvedTree === proposal.resolvedTree,
-        anchor.reviewDigest === proposal.reviewDigest,
-        anchor.pullRequestNumber === proposal.pullRequestNumber,
-      ].every(Boolean);
+    const anchored = anchor !== undefined && matchesAnchor(anchor, proposal);
     const publicationDigest =
       completion.publishedOrigin?.publicationProposalDigest ??
       completion.publicationScope?.proposal.digest ??
       (anchored ? anchor.originPublicationDigest : undefined);
-    if (publicationDigest === undefined) {
+    if (
+      publicationDigest === undefined ||
+      (input.reconciliationAnchor !== undefined &&
+        publicationDigest !== input.reconciliationAnchor.originPublicationDigest)
+    ) {
       continue;
     }
     // oxlint-disable-next-line eslint/no-await-in-loop -- Only the exact provider-verified recorded correction can restore the private copy.
@@ -141,7 +205,7 @@ export const readMergedReleaseSourceRecovery = async (input: {
       continue;
     }
     ctx.abortSignal.throwIfAborted();
-    return {
+    const result: PublishedPlanningRelease & { cueSha256?: string } = {
       mergeSha: merged.mergeCommitSha,
       releaseId,
       files: Object.fromEntries(
@@ -151,6 +215,19 @@ export const readMergedReleaseSourceRecovery = async (input: {
         ]),
       ),
     };
+    if (input.includeSchemaCue === true) {
+      const cueSha256 = cueSourceDigest(
+        retained.files["release-manifest.json"],
+        selection.manifestSha256,
+        appId,
+        releaseId,
+      );
+      if (cueSha256 === null) {
+        continue;
+      }
+      result.cueSha256 = cueSha256;
+    }
+    return result;
   }
 
   return null;

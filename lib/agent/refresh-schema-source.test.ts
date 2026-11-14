@@ -20,7 +20,10 @@ interface FixtureState {
 }
 const mocks = vi.hoisted(() => ({
   accessUpdate: vi.fn(),
+  credential: vi.fn(),
   classify: vi.fn(),
+  currentGrant: vi.fn(),
+  delivered: vi.fn(),
   inspect: vi.fn(),
   observeLocal: vi.fn<() => Promise<void>>().mockResolvedValue(),
   prepare: vi.fn(),
@@ -36,6 +39,10 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("./refresh-local-planning-source", () => ({
   refreshLocalPlanningSource: mocks.observeLocal,
+}));
+vi.mock("./direct-production-state", () => ({
+  currentDirectProductionGrant: mocks.currentGrant,
+  currentDirectProductionProposalIsDelivered: mocks.delivered,
 }));
 vi.mock("./app-baseline-state", () => ({ appBaselineState: { get: () => {} } }));
 vi.mock("./source-bound-sandbox", () => ({
@@ -58,7 +65,11 @@ vi.mock("./source-state", () => ({
 }));
 vi.mock("./deployment-repository-access-runtime", () => ({
   repositoryAccessRuntimeForSession: async () =>
-    await Promise.resolve({ classify: mocks.classify, prepareExistingSource: mocks.prepare }),
+    await Promise.resolve({
+      acquireExistingSourceCredential: mocks.credential,
+      classify: mocks.classify,
+      prepareExistingSource: mocks.prepare,
+    }),
 }));
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: async () =>
@@ -244,6 +255,42 @@ describe("shared source refresh before schema compilation", () => {
     );
     expect(mocks.reconcile).toHaveBeenCalledTimes(1);
     expect(mocks.updateWorkflow).not.toHaveBeenCalled();
+  });
+  it("adopts the verified CUE privately before planning a new optional field", async () => {
+    mocks.state.phase = "reviewed";
+    const reconciliation = { digest: "prior-repair" };
+    const publishedRelease = {
+      mergeSha: "c".repeat(40),
+      releaseId: "v8",
+      files: { "app-artifact.json": "d".repeat(64) },
+      cueSha256: "e".repeat(64),
+    };
+    mocks.delivered.mockReturnValueOnce(true);
+    mocks.currentGrant.mockReturnValueOnce({ subject: { revision: { reconciliation } } });
+    mocks.retainedReleaseId.mockReturnValueOnce("v8");
+    mocks.recoverRelease.mockResolvedValueOnce(publishedRelease);
+    mocks.credential.mockResolvedValueOnce({ token: "fixture-read-token" });
+    await expect(
+      refreshPlanningSource(ctx as never, "planning", { optionalFieldPlanning: true }),
+    ).resolves.toBe(mocks.sandbox);
+    expect(mocks.recoverRelease).toHaveBeenCalledWith({
+      current: mocks.state,
+      ctx,
+      includeSchemaCue: true,
+      installationId: "owned-installation",
+      reconciliationAnchor: reconciliation,
+      releaseId: "v8",
+    });
+    expect(mocks.reconcile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adoptPublishedSchemaCue: true,
+        preserveSourceHead: true,
+        publishedRelease,
+        targetSha: "b".repeat(40),
+      }),
+    );
+    expect(mocks.updateWorkflow).not.toHaveBeenCalled();
+    expect(mocks.accessUpdate).not.toHaveBeenCalled();
   });
   it("keeps ordinary planning refresh out of already applied builds", async () => {
     await refreshPlanningSource(ctx as never);
