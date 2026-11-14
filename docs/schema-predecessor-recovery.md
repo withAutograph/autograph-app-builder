@@ -28,6 +28,16 @@ release and returns `schema_release_identity_reused` before recording a current
 operator selection. The internal build agent authors the new ID and compiles
 again; this recovery never changes authored CUE or the generated pointer itself.
 
+Before drafting the next optional field after an already delivered draft
+correction, Builder checks the saved publication and its compiler manifest
+against the connected branch. It restores that exact published CUE and
+generated predecessor in the private checkout, checkpointing displaced bytes
+and keeping the approved source binding and unrelated app edits. The new
+approval therefore presents the field on top of the published CUE even if a
+private validation copy still contains older field labels. If the selected
+branch has since changed the CUE, Builder preserves both versions for review
+instead of silently replacing the newer source.
+
 A combined Production approval for an optional field in the connected app uses
 the repository's checked history. A private validation installation cannot
 replace published files, even when it reports the same release ID. If the saved

@@ -1,7 +1,10 @@
 /* oxlint-disable anti-slop/no-module-mocking -- Isolate session state, publication reads and artifact storage while exercising the recovery decision. */
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { readMergedReleaseSourceRecovery } from "./merged-release-source-recovery";
+import {
+  readMergedReleaseSourceRecovery,
+  retainedMergedSchemaReleaseId,
+} from "./merged-release-source-recovery";
 
 const mocks = vi.hoisted(() => ({
   completions: vi.fn(),
@@ -37,6 +40,7 @@ const repository = {
 const originalProposalDigest = "1".repeat(64);
 const originalReceiptDigest = "2".repeat(64);
 const reviewedHead = "3".repeat(40);
+const expectedBaseSha = "6".repeat(40);
 const resolvedTree = "4".repeat(40);
 const mergeSha = "5".repeat(40);
 const artifactRef = "retained-v8";
@@ -47,6 +51,8 @@ const reconciliationDigest = "b".repeat(64);
 const priorReviewDigest = "c".repeat(64);
 const artifact = Buffer.from('{"version":"2026-11-16.v8"}');
 const sql = Buffer.from("checked release member");
+const cuePath = `apps/${appId}/schema/${appId}.cue`;
+const cueSha256 = "d".repeat(64);
 
 const request = (changes: readonly string[] = [`apps/${appId}/app/page.tsx`]): RecoveryRequest => {
   const current = {
@@ -74,7 +80,7 @@ const request = (changes: readonly string[] = [`apps/${appId}/app/page.tsx`]): R
   return input as never;
 };
 
-const completion = (repositoryId = repository.repositoryId) => ({
+const completion = (repositoryId = repository.repositoryId, manifestSha256 = selectedManifest) => ({
   appId,
   preparation: "sealed-before-approval",
   proposal: {
@@ -87,6 +93,8 @@ const completion = (repositoryId = repository.repositoryId) => ({
     priorPublicationDigest: originalReceiptDigest,
     pullRequestNumber: 1822,
     resolvedTree,
+    expectedHeadSha: reviewedHead,
+    expectedBaseSha,
   },
   publishedOrigin: { publicationProposalDigest: originalProposalDigest },
   publicationScope: { proposal: { digest: originalProposalDigest } },
@@ -98,7 +106,7 @@ const completion = (repositoryId = repository.repositoryId) => ({
         artifactRef,
         appSpecDigest,
         schemaSha256: selectedSchema,
-        manifestSha256: selectedManifest,
+        manifestSha256,
       },
     },
   },
@@ -109,6 +117,36 @@ const mergedPullRequest = {
   reviewedRevision: true,
   reviewedTarget: { repositoryId: repository.repositoryId, pullRequestNumber: 1822 },
   state: "merged",
+};
+
+const deliveredAnchor = {
+  digest: reconciliationDigest,
+  originPublicationDigest: originalProposalDigest,
+  originPublicationReceiptDigest: originalReceiptDigest,
+  resolvedTree,
+  pullRequestNumber: 1822,
+  reviewDigest: priorReviewDigest,
+  expectedHeadSha: reviewedHead,
+  expectedBaseSha,
+};
+const archivedManifest = (manifest: Buffer, changedAfterCapture = false) => {
+  const hash = createHash("sha256").update(manifest).digest("hex");
+  mocks.completions.mockReturnValue([completion(repository.repositoryId, hash)]);
+  mocks.readRelease.mockResolvedValue({
+    selection: {
+      releaseId,
+      schemaSha256: selectedSchema,
+      manifestSha256: hash,
+      publishedSource: { gitTree: resolvedTree },
+    },
+    files: {
+      "app-artifact.json": artifact,
+      "schema.sql": sql,
+      "release-manifest.json": changedAfterCapture
+        ? Buffer.concat([manifest, Buffer.from(" ")])
+        : manifest,
+    },
+  });
 };
 
 describe("recover a checked release from the app's merged source", () => {
@@ -164,6 +202,76 @@ describe("recover a checked release from the app's merged source", () => {
     );
   });
 
+  it("reads the requested CUE digest from the exact delivered anchor and archived manifest", async () => {
+    archivedManifest(
+      Buffer.from(
+        JSON.stringify({
+          app: appId,
+          schema_version: releaseId,
+          sources: { [cuePath]: `sha256:${cueSha256}` },
+        }),
+      ),
+    );
+    mocks.anchor.mockReturnValue({ ...deliveredAnchor, digest: "7".repeat(64) });
+    const input = {
+      ...request([releasePath]),
+      reconciliationAnchor: deliveredAnchor,
+      includeSchemaCue: true as const,
+    };
+    expect(retainedMergedSchemaReleaseId("current-planning-proposal", appId, deliveredAnchor)).toBe(
+      releaseId,
+    );
+    await expect(readMergedReleaseSourceRecovery(input)).resolves.toMatchObject({
+      mergeSha,
+      releaseId,
+      cueSha256,
+    });
+    expect(mocks.anchor).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing CUE", {}],
+    ["other app's CUE", { "apps/other/schema/other.cue": `sha256:${cueSha256}` }],
+    ["malformed digest", { [cuePath]: "sha256:not-a-digest" }],
+  ])(
+    "treats an archived manifest with %s as unavailable when requested",
+    async (_reason, sources) => {
+      archivedManifest(
+        Buffer.from(JSON.stringify({ app: appId, schema_version: releaseId, sources })),
+      );
+      await expect(
+        readMergedReleaseSourceRecovery({ ...request(), includeSchemaCue: true }),
+      ).resolves.toBeNull();
+    },
+  );
+
+  it("cannot prove CUE by reading modified archived manifest bytes", async () => {
+    archivedManifest(
+      Buffer.from(
+        JSON.stringify({
+          app: appId,
+          schema_version: releaseId,
+          sources: { [cuePath]: `sha256:${cueSha256}` },
+        }),
+      ),
+      true,
+    );
+    await expect(
+      readMergedReleaseSourceRecovery({ ...request(), includeSchemaCue: true }),
+    ).resolves.toBeNull();
+  });
+
+  it("does not fall back to another completion when the supplied anchor does not match", async () => {
+    const reconciliationAnchor = { ...deliveredAnchor, expectedBaseSha: "e".repeat(40) };
+    expect(
+      retainedMergedSchemaReleaseId("current-planning-proposal", appId, reconciliationAnchor),
+    ).toBeUndefined();
+    await expect(
+      readMergedReleaseSourceRecovery({ ...request(), reconciliationAnchor }),
+    ).resolves.toBeNull();
+    expect(mocks.runtime).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["is open", { state: "open" }],
     ["has moved", { reviewedRevision: false }],
@@ -182,14 +290,7 @@ describe("recover a checked release from the app's merged source", () => {
     mocks.completions.mockReturnValue([
       { appId: preservedAppId, preparation, proposal, compilation },
     ]);
-    const anchor = {
-      digest: reconciliationDigest,
-      originPublicationDigest: originalProposalDigest,
-      originPublicationReceiptDigest: originalReceiptDigest,
-      resolvedTree,
-      pullRequestNumber: proposal.pullRequestNumber,
-      reviewDigest: priorReviewDigest,
-    };
+    const anchor = { ...deliveredAnchor };
     mocks.anchor.mockReturnValue({ ...anchor, reviewDigest: "d".repeat(64) });
     await expect(readMergedReleaseSourceRecovery(request())).resolves.toBeNull();
     expect(mocks.inspectHead).not.toHaveBeenCalled();
@@ -220,6 +321,15 @@ describe("recover a checked release from the app's merged source", () => {
 
   it("leaves approved edits and history from another repository untouched", async () => {
     await expect(readMergedReleaseSourceRecovery(request([releasePath]))).resolves.toBeNull();
+    await expect(
+      readMergedReleaseSourceRecovery({
+        ...request([releasePath]),
+        reconciliationAnchor: deliveredAnchor,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      readMergedReleaseSourceRecovery({ ...request([releasePath]), includeSchemaCue: true }),
+    ).resolves.toBeNull();
     mocks.completions.mockReturnValue([completion("other-repository")]);
     await expect(readMergedReleaseSourceRecovery(request())).resolves.toBeNull();
     expect(mocks.runtime).not.toHaveBeenCalled();

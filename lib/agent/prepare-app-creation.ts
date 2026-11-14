@@ -71,7 +71,10 @@ export const prepareAppCreation = async (
       "Finalize the UI and accept a build-ready AppSpec before running target planning.",
     );
   }
-  const sandboxForPlanning = await refreshPlanningSource(ctx);
+  const sandboxForPlanning =
+    optionalTextField === undefined
+      ? await refreshPlanningSource(ctx)
+      : await refreshPlanningSource(ctx, "planning", { optionalFieldPlanning: true });
   const planningState = appBuilderWorkflowState.get();
   let existingAppChanges = authoredChanges;
   let schemaPreimage: { digest: string; path: string } | undefined;
