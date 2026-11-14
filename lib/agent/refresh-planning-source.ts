@@ -180,6 +180,7 @@ export const refreshPlanningSource = async (
         );
         await reconcilePlanningSource({ ...reconciliation, publishedRelease: recovered });
       }
+      const publishedReleaseId = recovered?.releaseId;
       const publishedManifestSha256 = recovered?.files["release-manifest.json"];
       const publishedArtifactSha256 = recovered?.files["app-artifact.json"];
       const candidate = saved?.candidate;
@@ -190,7 +191,7 @@ export const refreshPlanningSource = async (
         (originalPrior.previousManifestSha256 !== undefined &&
           publishedManifestSha256 !== originalPrior.previousManifestSha256);
       const exactRecovery =
-        recovered !== null &&
+        publishedReleaseId !== undefined &&
         publishedManifestSha256 !== undefined &&
         publishedArtifactSha256 !== undefined;
       if (
@@ -218,7 +219,7 @@ export const refreshPlanningSource = async (
             previousManifestSha256:
               originalPrior?.previousManifestSha256 ?? publishedManifestSha256,
             publishedManifestSha256,
-            releaseId: recovered.releaseId,
+            releaseId: publishedReleaseId,
           },
           sandbox,
           signal: ctx.abortSignal,
