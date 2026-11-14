@@ -28,7 +28,10 @@ import {
   readDirectProductionCorrection,
 } from "./direct-production-correction";
 import type { DirectProductionCorrection } from "./direct-production-correction";
-import type { readOptionalFieldCorrectionProof } from "./optional-field-correction-proof";
+import type {
+  OptionalFieldCorrectionProofFailure,
+  readOptionalFieldCorrectionProof,
+} from "./optional-field-correction-proof";
 import { githubPublicationRuntimeForSession } from "./deployment-github-publication-runtime";
 import { observeMergedAppProduction } from "./app-production-observation";
 import type { GitHubPublicationRuntime } from "./github-publication-runtime";
@@ -829,6 +832,7 @@ interface ReconciliationObservationPorts {
 
 export type ProductionReconciliationFailure =
   | ReconciliationCandidateFailure
+  | OptionalFieldCorrectionProofFailure
   | "candidate-review-unavailable"
   | "retained-draft-review-only"
   | "current-draft-approval-unavailable"
@@ -1113,7 +1117,7 @@ export const prepareDirectProductionDraftReconciliation = async (
   const priorCueChanged =
     corrected.schemaChange.priorCueSha256 !== grant.subject.revision.schemaChange.priorCueSha256;
   if (priorCueChanged) {
-    const proof = await ports.verifyEquivalentCorrection?.({
+    const result = await ports.verifyEquivalentCorrection?.({
       ctx,
       current: state,
       candidate,
@@ -1127,9 +1131,13 @@ export const prepareDirectProductionDraftReconciliation = async (
     if (!isCurrent()) {
       return releaseSelectionChanged;
     }
-    if (proof === null || proof === undefined) {
+    if (result === undefined) {
       return schemaPredecessorMismatch;
     }
+    if ("reason" in result) {
+      return result.reason;
+    }
+    const { proof } = result;
     const correction = createDirectProductionCorrection({
       version: 1,
       originalGrantDigest: grant.digest,

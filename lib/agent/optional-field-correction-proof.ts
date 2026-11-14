@@ -40,6 +40,30 @@ interface CorrectionProofInput {
   priorMergeSha: string;
 }
 
+// oxlint-disable-next-line sonarjs/max-union-size -- Each closed stage identifies an independent proof input without exposing archive contents.
+export type OptionalFieldCorrectionProofFailure =
+  | "correction-source-scope"
+  | "original-draft-preimage"
+  | "installed-identity"
+  | "merged-predecessor"
+  | "original-draft-archive"
+  | "corrected-draft-archive"
+  | "installed-predecessor-archive"
+  | "original-predecessor-marker"
+  | "original-predecessor-archive"
+  | "correction-equivalence";
+
+type CorrectionProofResult =
+  | { reason: OptionalFieldCorrectionProofFailure }
+  | {
+      proof: {
+        priorMergeSha: string;
+        originalReleaseManifestSha256: string;
+        installed: ReturnType<typeof releaseIdentity> & { cueSha256: string };
+        candidate: ReturnType<typeof releaseIdentity>;
+      };
+    };
+
 interface CorrectionProofReads {
   readInstalled: typeof readInstalledSchemaPredecessor;
   readMergedSource: typeof readMergedReleaseSourceRecovery;
@@ -138,12 +162,12 @@ const matchArchivedPrior = (
 export const readOptionalFieldCorrectionProof = async (
   input: CorrectionProofInput,
   reads: CorrectionProofReads = defaultReads,
-) => {
+): Promise<CorrectionProofResult> => {
   const { ctx, current, candidate, corrected, priorMergeSha } = input;
   ctx.abortSignal.throwIfAborted();
   const scope = readSourceScope(input);
   if (scope === null) {
-    return null;
+    return { reason: "correction-source-scope" };
   }
   const { subject, review, originalChange, predecessorAnchor } = scope;
   const { appId, appSpecDigest, installationId, repositoryId } = subject;
@@ -154,7 +178,7 @@ export const readOptionalFieldCorrectionProof = async (
   const originalArtifact = draftPreimage("app-artifact.json");
   const originalManifest = draftPreimage("release-manifest.json");
   if (originalArtifact === undefined || originalManifest === undefined) {
-    return null;
+    return { reason: "original-draft-preimage" };
   }
   const session = {
     adapterSessionId: ctx.session.id,
@@ -166,137 +190,165 @@ export const readOptionalFieldCorrectionProof = async (
     sessionAuth: ctx.session.auth,
     signal: ctx.abortSignal,
   };
+  let installed: Predecessor;
   try {
-    const installed = await reads.readInstalled(appId, ctx);
-    const confirmsPrior = [
-      installed.appId === appId,
-      installed.repositoryId === repositoryId,
-      installed.cueSha256 === schemaChange.priorCueSha256,
-      installed.cueSha256 !== originalChange.priorCueSha256,
-    ].every(Boolean);
-    if (!confirmsPrior) {
-      return null;
-    }
-    const [published, original, next, activePrior] = await Promise.all([
-      reads.readMergedSource({
-        current,
-        ctx,
-        installationId,
+    installed = await reads.readInstalled(appId, ctx);
+  } catch {
+    ctx.abortSignal.throwIfAborted();
+    return { reason: "installed-identity" };
+  }
+  const confirmsPrior = [
+    installed.appId === appId,
+    installed.repositoryId === repositoryId,
+    installed.cueSha256 === schemaChange.priorCueSha256,
+    installed.cueSha256 !== originalChange.priorCueSha256,
+  ].every(Boolean);
+  if (!confirmsPrior) {
+    return { reason: "installed-identity" };
+  }
+
+  const [publishedRead, originalRead, nextRead, activePriorRead] = await Promise.allSettled([
+    reads.readMergedSource({
+      current,
+      ctx,
+      installationId,
+      releaseId: installed.releaseId,
+      includeSchemaCue: true,
+      includeSchemaCueBytes: true,
+      reconciliationAnchor: predecessorAnchor,
+    }),
+    reads.readRelease({
+      ...session,
+      lookup: {
+        appSpecDigest,
+        releaseId: selection.releaseId,
+        schemaSha256: originalArtifact,
+        manifestSha256: originalManifest,
+        publishedSource: {
+          repositoryId,
+          branch: proposal.branchName,
+          gitSha: proposal.expectedHeadSha,
+        },
+      },
+    }),
+    reads.readRelease({
+      ...session,
+      lookup: { appSpecDigest, artifactRef: selection.artifactRef },
+    }),
+    reads.readRelease({
+      ...session,
+      lookup: {
         releaseId: installed.releaseId,
-        includeSchemaCue: true,
-        reconciliationAnchor: predecessorAnchor,
-      }),
-      reads.readRelease({
-        ...session,
-        lookup: {
-          appSpecDigest,
-          releaseId: selection.releaseId,
-          schemaSha256: originalArtifact,
-          manifestSha256: originalManifest,
-          publishedSource: {
-            repositoryId,
-            branch: proposal.branchName,
-            gitSha: proposal.expectedHeadSha,
-          },
-        },
-      }),
-      reads.readRelease({
-        ...session,
-        lookup: { appSpecDigest, artifactRef: selection.artifactRef },
-      }),
-      reads.readRelease({
-        ...session,
-        lookup: {
-          releaseId: installed.releaseId,
-          schemaSha256: installed.artifactSha256,
-          manifestSha256: installed.manifestSha256,
-        },
-      }),
-    ]);
-    if (published === null || activePrior === undefined) {
-      return null;
-    }
-    if (original === undefined || next === undefined) {
-      return null;
-    }
-    const priorMatches = [
-      published.mergeSha === priorMergeSha,
-      published.releaseId === installed.releaseId,
-      published.cueSha256 === installed.cueSha256,
-      matchArchivedPrior(activePrior, installed, published),
-    ].every(Boolean);
-    if (!priorMatches || published.cueSha256 === undefined) {
-      return null;
-    }
-    if (!isEquivalentCompiledOperatorRelease(next.selection, selection)) {
-      return null;
-    }
-    const publishedDraft = original.selection.publishedSource;
-    const expectedDraft = [
-      original.selection.appSpecDigest === appSpecDigest,
-      original.selection.releaseId === selection.releaseId,
-      original.selection.schemaSha256 === originalArtifact,
-      original.selection.manifestSha256 === originalManifest,
-      publishedDraft?.repositoryId === repositoryId,
-      publishedDraft?.branch === proposal.branchName,
-      publishedDraft?.gitSha === proposal.expectedHeadSha,
-      publishedDraft?.gitTree === proposal.expectedHeadTree,
-    ].every(Boolean);
-    if (!expectedDraft) {
-      return null;
-    }
-    const originalPriorProof = readOptionalTextReleasePredecessor(original.files);
-    if (originalPriorProof === null || originalPriorProof.releaseId !== installed.releaseId) {
-      return null;
-    }
-    const originalPrior = await reads.readRelease({
+        schemaSha256: installed.artifactSha256,
+        manifestSha256: installed.manifestSha256,
+      },
+    }),
+  ]);
+  ctx.abortSignal.throwIfAborted();
+  if (publishedRead.status !== "fulfilled" || publishedRead.value === null) {
+    return { reason: "merged-predecessor" };
+  }
+  if (originalRead.status !== "fulfilled" || originalRead.value === undefined) {
+    return { reason: "original-draft-archive" };
+  }
+  if (nextRead.status !== "fulfilled" || nextRead.value === undefined) {
+    return { reason: "corrected-draft-archive" };
+  }
+  if (activePriorRead.status !== "fulfilled" || activePriorRead.value === undefined) {
+    return { reason: "installed-predecessor-archive" };
+  }
+  const { value: published } = publishedRead;
+  const { value: original } = originalRead;
+  const { value: next } = nextRead;
+  const { value: activePrior } = activePriorRead;
+  const priorMatches = [
+    published.mergeSha === priorMergeSha,
+    published.releaseId === installed.releaseId,
+    published.cueSha256 === installed.cueSha256,
+  ].every(Boolean);
+  if (!priorMatches || published.cueSha256 === undefined) {
+    return { reason: "merged-predecessor" };
+  }
+  if (!matchArchivedPrior(activePrior, installed, published)) {
+    return { reason: "installed-predecessor-archive" };
+  }
+  if (!isEquivalentCompiledOperatorRelease(next.selection, selection)) {
+    return { reason: "corrected-draft-archive" };
+  }
+  const publishedDraft = original.selection.publishedSource;
+  const expectedDraft = [
+    original.selection.appSpecDigest === appSpecDigest,
+    original.selection.releaseId === selection.releaseId,
+    original.selection.schemaSha256 === originalArtifact,
+    original.selection.manifestSha256 === originalManifest,
+    publishedDraft?.repositoryId === repositoryId,
+    publishedDraft?.branch === proposal.branchName,
+    publishedDraft?.gitSha === proposal.expectedHeadSha,
+    publishedDraft?.gitTree === proposal.expectedHeadTree,
+  ].every(Boolean);
+  if (!expectedDraft) {
+    return { reason: "original-draft-archive" };
+  }
+  const originalPriorProof = readOptionalTextReleasePredecessor(original.files);
+  if (originalPriorProof === null || originalPriorProof.releaseId !== installed.releaseId) {
+    return { reason: "original-predecessor-marker" };
+  }
+  let originalPrior: CapturedRelease | undefined;
+  try {
+    originalPrior = await reads.readRelease({
       ...session,
       lookup: {
         releaseId: originalPriorProof.releaseId,
         schemaSha256: originalPriorProof.artifactSha256,
       },
     });
-    if (originalPrior === undefined) {
-      return null;
-    }
+  } catch {
     ctx.abortSignal.throwIfAborted();
-    const predecessor = {
-      releaseId: installed.releaseId,
-      artifactSha256: installed.artifactSha256,
-      manifestSha256: installed.manifestSha256,
-      cueSha256: installed.cueSha256,
-    };
-    const verified = reads.verify({
-      appId,
-      original: {
-        ...originalChange,
-        prior: { ...originalPrior.selection, files: originalPrior.files },
-        candidate: { ...original.selection, files: original.files },
-      },
-      corrected: {
-        ...schemaChange,
-        prior: { ...activePrior.selection, files: activePrior.files },
-        candidate: { ...next.selection, files: next.files },
-      },
-      published: {
-        releaseId: published.releaseId,
-        artifactSha256: published.files["app-artifact.json"] ?? "",
-        manifestSha256: published.files["release-manifest.json"] ?? "",
-        cueSha256: published.cueSha256,
-      },
-      installed: predecessor,
-      headChanges: review.headChanges,
-    });
-    return verified
-      ? {
+    return { reason: "original-predecessor-archive" };
+  }
+  ctx.abortSignal.throwIfAborted();
+  if (originalPrior === undefined && published.cueBytes === undefined) {
+    return { reason: "original-predecessor-archive" };
+  }
+  const predecessor = {
+    releaseId: installed.releaseId,
+    artifactSha256: installed.artifactSha256,
+    manifestSha256: installed.manifestSha256,
+    cueSha256: installed.cueSha256,
+  };
+  const approvedPair: Parameters<CorrectionProofReads["verify"]>[0]["original"] = {
+    ...originalChange,
+    candidate: { ...original.selection, files: original.files },
+  };
+  if (originalPrior !== undefined) {
+    approvedPair.prior = { ...originalPrior.selection, files: originalPrior.files };
+  }
+  const verified = reads.verify({
+    appId,
+    original: approvedPair,
+    corrected: {
+      ...schemaChange,
+      prior: { ...activePrior.selection, files: activePrior.files },
+      candidate: { ...next.selection, files: next.files },
+    },
+    published: {
+      releaseId: published.releaseId,
+      artifactSha256: published.files["app-artifact.json"] ?? "",
+      manifestSha256: published.files["release-manifest.json"] ?? "",
+      cueSha256: published.cueSha256,
+    },
+    publishedPriorCue: published.cueBytes,
+    installed: predecessor,
+    headChanges: review.headChanges,
+  });
+  return verified
+    ? {
+        proof: {
           priorMergeSha,
           originalReleaseManifestSha256: originalManifest,
           installed: predecessor,
           candidate: releaseIdentity(next),
-        }
-      : null;
-  } catch {
-    ctx.abortSignal.throwIfAborted();
-    return null;
-  }
+        },
+      }
+    : { reason: "correction-equivalence" };
 };

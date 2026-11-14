@@ -264,18 +264,20 @@ describe("read-only evidence for retaining a Production schema approval", () => 
   it("uses the original published tree, active readback, exact predecessor merge, and sealed capture", async () => {
     const { input, reads, original, next, installed } = fixture();
     await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toEqual({
-      priorMergeSha,
-      originalReleaseManifestSha256: original.selection.manifestSha256,
-      installed: {
-        releaseId: installed.releaseId,
-        artifactSha256: installed.artifactSha256,
-        manifestSha256: installed.manifestSha256,
-        cueSha256: installed.cueSha256,
-      },
-      candidate: {
-        releaseId: next.selection.releaseId,
-        artifactSha256: next.selection.schemaSha256,
-        manifestSha256: next.selection.manifestSha256,
+      proof: {
+        priorMergeSha,
+        originalReleaseManifestSha256: original.selection.manifestSha256,
+        installed: {
+          releaseId: installed.releaseId,
+          artifactSha256: installed.artifactSha256,
+          manifestSha256: installed.manifestSha256,
+          cueSha256: installed.cueSha256,
+        },
+        candidate: {
+          releaseId: next.selection.releaseId,
+          artifactSha256: next.selection.schemaSha256,
+          manifestSha256: next.selection.manifestSha256,
+        },
       },
     });
     expect(reads.readInstalled).toHaveBeenCalledExactlyOnceWith(appId, input.ctx);
@@ -285,6 +287,7 @@ describe("read-only evidence for retaining a Production schema approval", () => 
       installationId,
       releaseId: priorVersion,
       includeSchemaCue: true,
+      includeSchemaCueBytes: true,
       reconciliationAnchor: input.predecessorGrant.subject.revision?.reconciliation,
     });
     const { proposal } = input.corrected;
@@ -305,28 +308,46 @@ describe("read-only evidence for retaining a Production schema approval", () => 
   it("stops when the installed schema still has the stale source", async () => {
     const { input, reads, installed } = fixture();
     reads.readInstalled.mockResolvedValue({ ...installed, cueSha256: oldPriorCue });
-    await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toBeNull();
+    await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toEqual({
+      reason: "installed-identity",
+    });
     expect(reads.readRelease).not.toHaveBeenCalled();
   });
 
   it("stops when a different earlier merge is observed", async () => {
     const { input, reads, published } = fixture();
     reads.readMergedSource.mockResolvedValue({ ...published, mergeSha: "9".repeat(40) });
-    await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toBeNull();
+    await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toEqual({
+      reason: "merged-predecessor",
+    });
     expect(reads.verify).not.toHaveBeenCalled();
   });
 
-  it("stops when the original published capture belongs to another tree", async () => {
-    const { input, reads, original } = fixture();
-    if (original.selection.publishedSource === undefined) {
-      throw new Error("Publication fixture required");
-    }
-    original.selection.publishedSource.gitTree = "9".repeat(40);
-    await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toBeNull();
-    expect(reads.verify).not.toHaveBeenCalled();
+  it.each([{ gitTree: "9".repeat(40) }, { branch: "other-branch" }, { repositoryId: "999" }])(
+    "refuses an original capture from a different publication (%j)",
+    async (change) => {
+      const { input, reads, original } = fixture();
+      if (original.selection.publishedSource === undefined) {
+        throw new Error("Publication fixture required");
+      }
+      Object.assign(original.selection.publishedSource, change);
+      await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toEqual({
+        reason: "original-draft-archive",
+      });
+      expect(reads.verify).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects a predecessor grant from another GitHub installation", async () => {
+    const { input, reads } = fixture();
+    input.predecessorGrant.subject.installationId = "999";
+    await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toEqual({
+      reason: "correction-source-scope",
+    });
+    expect(reads.readInstalled).not.toHaveBeenCalled();
   });
 
-  it("requires the old retained predecessor and never constructs absent release bytes", async () => {
+  it("requires merged CUE proof if the old retained predecessor is missing", async () => {
     const { input, reads, original, next, activePrior } = fixture();
     reads.readRelease
       .mockReset()
@@ -334,14 +355,55 @@ describe("read-only evidence for retaining a Production schema approval", () => 
       .mockResolvedValueOnce(next)
       .mockResolvedValueOnce(activePrior)
       .mockImplementationOnce(async () => {});
-    await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toBeNull();
+    await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toEqual({
+      reason: "original-predecessor-archive",
+    });
+    expect(reads.verify).not.toHaveBeenCalled();
+  });
+
+  it("supplies verified merged CUE when the stale predecessor archive is absent", async () => {
+    const { input, reads, original, next, activePrior, published } = fixture();
+    reads.readRelease
+      .mockReset()
+      .mockResolvedValueOnce(original)
+      .mockResolvedValueOnce(next)
+      .mockResolvedValueOnce(activePrior)
+      .mockImplementationOnce(async () => {});
+    const cueBytes = Buffer.from("verified merged source");
+    reads.readMergedSource.mockResolvedValue({ ...published, cueBytes });
+    await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toMatchObject({
+      proof: { priorMergeSha },
+    });
+    expect(reads.verify).toHaveBeenCalledOnce();
+    const verifierInput = reads.verify.mock.calls[0]?.[0];
+    expect(verifierInput?.original.prior).toBeUndefined();
+    expect(verifierInput?.publishedPriorCue).toEqual(cueBytes);
+  });
+
+  it("cannot use merged CUE when the stale predecessor archive lookup throws", async () => {
+    const { input, reads, original, next, activePrior, published } = fixture();
+    reads.readRelease
+      .mockReset()
+      .mockResolvedValueOnce(original)
+      .mockResolvedValueOnce(next)
+      .mockResolvedValueOnce(activePrior)
+      .mockRejectedValueOnce(new Error("opaque archive failure"));
+    reads.readMergedSource.mockResolvedValue({
+      ...published,
+      cueBytes: Buffer.from("verified merged source"),
+    });
+    await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toEqual({
+      reason: "original-predecessor-archive",
+    });
     expect(reads.verify).not.toHaveBeenCalled();
   });
 
   it("stops before readback when the retained review does not hash to the proposal", async () => {
     const { input, reads } = fixture();
     input.corrected.proposal.headChangesDigest = digest("stale");
-    await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toBeNull();
+    await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toEqual({
+      reason: "correction-source-scope",
+    });
     expect(reads.readInstalled).not.toHaveBeenCalled();
   });
 });

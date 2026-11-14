@@ -1,15 +1,20 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
+import { addOptionalTextField } from "../repository/optional-text-field";
 import type { OverlayChange } from "../repository/target-apply";
 import { GENERATED_RELEASE_MEMBERS } from "./hosted-operator-sandbox-launcher";
 import {
   assertOptionalTextProductionTransition,
   readOptionalTextReleasePredecessor,
+  readTransitionForRecoveredOptionalField,
 } from "./repository-production-schema-revision";
 
 type Transition = Parameters<typeof assertOptionalTextProductionTransition>[0];
 type ReleasePair = Omit<Transition, "appId">;
+type OriginalRelease = Omit<ReleasePair, "prior"> & {
+  prior?: ReleasePair["prior"] | undefined;
+};
 
 interface PredecessorIdentity {
   releaseId: string;
@@ -32,7 +37,7 @@ const manifestSchema = z.looseObject({
   compiler: z.json(),
   sources: z.record(z.string(), z.string()),
 });
-const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
+const sha256 = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
 
 type Artifact = z.infer<typeof artifactSchema>;
 
@@ -86,10 +91,102 @@ const compilerInputs = (candidate: ReleasePair["candidate"], cuePath: string) =>
   return { compiler, sources };
 };
 
+const changedExistingLabels = (prior: Artifact, candidate: Artifact) =>
+  prior.schema.models.flatMap((model) => {
+    const candidateModel = candidate.schema.models.find(({ id }) => id === model.id);
+    return model.fields.flatMap(({ id, label }) => {
+      const found = candidateModel?.fields.find((field) => field.id === id)?.label;
+      return found === undefined || found === label ? [] : [{ canonical: label, stale: found }];
+    });
+  });
+
+const replaceSingleLabel = (bytes: Buffer, labels: { canonical: string; stale: string }) => {
+  const raw = bytes.toString("utf-8");
+  if (!Buffer.from(raw).equals(bytes)) {
+    throw new Error("The checked label source is not UTF-8.");
+  }
+  const canonical = JSON.stringify(labels.canonical);
+  const index = raw.indexOf(canonical);
+  if (index === -1 || index !== raw.lastIndexOf(canonical)) {
+    throw new Error("The checked label does not have a unique literal.");
+  }
+  return raw.slice(0, index) + JSON.stringify(labels.stale) + raw.slice(index + canonical.length);
+};
+
+const recoverOriginalPair = (input: {
+  appId: string;
+  original: OriginalRelease;
+  corrected: ReleasePair;
+  canonicalCue: Buffer;
+  canonicalPrior: Artifact;
+}) => {
+  const { appId, original, corrected, canonicalCue, canonicalPrior } = input;
+  const candidate = readArtifact(original.candidate);
+  const changes = changedExistingLabels(canonicalPrior, candidate);
+  const [labels] = changes;
+  if (
+    changes.length !== 1 ||
+    labels === undefined ||
+    labels.canonical.toLowerCase() !== labels.stale.toLowerCase()
+  ) {
+    throw new Error("The original draft must differ by exactly one existing label's casing.");
+  }
+  const staleCue = replaceSingleLabel(canonicalCue, labels);
+  if (
+    sha256(canonicalCue) !== corrected.priorCueSha256 ||
+    sha256(staleCue) !== original.priorCueSha256
+  ) {
+    throw new Error("The deterministic predecessor source does not match the reviewed CUE.");
+  }
+  const recoveredArtifact = Buffer.from(
+    replaceSingleLabel(corrected.prior.files["app-artifact.json"], labels),
+  );
+  const field = readTransitionForRecoveredOptionalField({
+    appId,
+    publishedPrior: corrected.prior,
+    publishedPriorCueSha256: corrected.priorCueSha256,
+    recoveredArtifact,
+    candidate: original.candidate,
+    candidateCueSha256: original.candidateCueSha256,
+  });
+  const replay = (cue: string, pair: OriginalRelease) => {
+    const result = addOptionalTextField(cue, field);
+    return (
+      result.releaseId === pair.candidate.releaseId &&
+      sha256(result.content) === pair.candidateCueSha256
+    );
+  };
+  if (!replay(staleCue, original) || !replay(canonicalCue.toString("utf-8"), corrected)) {
+    throw new Error("The reviewed addition cannot be replayed exactly against both predecessors.");
+  }
+  const prior = artifactSchema.parse(JSON.parse(recoveredArtifact.toString("utf-8")));
+  return { prior, candidate };
+};
+
+const readOriginalPair = (
+  input: Parameters<typeof verifyOptionalFieldCorrectionEquivalence>[0],
+  canonicalPrior: Artifact,
+) => {
+  const { appId, original, corrected, publishedPriorCue } = input;
+  const { prior } = original;
+  if (prior === undefined) {
+    return publishedPriorCue === undefined
+      ? null
+      : recoverOriginalPair({
+          appId,
+          original,
+          corrected,
+          canonicalPrior,
+          canonicalCue: publishedPriorCue,
+        });
+  }
+  return checkedOnlinePair(appId, { ...original, prior });
+};
+
 const matchesDraftChanges = (input: {
   appId: string;
   cuePath: string;
-  original: ReleasePair;
+  original: OriginalRelease;
   corrected: ReleasePair;
   headChanges: readonly OverlayChange[];
 }) => {
@@ -131,16 +228,17 @@ const matchesDraftChanges = (input: {
  */
 export const verifyOptionalFieldCorrectionEquivalence = (input: {
   appId: string;
-  original: ReleasePair;
+  original: OriginalRelease;
   corrected: ReleasePair;
   installed: PredecessorIdentity;
   published: PredecessorIdentity;
   headChanges: readonly OverlayChange[];
+  publishedPriorCue?: Buffer | undefined;
 }): boolean => {
   const { appId, original, corrected, installed, published } = input;
   if (
     ![
-      original.prior.releaseId === corrected.prior.releaseId,
+      original.prior === undefined || original.prior.releaseId === corrected.prior.releaseId,
       original.candidate.releaseId === corrected.candidate.releaseId,
       /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u.test(corrected.candidate.releaseId),
       original.priorCueSha256 !== corrected.priorCueSha256,
@@ -151,11 +249,17 @@ export const verifyOptionalFieldCorrectionEquivalence = (input: {
   }
   const cuePath = `apps/${appId}/schema/${appId}.cue`;
   try {
-    const oldPair = checkedOnlinePair(appId, original);
     const nextPair = checkedOnlinePair(appId, corrected);
     const sameActiveRelease =
       isDeepStrictEqual(nextPair.identity, installed) &&
       isDeepStrictEqual(nextPair.identity, published);
+    if (!sameActiveRelease) {
+      return false;
+    }
+    const oldPair = readOriginalPair(input, nextPair.prior);
+    if (oldPair === null) {
+      return false;
+    }
     const sameExistingSchema = isDeepStrictEqual(
       lowerCaseExistingLabels(oldPair.prior, oldPair.prior),
       lowerCaseExistingLabels(nextPair.prior, nextPair.prior),
@@ -168,11 +272,7 @@ export const verifyOptionalFieldCorrectionEquivalence = (input: {
       compilerInputs(original.candidate, cuePath),
       compilerInputs(corrected.candidate, cuePath),
     );
-    if (
-      ![sameActiveRelease, sameExistingSchema, sameRequestedChange, sameCompilerInputs].every(
-        Boolean,
-      )
-    ) {
+    if (![sameExistingSchema, sameRequestedChange, sameCompilerInputs].every(Boolean)) {
       return false;
     }
     return matchesDraftChanges({ ...input, cuePath });

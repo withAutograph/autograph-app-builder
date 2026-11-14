@@ -73,6 +73,21 @@ const reconciliationGuidance: Record<ProductionReconciliationFailure, string> = 
     "The checked release does not prove compatibility with the app’s installed schema. Regenerate the unissued cut in the same draft candidate, then validate, review and seal it before requesting approval.",
   "candidate-schema-compatibility-unavailable":
     "Builder could not read the exact checked schema release. Preserve this draft and retry its saved validation and release review.",
+  "correction-source-scope": "The saved correction no longer matches the original approved source.",
+  "original-draft-preimage": "Builder could not establish the original checked draft bytes.",
+  "installed-identity": "Builder could not verify the matching installed Production schema.",
+  "merged-predecessor":
+    "Builder could not verify the previous reviewed merge and installed schema.",
+  "original-draft-archive": "Builder could not verify the exact original draft's checked release.",
+  "corrected-draft-archive":
+    "Builder could not verify the exact corrected draft's checked release.",
+  "installed-predecessor-archive":
+    "Builder could not read the checked archive for the installed schema.",
+  "original-predecessor-marker": "The original draft does not name the same predecessor release.",
+  "original-predecessor-archive":
+    "Builder could not verify the earlier schema used by the original draft.",
+  "correction-equivalence":
+    "The checked comparison did not prove the same approved optional field.",
 };
 
 const approvedPrivateBuild = (subject: z.infer<typeof directProductionSubjectSchema>) => {
