@@ -582,8 +582,18 @@ complete replacement content for each changed file. For one optional text
 field, supply `optionalTextField` with the existing model and write-operation
 IDs, plus the new field ID and label. Keep the CUE out of the generic file
 edits when using this input. Builder preserves the existing CUE and freezes
-the schema and UI changes together. If a supported
-starter-backed session needs newer repository capabilities, call
+the schema and UI changes together. Read the availability of the new field on
+the server through the app's authenticated data boundary. For a new form
+control use `operations.<model>.fieldActivation({ field, operation: "create" })`,
+or use `"update"` for edit. Render the new control only for `"active"`;
+`"pending"` keeps the old form, records and saves available. Pass only the
+availability result to the UI. In the Server Action, accept the old shape
+with the field omitted and keep generated write verification. Verify that a
+record can be saved with the field omitted while pending and with the new
+field once active. Use the active schema result even when the list is empty
+or the field's saved values are null.
+
+If a supported starter-backed session needs newer repository capabilities, call
 `prepare_app_creation({ refreshSource: true })` by itself before inspection.
 A connected GitHub checkout refreshes the shared compiler during approved
 schema compilation. If explicit refresh returns `connected_source_retained`,
