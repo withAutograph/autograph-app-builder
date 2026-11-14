@@ -1116,7 +1116,7 @@ export const prepareDirectProductionDraftReconciliation = async (
     if (!isCurrent()) {
       return releaseSelectionChanged;
     }
-    if (proof == null) {
+    if (proof === null || proof === undefined) {
       return schemaPredecessorMismatch;
     }
     const correction = createDirectProductionCorrection({
