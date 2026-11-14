@@ -28,6 +28,14 @@ import {
   repositoryProductionSchemaGrantDigestSchema,
 } from "./repository-production-native-status-contract";
 import type { RepositoryProductionNativeStatus } from "./repository-production-native-status-contract";
+import {
+  repositoryProductionSchemaPredecessorSchema,
+  repositoryProductionSchemaPredecessorTargetSchema,
+} from "./repository-production-schema-predecessor";
+import type {
+  RepositoryProductionSchemaPredecessor,
+  RepositoryProductionSchemaPredecessorTarget,
+} from "./repository-production-schema-predecessor";
 import type {
   RepositoryProductionIntent,
   RepositoryProductionScope,
@@ -113,6 +121,11 @@ export const repositoryProductionRequestSchema = z.discriminatedUnion("action", 
   }),
   z.strictObject({
     ...ownerFields,
+    ...repositoryProductionSchemaPredecessorTargetSchema.shape,
+    action: z.literal("schema-predecessor"),
+  }),
+  z.strictObject({
+    ...ownerFields,
     action: z.literal("access-status"),
     cursor: z.string().optional(),
   }),
@@ -153,6 +166,10 @@ export interface RepositoryProductionHandlerDependencies {
     owner: RepositoryProductionRequestOwner,
     target: RepositoryProductionDeliveryTarget,
   ) => Promise<RepositoryProductionDeliveryStatus>;
+  readSchemaPredecessor?: (
+    owner: RepositoryProductionRequestOwner,
+    target: RepositoryProductionSchemaPredecessorTarget,
+  ) => Promise<RepositoryProductionSchemaPredecessor>;
   resolveSetup: (
     owner: RepositoryProductionRequestOwner,
     approvedByCallId: string,
@@ -288,6 +305,19 @@ export const createRepositoryProductionHandler =
           result.repositoryId !== target.repositoryId ||
           result.repositoryFullName !== target.repositoryFullName
         ) {
+          return reply({ code: "app_access_denied" }, 403);
+        }
+        return reply(result);
+      }
+      if (body.action === "schema-predecessor") {
+        if (deps.readSchemaPredecessor === undefined) {
+          return reply({ code: "app_access_unknown" }, 503);
+        }
+        const { expectedRepositoryId, reviewedHeadSha } = body;
+        const result = repositoryProductionSchemaPredecessorSchema.parse(
+          await deps.readSchemaPredecessor(owner, { expectedRepositoryId, reviewedHeadSha }),
+        );
+        if (result.appId !== owner.appId || result.repositoryId !== expectedRepositoryId) {
           return reply({ code: "app_access_denied" }, 403);
         }
         return reply(result);

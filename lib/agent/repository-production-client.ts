@@ -32,6 +32,11 @@ import {
   repositoryProductionSchemaGrantDigestSchema,
 } from "../provisioning/repository-production-native-status-contract";
 
+import {
+  repositoryProductionSchemaPredecessorSchema,
+  repositoryProductionSchemaPredecessorTargetSchema,
+} from "../provisioning/repository-production-schema-predecessor";
+
 const setupSchema = z.object({
   operationRef: z.uuid(),
   state: z.enum([
@@ -46,13 +51,15 @@ const setupSchema = z.object({
 });
 const nativeStatusAction = "native-status";
 const deliveryStatusAction = "delivery-status";
+const schemaPredecessorAction = "schema-predecessor";
 // oxlint-disable-next-line sonarjs/max-union-size -- Each protected setup/read action has distinct existing service handling.
 type RepositoryProductionAction =
   | "plan"
   | "prepare"
   | "setup-status"
   | typeof deliveryStatusAction
-  | typeof nativeStatusAction;
+  | typeof nativeStatusAction
+  | typeof schemaPredecessorAction;
 
 export class RepositoryProductionNativeAccessChangedError extends Error {
   constructor() {
@@ -68,6 +75,7 @@ interface RepositoryProductionRequestExtras {
   repositoryFullName?: string;
   reviewedHeadSha?: string;
   expectedMergeSha?: string;
+  expectedRepositoryId?: string;
   expectedSchemaGrantDigest?: string;
   includeActivationProof?: true;
   schemaActivation?: RepositoryProductionSchemaActivation;
@@ -92,6 +100,9 @@ export const repositoryProductionResponseError = async (
     return response.status === 403
       ? new RepositoryProductionNativeAccessChangedError()
       : new Error("Builder could not check this app’s current availability.");
+  }
+  if (action === schemaPredecessorAction) {
+    return new Error("Builder could not verify the app’s installed schema.");
   }
   const code = await repositoryProductionErrorCode(response);
   if (code === "app_setup_destination_required") {
@@ -300,6 +311,25 @@ export const createRepositoryProductionClient = (input: {
         extra,
       );
       if (result.appId !== appId) {
+        throw new RepositoryProductionNativeAccessChangedError();
+      }
+      return result;
+    },
+    schemaPredecessor: async (
+      appId: string,
+      expectedRepositoryId: string,
+      reviewedHeadSha: string,
+    ) => {
+      const result = await send(
+        appId,
+        schemaPredecessorAction,
+        repositoryProductionSchemaPredecessorSchema,
+        repositoryProductionSchemaPredecessorTargetSchema.parse({
+          expectedRepositoryId,
+          reviewedHeadSha,
+        }),
+      );
+      if (result.appId !== appId || result.repositoryId !== expectedRepositoryId) {
         throw new RepositoryProductionNativeAccessChangedError();
       }
       return result;

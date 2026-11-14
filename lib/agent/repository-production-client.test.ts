@@ -41,6 +41,7 @@ const repository = { repositoryId: "123", repositoryFullName: "example/repo" };
 type RequestTarget = Partial<typeof repository> & {
   reviewedHeadSha?: string;
   expectedMergeSha?: string;
+  expectedRepositoryId?: string;
   expectedSchemaGrantDigest?: string;
 };
 const reviewedTarget = { ...repository, reviewedHeadSha: "a".repeat(40) };
@@ -202,5 +203,60 @@ describe("native Production revision transport", () => {
         body: f.requestBody({ expectedMergeSha, expectedSchemaGrantDigest }, "native-status"),
       }),
     );
+  });
+});
+
+describe("installed schema readback transport", () => {
+  const exactTarget = {
+    expectedRepositoryId: repository.repositoryId,
+    reviewedHeadSha: reviewedTarget.reviewedHeadSha,
+  };
+  const identity = {
+    version: 1,
+    appId: status.appId,
+    repositoryId: repository.repositoryId,
+    releaseId: "fixture.v8",
+    artifactSha256: "a".repeat(64),
+    manifestSha256: "b".repeat(64),
+    cueSha256: "c".repeat(64),
+  };
+
+  it("reads only the existing setup for the exact app, repository and draft head", async () => {
+    const f = deliveryClient();
+    f.fetch.mockResolvedValueOnce(Response.json(identity));
+    await expect(
+      f.client.schemaPredecessor(
+        status.appId,
+        exactTarget.expectedRepositoryId,
+        exactTarget.reviewedHeadSha,
+      ),
+    ).resolves.toEqual(identity);
+    expect(f.fetch).toHaveBeenCalledExactlyOnceWith(
+      new URL("https://operator.test/v1/repository-production"),
+      expect.objectContaining({
+        method: "POST",
+        body: f.requestBody(exactTarget, "schema-predecessor"),
+      }),
+    );
+  });
+
+  it("rejects ambiguous or malformed identity instead of falling back to ordinary setup", async () => {
+    const f = deliveryClient();
+    for (const response of [
+      Response.json({ ...identity, repositoryId: "999" }),
+      Response.json({ ...identity, connection: "private configuration" }),
+      Response.json({ code: "request_invalid" }, { status: 400 }),
+    ]) {
+      f.fetch.mockReset().mockResolvedValueOnce(response);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Keep each mock scoped to one failed request.
+      await expect(
+        f.client.schemaPredecessor(
+          status.appId,
+          exactTarget.expectedRepositoryId,
+          exactTarget.reviewedHeadSha,
+        ),
+      ).rejects.toThrow();
+      expect(f.fetch).toHaveBeenCalledOnce();
+    }
   });
 });
