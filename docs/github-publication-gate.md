@@ -638,7 +638,10 @@ An app code revision or safe optional text field addition to the same
 session's live private Arrusted app can use a combined Build and Production
 approval. The approval binds the new proposal and the preceding live release,
 along with the same owner, repository, installation, workspace, and app. The
-revision uses the existing Production data and access. Builder reads the
+revision uses the existing Production data and access. Preparing a review
+rechecks the saved app, repository, default branch and installation against
+current access. An exact match needs no destination write. New selections
+still use the protected session and operation checks. Builder reads the
 protected setup for the reviewed head before Ready and merge. An app code
 revision that keeps its schema and deployment configuration uses a read-only
 setup check. This covers app-owned forms, server actions, and data reads.

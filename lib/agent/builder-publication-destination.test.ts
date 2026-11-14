@@ -1,6 +1,10 @@
 /* oxlint-disable eslint/require-await -- Async ports model canonical state reads. */
-import { expect, it } from "vitest";
-import { createBuilderPublicationDestinationReader } from "./builder-publication-destination";
+import { expect, it, vi } from "vitest";
+import {
+  confirmBuilderPublicationDestination,
+  createBuilderPublicationDestinationReader,
+} from "./builder-publication-destination";
+import type { ExistingRepositoryDestination } from "../provisioning/builder-session-destination-contract";
 import { initialBuilderProvisionJournalRecord } from "../provisioning/journal";
 import type { BuilderProvisionJournalRow } from "../provisioning/journal";
 import { builderProvisionRequestDigest } from "../provisioning/contracts";
@@ -167,4 +171,108 @@ it("reads a selected existing repository without a resource provisioning journal
     publicSessionId: "saved",
     destination: { repository: "team/apps", repositoryId: "123", selectedInstallationId: "456" },
   });
+});
+
+const publicationDestination: ExistingRepositoryDestination = {
+  kind: "existing-repository",
+  version: 1,
+  appId: "notes",
+  repository: { repositoryId: "123", owner: "team", name: "apps", defaultBranch: "main" },
+  installationId: "456",
+  confirmedByCallId: "current-review",
+};
+
+const destinationPorts = () => ({
+  attach: vi.fn<() => Promise<void>>().mockResolvedValue(),
+  readSaved: vi
+    .fn<() => Promise<ExistingRepositoryDestination>>()
+    .mockResolvedValue(publicationDestination),
+});
+
+it("continues an already selected exact destination without retrying its attachment", async () => {
+  const ports = destinationPorts();
+  ports.attach.mockRejectedValue(
+    new Error("Builder destination selection requires settled session operations."),
+  );
+  const saved = { ...publicationDestination, confirmedByCallId: "initial-selection" };
+  ports.readSaved.mockResolvedValue(saved);
+  await expect(
+    confirmBuilderPublicationDestination({
+      ...ports,
+      saved,
+      destination: publicationDestination,
+      requireExactReadback: true,
+    }),
+  ).resolves.toBeUndefined();
+  expect(ports.attach).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["application", { appId: "other-app" }],
+  ["installation", { installationId: "789" }],
+  ["repository", { repository: { ...publicationDestination.repository, repositoryId: "789" } }],
+  [
+    "repository owner",
+    { repository: { ...publicationDestination.repository, owner: "other-team" } },
+  ],
+  ["repository name", { repository: { ...publicationDestination.repository, name: "other-apps" } }],
+  [
+    "default branch",
+    { repository: { ...publicationDestination.repository, defaultBranch: "develop" } },
+  ],
+])("refuses a changed saved %s without attempting attachment", async (_reason, changed) => {
+  const ports = destinationPorts();
+  await expect(
+    confirmBuilderPublicationDestination({
+      ...ports,
+      saved: { ...publicationDestination, ...changed },
+      destination: publicationDestination,
+    }),
+  ).rejects.toThrow();
+  expect(ports.attach).not.toHaveBeenCalled();
+});
+
+it("attaches and verifies a new destination before direct publication", async () => {
+  const ports = destinationPorts();
+  ports.readSaved.mockImplementation(async () => {
+    expect(ports.attach).toHaveBeenCalledTimes(1);
+    return publicationDestination;
+  });
+  await confirmBuilderPublicationDestination({
+    ...ports,
+    destination: publicationDestination,
+    requireExactReadback: true,
+  });
+  expect(ports.readSaved).toHaveBeenCalledTimes(1);
+});
+
+it("rejects a mismatched destination read back after initial attachment", async () => {
+  const ports = destinationPorts();
+  ports.readSaved.mockResolvedValue({ ...publicationDestination, installationId: "789" });
+  await expect(
+    confirmBuilderPublicationDestination({
+      ...ports,
+      destination: publicationDestination,
+      requireExactReadback: true,
+    }),
+  ).rejects.toThrow();
+  expect(ports.attach).toHaveBeenCalledTimes(1);
+});
+
+it("retains a provisioned destination for ordinary publication while enforcing exact Production readback", async () => {
+  const ports = destinationPorts();
+  const input = {
+    ...ports,
+    saved: {
+      appId: publicationDestination.appId,
+      requestId: "11111111-1111-4111-a111-111111111111",
+      requestDigest: "a".repeat(64),
+    },
+    destination: publicationDestination,
+  };
+  await expect(confirmBuilderPublicationDestination(input)).resolves.toBeUndefined();
+  await expect(
+    confirmBuilderPublicationDestination({ ...input, requireExactReadback: true }),
+  ).rejects.toThrow();
+  expect(ports.attach).not.toHaveBeenCalled();
 });

@@ -15,7 +15,10 @@ import type {
   BuilderProvisionJournalStore,
   BuilderProvisionAuthority,
 } from "../provisioning/journal";
-import type { BuilderSessionDestination } from "../provisioning/builder-session-destination-contract";
+import type {
+  BuilderSessionDestination,
+  ExistingRepositoryDestination,
+} from "../provisioning/builder-session-destination-contract";
 import type { PublicationDestinationSelector } from "./github-publication-destination";
 
 const DESTINATION_UNAVAILABLE = "The saved Builder app destination is unavailable for publication.";
@@ -158,6 +161,45 @@ export const readBuilderPublicationDestinationForTool = async (
   })();
 };
 
+const assertExactExistingDestination = (
+  saved: BuilderSessionDestination | undefined,
+  destination: ExistingRepositoryDestination,
+): void => {
+  if (
+    saved === undefined ||
+    !isExistingRepositoryDestination(saved) ||
+    saved.appId !== destination.appId ||
+    saved.installationId !== destination.installationId ||
+    !isDeepStrictEqual(saved.repository, destination.repository)
+  ) {
+    throw new Error("The saved Builder app destination differs from the verified repository.");
+  }
+};
+
+/** Reuse an already verified selection without entering the destination mutation flow. */
+export const confirmBuilderPublicationDestination = async (input: {
+  saved?: BuilderSessionDestination | undefined;
+  destination: ExistingRepositoryDestination;
+  attach: () => Promise<void>;
+  readSaved: () => Promise<BuilderSessionDestination | undefined>;
+  requireExactReadback?: boolean | undefined;
+}): Promise<void> => {
+  const { saved, destination } = input;
+  if (saved !== undefined) {
+    if (isExistingRepositoryDestination(saved)) {
+      assertExactExistingDestination(saved, destination);
+    } else if (input.requireExactReadback === true) {
+      throw new Error(DESTINATION_UNAVAILABLE);
+    }
+    return;
+  }
+  await input.attach();
+  const stored = await input.readSaved();
+  if (input.requireExactReadback === true) {
+    assertExactExistingDestination(stored, destination);
+  }
+};
+
 /** Metadata-only persistence after the normal GitHub access flow; grants no publication approval. */
 export const recordBuilderPublicationDestinationForTool = async (
   ctx: ToolContext,
@@ -206,18 +248,8 @@ export const recordBuilderPublicationDestinationForTool = async (
     owner,
     execution,
   });
-  if (session.appId !== appId || sessions.attachBuilderDestination === undefined) {
+  if (session.appId !== appId) {
     throw new Error(DESTINATION_UNAVAILABLE);
-  }
-  // Legacy provisioned destinations retain their resource operation identity.
-  if (
-    session.builderDestination !== undefined &&
-    !isExistingRepositoryDestination(session.builderDestination)
-  ) {
-    if (options?.requireExactReadback === true) {
-      throw new Error(DESTINATION_UNAVAILABLE);
-    }
-    return;
   }
   const { repository } = receipt;
   const destination = existingRepositoryDestinationSchema.parse({
@@ -233,37 +265,36 @@ export const recordBuilderPublicationDestinationForTool = async (
     installationId: receipt.scope.installationId,
     confirmedByCallId: receipt.confirmedByCallId,
   });
-  await sessions.attachBuilderDestination({
-    principal: owner.principal,
-    sessionId: session.sessionId,
+  await confirmBuilderPublicationDestination({
+    saved: session.builderDestination,
     destination,
-    activeBuild: true,
-    activeBuildTurn: ctx.session.turn,
-    expected: {
-      adapterSessionId: session.adapterSessionId,
-      adapterGeneration: session.adapterGeneration,
-      cancellationRevision: session.cancellationRevision ?? 0,
-      checkpointDigest: session.checkpointDigest,
+    requireExactReadback: options?.requireExactReadback,
+    attach: async () => {
+      if (sessions.attachBuilderDestination === undefined) {
+        throw new Error(DESTINATION_UNAVAILABLE);
+      }
+      await sessions.attachBuilderDestination({
+        principal: owner.principal,
+        sessionId: session.sessionId,
+        destination,
+        activeBuild: true,
+        activeBuildTurn: ctx.session.turn,
+        expected: {
+          adapterSessionId: session.adapterSessionId,
+          adapterGeneration: session.adapterGeneration,
+          cancellationRevision: session.cancellationRevision ?? 0,
+          checkpointDigest: session.checkpointDigest,
+        },
+        nowEpochMs: Date.now(),
+      });
     },
-    nowEpochMs: Date.now(),
+    readSaved: async () => {
+      const { currentSession } = await readHostedOperatorCallbackSessions({
+        store: sessions,
+        owner,
+        execution,
+      });
+      return currentSession.builderDestination;
+    },
   });
-  const { currentSession } = await readHostedOperatorCallbackSessions({
-    store: sessions,
-    owner,
-    execution,
-  });
-  if (options?.requireExactReadback === true) {
-    const saved = currentSession.builderDestination;
-    const matches =
-      saved !== undefined &&
-      isExistingRepositoryDestination(saved) &&
-      saved.appId === destination.appId &&
-      saved.installationId === destination.installationId &&
-      isDeepStrictEqual(saved.repository, destination.repository);
-    if (!matches) {
-      throw new Error(
-        "The saved Builder app destination differs from its approved Production release.",
-      );
-    }
-  }
 };
