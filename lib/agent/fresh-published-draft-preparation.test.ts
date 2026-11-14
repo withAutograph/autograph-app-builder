@@ -180,15 +180,15 @@ vi.mock("./deployment-github-publication-runtime", () => ({
     inspectPriorAppPublication: mocks.classify,
     inspectExistingDraftReconciliationSource: async () => {
       mocks.onSourceRead?.();
-      const publishedReconciliation = mocks.publishedCorrection();
-      return {
+      const observation = {
         draft: mocks.owned.draft,
         base: { headSha: mocks.candidate.baseSha },
         ownedPublication: mocks.ownedFirstPublication,
-        ...(publishedReconciliation === undefined
-          ? {}
-          : { publishedReconciliation, publishedHeadSha: mocks.owned.draft.headSha }),
       };
+      const publishedReconciliation = mocks.publishedCorrection();
+      return publishedReconciliation === undefined
+        ? observation
+        : { ...observation, publishedReconciliation, publishedHeadSha: observation.draft.headSha };
     },
     inspectOwnedPublishedDraftRepairSource: async (request: {
       publishedProposalDigest: string;
