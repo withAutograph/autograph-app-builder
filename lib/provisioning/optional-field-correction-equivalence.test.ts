@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { addOptionalTextField } from "../repository/optional-text-field";
 import type { OverlayChange } from "../repository/target-apply";
 import { GENERATED_RELEASE_MEMBERS } from "./hosted-operator-sandbox-launcher";
 import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launcher";
@@ -163,11 +164,16 @@ const edit = (path: string, before: string, after: string): OverlayChange => ({
   before: { digest: before, mode: "644" },
   after: { digest: after, mode: "644" },
 });
-const fixture = (correctedOptions: Partial<Parameters<typeof pair>[0]> = {}) => {
+type PairOptions = Parameters<typeof pair>[0];
+const fixture = (
+  correctedOptions: Partial<PairOptions> = {},
+  originalOptions: Partial<PairOptions> = {},
+) => {
   const original = pair({
     existingLabel: "Creator Actor ID",
     priorCueSha256: originalPriorCue,
     candidateCueSha256: originalCandidateCue,
+    ...originalOptions,
   });
   const corrected = pair({
     existingLabel: "Creator actor ID",
@@ -190,6 +196,47 @@ const fixture = (correctedOptions: Partial<Parameters<typeof pair>[0]> = {}) => 
     }),
   ];
   return { appId, original, corrected, installed: published, published, headChanges };
+};
+
+const publishedCue = (label: string, trailing = "") =>
+  Buffer.from(
+    [
+      "package schema",
+      "",
+      "manifest: #AppManifest & {",
+      `  version: "${baseVersion}"`,
+      `  models: [{id: "${model}", kind: "entity", fields: [{id: "creator_actor_id", label: "${label}", type: "text", required: true}]}]`,
+      `  change_types: [{id: "edit", model: "${model}", touches: ["creator_actor_id"]}]`,
+      "}",
+      trailing,
+    ].join("\n"),
+  );
+
+const replayFixture = (input: { oldLabel?: string; originalExtraSource?: string } = {}) => {
+  const staleCue = publishedCue(input.oldLabel ?? "Creator Actor ID", input.originalExtraSource);
+  const publishedPriorCue = publishedCue("Creator actor ID");
+  const approvedField = {
+    modelId: model,
+    fieldId: optional.id,
+    label: optional.label,
+    changeTypeIds: ["edit"],
+  };
+  const hashes = (bytes: Buffer) => ({
+    priorCueSha256: fingerprint(bytes),
+    candidateCueSha256: fingerprint(
+      Buffer.from(addOptionalTextField(bytes.toString("utf-8"), approvedField).content),
+    ),
+  });
+  const full = fixture(hashes(publishedPriorCue), {
+    ...hashes(staleCue),
+    existingLabel: input.oldLabel ?? "Creator Actor ID",
+  });
+  const { candidate, priorCueSha256, candidateCueSha256 } = full.original;
+  return {
+    ...full,
+    publishedPriorCue,
+    original: { candidate, priorCueSha256, candidateCueSha256 },
+  };
 };
 
 describe("Recompiling an approved optional field against its published predecessor", () => {
@@ -253,5 +300,52 @@ describe("Recompiling an approved optional field against its published predecess
     const correct = fixture();
     correct.corrected.candidate.files["sql-bundle.sql"] = Buffer.from("other SQL");
     expect(verifyOptionalFieldCorrectionEquivalence(correct)).toBe(false);
+  });
+
+  it("replays the exact approved addition when only the stale predecessor archive is absent", () => {
+    expect(verifyOptionalFieldCorrectionEquivalence(replayFixture())).toBe(true);
+  });
+
+  it("requires the published predecessor CUE bytes to hash to the installed release", () => {
+    const { original, corrected, installed, published, headChanges } = replayFixture();
+    const withoutCue = { appId, original, corrected, installed, published, headChanges };
+    expect(verifyOptionalFieldCorrectionEquivalence(withoutCue)).toBe(false);
+    expect(
+      verifyOptionalFieldCorrectionEquivalence({
+        ...withoutCue,
+        publishedPriorCue: publishedCue("Creator actor ID", "// changed\n"),
+      }),
+    ).toBe(false);
+  });
+
+  it.each([
+    { oldLabel: "Changed role identifier" },
+    { originalExtraSource: "// unrelated source drift\n" },
+  ])("refuses to repair unapproved predecessor changes: %j", (change) => {
+    expect(verifyOptionalFieldCorrectionEquivalence(replayFixture(change))).toBe(false);
+  });
+
+  it("requires the old grant's exact CUE hashes and original runtime proof", () => {
+    const correct = replayFixture();
+    expect(
+      verifyOptionalFieldCorrectionEquivalence({
+        ...correct,
+        original: { ...correct.original, priorCueSha256: originalPriorCue },
+      }),
+    ).toBe(false);
+    correct.original.candidate.files["transition-contract.json"] = json({
+      predecessors: [{ version: baseVersion, schema: {} }],
+    });
+    expect(verifyOptionalFieldCorrectionEquivalence(correct)).toBe(false);
+  });
+
+  it("does not replace an invalid existing archive with recovered evidence", () => {
+    const correct = replayFixture();
+    expect(
+      verifyOptionalFieldCorrectionEquivalence({
+        ...correct,
+        original: { ...correct.original, prior: fixture().original.prior },
+      }),
+    ).toBe(false);
   });
 });

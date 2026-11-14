@@ -707,6 +707,15 @@ the reviewed draft and the corrected release. Draft update, Ready, merge, and
 schema settlement use that same binding. If any comparison is unavailable,
 Builder preserves the draft and the live app.
 
+If the original draft's stale predecessor archive is unavailable, Builder can
+verify the same narrow correction from the authentic original draft release,
+the installed and merged predecessor, and the exact approved CUE inputs.
+Builder accepts only one unique casing change on an existing label. It
+reproduces the earlier artifact digest named by the checked compatibility
+records and replays the approved optional field against both CUE inputs.
+The reconstructed artifact is used only for comparison. The installer still
+uses the complete checked release and proves the installed predecessor.
+
 The already approved revision retains the live predecessor it extended. If a
 previous delivery was stopped during observation, Builder can use its retained
 call to locate the owned PR and independently verify the exact merge. That

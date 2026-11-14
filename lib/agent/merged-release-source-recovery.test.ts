@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   inspectHead: vi.fn(),
   inspectPullRequest: vi.fn(),
   readRelease: vi.fn(),
+  readMergedCue: vi.fn(),
 }));
 vi.mock("./direct-production-state", () => ({
   retainedProductionSourceReconciliation: mocks.anchor,
@@ -156,6 +157,7 @@ describe("recover a checked release from the app's merged source", () => {
     mocks.runtime.mockResolvedValue({
       inspectPublishedReconciliationHead: mocks.inspectHead,
       inspectPublishedPullRequest: mocks.inspectPullRequest,
+      readMergedAppSchemaCue: mocks.readMergedCue,
     });
     mocks.inspectHead.mockResolvedValue(reviewedHead);
     mocks.inspectPullRequest.mockResolvedValue(mergedPullRequest);
@@ -227,6 +229,38 @@ describe("recover a checked release from the app's merged source", () => {
       cueSha256,
     });
     expect(mocks.anchor).not.toHaveBeenCalled();
+  });
+
+  it("returns CUE bytes only if the exact reviewed merge matches the archived source digest", async () => {
+    const bytes = Buffer.from("app: socket-label-log\n");
+    const cueHash = createHash("sha256").update(bytes).digest("hex");
+    archivedManifest(
+      Buffer.from(
+        JSON.stringify({
+          app: appId,
+          schema_version: releaseId,
+          sources: { [cuePath]: `sha256:${cueHash}` },
+        }),
+      ),
+    );
+    const input = {
+      ...request(),
+      reconciliationAnchor: deliveredAnchor,
+      includeSchemaCue: true as const,
+      includeSchemaCueBytes: true as const,
+    };
+    mocks.readMergedCue.mockResolvedValueOnce(bytes).mockResolvedValueOnce(Buffer.from("other"));
+    await expect(readMergedReleaseSourceRecovery(input)).resolves.toMatchObject({
+      cueBytes: bytes,
+      cueSha256: cueHash,
+    });
+    expect(mocks.readMergedCue).toHaveBeenCalledWith({
+      appId,
+      merged: { ...repository, baseBranch: "main", sha: mergeSha },
+    });
+    const stale = await readMergedReleaseSourceRecovery(input);
+    expect(stale?.cueBytes).toBeUndefined();
+    expect(stale?.cueSha256).toBe(cueHash);
   });
 
   it.each([

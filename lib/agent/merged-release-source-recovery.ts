@@ -88,8 +88,9 @@ export const readMergedReleaseSourceRecovery = async (input: {
   ctx: Pick<ToolContext, "abortSignal" | "callId" | "session">;
   installationId: string;
   includeSchemaCue?: true;
+  includeSchemaCueBytes?: true;
   reconciliationAnchor?: ReconciliationAnchor;
-}): Promise<(PublishedPlanningRelease & { cueSha256?: string }) | null> => {
+}): Promise<(PublishedPlanningRelease & { cueSha256?: string; cueBytes?: Buffer }) | null> => {
   const { current, releaseId, ctx, installationId } = input;
   const source = current.githubSource;
   const { appId } = current.appSpec;
@@ -205,7 +206,7 @@ export const readMergedReleaseSourceRecovery = async (input: {
       continue;
     }
     ctx.abortSignal.throwIfAborted();
-    const result: PublishedPlanningRelease & { cueSha256?: string } = {
+    const result: PublishedPlanningRelease & { cueSha256?: string; cueBytes?: Buffer } = {
       mergeSha: merged.mergeCommitSha,
       releaseId,
       files: Object.fromEntries(
@@ -226,6 +227,27 @@ export const readMergedReleaseSourceRecovery = async (input: {
         continue;
       }
       result.cueSha256 = cueSha256;
+      if (input.includeSchemaCueBytes === true) {
+        try {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Read bytes only at the exact owned merge already proved above.
+          const blob = await runtime.readMergedAppSchemaCue?.({
+            appId,
+            merged: {
+              repositoryId: proposal.repositoryId,
+              owner: proposal.owner,
+              name: proposal.name,
+              baseBranch: proposal.baseBranch,
+              sha: merged.mergeCommitSha,
+            },
+          });
+          ctx.abortSignal.throwIfAborted();
+          if (blob && createHash("sha256").update(blob).digest("hex") === cueSha256) {
+            result.cueBytes = Buffer.from(blob);
+          }
+        } catch {
+          ctx.abortSignal.throwIfAborted();
+        }
+      }
     }
     return result;
   }

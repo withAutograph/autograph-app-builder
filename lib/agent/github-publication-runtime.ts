@@ -490,6 +490,10 @@ export interface GitHubPublicationRuntime {
     binding: GitHubDestinationReviewBinding;
     path: string;
   }) => Promise<{ bytes: Uint8Array; mode: string; digest: string } | null>;
+  readMergedAppSchemaCue?: (input: {
+    appId: string;
+    merged: { repositoryId: string; owner: string; name: string; baseBranch: string; sha: string };
+  }) => Promise<Uint8Array | null>;
   status: () => Promise<GitHubPublicationRuntimeStatus>;
   resolveImmutableSource: (input: {
     expectedInstallationId: string;
@@ -1113,6 +1117,32 @@ export function composeGitHubPublicationRuntime(input: {
         path: request.path,
         repository: request.binding.repository,
       });
+    },
+    async readMergedAppSchemaCue({ appId, merged }) {
+      const appIdValid = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId);
+      if (!appIdValid || adapter.readDestinationFile === undefined) {
+        return null;
+      }
+      const repository = await adapter.inspectRepository({
+        operation: sourceReadOperation,
+        ref: merged.sha,
+        repositoryId: merged.repositoryId,
+      });
+      const matches = [
+        repository.repositoryId === merged.repositoryId,
+        repository.owner === merged.owner,
+        repository.name === merged.name,
+        repository.defaultBranch === merged.baseBranch,
+        repository.headSha === merged.sha,
+      ].every(Boolean);
+      if (!matches) {
+        return null;
+      }
+      const blob = await adapter.readDestinationFile({
+        repository,
+        path: `apps/${appId}/schema/${appId}.cue`,
+      });
+      return blob?.bytes ?? null;
     },
     async inspectSourceBranch(request) {
       const observed = await adapter.inspectRepository({

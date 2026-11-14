@@ -1539,16 +1539,18 @@ describe("direct Production Build authority", () => {
       }
       const { selection } = compilation.release;
       const verifyEquivalentCorrection = vi.fn().mockResolvedValue({
-        installed: {
-          releaseId: "fixture-release-v1",
-          artifactSha256: sha256("live schema"),
-          manifestSha256: sha256("live manifest"),
-          cueSha256: sha256("other live schema"),
-        },
-        candidate: {
-          releaseId: selection.releaseId,
-          artifactSha256: selection.schemaSha256,
-          manifestSha256: selection.manifestSha256,
+        proof: {
+          installed: {
+            releaseId: "fixture-release-v1",
+            artifactSha256: sha256("live schema"),
+            manifestSha256: sha256("live manifest"),
+            cueSha256: sha256("other live schema"),
+          },
+          candidate: {
+            releaseId: selection.releaseId,
+            artifactSha256: selection.schemaSha256,
+            manifestSha256: selection.manifestSha256,
+          },
         },
       });
       const ports = { ...fixture.ports, verifyEquivalentCorrection };
@@ -1594,13 +1596,15 @@ describe("direct Production Build authority", () => {
   it("rejects a predecessor correction when the protected verification is unavailable", async () => {
     await contextStorage.run(new ContextContainer(), async () => {
       const fixture = retainSealedSchemaCorrection("predecessor");
-      const verifyEquivalentCorrection = vi.fn().mockResolvedValue(null);
+      const verifyEquivalentCorrection = vi
+        .fn()
+        .mockResolvedValue({ reason: "installed-identity" });
       await expect(
         prepareDirectProductionDraftReconciliation(releaseContext, {
           ...fixture.ports,
           verifyEquivalentCorrection,
         }),
-      ).resolves.toBe("schema-predecessor-mismatch");
+      ).resolves.toBe("installed-identity");
       expect(fixture.inspectExistingDraftReconciliationSource).toHaveBeenCalledOnce();
       expect(verifyEquivalentCorrection).toHaveBeenCalledOnce();
       expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
