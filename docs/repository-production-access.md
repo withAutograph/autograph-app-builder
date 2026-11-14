@@ -459,6 +459,16 @@ native Git delivery. Preserve its destination, database, records and setup.
 This adds no manual deployment, promotion, alias writer, synthetic runtime,
 external qualification or mandatory app-test gate.
 
+If a saved optional-field draft cannot proceed, Builder can ask the protected
+operator to identify the predecessor actually installed for that app. This
+read is scoped to the same owner, saved database and reviewed draft. The
+operator checks its retained release and reads the installed schema through
+the existing protected worker observation. It returns only release identity
+and digests for comparison; it does not disclose credentials, SQL, records,
+or grant another approval. The check is for diagnosis and does not run as a
+required step on a normal delivery. A disagreement between installed and
+published history leaves both intact for reconciliation.
+
 A missing saved destination is reported explicitly. Failed plan and status reads
 do not claim that setup was started or saved by that read. An uncertain
 preparation still requires status reconciliation before any retry.

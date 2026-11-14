@@ -335,6 +335,63 @@ describe("protected repository Production dispatcher", () => {
     ).toBe(403);
   });
 
+  it("returns only the installed schema proof to the authenticated Builder workload", async () => {
+    const f = fixture();
+    const target = { expectedRepositoryId: "123", reviewedHeadSha: "a".repeat(40) };
+    const proof = {
+      version: 1,
+      appId: owner.appId,
+      repositoryId: target.expectedRepositoryId,
+      releaseId: "release-1",
+      artifactSha256: "b".repeat(64),
+      manifestSha256: "c".repeat(64),
+      cueSha256: "d".repeat(64),
+    } as const;
+    const read = vi.fn(async () => proof);
+    f.deps.readSchemaPredecessor = read;
+    const request = { version: 1, ...owner, ...target, action: "schema-predecessor" };
+    expect((await f.send(request, "auth")).status).toBe(403);
+    expect((await f.send({ ...request, sessionId: "other" })).status).toBe(403);
+    expect((await f.send({ ...request, reviewedHeadSha: "main" })).status).toBe(400);
+    expect(read).not.toHaveBeenCalled();
+    const response = await f.send(request);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual(proof);
+    expect(read).toHaveBeenCalledExactlyOnceWith(owner, target);
+    expect(f.prepared).not.toHaveBeenCalled();
+    expect(f.deps.resolveSetup).not.toHaveBeenCalled();
+    expect(f.deps.management.execute).not.toHaveBeenCalled();
+  });
+
+  it("rejects a mismatched proof and redacts worker failure details", async () => {
+    const f = fixture();
+    const read =
+      vi.fn<NonNullable<RepositoryProductionHandlerDependencies["readSchemaPredecessor"]>>();
+    f.deps.readSchemaPredecessor = read;
+    const request = {
+      version: 1,
+      ...owner,
+      action: "schema-predecessor",
+      expectedRepositoryId: "123",
+      reviewedHeadSha: "a".repeat(40),
+    };
+    read.mockResolvedValueOnce({
+      version: 1,
+      appId: owner.appId,
+      repositoryId: "456",
+      releaseId: "release-1",
+      artifactSha256: "b".repeat(64),
+      manifestSha256: "c".repeat(64),
+      cueSha256: "d".repeat(64),
+    });
+    expect((await f.send(request)).status).toBe(403);
+    read.mockRejectedValueOnce(new Error("private worker failure context"));
+    const response = await f.send(request);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ code: "app_access_unknown" });
+  });
+
   it.each([
     { repositoryId: "repo", reviewedHeadSha: "a".repeat(40) },
     { repositoryId: "123", reviewedHeadSha: "main" },
