@@ -662,7 +662,11 @@ Form, save and display changes belong to the same frozen proposal. The app's
 authenticated server data boundary checks the new field's activation before the
 form renders the control. Existing records and saves stay available during
 activation. The same approval covers the checked schema update on the existing
-database.
+database. An approved follow-up can recover a conflicting private copy of
+a previously merged generated release. Builder checkpoints the old bytes,
+then verifies the earlier owned publication and the entire captured release
+against the selected branch before restoring only that release. It preserves
+the new proposal and leaves an unverified conflict for reconciliation.
 
 If an earlier candidate failed before merge, Builder can prepare an ordinary
 reconciliation of its owned open draft and retains every checked release on

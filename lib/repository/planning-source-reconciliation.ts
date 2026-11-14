@@ -2,9 +2,34 @@ import { z } from "zod";
 import type { SandboxSession } from "eve/sandbox";
 import { appBaselineMarkerPath } from "./app-baseline";
 import type { AppBaselineSelection } from "./app-baseline";
+import { GENERATED_RELEASE_MEMBERS } from "../provisioning/hosted-operator-sandbox-launcher";
 import { sanitizeValidationDiagnosticText } from "./validation-output-sanitize";
 
 const objectId = z.string().regex(/^[a-f0-9]{40,64}$/u);
+const releaseIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
+const publishedReleaseSchema = z.strictObject({
+  mergeSha: objectId,
+  releaseId: z.string().regex(releaseIdPattern),
+  files: z.record(z.enum(GENERATED_RELEASE_MEMBERS), z.string().regex(/^[a-f0-9]{64}$/u)),
+});
+export interface PublishedPlanningRelease {
+  mergeSha: string;
+  releaseId: string;
+  files: Record<string, string>;
+}
+
+export class PlanningReleaseConflictError extends Error {
+  readonly releaseId: string;
+
+  constructor(releaseId: string) {
+    super(
+      "A saved app release conflicts with the current repository source. Its original bytes are preserved.",
+    );
+    this.name = "PlanningReleaseConflictError";
+    this.releaseId = releaseId;
+  }
+}
+
 const outcomeSchema = z.strictObject({
   changed: z.boolean(),
   checkpointRef: z.string(),
@@ -18,6 +43,7 @@ const { createHash } = require("node:crypto");
 const { execFileSync, spawnSync } = require("node:child_process");
 const { existsSync, lstatSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } = require("node:fs");
 const { dirname, join, resolve } = require("node:path");
+const { isDeepStrictEqual } = require("node:util");
 const input = JSON.parse(process.argv[1]);
 const root = input.root;
 const privateRoot = join(input.stateRoot, createHash("sha256").update(root + input.sessionId).digest("hex"));
@@ -29,7 +55,7 @@ if (!/^refs\/app-builder\/source-checkpoints\/[a-f0-9]+(?:\/[a-f0-9]+)?$/.test(c
 const temporary = mkdtempSync(join(privateRoot, "index-"));
 const { APP_BUILDER_SOURCE_READ_TOKEN: sourceReadToken, ...childEnvironment } = process.env;
 const baseEnv = { ...childEnvironment, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_SYSTEM: "/dev/null", GIT_CONFIG_GLOBAL: "/dev/null", GIT_ATTR_NOSYSTEM: "1", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "/usr/bin/false", SSH_ASKPASS: "/usr/bin/false", GIT_AUTHOR_NAME: "Autograph Builder", GIT_AUTHOR_EMAIL: "builder@autograph.so", GIT_COMMITTER_NAME: "Autograph Builder", GIT_COMMITTER_EMAIL: "builder@autograph.so" };
-const args = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.attributesfile=/dev/null", "-c", "credential.helper=", "-c", "commit.gpgsign=false", "-C", root];
+const args = ["--no-replace-objects", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.attributesfile=/dev/null", "-c", "credential.helper=", "-c", "commit.gpgsign=false", "-C", root];
 const gitExecutable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
 const git = (command, options = {}) => execFileSync(gitExecutable, [...args, ...command], { env: { ...baseEnv, ...options.env }, input: options.input, encoding: options.buffer ? undefined : "utf8", maxBuffer: Infinity, stdio: ["pipe", "pipe", "pipe"] });
 const safe = value => value && !value.startsWith("/") && !value.includes("\\") && !/[\0\r\n]/.test(value) && !value.split("/").some(part => part === "." || part === ".." || part === ".git");
@@ -45,6 +71,37 @@ const writePlan = plan => { writeFileSync(planPath + ".pending", JSON.stringify(
 const ownedApp = file => file.startsWith("apps/" + input.appId + "/") || [".config/app-specs/" + input.appId + ".cue", ".config/app-specs/" + input.appId + ".md"].includes(file);
 const product = file => ownedApp(file) && (input.localSource || !file.startsWith("apps/" + input.appId + "/.config/mise/"));
 const releasePrefix = "apps/" + input.appId + "/schema/release/";
+const releaseMembers = ${JSON.stringify(GENERATED_RELEASE_MEMBERS)};
+const publishedRelease = input.publishedRelease;
+const validReleaseId = value => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value);
+const releaseConflict = (releaseId, file) => {
+  if (validReleaseId(releaseId)) process.stderr.write("APP_BUILDER_RELEASE_CONFLICT " + releaseId + "\n");
+  throw Error("An immutable app release has conflicting source bytes: " + file);
+};
+const verifyPublishedRelease = (sourceSha, oldEntries, targetEntries) => {
+  if (!publishedRelease) return;
+  const { mergeSha, releaseId, files } = publishedRelease;
+  const invalid = () => Error("The selected merged release does not match the current checked source.");
+  if (input.localSource || !validReleaseId(releaseId) || !/^[a-f0-9]{40,64}$/.test(mergeSha) ||
+      !files || Object.keys(files).length !== releaseMembers.length ||
+      !releaseMembers.every(member => /^[a-f0-9]{64}$/.test(files[member] ?? ""))) throw invalid();
+  const directory = releasePrefix + releaseId;
+  const prefix = directory + "/";
+  const inRelease = file => file === directory || file.startsWith(prefix);
+  const verifyFiles = (tree, emptyAllowed = false) => {
+    const members = [...tree].filter(([file]) => inRelease(file));
+    if (emptyAllowed && members.length === 0) return;
+    if (members.length !== releaseMembers.length ||
+        members.some(([file, entry]) => entry.mode !== "100644" || !Object.hasOwn(files, file.slice(prefix.length)) ||
+          createHash("sha256").update(git(["cat-file", "blob", entry.objectId], { buffer: true })).digest("hex") !== files[file.slice(prefix.length)])) throw invalid();
+  };
+  try { git(["merge-base", "--is-ancestor", mergeSha, sourceSha]); } catch { throw invalid(); }
+  verifyFiles(entries(mergeSha));
+  verifyFiles(entries(mergeSha + "^1"), true);
+  verifyFiles(targetEntries);
+  verifyFiles(oldEntries, true);
+  return inRelease;
+};
 // Only an owner-retained completed source transport may identify managed overlay
 // bytes. The candidate or manifest alone never selects a new merge base.
 let managedOverlay;
@@ -117,6 +174,10 @@ try {
   if (existsSync(planPath)) {
     const pending = JSON.parse(readFileSync(planPath, "utf8"));
     if (pending.sessionId !== input.sessionId || JSON.stringify(pending.baseline) !== JSON.stringify(input.baseline ?? null)) throw Error("Source reconciliation belongs to another session or app baseline.");
+    if (pending.publishedRelease !== undefined && !isDeepStrictEqual(pending.publishedRelease, publishedRelease)) {
+      if (publishedRelease === undefined) releaseConflict(pending.publishedRelease.releaseId, releasePrefix);
+      throw Error("The pending source reconciliation belongs to another merged app release.");
+    }
     complete(pending);
   }
   if (input.fetchRemote) {
@@ -147,6 +208,7 @@ try {
   if (oldHead === sourceSha && !input.localSource) { rmSync(temporary, { force: true, recursive: true }); console.log(JSON.stringify({ changed: false, checkpointRef, sourceSha, sourceTree })); process.exit(0); }
   const oldEntries = entries(oldHead);
   const targetEntries = entries(sourceSha);
+  const inPublishedRelease = verifyPublishedRelease(sourceSha, oldEntries, targetEntries);
   git(["read-tree", oldHead], { env: indexEnv });
   const paths = git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]).split("\0").filter(file => file && !file.startsWith(".app-builder/"));
   const records = [];
@@ -173,6 +235,8 @@ try {
   const snapshotCommit = git(["commit-tree", snapshotTree, "-p", oldHead], { input: "Checkpoint source before current-platform reconciliation\n" }).trim();
   git(["update-ref", checkpointRef, snapshotCommit]);
   const snapshotEntries = entries(snapshotTree);
+  if (inPublishedRelease && [...snapshotEntries].some(([file, entry]) => inPublishedRelease(file) && entry.mode !== "100644"))
+    throw Error("The saved app release contains a non-regular source entry and was preserved.");
   // Historical product bytes are an explicit baseline, not a merge conflict with
   // the newer app implementation. Repository-owned app tooling merges normally.
   updateIndex([...new Set([...oldEntries.keys(), ...snapshotEntries.keys()])].filter(product).map(file => setEntry(file, oldEntries.get(file))));
@@ -202,11 +266,15 @@ try {
   const protectedRecords = [];
   for (const file of new Set([...mergedEntries.keys(), ...snapshotEntries.keys()])) {
     if (!product(file)) continue;
+    if (inPublishedRelease?.(file)) {
+      protectedRecords.push(setEntry(file, targetEntries.get(file)));
+      continue;
+    }
     let preserved = snapshotEntries.get(file);
     if (!input.localSource && releasePrefix && file.startsWith(releasePrefix)) {
       const current = snapshotEntries.get(file);
       const added = targetEntries.get(file);
-      if (current && added && (current.objectId !== added.objectId || current.mode !== added.mode)) throw Error("An immutable app release has conflicting source bytes: " + file);
+      if (current && added && (current.objectId !== added.objectId || current.mode !== added.mode)) releaseConflict(file.slice(releasePrefix.length).split("/")[0], file);
       preserved = current ?? added;
     }
     protectedRecords.push(setEntry(file, preserved));
@@ -216,7 +284,7 @@ try {
   // A tracked update must not replace ignored private environment/dependency files.
   const ignored = git(["ls-files", "-z", "--others", "--ignored", "--exclude-standard"]).split("\0").filter(Boolean);
   const finalPaths = entries(workingTree);
-  const collisions = ignored.filter(file => [...finalPaths.keys()].some(target => target === file || target.startsWith(file + "/")));
+  const collisions = ignored.filter(file => inPublishedRelease?.(file) || [...finalPaths.keys()].some(target => target === file || target.startsWith(file + "/")));
   if (collisions.length) throw Error("Current repository source would overwrite ignored local files: " + collisions.slice(0, 20).join(", "));
   let marker;
   if (input.baseline) {
@@ -227,6 +295,7 @@ try {
     const oldUnexposed = new Set(marker.unexposedReleasePrefixes);
     const exposed = new Set([...snapshotEntries.keys()].filter(file => file.startsWith(releasePrefix)).map(file => releasePrefix + file.slice(releasePrefix.length).split("/")[0] + "/").filter(prefix => !oldUnexposed.has(prefix)));
     for (const file of targetEntries.keys()) if (file.startsWith(releasePrefix)) { const prefix = releasePrefix + file.slice(releasePrefix.length).split("/")[0] + "/"; if (!exposed.has(prefix)) oldUnexposed.add(prefix); }
+    if (inPublishedRelease) oldUnexposed.delete(releasePrefix + publishedRelease.releaseId + "/");
     const unexposedReleasePrefixes = [...oldUnexposed].sort();
     const { digest: priorDigest, ...unsigned } = marker.receipt;
     unsigned.platform = { commitSha: sourceSha, ref: input.branchRef, treeSha: sourceTree };
@@ -234,7 +303,7 @@ try {
     unsigned.unexposedReleaseDigest = createHash("sha256").update(JSON.stringify(unexposedReleasePrefixes)).digest("hex");
     marker = { platformFiles, receipt: { ...unsigned, digest: createHash("sha256").update(JSON.stringify(unsigned)).digest("hex") }, unexposedReleasePrefixes };
   }
-  const plan = { baseline: input.baseline ?? null, marker, sessionId: input.sessionId, sourceSha, workingTree };
+  const plan = { baseline: input.baseline ?? null, marker, sessionId: input.sessionId, sourceSha, workingTree, publishedRelease };
   writePlan(plan);
   complete(plan);
   console.log(JSON.stringify({ changed: true, checkpointRef, sourceSha, sourceTree }));
@@ -248,10 +317,11 @@ export const reconcilePlanningSource = async (input: {
   baseline?: AppBaselineSelection;
   branchRef: string;
   repository: string;
-  sandbox: SandboxSession;
+  sandbox: Pick<SandboxSession, "run">;
   sessionId: string;
   targetSha: string;
   token: string;
+  publishedRelease?: PublishedPlanningRelease;
 }) => {
   const request = {
     appId: z
@@ -265,6 +335,10 @@ export const reconcilePlanningSource = async (input: {
         : `/workspace/${appBaselineMarkerPath(input.baseline.appId)}`,
     branchRef: input.branchRef,
     fetchRemote: true,
+    publishedRelease:
+      input.publishedRelease === undefined
+        ? undefined
+        : publishedReleaseSchema.parse(input.publishedRelease),
     repository: input.repository,
     root: "/workspace/repository",
     sessionId: input.sessionId,
@@ -277,6 +351,12 @@ export const reconcilePlanningSource = async (input: {
     workingDirectory: "/workspace/repository",
   });
   if (result.exitCode !== 0) {
+    const conflict = /^APP_BUILDER_RELEASE_CONFLICT (?<id>[A-Za-z0-9][A-Za-z0-9._-]*)$/mu.exec(
+      result.stderr,
+    )?.groups?.id;
+    if (conflict !== undefined) {
+      throw new PlanningReleaseConflictError(conflict);
+    }
     const diagnostic = sanitizeValidationDiagnosticText(result.stderr || result.stdout);
     throw new Error(
       `Builder could not reconcile current repository source. Original authored source is checkpointed before replacement. Cause: ${diagnostic || "The repository command returned no diagnostic."}`,

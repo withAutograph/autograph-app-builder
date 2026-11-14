@@ -11,10 +11,16 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { appBaselineReceiptSchema } from "./app-baseline";
-import { planningSourceReconciliationProgram } from "./planning-source-reconciliation";
+import { GENERATED_RELEASE_MEMBERS } from "../provisioning/hosted-operator-sandbox-launcher";
+import {
+  PlanningReleaseConflictError,
+  planningSourceReconciliationProgram,
+  reconcilePlanningSource,
+} from "./planning-source-reconciliation";
+import type { PublishedPlanningRelease } from "./planning-source-reconciliation";
 
 const fixture = () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "source-reconciliation-"));
@@ -105,7 +111,11 @@ const fixture = () => {
       unexposedReleasePrefixes: [],
     }),
   );
-  const run = (program = planningSourceReconciliationProgram, requestedTargetSha = targetSha) =>
+  const run = (
+    program = planningSourceReconciliationProgram,
+    requestedTargetSha = targetSha,
+    publishedRelease?: PublishedPlanningRelease,
+  ) =>
     spawnSync(
       process.execPath,
       [
@@ -117,6 +127,7 @@ const fixture = () => {
           baselineMarkerPath,
           branchRef: "refs/heads/main",
           fetchRemote: false,
+          publishedRelease,
           root,
           sessionId: "session",
           stateRoot,
@@ -126,6 +137,38 @@ const fixture = () => {
       { cwd: root, encoding: "utf-8" },
     );
   return { baseline, baselineMarkerPath, git, oldHead, root, run, stateRoot, targetSha, write };
+};
+
+const releaseDirectory = "apps/spend-review/schema/release/v3";
+const artifactFile = `${releaseDirectory}/app-artifact.json`;
+const scratchFile = `${releaseDirectory}/unpublished-draft.txt`;
+const publishedFixture = (laterMember?: string) => {
+  const f = fixture();
+  f.git("checkout", "--quiet", "--detach", f.targetSha);
+  const files = Object.fromEntries(
+    GENERATED_RELEASE_MEMBERS.map((member) => {
+      const content = `Merged ${member}\n`;
+      f.write(`${releaseDirectory}/${member}`, content);
+      return [member, createHash("sha256").update(content).digest("hex")];
+    }),
+  );
+  f.git("add", releaseDirectory);
+  f.git("commit", "--quiet", "-m", "Merge owned release");
+  const mergeSha = f.git("rev-parse", "HEAD");
+  if (laterMember !== undefined) {
+    const file = `${releaseDirectory}/${laterMember}`;
+    f.write(file, "Unreviewed later bytes\n");
+    f.git("add", file);
+  }
+  f.write("successor-platform.txt", "Platform updated after the merge\n");
+  f.git("add", "successor-platform.txt");
+  f.git("commit", "--quiet", "-m", "Later platform source");
+  const currentSource = f.git("rev-parse", "HEAD");
+  f.git("checkout", "--quiet", "--detach", f.oldHead);
+  f.write(artifactFile, "Original unpublished artifact\n");
+  f.write(scratchFile, "Original unpublished release-only work\n");
+  f.write("apps/spend-review/product.txt", "Current app work\n");
+  return { ...f, currentSource, proof: { files, mergeSha, releaseId: "v3" } };
 };
 
 describe("owned planning source reconciliation", () => {
@@ -204,6 +247,109 @@ describe("owned planning source reconciliation", () => {
       rmSync(f.stateRoot, { force: true, recursive: true });
     }
   });
+  it("adopts one exact merged immutable cut and checkpoints the old release and authored work", () => {
+    const f = publishedFixture();
+    try {
+      const collision = f.run(planningSourceReconciliationProgram, f.currentSource);
+      expect(collision.status).not.toBe(0);
+      expect(collision.stderr).toContain("APP_BUILDER_RELEASE_CONFLICT v3");
+      expect(f.git("rev-parse", "HEAD")).toBe(f.oldHead);
+
+      const result = f.run(planningSourceReconciliationProgram, f.currentSource, f.proof);
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      expect(f.git("rev-parse", "HEAD")).toBe(f.currentSource);
+      expect(readFileSync(path.join(f.root, artifactFile), "utf-8")).toBe(
+        "Merged app-artifact.json\n",
+      );
+      expect(() => readFileSync(path.join(f.root, scratchFile), "utf-8")).toThrow();
+      expect(readFileSync(path.join(f.root, "apps/spend-review/product.txt"), "utf-8")).toBe(
+        "Current app work\n",
+      );
+      const { checkpointRef } = z
+        .object({ checkpointRef: z.string() })
+        .parse(JSON.parse(result.stdout));
+      expect(f.git("show", `${checkpointRef}:${artifactFile}`)).toBe(
+        "Original unpublished artifact",
+      );
+      expect(f.git("show", `${checkpointRef}:${scratchFile}`)).toBe(
+        "Original unpublished release-only work",
+      );
+      const marker = z
+        .object({ unexposedReleasePrefixes: z.array(z.string()) })
+        .parse(JSON.parse(readFileSync(f.baselineMarkerPath, "utf-8")));
+      expect(marker.unexposedReleasePrefixes).not.toContain(`${releaseDirectory}/`);
+    } finally {
+      rmSync(f.root, { force: true, recursive: true });
+      rmSync(f.stateRoot, { force: true, recursive: true });
+    }
+  });
+
+  it.each([
+    { failure: "hash" },
+    { failure: "unmerged" },
+    { failure: "changed target", laterMember: "app-artifact.json" },
+    { failure: "extra target member", laterMember: "extra.bin" },
+    { failure: "tracked prior" },
+  ])(
+    "preserves the checkout when the exact published cut proof fails ($failure)",
+    ({ failure, laterMember }) => {
+      const f = publishedFixture(laterMember);
+      try {
+        const target = failure === "unmerged" ? f.targetSha : f.currentSource;
+        let { proof } = f;
+        let expectedHead = f.oldHead;
+        let original = "Original unpublished artifact\n";
+        if (failure === "hash") {
+          proof = { ...proof, files: { ...proof.files, "app-artifact.json": "f".repeat(64) } };
+        }
+        if (failure === "tracked prior") {
+          original = "Different existing release bytes\n";
+          f.write(artifactFile, original);
+          f.git("add", artifactFile);
+          f.git("commit", "--quiet", "-m", "Existing tracked release bytes");
+          expectedHead = f.git("rev-parse", "HEAD");
+        }
+        const result = f.run(planningSourceReconciliationProgram, target, proof);
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain("selected merged release does not match");
+        expect(f.git("rev-parse", "HEAD")).toBe(expectedHead);
+        expect(readFileSync(path.join(f.root, artifactFile), "utf-8")).toBe(original);
+      } finally {
+        rmSync(f.root, { force: true, recursive: true });
+        rmSync(f.stateRoot, { force: true, recursive: true });
+      }
+    },
+  );
+
+  it("reports a typed generated release conflict without returning local filenames", async () => {
+    const sandbox = {
+      run: vi
+        .fn<Parameters<typeof reconcilePlanningSource>[0]["sandbox"]["run"]>()
+        .mockResolvedValue({
+          exitCode: 1,
+          stdout: "",
+          stderr: "APP_BUILDER_RELEASE_CONFLICT 2026-11-16.v8\nprivate/filename\n",
+        }),
+    } satisfies Parameters<typeof reconcilePlanningSource>[0]["sandbox"];
+    await expect(
+      reconcilePlanningSource({
+        appId: "spend-review",
+        branchRef: "refs/heads/main",
+        repository: "https://github.com/example/arrusted.git",
+        sandbox,
+        sessionId: "session",
+        targetSha: "a".repeat(40),
+        token: "fixture",
+      }),
+    ).rejects.toMatchObject({
+      name: PlanningReleaseConflictError.name,
+      releaseId: "2026-11-16.v8",
+      message:
+        "A saved app release conflicts with the current repository source. Its original bytes are preserved.",
+    });
+  });
+
   it("keeps an unchanged current checkout intact on retry", () => {
     const f = fixture();
     try {

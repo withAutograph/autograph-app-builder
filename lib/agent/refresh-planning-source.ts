@@ -12,9 +12,15 @@ import {
 } from "./workflow-state";
 import type { AcceptedAppSpec, AppBuilderWorkflowState } from "./workflow-state";
 import { getSourceBoundSandbox } from "./source-bound-sandbox";
-import { reconcilePlanningSource } from "../repository/planning-source-reconciliation";
+import {
+  PlanningReleaseConflictError,
+  reconcilePlanningSource,
+} from "../repository/planning-source-reconciliation";
+import { readMergedReleaseSourceRecovery } from "./merged-release-source-recovery";
 import { readAppBaselineMarker } from "../repository/app-baseline";
 import { resolveVercelSessionGitSource } from "../sandbox/vercel-session-source";
+
+const schemaCompilation = "schema-compilation";
 
 type RefreshableSourceState = Extract<AppBuilderWorkflowState, { appSpec: AcceptedAppSpec }>;
 const canRefreshSource = (
@@ -25,14 +31,14 @@ const canRefreshSource = (
     return true;
   }
   return (
-    purpose === "schema-compilation" &&
+    purpose === schemaCompilation &&
     ["applied", "validation_failed", "validated"].includes(state.phase)
   );
 };
 
 /** Reconcile branch foundations before planning while retaining the accepted product and authored source. */
 export const refreshPlanningSource = async (
-  ctx: Pick<ToolContext, "callId" | "getSandbox"> & { session: { auth: unknown; id: string } },
+  ctx: ToolContext,
   purpose: "planning" | "schema-compilation" = "planning",
 ) => {
   if (purpose === "planning") {
@@ -101,7 +107,33 @@ export const refreshPlanningSource = async (
       if (baseline !== undefined) {
         reconciliation.baseline = baseline.selection;
       }
-      await reconcilePlanningSource(reconciliation);
+      try {
+        await reconcilePlanningSource(reconciliation);
+      } catch (error) {
+        if (
+          purpose !== schemaCompilation ||
+          !(error instanceof PlanningReleaseConflictError) ||
+          !("applyReceipt" in current)
+        ) {
+          throw error;
+        }
+        const publishedRelease = await readMergedReleaseSourceRecovery({
+          current,
+          ctx,
+          installationId: access.scope.installationId,
+          releaseId: error.releaseId,
+        });
+        if (publishedRelease === null) {
+          throw error;
+        }
+        ctx.abortSignal.throwIfAborted();
+        assertExactWorkflowState(
+          appBuilderWorkflowState.get(),
+          current,
+          "restore checked history while compiling the approved app",
+        );
+        await reconcilePlanningSource({ ...reconciliation, publishedRelease });
+      }
       return sandbox;
     },
     selectedInstallationId: access.scope.installationId,
@@ -121,7 +153,7 @@ export const refreshPlanningSource = async (
   // The Git checkpoint/checkout and marker transition precede these durable Eve
   // state writes. New planning receipts are derived from the retained AppSpec.
   const refreshed: AppBuilderWorkflowState =
-    purpose === "schema-compilation" && "applyReceipt" in current
+    purpose === schemaCompilation && "applyReceipt" in current
       ? {
           ...current,
           githubSource: prepared.githubSource,

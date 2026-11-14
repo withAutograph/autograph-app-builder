@@ -1,6 +1,7 @@
 /* oxlint-disable anti-slop/no-module-mocking, typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Controlled owner/read/reconciliation ports exercise the real refresh hook without provider calls. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { refreshPlanningSource } from "./refresh-planning-source";
+import { PlanningReleaseConflictError } from "../repository/planning-source-reconciliation";
 
 interface FixtureState {
   phase: string;
@@ -24,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   observeLocal: vi.fn<() => Promise<void>>().mockResolvedValue(),
   prepare: vi.fn(),
   reconcile: vi.fn(),
+  recoverRelease: vi.fn(),
   sandbox: { id: "owned-sandbox" },
   sourceUpdate: vi.fn(),
   state: {} as FixtureState,
@@ -59,8 +61,14 @@ vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: async () =>
     await Promise.resolve({ inspectSourceBranch: mocks.inspect }),
 }));
-vi.mock("../repository/planning-source-reconciliation", () => ({
+vi.mock("../repository/planning-source-reconciliation", async (importOriginal) => ({
+  ...(await importOriginal<{
+    PlanningReleaseConflictError: typeof PlanningReleaseConflictError;
+  }>()),
   reconcilePlanningSource: mocks.reconcile,
+}));
+vi.mock("./merged-release-source-recovery", () => ({
+  readMergedReleaseSourceRecovery: mocks.recoverRelease,
 }));
 vi.mock("../sandbox/vercel-session-source", () => ({
   resolveVercelSessionGitSource: async () =>
@@ -70,6 +78,7 @@ vi.mock("../sandbox/vercel-session-source", () => ({
     }),
 }));
 const ctx = {
+  abortSignal: new AbortController().signal,
   callId: "compile-refresh",
   getSandbox: vi.fn(),
   session: { auth: {}, id: "owned-session" },
@@ -143,6 +152,42 @@ describe("shared source refresh before schema compilation", () => {
         targetSha: "b".repeat(40),
       }),
     );
+  });
+  it("retries only the proven merged release in the current applied proposal", async () => {
+    const original = mocks.state;
+    const proof = {
+      mergeSha: "c".repeat(40),
+      releaseId: "v8",
+      files: { "app-artifact.json": "d".repeat(64) },
+    };
+    mocks.reconcile.mockRejectedValueOnce(new PlanningReleaseConflictError("v8"));
+    mocks.recoverRelease.mockResolvedValueOnce(proof);
+    await expect(refreshPlanningSource(ctx as never, "schema-compilation")).resolves.toBe(
+      mocks.sandbox,
+    );
+    expect(mocks.recoverRelease).toHaveBeenCalledWith({
+      current: original,
+      ctx,
+      installationId: "owned-installation",
+      releaseId: "v8",
+    });
+    expect(mocks.reconcile.mock.calls[1]?.[0]).toEqual({
+      ...mocks.reconcile.mock.calls[0]?.[0],
+      publishedRelease: proof,
+    });
+    expect(mocks.updateWorkflow.mock.calls[0]?.[0](original)).toMatchObject({
+      applyReceipt: original.applyReceipt,
+      proposal: original.proposal,
+    });
+  });
+  it("leaves the source conflict pending if the exact owned publication is unavailable", async () => {
+    mocks.reconcile.mockRejectedValueOnce(new PlanningReleaseConflictError("v8"));
+    mocks.recoverRelease.mockResolvedValueOnce(null);
+    await expect(refreshPlanningSource(ctx as never, "schema-compilation")).rejects.toBeInstanceOf(
+      PlanningReleaseConflictError,
+    );
+    expect(mocks.reconcile).toHaveBeenCalledTimes(1);
+    expect(mocks.updateWorkflow).not.toHaveBeenCalled();
   });
   it("keeps ordinary planning refresh out of already applied builds", async () => {
     await refreshPlanningSource(ctx as never);
