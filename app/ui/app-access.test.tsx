@@ -424,10 +424,45 @@ describe("Builder app access", () => {
       <AppAccessPage sessionId={snapshot.sessionId} continueAction={continuation} />,
     );
     await click(container, "Show more people");
-    expect(calls[1]).toContain("cursor=page-two");
+    expect(calls.some((url) => url.includes("cursor=page-two"))).toBe(true);
     expect(container.textContent).toContain("Creator");
     expect(container.textContent).toContain("Guest");
     expect(container.textContent).not.toContain("Show more people");
+  });
+
+  it("shows delivery progress while preserving the available current app link", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async (url: string) =>
+          await Promise.resolve(
+            Response.json(
+              url.includes("/delivery?")
+                ? {
+                    cursor: 1,
+                    working: true,
+                    delivery: {
+                      phase: "updating-data",
+                      disposition: "retrying",
+                      observedAt: "2026-11-10T16:02:00Z",
+                      startedAt: "2026-11-10T16:01:00Z",
+                      appUrl: snapshot.appUrl,
+                    },
+                  }
+                : snapshot,
+            ),
+          ),
+      ),
+    );
+    const container = await render(
+      <AppAccessPage sessionId={snapshot.sessionId} continueAction={continuation} />,
+    );
+    expect(container.textContent).toContain("Updating app data");
+    expect(container.textContent).toContain("Builder is checking again.");
+    const open = [...container.querySelectorAll("a")].find(
+      (link) => link.textContent === "Open Request log",
+    );
+    expect(open?.href).toBe(snapshot.appUrl);
   });
 
   it("disables duplicate controls while the Server Action is pending and renders its completed state", async () => {

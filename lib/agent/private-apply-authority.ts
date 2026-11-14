@@ -68,6 +68,15 @@ export const recordApprovedPrivateApply = (scope: PrivateApplyScope, callId: str
     grant: scope,
     pending: current.pending.filter((entry) => entry.callId !== callId),
   }));
+  if (!sameScope(current.grant, scope)) {
+    console.info(
+      JSON.stringify({
+        event: "app_builder.build_grant_recorded",
+        callId,
+        observedAt: new Date().toISOString(),
+      }),
+    );
+  }
 };
 
 /** A policy decision for another call or scope cannot authorize this execution. */

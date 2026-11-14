@@ -3,6 +3,7 @@ import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";
 import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled-operator-artifacts";
 import { safeCommandOutput } from "@/lib/agent/command-output";
+import { validationInputCorrelation } from "@/lib/repository/validation-log";
 import { z } from "zod";
 import { refreshPlanningSource } from "@/lib/agent/refresh-planning-source";
 import { currentDirectProductionGrant } from "@/lib/agent/direct-production-state";
@@ -30,6 +31,9 @@ export const appSchemaReleaseCommand = (appId: string): string =>
 
 export const compileAppSchemaRelease = async (input: {
   appId: string;
+  callId?: string;
+  /** Optional exact source and dependency lock observed immediately before the command. */
+  observedInput?: { sessionId: string; resolvedTree: string };
   root: string;
   sandbox: Pick<SandboxSession, "run">;
   signal?: AbortSignal;
@@ -37,6 +41,9 @@ export const compileAppSchemaRelease = async (input: {
   environment?: Record<string, string>;
 }) => {
   const command = appSchemaReleaseCommand(input.appId);
+  const startedAt = new Date().toISOString();
+  const startedMonotonic = performance.now();
+  let exitCode: number | null = null;
   try {
     const request: Parameters<SandboxSession["run"]>[0] = { command, workingDirectory: input.root };
     if (input.environment !== undefined) {
@@ -45,7 +52,35 @@ export const compileAppSchemaRelease = async (input: {
     if (input.signal !== undefined) {
       request.abortSignal = input.signal;
     }
-    const result = await input.sandbox.run(request);
+    let result;
+    try {
+      result = await input.sandbox.run(request);
+      ({ exitCode } = result);
+    } finally {
+      if (input.callId !== undefined) {
+        const inputCorrelation =
+          input.observedInput === undefined
+            ? undefined
+            : validationInputCorrelation(
+                input.observedInput.sessionId,
+                input.observedInput.resolvedTree,
+                command,
+              );
+        console.info(
+          JSON.stringify({
+            event: "app_builder.validation_command",
+            callId: input.callId,
+            command: "schema-compile",
+            elapsedMs: Math.round(performance.now() - startedMonotonic),
+            exitCode,
+            finishedAt: new Date().toISOString(),
+            phase: exitCode === null ? "provider_error" : "finished",
+            startedAt,
+            validationInputCorrelation: inputCorrelation,
+          }),
+        );
+      }
+    }
     const stdout = safeCommandOutput(result.stdout, { taskLabel: "app:compile" });
     const stderr = safeCommandOutput(result.stderr, { taskLabel: "app:compile" });
     if (result.exitCode !== 0) {
@@ -188,6 +223,7 @@ export default defineTool({
     }
     return await compileAppSchemaRelease({
       appId: session.appId,
+      callId: ctx.callId,
       environment: prepared.environment,
       onCompiled: async () => {
         const result = await publishCompiledOperatorArtifactsForSession({

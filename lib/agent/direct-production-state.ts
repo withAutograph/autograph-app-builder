@@ -867,6 +867,56 @@ export const currentDirectProductionGrant = (
   return grant;
 };
 
+/** Locate the settled approval for a private repair without assigning it to a new draft. */
+export const retainedPrivateDraftSchemaGrant = (
+  ctx: OwnerContext,
+  candidate: NonNullable<ReturnType<typeof draftReconciliationState.get>>,
+) => {
+  const { grant } = authorization.get();
+  const approved = grant?.subject.revision;
+  const workflow = appBuilderWorkflowState.get();
+  const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
+  if (state.phase !== "reviewed" || grant === undefined || approved?.schemaChange === undefined) {
+    return null;
+  }
+  const { subject } = grant;
+  const original = subjectForProposal(ctx, state, [], revisionPredecessor(state.proposal.digest));
+  if (
+    original?.revision?.schemaChange === undefined ||
+    candidate.appId !== subject.appId ||
+    candidate.originalReviewDigest !== state.reviewReceipt.digest ||
+    candidate.repositoryId !== subject.repositoryId
+  ) {
+    return null;
+  }
+  const { reconciliation, schemaChange, ...revision } = approved;
+  const originalScope = {
+    ...subject,
+    revision: {
+      ...revision,
+      schemaChange: reconciliation === undefined ? schemaChange : original.revision.schemaChange,
+    },
+  };
+  if (!sameSubject(original, originalScope)) {
+    return null;
+  }
+  if (reconciliation !== undefined) {
+    const origin =
+      candidate.publishedOrigin?.publicationProposalDigest ??
+      candidate.publicationScope?.proposal.digest ??
+      state.publishedGitHubDraftProposalDigest;
+    if (
+      candidate.pullRequestNumber !== reconciliation.pullRequestNumber ||
+      origin !== reconciliation.originPublicationDigest ||
+      (candidate.headSha !== reconciliation.expectedHeadSha &&
+        candidate.headTree !== reconciliation.resolvedTree)
+    ) {
+      return null;
+    }
+  }
+  return { grant, schemaChange };
+};
+
 /** A checked correction can continue delivery under the settled grant that approved its exact addition. */
 export const currentDirectProductionDeliveryAuthorization = (
   ctx: OwnerContext,
@@ -918,6 +968,30 @@ export const currentDirectProductionDeliveryAuthorization = (
         correction,
       }
     : undefined;
+};
+
+/** A saved availability read may use a schema grant only for its current reviewed revision. */
+export const savedDirectProductionSchemaBinding = (ctx: OwnerContext, match: SubjectMatch) => {
+  const { grant } = authorization.get();
+  const workflow = appBuilderWorkflowState.get();
+  const state = resolveDraftReviewedWorkflow(workflow, draftReconciliationState.get()) ?? workflow;
+  if (state.phase !== "reviewed" || grant?.subject.revision?.schemaChange === undefined) {
+    return null;
+  }
+  const { subject } = grant;
+  const sameScope = [
+    subject.proposalDigest === state.proposal.digest,
+    subject.appId === match.appId,
+    subject.repositoryId === match.repositoryId,
+    subject.repositoryFullName === match.repositoryFullName,
+  ].every(Boolean);
+  if (!sameScope) {
+    return null;
+  }
+  const current = currentDirectProductionDeliveryAuthorization(ctx, match);
+  return current === undefined
+    ? { kind: "unverified" as const }
+    : { kind: "verified" as const, grantDigest: current.effectDigest };
 };
 
 /** A new combined decision can replace the grant for an exact still-draft schema revision. */

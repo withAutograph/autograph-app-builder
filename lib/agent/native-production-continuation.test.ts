@@ -3,10 +3,14 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type { ToolContext, WorkflowToolContext } from "eve/tools";
 import { z } from "zod";
+import { deliveryProgressSchema } from "../delivery-progress";
 import type { GitHubPrDeliveryApproval } from "./github-pr-delivery-approval";
 import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contract";
 import type { RepositoryProductionNativeStatus } from "../provisioning/repository-production-native-status-contract";
-import { createRepositoryProductionClient } from "./repository-production-client";
+import {
+  createRepositoryProductionClient,
+  RepositoryProductionSetupInterventionRequiredError,
+} from "./repository-production-client";
 import { readSettledMergedAppProductionSchema } from "./app-production-observation";
 import finishDelivery from "../../agent/tools/finish-github-pr-delivery";
 import observeProduction from "../../agent/tools/observe-app-production";
@@ -127,9 +131,10 @@ const workflowIterator = (execution: ReturnType<typeof finishDelivery.execute>) 
   const iterator: AsyncIterator<unknown, unknown> = execution[Symbol.asyncIterator]();
   return iterator;
 };
-const settle = async (iterator: AsyncIterator<unknown, unknown>) => {
+const settle = async (iterator: AsyncIterator<unknown, unknown>, partials?: unknown[]) => {
   let item = await iterator.next();
   while (item.done !== true) {
+    partials?.push(item.value);
     // oxlint-disable-next-line eslint/no-await-in-loop -- Drive the same workflow to its terminal result.
     item = await iterator.next();
   }
@@ -156,30 +161,47 @@ beforeEach(() => {
 it("installs the approved addition only after the provider activates the exact merged revision", async () => {
   const approvalReference = { appId, operationRef: "same-existing-app-setup" };
   const mergeIntentDigest = "d".repeat(64);
+  const schemaGrantDigest = "e".repeat(64);
+  const readyAt = "2026-11-10T15:55:00Z";
+  const deliveryObservedAt = "2026-11-10T16:00:00Z";
+  const providerActivatedAt = "2026-11-10T16:01:00Z";
+  const dataUpdatedAt = "2026-11-10T16:02:00Z";
+  const activated = {
+    ...observed("pending", "awaiting-activation"),
+    observedAt: providerActivatedAt,
+    deployment: { state: "active", requestedRevisionActive: true },
+  };
+  mocks.continueDelivery.mockResolvedValueOnce({
+    status: "waiting-for-checks",
+    readyAt,
+    currentAppUrl: appUrl,
+    nativeProductionPending: true,
+  });
   mocks.continueDelivery.mockResolvedValue({
     status: "merged",
     mergeCommitSha,
     nativeProductionTarget,
     schemaActivation: { deliveryCallId: "approved-merge-call", mergeIntentDigest },
+    deliveryObservedAt,
   });
   mocks.readAuthority.mockResolvedValue({
     subject: { appId },
     requirements: [],
     productionSchemaApprovalCallId: "single-build-approval",
+    productionSchemaGrantDigest: schemaGrantDigest,
   });
   const nativeStatus = vi
     .fn()
     // A signed-out response can appear live before the protected provider proof is available.
     .mockResolvedValueOnce(observed("available", "live"))
+    .mockResolvedValueOnce(activated)
+    .mockResolvedValueOnce(activated)
+    .mockResolvedValueOnce(activated)
     .mockResolvedValueOnce({
-      ...observed("pending", "awaiting-activation"),
-      deployment: { state: "active", requestedRevisionActive: true },
-    })
-    .mockResolvedValueOnce({
-      ...observed("pending", "awaiting-activation"),
-      deployment: { state: "active", requestedRevisionActive: true },
-    })
-    .mockResolvedValueOnce(observed("available", "live"));
+      ...observed("available", "live"),
+      observedAt: dataUpdatedAt,
+      schemaSetupSettled: true,
+    });
   const plan = vi.fn().mockResolvedValue({ approvalReference });
   const prepare = vi
     .fn()
@@ -191,10 +213,26 @@ it("installs the approved addition only after the provider activates the exact m
     await Promise.resolve();
   });
 
-  await expect(finish()).resolves.toMatchObject({
+  const partials: unknown[] = [];
+  const workflow = workflowIterator(finishDelivery.execute(approval, context()));
+  await expect(settle(workflow, partials)).resolves.toMatchObject({
     status: "merged",
     nativeProduction: { requestedRevision: "live", app: { url: appUrl } },
+    deliveryProgress: { phase: "live", observedAt: dataUpdatedAt, appUrl },
   });
+  expect(partials).toMatchObject([
+    { deliveryProgress: { phase: "waiting-for-checks", startedAt: readyAt, appUrl } },
+    { deliveryProgress: { phase: "deploying", startedAt: deliveryObservedAt, appUrl } },
+    { deliveryProgress: { phase: "updating-data", startedAt: providerActivatedAt, appUrl } },
+    {
+      deliveryProgress: {
+        phase: "updating-data",
+        startedAt: providerActivatedAt,
+        disposition: "retrying",
+        appUrl,
+      },
+    },
+  ]);
   expect(nativeStatus).toHaveBeenNthCalledWith(1, appId, mergeCommitSha, true);
   expect(nativeStatus).toHaveBeenNthCalledWith(2, appId, mergeCommitSha, true);
   expect(prepare).toHaveBeenCalledTimes(2);
@@ -204,8 +242,48 @@ it("installs the approved addition only after the provider activates the exact m
     mergeSha: mergeCommitSha,
     reviewedHeadSha: approval.headSha,
   });
-  expect(nativeStatus).toHaveBeenNthCalledWith(4, appId, mergeCommitSha);
-  expect(mocks.continueDelivery).toHaveBeenCalledTimes(1);
+  expect(nativeStatus).toHaveBeenLastCalledWith(
+    appId,
+    mergeCommitSha,
+    undefined,
+    schemaGrantDigest,
+  );
+  expect(mocks.continueDelivery).toHaveBeenCalledTimes(2);
+});
+
+it("reports an exact setup refusal as needing intervention and keeps the current app link", async () => {
+  mocks.continueDelivery.mockResolvedValue({
+    status: "merged",
+    mergeCommitSha,
+    nativeProductionTarget,
+    schemaActivation: { deliveryCallId: "approved-merge-call", mergeIntentDigest: "d".repeat(64) },
+    deliveryObservedAt: "2026-11-10T16:00:00Z",
+  });
+  mocks.readAuthority.mockResolvedValue({
+    subject: { appId },
+    productionSchemaApprovalCallId: "single-build-approval",
+    productionSchemaGrantDigest: "e".repeat(64),
+  });
+  const active = {
+    ...observed("available", "awaiting-activation"),
+    deployment: { state: "active", requestedRevisionActive: true },
+  };
+  const plan = vi.fn().mockResolvedValue({ approvalReference: { appId } });
+  const prepare = vi
+    .fn()
+    .mockRejectedValue(
+      new RepositoryProductionSetupInterventionRequiredError("Recheck the saved destination"),
+    );
+  const nativeStatus = vi.fn().mockResolvedValue(active);
+  mocks.clientForContext.mockResolvedValue({ nativeStatus, plan, prepare });
+
+  await expect(finish()).resolves.toMatchObject({
+    status: "merged",
+    schemaUpdatePending: true,
+    deliveryProgress: { phase: "updating-data", disposition: "intervention-required", appUrl },
+  });
+  expect(mocks.sleep).not.toHaveBeenCalled();
+  expect(prepare).toHaveBeenCalledTimes(1);
 });
 
 it("continues an actual merged workflow through protected native reads without merging again", async () => {
@@ -471,17 +549,32 @@ it("returns merged with the available app link when activation remains pending b
 });
 
 it("keeps the known app link and merge after a transient native provider read failure", async () => {
+  mocks.continueDelivery.mockResolvedValue({
+    status: "merged",
+    mergeCommitSha,
+    nativeProductionTarget,
+    deliveryObservedAt: "2026-11-10T16:00:00Z",
+  });
   const nativeStatus = vi
     .fn()
     .mockResolvedValueOnce(observed("available", "awaiting-activation"))
-    .mockRejectedValueOnce(new Error("provider unavailable"));
+    .mockRejectedValueOnce(new Error("provider unavailable"))
+    .mockResolvedValueOnce(observed("available", "live"));
   mocks.clientForContext.mockResolvedValue({ nativeStatus });
 
-  await expect(finish()).resolves.toMatchObject({
+  const partials: unknown[] = [];
+  const workflow = workflowIterator(finishDelivery.execute(approval, context()));
+  await expect(settle(workflow, partials)).resolves.toMatchObject({
     status: "merged",
     mergeCommitSha,
-    nativeProduction: { status: "service-unavailable", app: { url: appUrl } },
+    nativeProduction: { status: "available", requestedRevision: "live", app: { url: appUrl } },
+    deliveryProgress: { phase: "live", appUrl },
   });
+  const progress = z.array(z.object({ deliveryProgress: deliveryProgressSchema })).parse(partials);
+  expect(
+    progress.find(({ deliveryProgress }) => deliveryProgress.disposition === "retrying")
+      ?.deliveryProgress,
+  ).toMatchObject({ phase: "deploying", appUrl });
   expect(mocks.continueDelivery).toHaveBeenCalledOnce();
 });
 

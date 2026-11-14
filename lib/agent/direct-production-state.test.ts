@@ -52,6 +52,7 @@ import {
   prepareDirectProductionDraftReconciliation,
   recordDirectProductionGrant,
   requestDirectProductionGrant,
+  retainedPrivateDraftSchemaGrant,
   restoreDirectProductionRevisionPredecessor,
 } from "./direct-production-state";
 import {
@@ -1527,6 +1528,27 @@ describe("direct Production Build authority", () => {
         priorGrantDigest: repaired.digest,
         priorProposalDigest: repaired.subject.proposalDigest,
       });
+    });
+  });
+
+  it("locates the settled schema approval for private recovery without authorizing publication", () => {
+    contextStorage.run(new ContextContainer(), () => {
+      const { failed } = retainSealedSchemaCorrection("predecessor");
+      const candidate = draftReconciliationState.get();
+      if (candidate === null) {
+        throw new Error("Expected a private correction candidate.");
+      }
+      expect(retainedPrivateDraftSchemaGrant(releaseContext, candidate)?.grant).toEqual(failed);
+      expect(retainedPrivateDraftSchemaGrant(context("other-owner"), candidate)).toBeNull();
+      expect(
+        retainedPrivateDraftSchemaGrant(releaseContext, {
+          ...candidate,
+          repositoryId: "another-repo",
+        }),
+      ).toBeNull();
+      expect(
+        currentDirectProductionDeliveryAuthorization(releaseContext, failed.subject),
+      ).toBeUndefined();
     });
   });
 

@@ -43,8 +43,16 @@ export const repositoryProductionNativeStatusSchema = z
     }),
     requestedRevision: z.enum(["unassessed", "awaiting-activation", "live"]),
     schemaSetupSettled: z.literal(true).optional(),
+    schemaUpdateDisposition: z.enum(["retrying", "intervention-required"]).optional(),
     serviceIssue: z
-      .enum(["configuration", "provider-access", "provider-read", "domain-binding", "gateway-read"])
+      .enum([
+        "configuration",
+        "provider-access",
+        "provider-read",
+        "domain-binding",
+        "gateway-read",
+        "deployment-failed",
+      ])
       .optional(),
   })
   .refine(

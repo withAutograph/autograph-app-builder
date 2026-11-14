@@ -3,6 +3,8 @@ import type { ReactElement, ReactNode } from "react";
 import { FaGithub } from "react-icons/fa";
 
 import { ChoiceCard, SectionShell } from "../../../components/create-app/choice-card";
+import { ProductionDeliveryProgress } from "../../../components/create-app/production-delivery-progress";
+import type { DeliveryProgress } from "../../delivery-progress";
 import {
   githubConnectionPrompt,
   githubRepositoryAccessViewModel,
@@ -770,6 +772,7 @@ export function SessionAppView({
   onOpenLink,
   onRespond,
   result,
+  deliveryProgress,
   identityInvitations = [],
 }: {
   canCallTools: boolean;
@@ -777,6 +780,7 @@ export function SessionAppView({
   onOpenLink: (url: string) => Promise<void>;
   onRespond: (responses: SessionResponse[]) => Promise<void>;
   result?: EveSessionResult;
+  deliveryProgress?: DeliveryProgress;
   identityInvitations?: PublicIdentityInvitation[];
 }) {
   const [answers, setAnswers] = useState<Record<string, SessionAnswer>>({});
@@ -869,6 +873,19 @@ export function SessionAppView({
     canOpenLinks,
     onOpenLink,
   });
+  if (
+    deliveryProgress !== undefined &&
+    result.status !== "failed" &&
+    decisionOutcome?.status !== "failed"
+  ) {
+    invitations.unshift(
+      <ProductionDeliveryProgress
+        key="production-delivery"
+        progress={deliveryProgress}
+        onOpenLink={canOpenLinks ? onOpenLink : undefined}
+      />,
+    );
+  }
   if (
     result.status === "failed" ||
     decisionOutcome?.status === "failed" ||

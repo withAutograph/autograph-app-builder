@@ -40,6 +40,10 @@ export interface ValidationLogStore {
 }
 
 const sha256 = (value: string): string => createHash("sha256").update(value, "utf-8").digest("hex");
+
+/** Correlate command repeats on the same observed source and lockfile within one session. */
+export const validationInputCorrelation = (sessionId: string, tree: string, command: string) =>
+  sha256(JSON.stringify(["validation-input-observation-v1", sessionId, tree, command]));
 const CHUNK_BYTES = 32 * 1024;
 // Keep a suffix when streaming an unseparated line so a credential marker
 // split at the operation boundary is recognized before any value is written.

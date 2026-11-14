@@ -9,7 +9,8 @@ import {
   eveSessionResultSchema,
   eveStartInputSchema,
 } from "../../lib/mcp/contracts";
-import type { EveSessionResult } from "../../lib/mcp/contracts";
+import type { EveSessionResult, PublicInputRequest } from "../../lib/mcp/contracts";
+import type { DeliveryProgress } from "../../lib/delivery-progress";
 import type { z } from "zod";
 import { sanitizeEvidence } from "./self-reproduction-evidence";
 
@@ -18,6 +19,14 @@ export type Responses = {
   response: { kind: "approve" | "deny" } | { kind: "answer"; value: string; optionId?: string };
 }[];
 export type PublicStartInput = z.infer<typeof eveStartInputSchema>;
+
+interface BuildApprovalObservation {
+  requestId: string;
+  kind: "private-build" | "build-and-release";
+  firstObservedAt: string;
+  response?: { decision: "approve" | "deny"; acknowledgedAt: string };
+}
+
 export interface PublicState {
   version: 1;
   endpoint: string;
@@ -33,6 +42,8 @@ export interface PublicState {
   /** Accepted SEND may precede native progress beyond the previous waiting snapshot. */
   awaitingMessageProgressAfterCursor?: number;
   answered: string[];
+  buildApprovals?: BuildApprovalObservation[];
+  deliveryTiming?: Omit<DeliveryProgress, "appUrl">[];
   outcome: string;
   error?: string;
   promptSha256?: string;
@@ -131,6 +142,11 @@ export const publicObservationReport = (state: PublicState, nowMs = Date.now()) 
   }
   const report = {
     ...state,
+    buildApprovals: (state.buildApprovals ?? []).map(({ kind, firstObservedAt, response }) => ({
+      kind,
+      firstObservedAt,
+      response,
+    })),
     comparison: "unassessed",
     elapsedMs: nowMs - Date.parse(state.startedAt),
     note: "A completed Builder session or HTTP-ready preview does not prove a working independent replica. Compare user-visible behavior separately.",
@@ -161,6 +177,63 @@ export const publicObservationReport = (state: PublicState, nowMs = Date.now()) 
     redaction:
       "Shareable URLs retain origins only. Original public responses and usable preview URLs remain in owner-only transcript.private.jsonl and state.json; do not share these private files.",
   });
+};
+
+const buildApprovalKind = (
+  request: PublicInputRequest,
+): BuildApprovalObservation["kind"] | undefined => {
+  if (request.kind === "approval") {
+    if (request.title === "Build this app?") {
+      return "private-build";
+    }
+    if (request.title === "Build and release to Production?") {
+      return "build-and-release";
+    }
+  }
+  return undefined;
+};
+
+/** Persist the first observation even after later event pages no longer contain that card. */
+const observeBuildApprovals = (state: PublicState, result: EveSessionResult): void => {
+  const observations = state.buildApprovals ?? [];
+  const seen = new Set(observations.map(({ requestId }) => requestId));
+  const requests = [
+    ...result.events.flatMap((event) => (event.type === "input_required" ? [event.request] : [])),
+    ...(result.inputRequests ?? []),
+  ];
+  const firstObservedAt = new Date().toISOString();
+  for (const request of requests) {
+    const kind = buildApprovalKind(request);
+    if (kind !== undefined && !seen.has(request.requestId)) {
+      observations.push({ kind, requestId: request.requestId, firstObservedAt });
+      seen.add(request.requestId);
+    }
+  }
+  if (observations.length > 0) {
+    state.buildApprovals = observations;
+  }
+};
+
+const deliveryStageKey = ({ phase, startedAt }: Omit<DeliveryProgress, "appUrl">) =>
+  JSON.stringify([phase, startedAt]);
+
+/** Keep delivery stage times when a later public page advances past those events. */
+const observeDeliveryTiming = (state: PublicState, result: EveSessionResult): void => {
+  const stages = new Map(state.deliveryTiming?.map((stage) => [deliveryStageKey(stage), stage]));
+  for (const event of result.events) {
+    if (event.type === "progress" && event.delivery !== undefined) {
+      const { phase, startedAt, observedAt, disposition } = event.delivery;
+      const observation = { phase, startedAt, observedAt, disposition };
+      const key = deliveryStageKey(observation);
+      const previous = stages.get(key);
+      if (previous === undefined || Date.parse(observedAt) > Date.parse(previous.observedAt)) {
+        stages.set(key, observation);
+      }
+    }
+  }
+  if (stages.size > 0) {
+    state.deliveryTiming = [...stages.values()];
+  }
 };
 
 export const validatePublicEndpoint = (endpoint: string) => {
@@ -595,6 +668,14 @@ const submitResponse = async (options: SessionOptions, accept: AcceptSession) =>
   if (result.sessionId !== sessionId) {
     throw new Error("Builder did not return the session for this response batch.");
   }
+  const acknowledgedAt = new Date().toISOString();
+  const buildApprovals = new Map(state.buildApprovals?.map((item) => [item.requestId, item]));
+  for (const { requestId, response } of pending.responses) {
+    const build = buildApprovals.get(requestId);
+    if (build && build.response === undefined && response.kind !== "answer") {
+      build.response = { acknowledgedAt, decision: response.kind };
+    }
+  }
   state.answered.push(...pending.responses.map((item) => item.requestId));
   delete state.pendingResponse;
   accept(result);
@@ -656,6 +737,8 @@ export const runPublicSession = async (options: SessionOptions) => {
       );
     }
     reconcileMessageProgress(state, result);
+    observeBuildApprovals(state, result);
+    observeDeliveryTiming(state, result);
     state.session = retainPublicSessionCursor(state.session, result);
     state.outcome = state.session.status;
     delete state.error;

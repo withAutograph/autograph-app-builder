@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   readAuthority: vi.fn(),
   readAuthorization: vi.fn(),
   liveProduction: vi.fn(),
+  currentApp: vi.fn(),
 }));
 vi.mock("./github-pr-delivery-authority", () => ({
   captureGitHubPrDeliveryAuthority: mocks.captureAuthority,
@@ -26,6 +27,7 @@ vi.mock("./direct-production-state", () => ({
 }));
 vi.mock("./app-production-observation", () => ({
   readSettledMergedAppProductionSchema: mocks.liveProduction,
+  observeMergedAppProduction: mocks.currentApp,
 }));
 vi.mock("./draft-reconciliation-state", () => ({
   draftReconciliationState: { get: mocks.getCandidate },
@@ -105,6 +107,8 @@ beforeEach(() => {
   mocks.captureAuthority.mockReset();
   mocks.readAuthorization.mockReset();
   mocks.liveProduction.mockReset();
+  mocks.currentApp.mockReset();
+  mocks.currentApp.mockResolvedValue({ status: "pending" });
   mocks.captureAuthority.mockResolvedValue(null);
   mocks.readAuthority.mockReset();
   mocks.readAuthority.mockResolvedValue({ subject: { appId: "example-app" }, requirements: [] });
@@ -235,7 +239,7 @@ it("requires provider proof of the retained reconciliation before approving its 
   });
   mocks.inspect.mockResolvedValue(observe({ draft: true }));
   mocks.run.mockResolvedValue({ evidence: { kind: "pr-ready", readyAt }, status: "succeeded" });
-  await expect(step(reconciled)).resolves.toEqual({ readyAt, status: "waiting-for-checks" });
+  await expect(step(reconciled)).resolves.toMatchObject({ readyAt, status: "waiting-for-checks" });
   expect(mocks.inspect).toHaveBeenCalledWith(approval.proposalDigest, approval.headSha);
   expect(mocks.run).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -307,9 +311,11 @@ it.each([false, true])(
 it("rechecks the approved proposal in the authenticated workflow without a model-carried session ID", async () => {
   mocks.inspect.mockResolvedValue(observe());
   const callback = { abortSignal, callId, session: { ...session, id: "workflow-session" } };
-  // SAFETY: These are the only callback fields the step reads.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Partial workflow fixture.
-  await expect(continueGitHubPrDelivery(approval, callback as never, readyAt)).resolves.toEqual({
+  await expect(
+    // SAFETY: These are the only callback fields the step reads.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Partial workflow fixture.
+    continueGitHubPrDelivery(approval, callback as never, readyAt),
+  ).resolves.toMatchObject({
     readyAt,
     status: "waiting-for-checks",
   });
@@ -319,7 +325,7 @@ it("rechecks the approved proposal in the authenticated workflow without a model
 
 it("refuses a mismatch between the approval target and the live reviewed publication", async () => {
   mocks.inspect.mockResolvedValue(observe());
-  await expect(step({ ...approval, headSha: "d".repeat(40) })).resolves.toEqual({
+  await expect(step({ ...approval, headSha: "d".repeat(40) })).resolves.toMatchObject({
     status: "revision-changed",
   });
   expect(mocks.production).not.toHaveBeenCalled();
@@ -329,7 +335,7 @@ it("refuses a mismatch between the approval target and the live reviewed publica
 it("marks the approved draft ready and returns the observed cycle without merging", async () => {
   mocks.inspect.mockResolvedValue(observe({ draft: true }));
   mocks.run.mockResolvedValue({ evidence: { kind: "pr-ready", readyAt }, status: "succeeded" });
-  await expect(step(approval)).resolves.toEqual({ readyAt, status: "waiting-for-checks" });
+  await expect(step(approval)).resolves.toMatchObject({ readyAt, status: "waiting-for-checks" });
   expect(mocks.run).toHaveBeenCalledExactlyOnceWith({
     abortSignal,
     approvedByCallId: callId,
@@ -391,8 +397,14 @@ it("verifies an additive transition before GitHub writes and carries the exact m
   expect(mocks.run).not.toHaveBeenCalled();
 
   mocks.production.mockResolvedValue({ ...setup, schemaTransitionVerified: true });
+  const currentAppUrl = "https://apps.example.com/example-app";
+  mocks.currentApp.mockResolvedValueOnce({ status: "available", app: { url: currentAppUrl } });
   mocks.run.mockResolvedValue({ evidence: { kind: "pr-ready", readyAt }, status: "succeeded" });
-  await expect(step(approval)).resolves.toEqual({ status: "waiting-for-checks", readyAt });
+  await expect(step(approval)).resolves.toMatchObject({
+    status: "waiting-for-checks",
+    readyAt,
+    currentAppUrl,
+  });
 
   mocks.inspect.mockResolvedValue(observe({ checks: "passed" }));
   mocks.production.mockResolvedValue(setup);
@@ -425,7 +437,7 @@ it("verifies an additive transition before GitHub writes and carries the exact m
     expect.objectContaining({ kind: "pr-merge", reconcileOnly: true }),
   );
   mocks.run.mockReset();
-  await expect(step(approval, readyAt)).resolves.toEqual({ status: "merge-unconfirmed" });
+  await expect(step(approval, readyAt)).resolves.toMatchObject({ status: "merge-unconfirmed" });
 });
 
 it("waits for managed setup and the current required check in a delegated Production delivery", async () => {
@@ -463,7 +475,7 @@ it("waits for managed setup and the current required check in a delegated Produc
     preparationRequired: false,
   });
   mocks.run.mockResolvedValue({ evidence: { kind: "pr-ready", readyAt }, status: "succeeded" });
-  await expect(step(approval)).resolves.toEqual({ readyAt, status: "waiting-for-checks" });
+  await expect(step(approval)).resolves.toMatchObject({ readyAt, status: "waiting-for-checks" });
   const productionRead = {
     appId: managedSetup.appId,
     repositoryId: managedSetup.repositoryId,
@@ -478,7 +490,10 @@ it("waits for managed setup and the current required check in a delegated Produc
   mocks.production.mockClear();
 
   mocks.inspect.mockResolvedValue(observe({ checks: "pending" }));
-  await expect(step(approval, readyAt)).resolves.toEqual({ readyAt, status: "waiting-for-checks" });
+  await expect(step(approval, readyAt)).resolves.toMatchObject({
+    readyAt,
+    status: "waiting-for-checks",
+  });
   expect(mocks.run).toHaveBeenCalledTimes(1);
   expect(mocks.production).not.toHaveBeenCalled();
 
@@ -487,7 +502,7 @@ it("waits for managed setup and the current required check in a delegated Produc
     evidence: { kind: "pr-merge", mergeCommitSha },
     status: "succeeded",
   });
-  await expect(step(approval, readyAt)).resolves.toEqual({
+  await expect(step(approval, readyAt)).resolves.toMatchObject({
     status: "merged",
     mergeCommitSha,
     nativeProductionTarget: {
@@ -516,7 +531,7 @@ it.each([
   ],
 ])("does not merge pending, failed, or superseded checks", async (observation, result) => {
   mocks.inspect.mockResolvedValue(observation);
-  await expect(step(approval, readyAt)).resolves.toEqual(result);
+  await expect(step(approval, readyAt)).resolves.toMatchObject(result);
   expect(mocks.run).not.toHaveBeenCalled();
 });
 
@@ -529,7 +544,7 @@ it.each([
 ])("merges the approved revision only after its current checks pass", async (receipt, result) => {
   mocks.inspect.mockResolvedValue(observe({ checkRunId: 42, checks: "passed" }));
   mocks.run.mockResolvedValue(receipt);
-  await expect(step(approval, readyAt)).resolves.toEqual(result);
+  await expect(step(approval, readyAt)).resolves.toMatchObject(result);
   expect(mocks.run).toHaveBeenCalledExactlyOnceWith({
     abortSignal,
     approvedByCallId: callId,
@@ -595,7 +610,7 @@ it("retains the same review and ready cycle while saved setup is still progressi
     evidence: { kind: "pr-merge", mergeCommitSha },
     status: "succeeded",
   });
-  await expect(step(approval, readyAt)).resolves.toEqual({
+  await expect(step(approval, readyAt)).resolves.toMatchObject({
     status: "merged",
     mergeCommitSha,
     nativeProductionTarget: {
@@ -626,7 +641,7 @@ it("does not merge if the required setup service cannot be read", async () => {
 it("recovers a ready transition after the original response is lost", async () => {
   mocks.inspect.mockResolvedValue(observe());
   mocks.run.mockResolvedValue({ evidence: { kind: "pr-ready", readyAt }, status: "succeeded" });
-  await expect(step(approval)).resolves.toEqual({ readyAt, status: "waiting-for-checks" });
+  await expect(step(approval)).resolves.toMatchObject({ readyAt, status: "waiting-for-checks" });
   expect(mocks.run).toHaveBeenCalledExactlyOnceWith({
     abortSignal,
     approvedByCallId: callId,
@@ -648,7 +663,7 @@ it("recovers the same owned managed merge and passes its exact saved native targ
     requirements: [{ ...target, operationRef: "11111111-1111-4111-8111-111111111111" }],
   });
   mocks.inspect.mockResolvedValue(observe({ state: "merged", mergeCommitSha }));
-  await expect(step(approval, readyAt)).resolves.toEqual({
+  await expect(step(approval, readyAt)).resolves.toMatchObject({
     status: "merged",
     mergeCommitSha,
     nativeProductionTarget: target,

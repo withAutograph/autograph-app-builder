@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   publicationRuntime: vi.fn(),
   productionClient: vi.fn(),
   reviewedDelivery: vi.fn(),
+  savedSchemaBinding: vi.fn(),
 }));
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: mocks.publicationRuntime,
@@ -18,6 +19,9 @@ vi.mock("./github-pr-delivery-subject", () => ({
 vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: vi.fn() } }));
 vi.mock("./draft-reconciliation-state", () => ({
   draftReconciliationState: { get: vi.fn() },
+}));
+vi.mock("./direct-production-state", () => ({
+  savedDirectProductionSchemaBinding: mocks.savedSchemaBinding,
 }));
 vi.mock("./repository-production-client", async (original) => ({
   ...(await original<typeof productionClientModule>()),
@@ -47,6 +51,7 @@ beforeEach(() => {
   mocks.publicationRuntime.mockReset();
   mocks.productionClient.mockReset();
   mocks.reviewedDelivery.mockReset();
+  mocks.savedSchemaBinding.mockReset();
 });
 afterEach(() => vi.useRealTimers());
 
@@ -55,6 +60,48 @@ it("returns the observed availability without waiting for the deadline", async (
   await expect(observe()).resolves.toEqual(sample);
   expect(vi.getTimerCount()).toBe(0);
 });
+
+it.each([
+  { binding: { kind: "unverified" }, settled: false, expected: "awaiting-activation" },
+  {
+    binding: { kind: "verified", grantDigest: "b".repeat(64) },
+    settled: false,
+    expected: "awaiting-activation",
+  },
+  { binding: { kind: "verified", grantDigest: "b".repeat(64) }, settled: true, expected: "live" },
+])(
+  "reports the saved schema revision as $expected with settlement $settled",
+  async ({ binding, settled, expected }) => {
+    const repositoryId = "1";
+    const mergeSha = "a".repeat(40);
+    mocks.reviewedDelivery.mockReturnValue({ appId, proposalDigest: "proposal" });
+    mocks.savedSchemaBinding.mockReturnValue(binding);
+    mocks.publicationRuntime.mockResolvedValue({
+      inspectPublishedPullRequest: vi.fn().mockResolvedValue({
+        state: "merged",
+        reviewedRevision: true,
+        mergeCommitSha: mergeSha,
+        reviewedTarget: { repositoryId, owner: "test-owner", name: "test-repo" },
+      }),
+    });
+    const liveStatus = {
+      ...sample,
+      destination: { repositoryId, repositoryFullName: "test-owner/test-repo" },
+      requestedRevision: "live",
+    };
+    const nativeStatus = vi
+      .fn()
+      .mockResolvedValue(settled ? { ...liveStatus, schemaSetupSettled: true } : liveStatus);
+    mocks.productionClient.mockResolvedValue({ nativeStatus });
+    await expect(observe()).resolves.toMatchObject({
+      status: "available",
+      requestedRevision: expected,
+    });
+    if (binding.kind === "verified") {
+      expect(nativeStatus).toHaveBeenCalledWith(appId, mergeSha, undefined, binding.grantDigest);
+    }
+  },
+);
 
 it("bounds a stalled GitHub read and ignores late evidence", async () => {
   const pullRequest = Promise.withResolvers<unknown>();

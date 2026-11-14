@@ -106,6 +106,90 @@ describe("public self-reproduction driver", () => {
     expect(calls).toEqual(["autograph_start"]);
     expect(current.outcome).toBe("input_required");
   });
+  it("retains a first Build card across reconnect and records only its acknowledged response", async () => {
+    const current = state();
+    const request = { ...approval, title: "Build and release to Production?" };
+    const card = {
+      ...session("input_required", [request]),
+      events: [{ index: 0, request, type: "input_required" }],
+    };
+    const options = { pollMs: 1, save: () => {}, state: current, timeoutMs: 1000 };
+    await runPublicSession({ ...options, transport: { call: async () => card } });
+    const first = current.buildApprovals?.[0];
+    expect(first).toMatchObject({ kind: "build-and-release" });
+    expect(first?.response).toBeUndefined();
+    await runPublicSession({
+      ...options,
+      responses: [{ requestId: request.requestId, response: { kind: "approve" } }],
+      transport: {
+        call: async (name) => (name === "autograph_respond" ? session("completed") : card),
+      },
+    });
+    expect(current.buildApprovals).toHaveLength(1);
+    expect(current.buildApprovals?.[0]).toMatchObject({
+      firstObservedAt: first?.firstObservedAt,
+      response: { decision: "approve" },
+    });
+    expect(
+      z.iso.datetime().safeParse(current.buildApprovals?.[0]?.response?.acknowledgedAt).success,
+    ).toBe(true);
+    const report = z
+      .object({ buildApprovals: z.array(z.looseObject({})) })
+      .parse(publicObservationReport(current));
+    expect(report.buildApprovals[0]).not.toHaveProperty("requestId");
+  });
+  it("retains delivery timings after the public cursor moves past the stage events", async () => {
+    const current = state();
+    const build = {
+      type: "progress",
+      index: 0,
+      label: "Deploying",
+      state: "started",
+      delivery: {
+        phase: "deploying",
+        disposition: "active",
+        startedAt: "2026-11-14T19:09:38Z",
+        observedAt: "2026-11-14T19:09:42Z",
+      },
+    };
+    const live = {
+      type: "progress",
+      index: 1,
+      label: "Live",
+      state: "completed",
+      delivery: {
+        phase: "live",
+        disposition: "active",
+        startedAt: "2026-11-14T19:23:59Z",
+        observedAt: "2026-11-14T19:24:00Z",
+        appUrl: "https://apps.example.test/private",
+      },
+    };
+    await runPublicSession({
+      pollMs: 1,
+      save: () => {},
+      sleep: async () => {},
+      state: current,
+      timeoutMs: 1000,
+      transport: {
+        call: async (name, args) => {
+          if (name === "autograph_start") {
+            return { ...session("working"), events: [build] };
+          }
+          if (args.cursor === 1) {
+            return { ...session("working"), cursor: 2, events: [live] };
+          }
+          return { ...session("completed"), cursor: 3 };
+        },
+      },
+    });
+    expect(current.session?.events).toEqual([]);
+    expect(current.deliveryTiming?.map(({ phase, observedAt }) => [phase, observedAt])).toEqual([
+      ["deploying", build.delivery.observedAt],
+      ["live", live.delivery.observedAt],
+    ]);
+    expect(current.deliveryTiming?.[1]).not.toHaveProperty("appUrl");
+  });
   it("never answers authorization even with an explicit forged answer", async () => {
     const current = state();
     await runPublicSession({

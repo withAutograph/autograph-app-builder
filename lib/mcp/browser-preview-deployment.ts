@@ -3,7 +3,7 @@ import { getPrototypeChunk } from "../agent/postgres-prototype-chunks";
 import type { PrototypeChunkKey } from "../agent/postgres-prototype-chunks";
 import { createPostgresPreviewOrganizationAuthority } from "../auth/postgres-organization-user-authority";
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
-import { createHostedEveSessionService } from "../eve/hosted-service";
+import { createHostedEveSessionService, HostedSessionNotFoundError } from "../eve/hosted-service";
 import type { HostedEveTransport } from "../eve/hosted-service";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
 import type { HostedPrincipal } from "../eve/hosted-auth";
@@ -24,6 +24,7 @@ import type { StreamedPrototypePreviewResolver } from "./browser-preview";
 import { openHostedPostgresDatabase } from "./hosted-route";
 import { createRealmContinuationRead } from "./realm-continuation-read";
 import type { ResumeRealmContinuation } from "./realm-continuation-read";
+import { recentDeliveryProgress } from "./contracts";
 
 type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
@@ -242,6 +243,73 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
     }),
   });
   return Object.assign(preview, {
+    async readDeliveryProgress(request: Request, sessionId: string) {
+      const headers = { "cache-control": "no-store" };
+      try {
+        if (adapterMode(input.environment) !== "hosted") {
+          return new Response(null, { status: 404, headers });
+        }
+        const context = await hostedContextForRequest(request);
+        if (context === undefined) {
+          return new Response(null, { status: 404, headers });
+        }
+        const cutoff = Number(new URL(request.url).searchParams.get("after") ?? 0);
+        if (!Number.isSafeInteger(cutoff) || cutoff < 0) {
+          return new Response(null, { status: 400, headers });
+        }
+        // Refresh the one owned session, then use its immutable checkpoint
+        // to search newest-first. Each earlier page is read only when needed.
+        const observed = await context.service.get({ sessionId, cursor: cutoff, limit: 1 });
+        // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Read the session binding after its checkpoint refresh settles.
+        const stored = await context.store.getSession(context.principal, sessionId);
+        if (observed.sessionId !== sessionId || stored === null) {
+          return new Response(null, { status: 404, headers });
+        }
+        if (observed.error !== undefined) {
+          return new Response(null, { status: 503, headers });
+        }
+        const { checkpoint, checkpointRef } = stored.version === 2 ? stored : {};
+        const readPage = context.store.readCheckpointPage;
+        const eventCount =
+          checkpointRef?.eventCount ?? (checkpoint?.events.at(-1)?.index ?? -1) + 1;
+        const firstIndex = cutoff <= eventCount ? cutoff : 0;
+        let delivery = recentDeliveryProgress(
+          checkpoint?.events.filter((event) => event.index >= firstIndex) ?? observed.events,
+        )?.delivery;
+        if (checkpointRef !== undefined && readPage !== undefined) {
+          for (let end = eventCount; end > firstIndex;) {
+            const cursor = Math.max(firstIndex, end - 100);
+            // oxlint-disable-next-line eslint/no-await-in-loop -- Newest pages are searched first; stop when a delivery event is found.
+            const page = await readPage.call(context.store, {
+              principal: context.principal,
+              sessionId,
+              checkpointRef,
+              cursor,
+              limit: end - cursor,
+            });
+            if (page.checkpointDigest !== checkpointRef.digest || page.totalEvents !== eventCount) {
+              return new Response(null, { status: 503, headers });
+            }
+            delivery = recentDeliveryProgress(page.events)?.delivery;
+            if (delivery !== undefined) {
+              break;
+            }
+            end = cursor;
+          }
+        }
+        return Response.json(
+          {
+            cursor: eventCount,
+            delivery,
+            working: observed.status === "working",
+          },
+          { headers },
+        );
+      } catch (error) {
+        const status = error instanceof HostedSessionNotFoundError ? 404 : 503;
+        return new Response(null, { status, headers });
+      }
+    },
     async readRecoveryReceipt(
       request: Request,
       selection: { sessionId: string; logicalSessionId: string; ownerRunId: string },

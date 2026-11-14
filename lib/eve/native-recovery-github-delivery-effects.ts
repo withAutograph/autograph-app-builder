@@ -12,6 +12,7 @@ const deliveryStep = "continueGitHubPrDelivery";
 const schemaStep = "continueGitHubProductionSchema";
 const unexpectedStepAfterStop = "unexpected-step-after-stop";
 const schemaTargetMismatch = "schema-target-mismatch";
+const schemaProviderOnly = "schema-provider-only";
 const readyAt = z.iso.datetime({ offset: true });
 const deliveryTargetSchema = z.strictObject({
   appId: z.string().min(1),
@@ -21,6 +22,7 @@ const deliveryTargetSchema = z.strictObject({
 const mergedSchema = z.strictObject({
   status: z.literal("merged"),
   mergeCommitSha: repositoryProductionExpectedMergeShaSchema,
+  deliveryObservedAt: readyAt.optional(),
   nativeProductionTarget: deliveryTargetSchema.optional(),
   schemaActivation: repositoryProductionSchemaActivationSchema
     .omit({
@@ -29,7 +31,13 @@ const mergedSchema = z.strictObject({
     })
     .optional(),
 });
-const waitingSchema = z.strictObject({ status: z.literal("waiting-for-checks"), readyAt });
+const waitingSchema = z.strictObject({
+  status: z.literal("waiting-for-checks"),
+  readyAt,
+  deliveryObservedAt: readyAt.optional(),
+  currentAppUrl: z.url().optional(),
+  nativeProductionPending: z.literal(true).optional(),
+});
 const deliveryOutputSchema = z.union([waitingSchema, mergedSchema]);
 const stepArgumentsSchema = z.tuple([
   z.strictObject({
@@ -39,6 +47,12 @@ const stepArgumentsSchema = z.tuple([
         githubPrDeliveryApprovalSchema,
         z.null(),
         z.union([readyAt, repositoryProductionSchemaActivationSchema]),
+      ]),
+      z.tuple([
+        githubPrDeliveryApprovalSchema,
+        z.null(),
+        repositoryProductionSchemaActivationSchema,
+        z.literal(true),
       ]),
     ]),
     context: z.looseObject({
@@ -82,7 +96,7 @@ export type GitHubDeliveryEffectRejection =
   | typeof schemaTargetMismatch
   | "merge-result-missing"
   | "schema-not-confirmed-live"
-  | "schema-provider-only"
+  | typeof schemaProviderOnly
   | "repeat-schema-not-expected"
   | "repeat-merge-step-missing"
   | "repeat-merge-step-has-ready-cycle"
@@ -155,7 +169,7 @@ const readStep = (
   }
   const result = stepOutputSchema.safeParse(step.output).data;
   if (result !== undefined) {
-    return { argument: args[2], output: result.output };
+    return { argument: args[2], observeOnly: args[3], output: result.output };
   }
   const metadata = stepOutputMetadataSchema.safeParse(step.output).data;
   if (metadata?.kind === "authorization-required") {
@@ -171,6 +185,21 @@ const deliveryDestination = (approval: Approval) => ({
   repositoryId: approval.repositoryId,
   repositoryFullName: `${approval.owner}/${approval.name}`,
 });
+
+const observationCanContinue = (
+  observation: z.infer<typeof repositoryProductionNativeStatusSchema>,
+) => {
+  if (observation.schemaUpdateDisposition === "intervention-required") {
+    return false;
+  }
+  const { status, requestedRevision, serviceIssue } = observation;
+  if (status === "service-unavailable") {
+    return serviceIssue === "provider-read" || serviceIssue === "gateway-read";
+  }
+  return (
+    status === "pending" || (status === "available" && requestedRevision === "awaiting-activation")
+  );
+};
 
 /** Check the retained writes of a natively bound child without creating a tool result or replay authority. */
 export const hasSettledGitHubDeliveryEffects = (
@@ -233,9 +262,7 @@ export const hasSettledGitHubDeliveryEffects = (
       return reject("unexpected-schema-step");
     }
     const continuingSchema =
-      lastSchemaResult?.status === "pending" ||
-      (lastSchemaResult?.status === "available" &&
-        lastSchemaResult.requestedRevision === "awaiting-activation");
+      lastSchemaResult !== undefined && observationCanContinue(lastSchemaResult);
     if (
       (lastSchemaResult !== undefined && !continuingSchema) ||
       merge.schemaActivation.deliveryCallId !== input.callId ||
@@ -250,6 +277,9 @@ export const hasSettledGitHubDeliveryEffects = (
     lastSchemaResult = repositoryProductionNativeStatusSchema.safeParse(result.output).data;
     if (lastSchemaResult === undefined) {
       return reject("invalid-schema-result");
+    }
+    if (result.observeOnly === true && lastSchemaResult.requestedRevision === "live") {
+      return reject(schemaProviderOnly);
     }
     if (
       lastSchemaResult.appId !== input.appId ||
@@ -271,7 +301,7 @@ export const hasSettledGitHubDeliveryEffects = (
   // The final protected read checks installed schema. The earlier provider-only
   // activation proof includes this marker and cannot attest to the installation.
   if (lastSchemaResult.deployment.requestedRevisionActive !== undefined) {
-    return reject("schema-provider-only");
+    return reject(schemaProviderOnly);
   }
   return isDeepStrictEqual(lastSchemaResult.destination, destination)
     ? true
@@ -375,16 +405,18 @@ export const readSettledGitHubDeliveryRepeat = (
         return reject(schemaTargetMismatch);
       }
       const waiting =
-        status.requestedRevision === "awaiting-activation" &&
-        (status.status === "pending" || status.status === "available");
+        (status.requestedRevision === "awaiting-activation" ||
+          status.status === "service-unavailable") &&
+        observationCanContinue(status);
       const live =
         last &&
         status.requestedRevision === "live" &&
-        status.deployment.requestedRevisionActive === undefined;
+        status.deployment.requestedRevisionActive === undefined &&
+        result.observeOnly !== true;
       if (!waiting && !live) {
         return reject(
           last && status.requestedRevision === "live"
-            ? "schema-provider-only"
+            ? schemaProviderOnly
             : "schema-not-confirmed-live",
         );
       }

@@ -1,5 +1,8 @@
 import { tenantKeyFor } from "../eve/hosted-auth";
-import { readDirectProductionCorrection } from "./direct-production-correction";
+import {
+  directProductionEffectDigest,
+  readDirectProductionCorrection,
+} from "./direct-production-correction";
 import type { WorkflowStepToolContext } from "eve/tools";
 import { isDeepStrictEqual } from "node:util";
 import type { ApprovedBuildDecision } from "./approved-build-continuation";
@@ -224,7 +227,11 @@ export const readGitHubPrDeliveryAuthority = async (
   const direct = { ...authority, directProduction: true as const };
   const revision = approved?.revision;
   if (revision?.schemaChange !== undefined && grant !== undefined) {
-    return { ...direct, productionSchemaApprovalCallId: grant.callId };
+    return {
+      ...direct,
+      productionSchemaApprovalCallId: grant.callId,
+      productionSchemaGrantDigest: directProductionEffectDigest(grant, correction),
+    };
   }
   return revision === undefined ? direct : { ...direct, productionRevision: true as const };
 };

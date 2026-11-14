@@ -11,6 +11,7 @@ import {
   applicationSourceReviewKey,
   applicationSourceReviewRubricDigest,
   applicationSourceReviewCacheSessionId,
+  sourceReviewInputCorrelation,
 } from "./application-source-review";
 import type {
   ApplicationReviewEvidence,
@@ -348,6 +349,8 @@ export const reviewAppliedProductSource = async (input: {
     }
     const evidence = createApplicationReviewEvidence(evidenceInput);
     const { abortSignal, sessionId } = input;
+    const reviewInputCorrelation =
+      sessionId === undefined ? undefined : sourceReviewInputCorrelation(sessionId, bindingDigest);
     const options: ApplicationSourceReviewOptions = {
       abortSignal,
       onInvocation(invocation) {
@@ -356,6 +359,7 @@ export const reviewAppliedProductSource = async (input: {
             callId: input.callId,
             event: "app_builder.source_review_invocation",
             sessionId: input.sessionId,
+            reviewInputCorrelation,
             ...invocation,
           }),
         );
@@ -366,6 +370,7 @@ export const reviewAppliedProductSource = async (input: {
             callId: input.callId,
             event: "app_builder.source_review_request_finished",
             sessionId: input.sessionId,
+            reviewInputCorrelation,
             ...completedRequest,
           }),
         );
@@ -376,6 +381,7 @@ export const reviewAppliedProductSource = async (input: {
             callId: input.callId,
             event: "app_builder.source_review_request_started",
             sessionId: input.sessionId,
+            reviewInputCorrelation,
             requestOrdinal: startedRequest.requestOrdinal,
             sdkCallId: startedRequest.sdkCallId,
             stepNumber: startedRequest.stepNumber,
@@ -449,14 +455,27 @@ export const prepareAppliedProductSourceReview = async (
   if (hasTestCapability("mock-model")) {
     return unavailable(MOCK_PROFILE_REVIEW_UNASSESSED);
   }
-  if (reviewInput.originalRequest === null || input.sessionId === undefined) {
+  const { appId } = input.appSpec;
+  const { sessionAuth, sessionId, abortSignal } = input;
+  if (reviewInput.originalRequest === null || sessionId === undefined) {
     return unavailable("Original requirements or the owning review session are unavailable.");
   }
   try {
     const reviewKey = applicationSourceReviewKey(reviewInput, input.normalizedChanges);
+    const reportDisposition = (disposition: "retained" | "prepared") => {
+      console.info(
+        JSON.stringify({
+          event: "app_builder.source_review_input",
+          callId: input.callId,
+          observedAt: new Date().toISOString(),
+          reviewInputCorrelation: sourceReviewInputCorrelation(sessionId, reviewKey),
+          disposition,
+        }),
+      );
+    };
     const journal = await sourceReviewJournalForSession({
-      sessionAuth: input.sessionAuth,
-      sessionId: input.sessionId,
+      sessionAuth,
+      sessionId,
     });
     const retained = await journal.read(reviewKey);
     assertNotStopped();
@@ -477,6 +496,7 @@ export const prepareAppliedProductSourceReview = async (
         );
       }
       retainScopedProductSourceAssessment(retained.assessment, reviewKey);
+      reportDisposition("retained");
       return {
         assessment: {
           ...retained.assessment,
@@ -502,8 +522,8 @@ export const prepareAppliedProductSourceReview = async (
       for await (const part of acceptedAppSpecTextParts({
         accepted: input.appSpec,
         artifacts: input.artifacts ?? [],
-        sessionAuth: input.sessionAuth,
-        sessionId: input.sessionId,
+        sessionAuth,
+        sessionId,
       })) {
         assertNotStopped();
         parts.push(part);
@@ -525,8 +545,8 @@ export const prepareAppliedProductSourceReview = async (
     };
     const prepared: PreparedApplicationReviewContext = {
       version: 1,
-      appId: input.appSpec.appId,
-      parentSessionId: input.sessionId,
+      appId,
+      parentSessionId: sessionId,
       sandboxName: getBuilderSandboxId(sandbox),
       applyRoot: input.applyReceipt.applyRoot,
       observed: input.observed,
@@ -535,18 +555,18 @@ export const prepareAppliedProductSourceReview = async (
       reviewKey,
       reviewInput: privateReviewInput,
     };
-    const { appId } = input.appSpec;
-    const { sessionAuth, sessionId, abortSignal } = input;
     const store = await sourceReviewContextStoreForSession({
       abortSignal,
       appId,
       sessionAuth,
       sessionId,
     });
+    const contextRef = await store.publishContext(prepared);
+    reportDisposition("prepared");
     return {
       reference: {
         appId: input.appSpec.appId,
-        contextRef: await store.publishContext(prepared),
+        contextRef,
       },
     };
   } catch {

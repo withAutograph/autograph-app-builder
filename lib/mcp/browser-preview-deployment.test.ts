@@ -16,6 +16,7 @@ import type { HostedEveTransport } from "../eve/hosted-service";
 import type { NativeRecoveryBinding } from "../eve/native-recovery-contract";
 import type { getPrototypeChunk, PrototypeChunkKey } from "../agent/postgres-prototype-chunks";
 import type { ResumeRealmContinuation } from "./realm-continuation-read";
+import type { PublicEveEvent } from "./contracts";
 
 const providers = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -74,9 +75,11 @@ const ownedFixture = (
     lostAdapter?: boolean;
     resumeRealmContinuation?: ResumeRealmContinuation;
     nativeRecoveryBinding?: NativeRecoveryBinding;
+    events?: PublicEveEvent[];
   } = {},
 ) => {
   const publicId = "ses_public";
+  const events = options.events ?? [];
   const current = options.current ?? "wrun_current";
   const origin = options.origin ?? current;
   const artifact = {
@@ -107,7 +110,7 @@ const ownedFixture = (
       checkpointProgressDigest: `sha256:${"d".repeat(64)}`,
       checkpointRef: {
         digest: `sha256:${"c".repeat(64)}`,
-        eventCount: 0,
+        eventCount: events.length,
         id: "00000000-0000-4000-8000-000000000001",
       },
       createdAtEpochMs: 1000,
@@ -149,10 +152,10 @@ const ownedFixture = (
       }
       return await Promise.resolve({
         checkpointDigest: record.checkpointDigest ?? "",
-        cursor: 0,
-        events: [],
+        cursor: Math.min(events.length, input.cursor + input.limit),
+        events: events.slice(input.cursor, input.cursor + input.limit),
         metadata,
-        totalEvents: 0,
+        totalEvents: events.length,
       });
     },
   );
@@ -169,10 +172,10 @@ const ownedFixture = (
     }
     return await Promise.resolve({
       artifactProjectionRequiresLegacyReadback: false,
-      installedEventCount: 0,
+      installedEventCount: events.length,
       pendingRequests: [],
       prototypeRef: metadata.prototypeRef,
-      publicEventCount: 0,
+      publicEventCount: events.length,
       status: "completed" as const,
     });
   });
@@ -216,6 +219,39 @@ describe("deployment Browser preview route", () => {
     for (const mock of Object.values(providers)) {
       mock.mockReset();
     }
+  });
+  it("returns only delivery progress for the exact signed-in session", async () => {
+    const delivery = {
+      phase: "live" as const,
+      disposition: "active" as const,
+      startedAt: "2026-11-10T16:02:00Z",
+      observedAt: "2026-11-10T16:02:00Z",
+      appUrl: "https://apps.example.test/vendor-onboarding",
+    };
+    const fixture = ownedFixture({
+      events: [
+        { type: "assistant_message", text: "Private session content", index: 0, turnId: "turn" },
+        { type: "progress", label: "Live", state: "completed", index: 1, delivery },
+        ...Array.from({ length: 127 }, (_, index) => ({
+          type: "assistant_message" as const,
+          text: "Later session content",
+          index: index + 2,
+          turnId: "later",
+        })),
+      ],
+    });
+    const normal = await fixture.handler.readDeliveryProgress(fixture.request, fixture.publicId);
+    expect(normal.status).toBe(200);
+    expect(normal.headers.get("cache-control")).toBe("no-store");
+    await expect(normal.json()).resolves.toEqual({ working: false, delivery, cursor: 129 });
+    const missing = await fixture.handler.readDeliveryProgress(fixture.request, "other-session");
+    expect(missing.status).toBe(404);
+    providers.workspace.mockResolvedValue("another-workspace");
+    const wrongOwner = await fixture.handler.readDeliveryProgress(
+      fixture.request,
+      fixture.publicId,
+    );
+    expect(wrongOwner.status).toBe(404);
   });
   it("does not look up a recovery receipt without an authenticated owner", async () => {
     const fixture = ownedFixture();

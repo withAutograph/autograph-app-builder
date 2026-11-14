@@ -698,9 +698,13 @@ describe("read-only native Production observation", () => {
   it("reports a real selected deployment failure separately from a pending activation", async () => {
     const f = fixture();
     f.setReadyState("ERROR");
-    expect(await f.read(f.owner)).toMatchObject({
+    f.setProjectLink(linkedRepository);
+    f.setAlias({ deploymentId: "previous-production" });
+    f.setActivation({ source: "git", gitSource: currentGitSource });
+    expect(await f.read(f.owner, mergeSha)).toMatchObject({
       status: "service-unavailable",
       deployment: { state: "service-unavailable" },
+      serviceIssue: "deployment-failed",
     });
   });
   it("does not elect another deployment if activation changes while the public app is read", async () => {

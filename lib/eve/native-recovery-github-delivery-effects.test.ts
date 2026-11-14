@@ -84,6 +84,20 @@ describe("retained GitHub delivery effects", () => {
     expect(prove([ready, merge(mergedWithSchema), schema(pending), schema(live)])).toBe(true);
   });
 
+  it("retains the activation-only read and retries without treating them as settled data", () => {
+    const read = (output: Json) =>
+      step("continueGitHubProductionSchema", output, [approval, null, activation, true]);
+    const transient = {
+      ...pending,
+      status: "service-unavailable",
+      serviceIssue: "provider-read",
+    };
+    expect(
+      prove([ready, merge(mergedWithSchema), read(transient), read(pending), schema(live)]),
+    ).toBe(true);
+    expect(prove([ready, merge(mergedWithSchema), read(live)])).toBe(false);
+  });
+
   it("recognizes a completed merge with no authorized schema change", () => {
     expect(prove([ready, merge(merged)], false)).toBe(true);
     expect(prove([delivery({ status: "merged", mergeCommitSha })], false)).toBe(true);

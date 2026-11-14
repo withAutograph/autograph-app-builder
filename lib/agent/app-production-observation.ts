@@ -34,6 +34,11 @@ type AppProductionObservationContext = Pick<
   WorkflowStepToolContext,
   "abortSignal" | "callId" | "session"
 >;
+type SavedSchemaBinding = { kind: "unverified" } | { kind: "verified"; grantDigest: string } | null;
+type ReadSavedSchemaBinding = (
+  ctx: AppProductionObservationContext,
+  target: AppProductionDeliveryTarget,
+) => SavedSchemaBinding;
 
 const monitoringStopped = (): AppProductionObservation => ({
   status: monitoringStoppedStatus,
@@ -159,6 +164,7 @@ const currentReviewedDelivery = () =>
 const readSavedAppProduction = async (
   appId: string,
   ctx: WorkflowStepToolContext,
+  readSchemaBinding: ReadSavedSchemaBinding,
 ): Promise<AppProductionObservation> => {
   ctx.abortSignal.throwIfAborted();
   try {
@@ -189,16 +195,28 @@ const readSavedAppProduction = async (
           isDeepStrictEqual(currentReviewedDelivery(), subject)
         ) {
           const { repositoryId, owner, name } = observed.reviewedTarget;
+          const target = { appId, repositoryId, repositoryFullName: `${owner}/${name}` };
+          const schemaBinding = readSchemaBinding(ctx, target);
           const status = await observeMergedAppProduction(
-            { appId, repositoryId, repositoryFullName: `${owner}/${name}` },
+            target,
             ctx,
             observed.mergeCommitSha,
+            undefined,
+            schemaBinding?.kind === "verified" ? schemaBinding.grantDigest : undefined,
           );
-          if (
-            status.status === monitoringStoppedStatus ||
-            isDeepStrictEqual(currentReviewedDelivery(), subject)
-          ) {
+          if (status.status === monitoringStoppedStatus) {
             return status;
+          }
+          if (
+            isDeepStrictEqual(currentReviewedDelivery(), subject) &&
+            isDeepStrictEqual(readSchemaBinding(ctx, target), schemaBinding)
+          ) {
+            const schemaPending =
+              schemaBinding !== null &&
+              (schemaBinding.kind === "unverified" || status.schemaSetupSettled !== true);
+            return status.requestedRevision === "live" && schemaPending
+              ? { ...status, requestedRevision: "awaiting-activation" }
+              : status;
           }
         }
       }
@@ -214,6 +232,7 @@ const readSavedAppProduction = async (
 export const observeSavedAppProduction = async (
   appId: string,
   ctx: WorkflowStepToolContext,
+  readSchemaBinding: ReadSavedSchemaBinding,
 ): Promise<AppProductionObservation> => {
   ctx.abortSignal.throwIfAborted();
   const deadline = new AbortController();
@@ -228,7 +247,7 @@ export const observeSavedAppProduction = async (
   abortSignal.addEventListener("abort", onAbort, { once: true });
   try {
     const observed = await Promise.race([
-      readSavedAppProduction(appId, { ...ctx, abortSignal }),
+      readSavedAppProduction(appId, { ...ctx, abortSignal }, readSchemaBinding),
       aborted.promise,
     ]);
     ctx.abortSignal.throwIfAborted();
