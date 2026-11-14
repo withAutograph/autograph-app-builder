@@ -123,6 +123,8 @@ export interface PreparedDraftReconciliation {
   baseTree: string;
   headSha: string;
   headTree: string;
+  /** Exact local single-parent commit created by staging retained reviewed edits. */
+  replayedHeadSha?: string;
   conflicts: readonly string[];
   publicationScope?: OwnedPublicationReconciliationScope;
   originalPublicationRepair?: OriginalPublicationRepair;
@@ -370,17 +372,17 @@ const stageUnpublished = async (
   input: DraftReconciliationInput,
   root: string,
   workspaceRoot: string,
-): Promise<void> => {
+): Promise<string | null> => {
   const { unpublished } = input;
   if (unpublished === undefined || unpublished.changes.length === 0) {
-    return;
+    return null;
   }
   const changes = await initialRecoveryChanges(input, root, unpublished);
   const observed = await Promise.all(
     changes.map(async (change) => await currentFileState(input.sandbox, root, change.path)),
   );
   if (changes.every((change, index) => matchesFileState(observed[index] ?? null, change.after))) {
-    return;
+    return null;
   }
   const candidates = changes.filter(
     (change, index) =>
@@ -489,6 +491,21 @@ const stageUnpublished = async (
     "record unpublished app changes for local merge analysis",
     `${git(root, ["-c", "user.name=Autograph App Builder", "-c", "user.email=builder@autograph.so", "commit", "--no-verify", "--no-gpg-sign", "-m", "Local reviewed app changes for draft reconciliation"])} >/dev/null`,
   );
+  const replay = await checked(
+    input.sandbox,
+    "record the exact local review replay",
+    git(root, ["rev-list", "--parents", "-n", "1", "HEAD"]),
+  );
+  const [commit, parent, extraParent] = replay.split(" ");
+  if (
+    commit === undefined ||
+    !SHA.test(commit) ||
+    parent !== input.headSha ||
+    extraParent !== undefined
+  ) {
+    throw new Error("The local review replay no longer belongs to the verified draft head.");
+  }
+  return commit;
 };
 
 const ownedDependencyRootProgram = String.raw`
@@ -1092,13 +1109,30 @@ const selectCandidateRoot = async (
   let preservedCandidateRoot: string | undefined;
   let replayedAppChanges = false;
   const changedLineage = previous !== undefined && replay === null;
-  const needsFreshRoot =
-    input.forceFreshCandidate === true || advancedBase || changedLineage || changedRepair;
+  const possibleLegacyReplay =
+    [!created, replay !== null, replay?.root === root, replay?.replayedHeadSha === undefined].every(
+      Boolean,
+    ) &&
+    (await checked(
+      input.sandbox,
+      "inspect the saved draft worktree head",
+      git(root, ["rev-parse", "HEAD"]),
+    )) !== input.headSha;
+  const needsFreshRoot = [
+    input.forceFreshCandidate === true,
+    advancedBase,
+    changedLineage,
+    changedRepair,
+    possibleLegacyReplay,
+  ].some(Boolean);
   if (needsFreshRoot || (!created && (await outsideCandidateChanges(input, root)))) {
     preservedCandidateRoot = previous?.root ?? (created ? undefined : root);
     root = `${canonicalRoot}-${randomUUID()}`;
     created = true;
     replayedAppChanges = replay !== null && preservedCandidateRoot === replay.root;
+    if (possibleLegacyReplay && input.unpublished === undefined) {
+      replayedAppChanges = false;
+    }
     if (
       advancedBase &&
       replay !== null &&
@@ -1157,6 +1191,10 @@ export const prepareDraftReconciliation = async (
     canonicalRoot,
   );
   let originalRepairPlan: Awaited<ReturnType<typeof planOriginalPublicationRepair>> | undefined;
+  let replayedHeadSha =
+    created || input.previousCandidate?.root !== root
+      ? null
+      : (input.previousCandidate.replayedHeadSha ?? null);
   // oxlint-disable-next-line eslint/no-negated-condition, unicorn/no-negated-condition -- creation has the longer branch and recovery is handled after it.
   if (created) {
     const head = await checked(
@@ -1219,7 +1257,7 @@ export const prepareDraftReconciliation = async (
         plan: originalRepairPlan,
       });
     }
-    await stageUnpublished(input, root, workspaceRoot);
+    replayedHeadSha = await stageUnpublished(input, root, workspaceRoot);
     const merge = await run(
       sandbox,
       "merge the base into the private draft candidate",
@@ -1248,7 +1286,7 @@ export const prepareDraftReconciliation = async (
       git(root, ["rev-parse", "-q", "--verify", "MERGE_HEAD"]),
     );
     if (merged.exitCode !== 0 && inProgress.exitCode !== 0) {
-      await stageUnpublished(input, root, workspaceRoot);
+      replayedHeadSha = (await stageUnpublished(input, root, workspaceRoot)) ?? replayedHeadSha;
       const retry = await run(
         sandbox,
         "resume the base merge in the saved candidate",
@@ -1345,13 +1383,21 @@ export const prepareDraftReconciliation = async (
     initial.preservedCandidateRoot = preservedCandidateRoot;
     initial.replayedAppChanges = replayedAppChanges;
   }
-  return {
+  const prepared: PreparedDraftReconciliation & {
+    created: boolean;
+    preservedCandidateRoot?: string;
+    replayedAppChanges?: boolean;
+  } = {
     ...initial,
     headSha: input.headSha,
     headTree: await inspectRevision(sandbox, checkout, input.headSha),
     root,
     workspaceRoot,
   };
+  if (replayedHeadSha !== null) {
+    prepared.replayedHeadSha = replayedHeadSha;
+  }
+  return prepared;
 };
 /* oxlint-enable eslint/complexity, sonarjs/cognitive-complexity */
 

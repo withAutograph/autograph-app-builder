@@ -11,7 +11,7 @@ const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
 
 const discardProgram = String.raw`
 import hashlib, json, os, stat, subprocess, sys
-workspace, root, app, release, base, base_tree, head, head_tree, saved_tree, staging, raw_members = sys.argv[1:]
+workspace, root, app, release, base, base_tree, head, head_tree, replayed, saved_tree, staging, raw_members = sys.argv[1:]
 relative = "apps/" + app + "/schema/release/" + release
 members = sorted(json.loads(raw_members))
 flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
@@ -33,11 +33,16 @@ def checked_discard():
         raise ValueError("The selected source is not an isolated draft candidate.")
     candidate_fd = directory(workspace_fd, candidate_root)
     os.fchdir(candidate_fd)
+    checkout_head = git("rev-parse", "HEAD").strip().decode()
+    if replayed:
+        expected_worktree = git("rev-list", "--parents", "-n", "1", "HEAD").split() == [replayed.encode(), head.encode()]
+    else:
+        expected_worktree = checkout_head == head
     if (git("rev-parse", "--show-prefix") != b"\n"
-        or git("rev-parse", "HEAD").strip().decode() != head
+        or not expected_worktree
         or git("rev-parse", base + "^{tree}").strip().decode() != base_tree
         or git("rev-parse", head + "^{tree}").strip().decode() != head_tree):
-        raise ValueError("The private checkout no longer matches the verified draft and base.")
+        raise ValueError("The private checkout no longer matches the verified draft and base. Prepare the same owned draft again. After any local replay, inspect the CUE to confirm the intended correction before recompilation.")
     common = git("merge-base", "--all", base, head).decode().splitlines()
     if not common or any(git("ls-tree", "-z", rev, "--", relative) for rev in [base, *common]):
         raise ValueError("The release is part of established base history and was preserved.")
@@ -61,6 +66,13 @@ def checked_discard():
         return entries
 
     proven = [generated_entries(head)]
+    if replayed:
+        # The provider draft still proves this cut is eligible. The exact local
+        # replay may also prove a complete set of candidate preimage bytes.
+        try:
+            proven.append(generated_entries(replayed))
+        except ValueError:
+            pass
     if saved_tree and saved_tree != head_tree:
         # A compiler success is retained against an immutable candidate tree by Builder.
         # It can prove an alternate preimage, but cannot expand the set of draft-owned cuts.
@@ -119,9 +131,13 @@ export const discardUnissuedDraftSchemaRelease = async (input: {
   markUncertain: () => void;
   abortSignal?: AbortSignal;
 }): Promise<{ path: string }> => {
-  const { appId, root, workspaceRoot, baseSha, baseTree, headSha, headTree } = input.prepared;
+  const { appId, root, workspaceRoot, baseSha, baseTree, headSha, headTree, replayedHeadSha } =
+    input.prepared;
   const releaseId = draftSchemaReleaseId.parse(input.releaseId);
   const verifiedTrees = [baseSha, baseTree, headSha, headTree];
+  if (replayedHeadSha !== undefined) {
+    verifiedTrees.push(replayedHeadSha);
+  }
   if (input.validatedTree !== undefined) {
     verifiedTrees.push(input.validatedTree);
   }
@@ -143,6 +159,7 @@ export const discardUnissuedDraftSchemaRelease = async (input: {
     baseTree,
     headSha,
     headTree,
+    replayedHeadSha ?? "",
     input.validatedTree ?? "",
     `draft-schema-recompile-${randomUUID()}`,
     JSON.stringify(GENERATED_RELEASE_MEMBERS),

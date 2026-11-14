@@ -303,7 +303,7 @@ describe("isolated draft reconciliation", () => {
     );
   });
 
-  const draftReleaseFixture = async () => {
+  const draftReleaseFixture = async (replayReviewedEdit = false) => {
     const f = fixture();
     const checkout = path.join(f.root, "repository");
     const releaseId = "2026-11-16.v2";
@@ -338,9 +338,37 @@ describe("isolated draft reconciliation", () => {
     );
     git(checkout, "push", "origin", "draft");
     const headSha = git(checkout, "rev-parse", "HEAD");
+    const file = "apps/demo/notes.ts";
+    const content = "export const notes = true;\n";
+    const bundle = `${release}/sql-bundle.sql`;
+    const replayedBundle = "replayed reviewed SQL bundle";
+    const reviewedReplay = {
+      reviewDigest: digest("reviewed correction"),
+      changes: [
+        { path: file, kind: "added" as const, after: { digest: digest(content), mode: "644" } },
+        {
+          path: bundle,
+          kind: "modified" as const,
+          before: { digest: digest("generated sql-bundle.sql"), mode: "644" },
+          after: { digest: digest(replayedBundle), mode: "644" },
+        },
+      ],
+      contentSource: {
+        readFile: async (filePath: string) => {
+          const bytes = filePath === bundle ? replayedBundle : content;
+          return await Promise.resolve({
+            bytes: Buffer.from(bytes),
+            digest: digest(bytes),
+            mode: "644",
+          });
+        },
+      },
+    };
+    const baseInput = candidateFixtureInput(f, baseSha);
     const prepared = await prepareDraftReconciliation({
-      ...candidateFixtureInput(f, baseSha),
+      ...baseInput,
       headSha,
+      unpublished: replayReviewedEdit ? reviewedReplay : undefined,
     });
     const discard = async (target = releaseId, validatedTree?: string) =>
       await discardUnissuedDraftSchemaRelease({
@@ -351,7 +379,7 @@ describe("isolated draft reconciliation", () => {
         sandbox: f.sandbox,
         validatedTree,
       });
-    return { checkout, discard, f, headSha, predecessor, prepared, release };
+    return { checkout, discard, f, headSha, predecessor, prepared, release, releaseId, baseInput };
   };
 
   it("preserves the base release, original draft, and other edits when preparing to regenerate a draft cut", async () => {
@@ -390,6 +418,64 @@ describe("isolated draft reconciliation", () => {
     const candidateTree = git(prepared.root, "write-tree");
     await expect(discard(undefined, candidateTree)).resolves.toEqual({ path: release });
     expect(existsSync(path.join(prepared.root, release))).toBe(false);
+  });
+
+  it("discards the draft cut after the exact local review replay and refuses an unrecorded replay", async () => {
+    const { discard, f, headSha, predecessor, prepared, release, releaseId } =
+      await draftReleaseFixture(true);
+    const currentHead = git(prepared.root, "rev-parse", "HEAD");
+    expect(currentHead).not.toBe(headSha);
+    expect(prepared.replayedHeadSha).toBe(currentHead);
+    expect(git(prepared.root, "rev-list", "--parents", "-n", "1", "HEAD")).toBe(
+      `${currentHead} ${headSha}`,
+    );
+    expect(readFileSync(path.join(prepared.root, release, "sql-bundle.sql"), "utf-8")).toBe(
+      "replayed reviewed SQL bundle",
+    );
+    const legacy = { ...prepared };
+    delete legacy.replayedHeadSha;
+    await expect(
+      discardUnissuedDraftSchemaRelease({
+        assertCurrent: vi.fn<() => void>(),
+        markUncertain: vi.fn<() => void>(),
+        prepared: legacy,
+        releaseId,
+        sandbox: f.sandbox,
+      }),
+    ).rejects.toThrow("private checkout no longer matches");
+    await expect(discard()).resolves.toEqual({ path: release });
+    expect(existsSync(path.join(prepared.root, predecessor))).toBe(true);
+    expect(readFileSync(path.join(prepared.root, "apps/demo/notes.ts"), "utf-8")).toContain(
+      "export const notes",
+    );
+  });
+
+  it("reopens a retained legacy replay from the exact draft when its old edits were superseded", async () => {
+    const { baseInput, f, headSha, prepared, release, releaseId } = await draftReleaseFixture(true);
+    const legacy = { ...prepared };
+    delete legacy.replayedHeadSha;
+    const reopened = await prepareDraftReconciliation({
+      ...baseInput,
+      headSha,
+      previousCandidate: legacy,
+      replayPreviousCandidate: true,
+    });
+    expect(reopened.root).not.toBe(legacy.root);
+    expect(reopened.preservedCandidateRoot).toBe(legacy.root);
+    expect(git(reopened.root, "rev-parse", "HEAD")).toBe(headSha);
+    const notes = "apps/demo/notes.ts";
+    expect(existsSync(path.join(legacy.root, notes))).toBe(true);
+    expect(existsSync(path.join(reopened.root, notes))).toBe(false);
+    await expect(
+      discardUnissuedDraftSchemaRelease({
+        assertCurrent: vi.fn<() => void>(),
+        markUncertain: vi.fn<() => void>(),
+        prepared: reopened,
+        releaseId,
+        sandbox: f.sandbox,
+      }),
+    ).resolves.toEqual({ path: release });
+    expect(existsSync(path.join(legacy.root, release))).toBe(true);
   });
 
   const catalogCandidate = async () => {

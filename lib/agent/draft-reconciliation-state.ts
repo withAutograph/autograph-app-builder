@@ -99,6 +99,7 @@ interface DraftCandidateFields {
   workspaceRoot: string;
   headSha: string;
   headTree: string;
+  replayedHeadSha?: string;
   baseSha: string;
   baseTree: string;
   conflicts: readonly string[];

@@ -40,7 +40,10 @@ import {
 } from "../repository/reviewed-change-set";
 import { createGitHubDestinationReviewBinding } from "../repository/github-destination-review";
 import { freshFixture, workflowKey } from "../eve/test-support/draft-reviewed-recovery";
-import type { DraftReconciliationCandidate } from "./draft-reconciliation-state";
+import type {
+  DraftReconciliationCandidate,
+  DraftReconciliationCompletion,
+} from "./draft-reconciliation-state";
 import type { PublishedDraftRepairSource } from "./published-draft-repair";
 import { retainedPublishedDraftOriginForReview } from "./published-draft-repair";
 import type { observeNormalizedChangeSet } from "../../agent/tools/change_set_status";
@@ -101,6 +104,11 @@ const mocks = vi.hoisted(() => ({
   onOwnedRead: undefined as undefined | (() => void),
   classify: vi.fn<(proposal: DraftPullRequestProposal) => Promise<"recorded" | "unrecorded">>(),
   ownedProposalDigests: [] as string[],
+  publishedCorrection: vi.fn<() => DraftReconciliationCompletion["proposal"] | undefined>(),
+  completions: [] as Pick<
+    DraftReconciliationCompletion,
+    "preparation" | "appId" | "appReview" | "proposal"
+  >[],
   onSourceRead: undefined as undefined | (() => void),
   prepare: vi.fn<(request: PrepareRequest) => Promise<Candidate & { created: boolean }>>(),
   inspectCandidate: vi.fn(),
@@ -135,7 +143,7 @@ vi.mock("./existing-app-repair-planning", () => ({
   priorResumedBuildDraftProposal: () => {},
 }));
 vi.mock("./draft-reconciliation-state", () => ({
-  draftReconciliationCompletions: { get: () => [] },
+  draftReconciliationCompletions: { get: () => mocks.completions },
   draftReconciliationState: { get: () => mocks.candidate },
   publishedDraftRepairCompletions: { get: () => [] },
   samePersistedDraftCandidate: (left: unknown, right: unknown) =>
@@ -172,10 +180,14 @@ vi.mock("./deployment-github-publication-runtime", () => ({
     inspectPriorAppPublication: mocks.classify,
     inspectExistingDraftReconciliationSource: async () => {
       mocks.onSourceRead?.();
+      const publishedReconciliation = mocks.publishedCorrection();
       return {
         draft: mocks.owned.draft,
         base: { headSha: mocks.candidate.baseSha },
         ownedPublication: mocks.ownedFirstPublication,
+        ...(publishedReconciliation === undefined
+          ? {}
+          : { publishedReconciliation, publishedHeadSha: mocks.owned.draft.headSha }),
       };
     },
     inspectOwnedPublishedDraftRepairSource: async (request: {
@@ -298,6 +310,8 @@ describe("owned draft preparation after review recovery", () => {
     mocks.onOwnedRead = undefined;
     mocks.classify.mockReset().mockResolvedValue("unrecorded");
     mocks.ownedProposalDigests = [];
+    mocks.completions = [];
+    mocks.publishedCorrection.mockReset();
     // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     mocks.onSourceRead = undefined;
     mocks.prepare.mockReset();
@@ -1235,6 +1249,27 @@ describe("owned draft preparation after review recovery", () => {
     expect(readFileSync(path.join(previous.root, "candidate.txt"), "utf-8")).toBe(
       "latest unpublished candidate bytes\n",
     );
+  });
+
+  it("keeps the provider-proved correction instead of replaying the superseded app review", async () => {
+    selectAcquiredSource();
+    const { reviewReceipt, appSpec } = fixture.reviewed;
+    // A provider-verified proposal was retained with this exact original review.
+    const proposal = {
+      digest: "b".repeat(64),
+      resolvedTree: mocks.owned.draft.headTree,
+    } as DraftReconciliationCompletion["proposal"];
+    mocks.publishedCorrection.mockReturnValue(proposal);
+    mocks.completions.push({
+      preparation: "sealed-before-approval",
+      appId: appSpec.appId,
+      appReview: reviewReceipt,
+      proposal,
+    });
+    await expect(
+      prepareDraftReconciliationTool.execute({ pullRequestNumber: 42 }, ctx),
+    ).resolves.toMatchObject({ status: "ready_for_validation" });
+    expect(mocks.prepare.mock.calls[0]?.[0]).not.toHaveProperty("unpublished");
   });
 
   it.each(["missing", "moved-head", "moved-tree"] as const)(
