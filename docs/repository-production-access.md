@@ -369,7 +369,10 @@ resource configuration into preparation. The reference binds the app, repository
 operation, setup-effect digest and displayed access/account selection. The
 protected service resolves the current owner-scoped captured release and app
 description again, compares the reference, and observes the exact native request
-and creator settlement before retaining approval or running setup. Changed
+and creator settlement before retaining approval or running setup. If a bounded
+history read stops early, the next request resumes from a durable private cursor
+bound to the owner, session, setup effects, and exact approval call. Partial
+history never authorizes setup. Changed
 schema, repository, organization or access effects need a current approval;
 source-only revisions retain the same effects and storage. No additional plan
 store or provider operation is introduced. Legacy full-plan preparation and the

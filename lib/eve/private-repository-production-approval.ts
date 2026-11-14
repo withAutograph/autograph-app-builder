@@ -59,6 +59,9 @@ export const createPrivateRepositoryProductionApprovalCapture = (input: {
           }
           const { requestId, action } = request;
           const { callId, input: requestedInput, toolName } = action;
+          if (callId !== input.callId) {
+            continue;
+          }
           if (input.directProduction !== undefined) {
             const approval = z
               .object({ directProduction: directProductionSubjectSchema })
