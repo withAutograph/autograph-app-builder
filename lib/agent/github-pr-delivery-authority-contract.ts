@@ -47,6 +47,13 @@ export const githubPrDeliveryCallScopeSchema = z.strictObject({
 export const githubPrDeliveryAuthorityProjectionSchema = z.strictObject({
   version: z.literal(1),
   current: githubPrDeliveryReviewScopeSchema.nullable(),
+  publishedReconciliation: z
+    .strictObject({
+      digest,
+      reconciliationReviewDigest: digest,
+      reconciliationTree: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u),
+    })
+    .optional(),
   requirements: z.array(githubPrDeliveryManagedRequirementSchema),
   calls: z.array(githubPrDeliveryCallScopeSchema),
 });

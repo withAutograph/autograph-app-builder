@@ -1,9 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import {
-  ARRUSTED_PRODUCTION_REPOSITORY,
-  createDirectProductionGrant,
-} from "../agent/direct-production-authorization";
+import { ARRUSTED_PRODUCTION_REPOSITORY } from "../agent/direct-production-authorization";
 import { approvedBuildDecisionSchema } from "../agent/approved-build-continuation";
 import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
 import {
@@ -176,57 +173,29 @@ const readAuthorityFixture = () => {
   const { repositoryId } = scope;
   const installationId = "456";
   const baseBranch = "main";
-  const grant = createDirectProductionGrant({
-    callId: "original-build",
-    toolName: "apply_app_creation",
-    subject: {
-      version: 1,
-      authority: scope.authority,
-      appId,
-      sessionId: logicalSessionId,
-      appSpecDigest: "1".repeat(64),
-      proposalDigest: "2".repeat(64),
-      buildWorkspaceId: "private-workspace",
-      repositoryId,
-      repositoryFullName: ARRUSTED_PRODUCTION_REPOSITORY,
-      installationId,
-      baseBranch,
-      storageKind: "postgres",
-      revision: {
-        priorGrantDigest: "3".repeat(64),
-        priorProposalDigest: "4".repeat(64),
-        schemaChange: {
-          kind: "add-optional-text-field",
-          priorCueSha256: "5".repeat(64),
-          candidateCueSha256: "6".repeat(64),
-        },
-      },
-    },
-  });
-  const { subject } = grant;
+  const appSpecDigest = "1".repeat(64);
   const reviewDigest = "7".repeat(64);
   const decision: ApprovedBuildDecision = {
     version: 1,
-    adapterSessionId: logicalSessionId,
+    adapterSessionId: owner.adapterSessionId,
     turnId: "correction",
     turnSequence: 2,
     decision: "blocked",
     workflowPhase: "reviewed",
     currentSpec: {
       appId,
-      appSpecDigest: subject.appSpecDigest,
-      proposalDigest: subject.proposalDigest,
+      appSpecDigest,
+      proposalDigest: "2".repeat(64),
       sessionId: logicalSessionId,
-      workspaceId: subject.buildWorkspaceId,
+      workspaceId: "private-workspace",
     },
-    schemaPredecessorReadback: grant,
     githubDelivery: {
       version: 1,
       requirements: [],
       calls: [],
       current: {
         appId,
-        appSpecDigest: subject.appSpecDigest,
+        appSpecDigest,
         proposalDigest: "8".repeat(64),
         reviewDigest,
         installationId,
@@ -263,17 +232,16 @@ const readAuthorityFixture = () => {
       appId,
       repositoryId,
     },
-    grant,
     published,
     target: { expectedRepositoryId: repositoryId, reviewedHeadSha: published.gitSha },
   };
 };
 
 describe("published draft readback authority", () => {
-  it("uses retained approval and published review even when no draft correction may proceed", () => {
-    const { input, grant, target, published } = readAuthorityFixture();
+  it("uses the owner-reviewed publication without requiring permission to correct it", () => {
+    const { input, target, published } = readAuthorityFixture();
     const authority = readRepositoryProductionSchemaPredecessorAuthority(input);
-    expect(authority.grant).toEqual(grant);
+    expect(authority.repositoryFullName).toBe(ARRUSTED_PRODUCTION_REPOSITORY);
     expect(input.decision.directProduction).toBeUndefined();
     expect(assertRepositoryProductionSchemaPredecessorSource(authority, published, target)).toEqual(
       published,
@@ -294,19 +262,59 @@ describe("published draft readback authority", () => {
     ).toThrow();
   });
 
-  it("rejects a changed tenant owner, repository, logical session, or specification", () => {
+  it("rejects a changed physical owner, repository, logical session, or installation", () => {
     const { input } = readAuthorityFixture();
     const changes = [
       {
         ...input,
-        owner: { ...input.owner, authority: { ...scope.authority, ownerUserId: "other" } },
+        owner: { ...input.owner, adapterSessionId: "another-worker" },
       },
       { ...input, repositoryId: "999" },
       { ...input, logicalSessionId: "other-session" },
-      { ...input, decision: { ...input.decision, workflowPhase: "applied" } },
+      { ...input, destination: { ...input.destination, installationId: "999" } },
+      { ...input, decision: { ...input.decision, workflowPhase: "planned" } },
     ];
     for (const changed of changes) {
       expect(() => readRepositoryProductionSchemaPredecessorAuthority(changed)).toThrow();
     }
+  });
+
+  it("accepts a retained published reconciliation only with its exact review and tree", () => {
+    const { input, published, target } = readAuthorityFixture();
+    const reconciliationDigest = "3".repeat(64);
+    const reconciled = {
+      digest: reconciliationDigest,
+      reconciliationReviewDigest: "4".repeat(64),
+      reconciliationTree: "5".repeat(40),
+    };
+    const { githubDelivery } = input.decision;
+    if (githubDelivery === undefined || githubDelivery.current === null) {
+      throw new Error("Expected an existing reviewed draft fixture.");
+    }
+    const current = { ...githubDelivery.current, reconciliationDigest };
+    const partial = {
+      ...input.decision,
+      workflowPhase: "validated",
+      githubDelivery: { ...githubDelivery, current },
+    };
+    expect(() =>
+      readRepositoryProductionSchemaPredecessorAuthority({ ...input, decision: partial }),
+    ).toThrow();
+    const decision = {
+      ...partial,
+      githubDelivery: { ...githubDelivery, current, publishedReconciliation: reconciled },
+    };
+    const authority = readRepositoryProductionSchemaPredecessorAuthority({ ...input, decision });
+    expect(() =>
+      assertRepositoryProductionSchemaPredecessorSource(authority, published, target),
+    ).toThrow();
+    const result = {
+      ...published,
+      reviewDigest: reconciled.reconciliationReviewDigest,
+      gitTree: reconciled.reconciliationTree,
+    };
+    expect(assertRepositoryProductionSchemaPredecessorSource(authority, result, target)).toEqual(
+      result,
+    );
   });
 });

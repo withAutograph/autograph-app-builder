@@ -33,6 +33,10 @@ const managedReleaseUnavailable = "managed-release-unavailable" as const;
 const reconciliationGuidance: Record<ProductionReconciliationFailure, string> = {
   "candidate-review-unavailable":
     "Recover the current review for the same owned draft and verify both diffs before sealing the correction.",
+  "retained-draft-review-only":
+    "Builder found the original draft review in session history. Restore the current review on the same owned draft before continuing the existing approval.",
+  "current-draft-approval-unavailable":
+    "Builder found the reviewed schema correction and could not verify its original Production approval. Preserve the same draft and recover the original approval from this Builder session.",
   "candidate-unsealed":
     "Seal the corrected draft candidate with its current review digest, then read Production approval again.",
   "candidate-compile-unavailable":
@@ -46,7 +50,7 @@ const reconciliationGuidance: Record<ProductionReconciliationFailure, string> = 
   "candidate-schema-unchanged":
     "Confirm the private candidate contains the schema correction and regenerate its draft-only checked release if needed. Review and seal the actual changed candidate.",
   "prior-approved-revision-unavailable":
-    "Preserve this draft. Recover the same app’s previously approved Production revision before requesting another release decision.",
+    "Preserve this draft. Builder found the original approval for this update and could not verify the previous approved Production revision it depends on.",
   "approved-release-mismatch":
     "Verify this saved app’s accepted revision and Arrusted destination. Preserve the current owned draft.",
   "prior-delivery-unavailable":

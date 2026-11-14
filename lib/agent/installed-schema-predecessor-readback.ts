@@ -1,8 +1,9 @@
+import { isDeepStrictEqual } from "node:util";
 import type { ToolContext } from "eve/tools";
 
 import { githubPublicationRuntimeForSession } from "./deployment-github-publication-runtime";
-import { retainedDirectProductionSchemaReadbackGrant } from "./direct-production-state";
 import { draftReconciliationState } from "./draft-reconciliation-state";
+import { resolveDraftReviewedWorkflow } from "./draft-reviewed-lineage";
 import { resolveGitHubPrDeliverySubject } from "./github-pr-delivery-subject";
 import { repositoryProductionClientForContext } from "./repository-production-client";
 import { appBuilderWorkflowState } from "./workflow-state";
@@ -10,48 +11,60 @@ import { appBuilderWorkflowState } from "./workflow-state";
 const unavailableMessage =
   "Builder could not verify the installed schema for this reviewed draft. The app’s data and delivery are unchanged.";
 
-const approvalChanged = "approval-changed";
+const reviewChanged = "review-changed";
 
 // oxlint-disable-next-line sonarjs/max-union-size -- Closed non-sensitive failure stages.
 type ReadbackFailure =
   | "review-unavailable"
-  | "approval-unavailable"
   | "github-read-unavailable"
   | "draft-changed"
   | "readback-authority-unavailable"
   | "operator-read-unavailable"
-  | typeof approvalChanged;
+  | typeof reviewChanged;
 
-const currentReviewedSubject = () =>
-  resolveGitHubPrDeliverySubject(appBuilderWorkflowState.get(), draftReconciliationState.get());
+const currentReviewedDraft = (appId: string) => {
+  const workflow = appBuilderWorkflowState.get();
+  const candidate = draftReconciliationState.get();
+  const review = resolveDraftReviewedWorkflow(workflow, candidate);
+  const subject = resolveGitHubPrDeliverySubject(workflow, candidate);
+  const repository =
+    review?.githubSource?.repository ?? review?.githubDestinationReview?.repository;
+  const installationId = subject?.installationId;
+  if (
+    review === undefined ||
+    subject?.appId !== appId ||
+    repository === undefined ||
+    installationId === undefined
+  ) {
+    return null;
+  }
+  return {
+    appSpecDigest: review.appSpec.digest,
+    appReviewDigest: review.reviewReceipt.digest,
+    installationId,
+    proposalDigest: subject.proposalDigest,
+    reconciliation: subject.reconciliation,
+    repository: {
+      repositoryId: repository.repositoryId,
+      owner: repository.owner,
+      name: repository.name,
+      baseBranch: repository.defaultBranch,
+    },
+  };
+};
 
-/** Read the exact app's existing installation for the current approved draft only. */
+/** Read the existing installation for the session's exact published draft. */
 export const readInstalledSchemaPredecessor = async (appId: string, ctx: ToolContext) => {
   ctx.abortSignal.throwIfAborted();
   let stage: ReadbackFailure = "review-unavailable";
   const unavailable = () => new Error(`${unavailableMessage} (${stage})`);
   try {
-    const subject = currentReviewedSubject();
-    if (subject?.appId !== appId || subject.installationId === undefined) {
-      throw unavailable();
-    }
-    stage = "approval-unavailable";
-    const scope = { appId, installationId: subject.installationId };
-    const grant = retainedDirectProductionSchemaReadbackGrant(ctx, scope);
-    const revision = grant?.subject.revision;
-    const repair = revision?.reconciliation;
-    const reviewedRepair =
-      repair?.digest === subject.reconciliation?.digest &&
-      (repair === undefined || repair.originPublicationDigest === subject.proposalDigest);
-    if (
-      grant === undefined ||
-      revision?.schemaChange?.kind !== "add-optional-text-field" ||
-      !reviewedRepair
-    ) {
+    const scope = currentReviewedDraft(appId);
+    if (scope === null) {
       throw unavailable();
     }
     stage = "github-read-unavailable";
-    const { proposalDigest, reconciliation, installationId } = subject;
+    const { proposalDigest, reconciliation, installationId, repository } = scope;
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth, {
       selectedInstallationId: installationId,
     });
@@ -74,26 +87,21 @@ export const readInstalledSchemaPredecessor = async (appId: string, ctx: ToolCon
       observation.state === "open",
       observation.draft,
       observation.reviewedRevision,
-      target.repositoryId === grant.subject.repositoryId,
-      `${target.owner}/${target.name}` === grant.subject.repositoryFullName,
-      target.baseBranch === grant.subject.baseBranch,
-      repair === undefined || target.pullRequestNumber === repair.pullRequestNumber,
+      target.repositoryId === repository.repositoryId,
+      target.owner === repository.owner,
+      target.name === repository.name,
+      target.baseBranch === repository.baseBranch,
+      reconciliation === undefined ||
+        (target.pullRequestNumber === reconciliation.pullRequestNumber && target.headSha === head),
     ].every(Boolean);
     if (!matches) {
       throw unavailable();
     }
     const stillCurrent = () => {
       ctx.abortSignal.throwIfAborted();
-      const current = currentReviewedSubject();
-      return [
-        current?.appId === appId,
-        current?.proposalDigest === proposalDigest,
-        current?.installationId === installationId,
-        current?.reconciliation?.digest === reconciliation?.digest,
-        retainedDirectProductionSchemaReadbackGrant(ctx, scope)?.digest === grant.digest,
-      ].every(Boolean);
+      return isDeepStrictEqual(currentReviewedDraft(appId), scope);
     };
-    stage = approvalChanged;
+    stage = reviewChanged;
     if (!stillCurrent()) {
       throw unavailable();
     }
@@ -101,19 +109,19 @@ export const readInstalledSchemaPredecessor = async (appId: string, ctx: ToolCon
     const { emitCurrentBuildWorkflowProjection } =
       await import("./approved-build-continuation-runtime");
     await emitCurrentBuildWorkflowProjection(ctx);
-    stage = approvalChanged;
+    stage = reviewChanged;
     if (!stillCurrent()) {
       throw unavailable();
     }
     stage = "operator-read-unavailable";
     const client = await repositoryProductionClientForContext(ctx);
-    stage = approvalChanged;
+    stage = reviewChanged;
     if (!stillCurrent()) {
       throw unavailable();
     }
     stage = "operator-read-unavailable";
     const result = await client.schemaPredecessor(appId, target.repositoryId, target.headSha);
-    stage = approvalChanged;
+    stage = reviewChanged;
     if (stillCurrent()) {
       return result;
     }

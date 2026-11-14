@@ -50,12 +50,24 @@ export const currentGitHubPrDeliveryAuthorityProjection =
             installationId: subject.installationId,
             reconciliationDigest: subject.reconciliation?.digest,
           });
-    return githubPrDeliveryAuthorityProjectionSchema.parse({
+    const projection: GitHubPrDeliveryAuthorityProjection = {
       version: 1,
       current: current !== null && current.success ? current.data : null,
       requirements: managedProductionDeliveryRequirements.get(),
       calls: calls.get(),
-    });
+    };
+    const reconciliation = subject?.reconciliation;
+    if (
+      reconciliation !== undefined &&
+      projection.current?.reconciliationDigest === reconciliation.digest
+    ) {
+      projection.publishedReconciliation = {
+        digest: reconciliation.digest,
+        reconciliationReviewDigest: reconciliation.reviewDigest,
+        reconciliationTree: reconciliation.resolvedTree,
+      };
+    }
+    return githubPrDeliveryAuthorityProjectionSchema.parse(projection);
   };
 export const gitHubPrDeliveryAuthorityProjectionChanged = () => {
   const projection = currentGitHubPrDeliveryAuthorityProjection();

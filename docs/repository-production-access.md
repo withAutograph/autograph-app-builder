@@ -461,13 +461,15 @@ external qualification or mandatory app-test gate.
 
 If a saved optional-field draft cannot proceed, Builder can ask the protected
 operator to identify the predecessor actually installed for that app. This
-read is scoped to the same owner, saved database and reviewed draft. It uses
-the approval that belongs to the published draft, even while Builder is preparing
-a private correction. The operator verifies that binding, checks the retained
-release and observes the installed schema through the protected worker.
-The response includes only the release identity and digests. The read performs
-no delivery or database writes and is available on demand. A disagreement between installed and
-published history leaves both intact for reconciliation.
+read requires the authenticated owner, saved Production setup and exact
+reviewed GitHub draft, including its installation and published head.
+Builder can verify that read from the retained review when a private correction
+or session recovery prevents it from reconstructing the release approval.
+The operator checks the saved setup and observes the installed schema through
+the protected worker. The response includes only the release identity and
+digests. Reconciliation and delivery still require their exact existing
+approval. A disagreement between installed and published history leaves both
+intact for reconciliation.
 
 A missing saved destination is reported explicitly. Failed plan and status reads
 do not claim that setup was started or saved by that read. An uncertain

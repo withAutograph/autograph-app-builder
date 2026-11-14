@@ -38,6 +38,7 @@ import {
   draftReconciliationCompletions,
   draftReconciliationState,
 } from "./draft-reconciliation-state";
+import { resolveDraftReviewedWorkflow } from "./draft-reviewed-lineage";
 import { verifyDraftOptionalFieldRelease } from "./draft-optional-field-release";
 import { currentDraftCandidateSource } from "./published-draft-repair";
 import {
@@ -829,6 +830,8 @@ interface ReconciliationObservationPorts {
 export type ProductionReconciliationFailure =
   | ReconciliationCandidateFailure
   | "candidate-review-unavailable"
+  | "retained-draft-review-only"
+  | "current-draft-approval-unavailable"
   | "prior-approved-revision-unavailable"
   | typeof approvedReleaseMismatch
   | "prior-delivery-unavailable"
@@ -922,14 +925,22 @@ export const prepareDirectProductionDraftReconciliation = async (
   const state = appBuilderWorkflowState.get();
   const { grant } = authorization.get();
   const candidate = draftReconciliationState.get();
-  if (
-    !("proposal" in state) ||
-    grant?.subject.revision?.schemaChange === undefined ||
-    candidate?.appId !== state.appSpec.appId
-  ) {
+  if (!("proposal" in state) || candidate?.appId !== state.appSpec.appId) {
     return null;
   }
-  if (state.phase !== "reviewed" || reviewedDraftReconciliation(state) === null) {
+  if (grant?.subject.revision?.schemaChange === undefined) {
+    const savedSchemaDraft =
+      candidate.proposal !== undefined &&
+      resolveDraftReviewedWorkflow(state, candidate) !== undefined &&
+      eligibleRevisionScope(state, [])?.schemaChange !== undefined;
+    return savedSchemaDraft ? "current-draft-approval-unavailable" : null;
+  }
+  if (state.phase !== "reviewed") {
+    return resolveDraftReviewedWorkflow(state, candidate) === undefined
+      ? "candidate-review-unavailable"
+      : "retained-draft-review-only";
+  }
+  if (reviewedDraftReconciliation(state) === null) {
     return "candidate-review-unavailable";
   }
   if (grant.subject.proposalDigest !== state.proposal.digest) {
@@ -1307,32 +1318,6 @@ export const currentPlannedDirectProductionAuthoring = (ctx: OwnerContext): stri
     return undefined;
   }
   return proposalDigest;
-};
-
-/** Read-only identity for an approved schema release even while its private draft repair is pending. */
-export const retainedDirectProductionSchemaReadbackGrant = (
-  ctx: OwnerContext,
-  match: SubjectMatch,
-): DirectProductionGrant | undefined => {
-  const strict = currentDirectProductionGrant(ctx, match);
-  if (strict?.subject.revision?.schemaChange !== undefined) {
-    return strict;
-  }
-  const { grant } = authorization.get();
-  const state = appBuilderWorkflowState.get();
-  if (
-    state.phase !== "reviewed" ||
-    grant?.subject.appId !== match.appId ||
-    grant.subject.revision?.schemaChange === undefined ||
-    grant.subject.revision.reconciliation !== undefined
-  ) {
-    return undefined;
-  }
-  const matchesDestination = (
-    ["repositoryId", "repositoryFullName", "baseBranch", "installationId"] as const
-  ).every((key) => match[key] === undefined || match[key] === grant.subject[key]);
-  const original = subjectForProposal(ctx, state, [], revisionPredecessor(state.proposal.digest));
-  return matchesDestination && sameSubject(original, grant.subject) ? grant : undefined;
 };
 
 /** A completed delivery is the predecessor for a new change, not a fresh approval subject. */
