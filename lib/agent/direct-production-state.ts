@@ -28,7 +28,7 @@ import {
   readDirectProductionCorrection,
 } from "./direct-production-correction";
 import type { DirectProductionCorrection } from "./direct-production-correction";
-import type { readOptionalFieldCorrectionProof } from "./optional-field-correction-proof";
+import { readOptionalFieldCorrectionProof } from "./optional-field-correction-proof";
 import { githubPublicationRuntimeForSession } from "./deployment-github-publication-runtime";
 import { observeMergedAppProduction } from "./app-production-observation";
 import type { GitHubPublicationRuntime } from "./github-publication-runtime";
@@ -1031,13 +1031,7 @@ export const prepareDirectProductionDraftReconciliation = async (
   const priorCueChanged =
     corrected.schemaChange.priorCueSha256 !== grant.subject.revision.schemaChange.priorCueSha256;
   if (priorCueChanged) {
-    const readProof =
-      ports.verifyEquivalentCorrection ??
-      (async (input: Parameters<typeof readOptionalFieldCorrectionProof>[0]) => {
-        const { readOptionalFieldCorrectionProof: read } =
-          await import("./optional-field-correction-proof");
-        return await read(input);
-      });
+    const readProof = ports.verifyEquivalentCorrection ?? readOptionalFieldCorrectionProof;
     const proof = await readProof({
       ctx,
       current: state,
