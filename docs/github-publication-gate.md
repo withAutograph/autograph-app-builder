@@ -658,8 +658,11 @@ require a new proposal before Builder can present its Production approval.
 For one optional text field on a supported generated CUE layout, Builder
 prepares the schema with `optionalTextField`, preserving the original CUE
 outside the new field, its existing write operations and the release version.
-Form, save and display changes belong to the same frozen proposal. The same
-approval covers the checked schema update on the existing database.
+Form, save and display changes belong to the same frozen proposal. The app's
+authenticated server data boundary checks the new field's activation before the
+form renders the control. Existing records and saves stay available during
+activation. The same approval covers the checked schema update on the existing
+database.
 
 If an earlier candidate failed before merge, Builder can prepare an ordinary
 reconciliation of its owned open draft and retains every checked release on

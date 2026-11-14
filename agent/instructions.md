@@ -91,6 +91,13 @@ inspect its current files and call `prepare_app_creation` with nonempty
 For one optional text field, use the `optionalTextField` input with the existing
 model ID, the new field ID and label, and the IDs of the existing operations
 that write it. Put the form, save and display edits in `existingAppChanges`.
+Before preparing the proposal, use the app's authenticated server data boundary
+to read `operations.<model>.fieldActivation({ field, operation: "create" })`
+(or `"update"` for an edit). Render the new control only when that request
+returns `"active"`. While it returns `"pending"`, retain the existing form,
+list and saves and omit the new control and its value from the submission.
+Keep the existing generated write checks in the Server Action. An active
+field can have a null value, so saved data cannot determine readiness.
 Builder patches the current CUE, preserving existing fields and metadata.
 If the CUE does not support this form, inspect it and preserve the existing
 fields, labels, descriptions, roles, policies, requirements and defaults.
