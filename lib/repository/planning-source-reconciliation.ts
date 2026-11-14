@@ -8,11 +8,16 @@ import { sanitizeValidationDiagnosticText } from "./validation-output-sanitize";
 const objectId = z.string().regex(/^[a-f0-9]{40,64}$/u);
 const releaseIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 const publishedReleaseSchema = z.strictObject({
+  cueSha256: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/u)
+    .optional(),
   mergeSha: objectId,
   releaseId: z.string().regex(releaseIdPattern),
   files: z.record(z.enum(GENERATED_RELEASE_MEMBERS), z.string().regex(/^[a-f0-9]{64}$/u)),
 });
 export interface PublishedPlanningRelease {
+  cueSha256?: string;
   mergeSha: string;
   releaseId: string;
   files: Record<string, string>;
@@ -73,6 +78,12 @@ const product = file => ownedApp(file) && (input.localSource || !file.startsWith
 const releasePrefix = "apps/" + input.appId + "/schema/release/";
 const releaseMembers = ${JSON.stringify(GENERATED_RELEASE_MEMBERS)};
 const publishedRelease = input.publishedRelease;
+const adoptPublishedSchemaCue = input.adoptPublishedSchemaCue === true;
+const preserveSourceHead = input.preserveSourceHead === true;
+const publishedSchemaPath = adoptPublishedSchemaCue ? "apps/" + input.appId + "/schema/" + input.appId + ".cue" : undefined;
+const isPublishedSchemaFile = file =>
+  file === publishedSchemaPath || file === releasePrefix + publishedRelease.releaseId ||
+  file.startsWith(releasePrefix + publishedRelease.releaseId + "/");
 const validReleaseId = value => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value);
 const releaseConflict = (releaseId, file) => {
   if (validReleaseId(releaseId)) process.stderr.write("APP_BUILDER_RELEASE_CONFLICT " + releaseId + "\n");
@@ -96,10 +107,21 @@ const verifyPublishedRelease = (sourceSha, oldEntries, targetEntries) => {
           createHash("sha256").update(git(["cat-file", "blob", entry.objectId], { buffer: true })).digest("hex") !== files[file.slice(prefix.length)])) throw invalid();
   };
   try { git(["merge-base", "--is-ancestor", mergeSha, sourceSha]); } catch { throw invalid(); }
-  verifyFiles(entries(mergeSha));
+  const mergedEntries = entries(mergeSha);
+  verifyFiles(mergedEntries);
   verifyFiles(entries(mergeSha + "^1"), true);
   verifyFiles(targetEntries);
   verifyFiles(oldEntries, true);
+  if (publishedSchemaPath !== undefined) {
+    const original = mergedEntries.get(publishedSchemaPath);
+    const target = targetEntries.get(publishedSchemaPath);
+    const { cueSha256 } = publishedRelease;
+    if (!original || !target || original.mode !== "100644" || target.mode !== "100644" ||
+        original.objectId !== target.objectId || !/^[a-f0-9]{64}$/.test(cueSha256 ?? "") ||
+        createHash("sha256").update(git(["cat-file", "blob", original.objectId], { buffer: true })).digest("hex") !== cueSha256) {
+      throw Error("The published schema CUE does not match the current checked source. The private app source was preserved.");
+    }
+  }
   return inRelease;
 };
 // Only an owner-retained completed source transport may identify managed overlay
@@ -124,13 +146,26 @@ if (input.localSource && input.currentManifestDigest !== undefined) {
 const complete = plan => {
   // The original bytes are already reachable through checkpointRef. Replaying this
   // transition repairs an interrupted checkout before another planning command runs.
+  const sourceIsPreserved = plan.preserveSourceHead === true;
+  if (sourceIsPreserved && git(["rev-parse", "HEAD"]).trim() !== plan.originalHead)
+    throw Error("The approved source changed during the pending schema recovery.");
   const finalEntries = entries(plan.workingTree);
   const currentPaths = git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]).split("\0").filter(file => file && !file.startsWith(".app-builder/"));
   for (const file of currentPaths) {
+    if (sourceIsPreserved && !isPublishedSchemaFile(file)) continue;
     if (!safe(file)) throw Error("Source transition encountered an unsafe source path.");
-    if (!finalEntries.has(file)) rmSync(resolve(root, file), { force: true });
+    const absolute = resolve(root, file);
+    if (finalEntries.has(file)) continue;
+    if (sourceIsPreserved && existsSync(dirname(absolute))) {
+      const canonicalRoot = realpathSync(root);
+      if (realpathSync(dirname(absolute)) !== resolve(canonicalRoot, dirname(file))) {
+        throw Error("The saved schema is under a linked path and was preserved.");
+      }
+    }
+    rmSync(absolute, { force: true });
   }
   for (const [file, entry] of finalEntries) {
+    if (sourceIsPreserved && !isPublishedSchemaFile(file)) continue;
     const parts = file.split("/");
     let parent = root;
     for (const part of parts.slice(0, -1)) {
@@ -161,9 +196,11 @@ const complete = plan => {
     writeFileSync(destination, bytes);
     chmodSync(destination, mode);
   }
-  git(["update-ref", "HEAD", plan.sourceSha]);
-  git(["read-tree", plan.sourceSha]);
-  if (plan.marker) {
+  if (!sourceIsPreserved) {
+    git(["update-ref", "HEAD", plan.sourceSha]);
+    git(["read-tree", plan.sourceSha]);
+  }
+  if (!sourceIsPreserved && plan.marker) {
     const markerPath = input.baselineMarkerPath;
     writeFileSync(markerPath + ".pending", JSON.stringify(plan.marker) + "\n", { mode: 384 });
     renameSync(markerPath + ".pending", markerPath);
@@ -171,9 +208,16 @@ const complete = plan => {
   rmSync(planPath);
 };
 try {
+  if (adoptPublishedSchemaCue && !publishedRelease) throw Error("Adopting a published schema requires its verified merged release.");
+  if (preserveSourceHead && !adoptPublishedSchemaCue) throw Error("Preserving the approved source requires its selected published schema.");
   if (existsSync(planPath)) {
     const pending = JSON.parse(readFileSync(planPath, "utf8"));
     if (pending.sessionId !== input.sessionId || JSON.stringify(pending.baseline) !== JSON.stringify(input.baseline ?? null)) throw Error("Source reconciliation belongs to another session or app baseline.");
+    if ((pending.preserveSourceHead === true) !== preserveSourceHead ||
+        (pending.adoptPublishedSchemaCue === true &&
+         (!adoptPublishedSchemaCue || pending.sourceSha !== input.targetSha))) {
+      throw Error("Resume the pending source reconciliation with its selected published schema and source.");
+    }
     if (pending.publishedRelease !== undefined && !isDeepStrictEqual(pending.publishedRelease, publishedRelease)) {
       if (publishedRelease === undefined) releaseConflict(pending.publishedRelease.releaseId, releasePrefix);
       throw Error("The pending source reconciliation belongs to another merged app release.");
@@ -239,6 +283,20 @@ try {
   const snapshotEntries = entries(snapshotTree);
   if (inPublishedRelease && [...snapshotEntries].some(([file, entry]) => inPublishedRelease(file) && entry.mode !== "100644"))
     throw Error("The saved app release contains a non-regular source entry and was preserved.");
+  if (preserveSourceHead) {
+    const ignored = git(["ls-files", "-z", "--others", "--ignored", "--exclude-standard"]).split("\0").filter(Boolean);
+    if (ignored.some(isPublishedSchemaFile)) throw Error("A private ignored file conflicts with the published schema.");
+    const scopedPaths = [...new Set([...snapshotEntries.keys(), ...targetEntries.keys()])].filter(isPublishedSchemaFile);
+    updateIndex(scopedPaths.map(file => setEntry(file, targetEntries.get(file))));
+    const workingTree = git(["write-tree"], { env: indexEnv }).trim();
+    const plan = { baseline: input.baseline ?? null, sessionId: input.sessionId, sourceSha, originalHead: oldHead, workingTree, publishedRelease, adoptPublishedSchemaCue, preserveSourceHead };
+    writePlan(plan);
+    complete(plan);
+    const approvedTree = git(["rev-parse", oldHead + "^{tree}"]).trim();
+    console.log(JSON.stringify({ changed: true, checkpointRef, sourceSha: oldHead, sourceTree: approvedTree }));
+    rmSync(temporary, { force: true, recursive: true });
+    process.exit(0);
+  }
   // Historical product bytes are an explicit baseline, not a merge conflict with
   // the newer app implementation. Repository-owned app tooling merges normally.
   updateIndex([...new Set([...oldEntries.keys(), ...snapshotEntries.keys()])].filter(product).map(file => setEntry(file, oldEntries.get(file))));
@@ -268,7 +326,7 @@ try {
   const protectedRecords = [];
   for (const file of new Set([...mergedEntries.keys(), ...snapshotEntries.keys()])) {
     if (!product(file)) continue;
-    if (inPublishedRelease?.(file)) {
+    if (file === publishedSchemaPath || inPublishedRelease?.(file)) {
       protectedRecords.push(setEntry(file, targetEntries.get(file)));
       continue;
     }
@@ -305,7 +363,7 @@ try {
     unsigned.unexposedReleaseDigest = createHash("sha256").update(JSON.stringify(unexposedReleasePrefixes)).digest("hex");
     marker = { platformFiles, receipt: { ...unsigned, digest: createHash("sha256").update(JSON.stringify(unsigned)).digest("hex") }, unexposedReleasePrefixes };
   }
-  const plan = { baseline: input.baseline ?? null, marker, sessionId: input.sessionId, sourceSha, workingTree, publishedRelease };
+  const plan = { baseline: input.baseline ?? null, marker, sessionId: input.sessionId, sourceSha, workingTree, publishedRelease, adoptPublishedSchemaCue };
   writePlan(plan);
   complete(plan);
   console.log(JSON.stringify({ changed: true, checkpointRef, sourceSha, sourceTree }));
@@ -316,6 +374,7 @@ const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 
 export const reconcilePlanningSource = async (input: {
   appId: string;
+  adoptPublishedSchemaCue?: true;
   baseline?: AppBaselineSelection;
   branchRef: string;
   repository: string;
@@ -324,8 +383,10 @@ export const reconcilePlanningSource = async (input: {
   targetSha: string;
   token: string;
   publishedRelease?: PublishedPlanningRelease;
+  preserveSourceHead?: true;
 }) => {
   const request = {
+    adoptPublishedSchemaCue: input.adoptPublishedSchemaCue,
     appId: z
       .string()
       .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
@@ -337,6 +398,7 @@ export const reconcilePlanningSource = async (input: {
         : `/workspace/${appBaselineMarkerPath(input.baseline.appId)}`,
     branchRef: input.branchRef,
     fetchRemote: true,
+    preserveSourceHead: input.preserveSourceHead,
     publishedRelease:
       input.publishedRelease === undefined
         ? undefined

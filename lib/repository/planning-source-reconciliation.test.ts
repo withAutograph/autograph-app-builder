@@ -115,6 +115,8 @@ const fixture = () => {
     program = planningSourceReconciliationProgram,
     requestedTargetSha = targetSha,
     publishedRelease?: PublishedPlanningRelease,
+    adoptPublishedSchemaCue?: true,
+    preserveSourceHead?: true,
   ) =>
     spawnSync(
       process.execPath,
@@ -122,11 +124,13 @@ const fixture = () => {
         "-e",
         program,
         JSON.stringify({
+          adoptPublishedSchemaCue,
           appId: baseline.appId,
           baseline,
           baselineMarkerPath,
           branchRef: "refs/heads/main",
           fetchRemote: false,
+          preserveSourceHead,
           publishedRelease,
           root,
           sessionId: "session",
@@ -139,6 +143,8 @@ const fixture = () => {
   return { baseline, baselineMarkerPath, git, oldHead, root, run, stateRoot, targetSha, write };
 };
 
+const releasedCuePath = "apps/spend-review/schema/spend-review.cue";
+const releasedCue = 'label: "Creator actor ID"\n';
 const releaseDirectory = "apps/spend-review/schema/release/v3";
 const artifactFile = `${releaseDirectory}/app-artifact.json`;
 const scratchFile = `${releaseDirectory}/unpublished-draft.txt`;
@@ -152,7 +158,8 @@ const publishedFixture = (laterMember?: string) => {
       return [member, createHash("sha256").update(content).digest("hex")];
     }),
   );
-  f.git("add", releaseDirectory);
+  f.write(releasedCuePath, releasedCue);
+  f.git("add", releaseDirectory, releasedCuePath);
   f.git("commit", "--quiet", "-m", "Merge owned release");
   const mergeSha = f.git("rev-parse", "HEAD");
   if (laterMember !== undefined) {
@@ -168,7 +175,8 @@ const publishedFixture = (laterMember?: string) => {
   f.write(artifactFile, "Original unpublished artifact\n");
   f.write(scratchFile, "Original unpublished release-only work\n");
   f.write("apps/spend-review/product.txt", "Current app work\n");
-  return { ...f, currentSource, proof: { files, mergeSha, releaseId: "v3" } };
+  const cueSha256 = createHash("sha256").update(releasedCue).digest("hex");
+  return { ...f, currentSource, proof: { cueSha256, files, mergeSha, releaseId: "v3" } };
 };
 
 describe("owned planning source reconciliation", () => {
@@ -325,6 +333,158 @@ describe("owned planning source reconciliation", () => {
       rmSync(f.stateRoot, { force: true, recursive: true });
     }
   });
+
+  it("restores only the published CUE and verifies the displaced private input remains checkpointed", () => {
+    const f = publishedFixture();
+    try {
+      f.git("checkout", "--quiet", "--force", "--detach", f.currentSource);
+      const product = "apps/spend-review/product.txt";
+      const stale = 'label: "Creator Actor ID"\n';
+      const authored = "Unrelated authored product bytes  \n";
+      f.write(releasedCuePath, stale);
+      f.write(product, authored);
+      const ordinary = f.run(planningSourceReconciliationProgram, f.currentSource, f.proof);
+      expect(ordinary.status).toBe(0);
+      expect(readFileSync(path.join(f.root, releasedCuePath), "utf-8")).toBe(stale);
+
+      const result = f.run(planningSourceReconciliationProgram, f.currentSource, f.proof, true);
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      expect(f.git("rev-parse", "HEAD")).toBe(f.currentSource);
+      expect(readFileSync(path.join(f.root, releasedCuePath), "utf-8")).toBe(releasedCue);
+      expect(readFileSync(path.join(f.root, product), "utf-8")).toBe(authored);
+      const { checkpointRef } = z
+        .object({ checkpointRef: z.string() })
+        .parse(JSON.parse(result.stdout));
+      expect(f.git("show", `${checkpointRef}:${releasedCuePath}`)).toBe(stale.trimEnd());
+
+      const retry = f.run(planningSourceReconciliationProgram, f.currentSource, f.proof, true);
+      expect(retry.status).toBe(0);
+      expect(f.git("show", `${checkpointRef}:${releasedCuePath}`)).toBe(stale.trimEnd());
+    } finally {
+      rmSync(f.root, { force: true, recursive: true });
+      rmSync(f.stateRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("projects the published schema without rebasing the approved worktree or index", () => {
+    const f = publishedFixture();
+    try {
+      const product = "apps/spend-review/product.txt";
+      f.write(product, "Staged authored bytes\n");
+      f.git("add", "--", product);
+      f.write(product, "Separate unstaged authored bytes\n");
+      f.write(releasedCuePath, "Outdated draft CUE\n");
+      const approvedIndex = f.git("write-tree");
+      const markerBefore = readFileSync(f.baselineMarkerPath);
+
+      const result = f.run(
+        planningSourceReconciliationProgram,
+        f.currentSource,
+        f.proof,
+        true,
+        true,
+      );
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      const { checkpointRef, sourceSha, sourceTree } = z
+        .object({ checkpointRef: z.string(), sourceSha: z.string(), sourceTree: z.string() })
+        .parse(JSON.parse(result.stdout));
+      expect(sourceSha).toBe(f.oldHead);
+      expect(sourceTree).toBe(f.git("rev-parse", `${f.oldHead}^{tree}`));
+      expect(f.git("rev-parse", "HEAD")).toBe(f.oldHead);
+      expect(f.git("write-tree")).toBe(approvedIndex);
+      expect(readFileSync(f.baselineMarkerPath)).toEqual(markerBefore);
+      expect(readFileSync(path.join(f.root, product), "utf-8")).toBe(
+        "Separate unstaged authored bytes\n",
+      );
+      expect(readFileSync(path.join(f.root, releasedCuePath), "utf-8")).toBe(releasedCue);
+      expect(readFileSync(path.join(f.root, artifactFile), "utf-8")).toBe(
+        "Merged app-artifact.json\n",
+      );
+      expect(() => readFileSync(path.join(f.root, "successor-platform.txt"))).toThrow();
+      expect(() => readFileSync(path.join(f.root, scratchFile))).toThrow();
+      expect(f.git("show", `${checkpointRef}:${releasedCuePath}`)).toBe("Outdated draft CUE");
+      expect(f.git("show", `${checkpointRef}:${artifactFile}`)).toBe(
+        "Original unpublished artifact",
+      );
+    } finally {
+      rmSync(f.root, { force: true, recursive: true });
+      rmSync(f.stateRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("resumes an interrupted CUE adoption only with the same published proof", () => {
+    const f = publishedFixture();
+    try {
+      f.git("checkout", "--quiet", "--force", "--detach", f.currentSource);
+      const local = 'label: "Private draft"\n';
+      f.write(releasedCuePath, local);
+      const interrupted = planningSourceReconciliationProgram.replace(
+        "    writeFileSync(destination, bytes);",
+        `    if (file === ${JSON.stringify(releasedCuePath)}) throw Error("fixture interruption");\n    writeFileSync(destination, bytes);`,
+      );
+      const failure = f.run(interrupted, f.currentSource, f.proof, true, true);
+      expect(failure.stderr).toContain("fixture interruption");
+
+      const ordinary = f.run(planningSourceReconciliationProgram, f.currentSource, f.proof);
+      expect(ordinary.stderr).toContain("Resume the pending source reconciliation");
+      const differentTarget = f.run(
+        planningSourceReconciliationProgram,
+        f.targetSha,
+        f.proof,
+        true,
+      );
+      expect(differentTarget.stderr).toContain("Resume the pending source reconciliation");
+      expect(readFileSync(path.join(f.root, releasedCuePath), "utf-8")).toBe(local);
+
+      const retry = f.run(
+        planningSourceReconciliationProgram,
+        f.currentSource,
+        f.proof,
+        true,
+        true,
+      );
+      expect(retry.status).toBe(0);
+      expect(readFileSync(path.join(f.root, releasedCuePath), "utf-8")).toBe(releasedCue);
+    } finally {
+      rmSync(f.root, { force: true, recursive: true });
+      rmSync(f.stateRoot, { force: true, recursive: true });
+    }
+  });
+
+  it.each(["changed target", "absent target", "wrong digest"] as const)(
+    "preserves private files if the released CUE proof fails (%s)",
+    (failure) => {
+      const f = publishedFixture();
+      try {
+        f.git("checkout", "--quiet", "--force", "--detach", f.currentSource);
+        let { proof } = f;
+        if (failure === "wrong digest") {
+          proof = { ...proof, cueSha256: "f".repeat(64) };
+        } else {
+          if (failure === "absent target") {
+            rmSync(path.join(f.root, releasedCuePath));
+          } else {
+            f.write(releasedCuePath, 'label: "A newer schema"\n');
+          }
+          f.git("add", "--all", "--", releasedCuePath);
+          f.git("commit", "--quiet", "-m", "Advance tracked app schema");
+        }
+        const head = f.git("rev-parse", "HEAD");
+        const local = 'label: "Private draft"\n';
+        f.write(releasedCuePath, local);
+        const result = f.run(planningSourceReconciliationProgram, head, proof, true);
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain("The published schema CUE does not match");
+        expect(f.git("rev-parse", "HEAD")).toBe(head);
+        expect(readFileSync(path.join(f.root, releasedCuePath), "utf-8")).toBe(local);
+      } finally {
+        rmSync(f.root, { force: true, recursive: true });
+        rmSync(f.stateRoot, { force: true, recursive: true });
+      }
+    },
+  );
 
   it.each([
     { failure: "hash" },
