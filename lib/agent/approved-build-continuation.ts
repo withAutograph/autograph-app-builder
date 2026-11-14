@@ -16,6 +16,7 @@ import type { EveSessionResult } from "../mcp/contracts";
 import type { TargetApplyFailureReceipt } from "../repository/target-apply";
 import type { TargetValidationFailureReceipt } from "../repository/target-validation";
 import { appAccessIntentFields, appAccessIntentSchema } from "./app-access-intent";
+import { directProductionCorrectionSchema } from "./direct-production-correction";
 
 const COMMAND_FAILED = "command-failed";
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -31,6 +32,7 @@ export const approvedBuildDecisionSchema = z.strictObject({
   githubDelivery: githubPrDeliveryAuthorityProjectionSchema.optional(),
   directProduction: directProductionGrantSchema.optional(),
   schemaPredecessorReadback: directProductionGrantSchema.optional(),
+  schemaCorrection: directProductionCorrectionSchema.optional(),
   currentSpec: z
     .strictObject({
       appId: z.string(),

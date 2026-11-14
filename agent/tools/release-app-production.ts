@@ -7,6 +7,7 @@ import {
   directProductionSubjectSchema,
 } from "../../lib/agent/direct-production-authorization";
 import {
+  currentDirectProductionDeliveryAuthorization,
   currentDirectProductionProposalIsDelivered,
   directProductionReconciliationContinuation,
   directProductionSubjectForPlan,
@@ -168,6 +169,24 @@ export default defineTool({
         guidance:
           "The current proposal has already been delivered. For a new requested change, read this app's current source and call prepare_app_creation with the nonempty existingAppChanges for the new change. Then call this tool again to get the new Production subject and present the combined Build card in the same turn. Keep the same app, destination and saved data. If the user only asked to check the live app, use observe-app-production instead.",
       };
+    }
+    const current = appBuilderWorkflowState.get();
+    if (
+      input.directProduction === undefined &&
+      input.destination === undefined &&
+      reconciliationFailure === null &&
+      current.phase === "reviewed"
+    ) {
+      const authorized = currentDirectProductionDeliveryAuthorization(ctx, current.appSpec);
+      if (authorized?.correction !== undefined) {
+        const nextCall = directProductionReconciliationContinuation(authorized.subject);
+        if (nextCall !== null) {
+          const { emitCurrentBuildWorkflowProjection } =
+            await import("../../lib/agent/approved-build-continuation-runtime");
+          await emitCurrentBuildWorkflowProjection(ctx);
+          return { status: "production-release-approved" as const, nextCall };
+        }
+      }
     }
     if (subject === undefined) {
       if (reconciliationFailure !== null) {

@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => ({
   getState: vi.fn(),
   getCandidate: vi.fn(() => null),
   runtimeForSession: vi.fn(),
-  directGrant: vi.fn(),
+  deliveryAuthorization: vi.fn(),
   liveProduction: vi.fn(),
   recordProgress: vi.fn<(grantDigest: string, stage: string) => void>(),
   production:
@@ -39,7 +39,9 @@ vi.mock("./draft-reconciliation-state", () => ({
 }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T): T => tool }));
 vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: mocks.getState } }));
-vi.mock("./direct-production-state", () => ({ currentDirectProductionGrant: mocks.directGrant }));
+vi.mock("./direct-production-state", () => ({
+  currentDirectProductionDeliveryAuthorization: mocks.deliveryAuthorization,
+}));
 vi.mock("./direct-production-progress", () => ({
   recordDirectProductionProgress: mocks.recordProgress,
 }));
@@ -56,8 +58,16 @@ vi.mock("./github-production-delivery-readiness", () => ({
     input: { appId: setup.appId },
   }),
 }));
+const mockGrant = (grant: { digest?: string; subject: unknown }) => {
+  mocks.deliveryAuthorization.mockReturnValue({
+    grant,
+    subject: grant.subject,
+    effectDigest: grant.digest,
+  });
+};
+
 beforeEach(() => {
-  mocks.directGrant.mockReset();
+  mocks.deliveryAuthorization.mockReset();
   mocks.liveProduction.mockReset();
   mocks.recordProgress.mockReset();
   mocks.production.mockReset();
@@ -232,7 +242,7 @@ it.each(["new-app", "presentation", "unchecked-schema", "checked-schema"])(
                 candidateCueSha256: "2".repeat(64),
               },
             };
-      mocks.directGrant.mockReturnValue({ subject: { revision } });
+      mockGrant({ subject: { revision } });
     }
     const status: RepositoryProductionDeliveryStatus = {
       version: 1,
@@ -368,7 +378,7 @@ it("offers the existing schema continuation after merge when protected status ha
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Supply the used session field.
   const ctx = { session: { auth: {} } } as never;
   await expect(readDelivery.execute({}, ctx)).resolves.not.toHaveProperty("nextCall");
-  mocks.directGrant.mockReturnValue({
+  mockGrant({
     digest: "6".repeat(64),
     subject: { revision: { schemaChange: { kind: "add-optional-text-field" } } },
   });
@@ -429,7 +439,7 @@ it.each([
       runPublishedPullRequestEffect: mutate,
     });
     inspect.mockResolvedValue({ ...observation, draft: false, state: "merged", mergeCommitSha });
-    mocks.directGrant.mockReturnValue(grant);
+    mockGrant(grant);
     mocks.liveProduction.mockImplementation(async () => {
       if (reviewReplaced) {
         mocks.getState.mockReturnValue({

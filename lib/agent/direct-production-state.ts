@@ -22,6 +22,13 @@ import type {
   DirectProductionGrant,
   DirectProductionSubject,
 } from "./direct-production-authorization";
+import {
+  createDirectProductionCorrection,
+  directProductionEffectDigest,
+  readDirectProductionCorrection,
+} from "./direct-production-correction";
+import type { DirectProductionCorrection } from "./direct-production-correction";
+import type { readOptionalFieldCorrectionProof } from "./optional-field-correction-proof";
 import { githubPublicationRuntimeForSession } from "./deployment-github-publication-runtime";
 import { observeMergedAppProduction } from "./app-production-observation";
 import type { GitHubPublicationRuntime } from "./github-publication-runtime";
@@ -78,7 +85,12 @@ const authorization = defineState<{
   authoringPlan?: DirectProductionSubject;
   grant?: DirectProductionGrant;
   reconciliation?: { failedGrantDigest: string; subject: DirectProductionSubject } | null;
-  revisionAnchor?: { proposalDigest: string; priorGrant: DirectProductionGrant };
+  correction?: DirectProductionCorrection | null;
+  revisionAnchor?: {
+    proposalDigest: string;
+    priorGrant: DirectProductionGrant;
+    priorCorrection?: DirectProductionCorrection;
+  };
   pending: Record<string, DirectProductionGrant>;
 }>("autograph-app-builder.direct-production-authorization.v1", () => ({ pending: {} }));
 
@@ -202,7 +214,7 @@ const productionDestinationForPlan = (
 
 /** A retained predecessor keeps this revision bound after its new grant replaces the live grant. */
 const revisionPredecessor = (proposalDigest: string): DirectProductionGrant | undefined => {
-  const { grant, revisionAnchor } = authorization.get();
+  const { grant, correction, revisionAnchor } = authorization.get();
   if (grant === undefined) {
     return undefined;
   }
@@ -216,14 +228,25 @@ const revisionPredecessor = (proposalDigest: string): DirectProductionGrant | un
   }
   const progress = directProductionProgressState.get();
   return hasAvailableDirectProductionPredecessor(progress?.stage) &&
-    progress?.grantDigest === grant.digest
+    progress?.grantDigest === directProductionEffectDigest(grant, correction ?? undefined)
     ? grant
     : undefined;
 };
 
+const retainedCorrectionForGrant = (grant: DirectProductionGrant) => {
+  const { correction, revisionAnchor } = authorization.get();
+  return (
+    readDirectProductionCorrection(grant, correction ?? undefined) ??
+    readDirectProductionCorrection(grant, revisionAnchor?.priorCorrection)
+  );
+};
+
 /** The retained decision locates the previous approved repair; it grants no source or deployment effect. */
-export const retainedProductionSourceReconciliation = (proposalDigest: string) =>
-  revisionPredecessor(proposalDigest)?.subject.revision?.reconciliation;
+export const retainedProductionSourceReconciliation = (proposalDigest: string) => {
+  const prior = revisionPredecessor(proposalDigest);
+  const correction = prior === undefined ? undefined : retainedCorrectionForGrant(prior);
+  return (correction?.correctedSubject ?? prior?.subject)?.revision?.reconciliation;
+};
 
 type AppFileChange = Pick<OverlayChange, "path" | "before" | "after">;
 
@@ -476,6 +499,7 @@ const reviewedDraftReconciliation = (state: ProposedWorkflow) => {
 };
 
 const candidateReviewMismatch = "candidate-review-mismatch";
+const schemaPredecessorMismatch = "schema-predecessor-mismatch";
 const approvedReleaseMismatch = "approved-release-mismatch";
 const readAnchoredMerge = "read-anchored-merge";
 const releaseSelectionChanged = "release-selection-changed";
@@ -484,7 +508,7 @@ type ReconciliationCandidateFailure =
   | "candidate-unsealed"
   | "candidate-compile-unavailable"
   | typeof candidateReviewMismatch
-  | "schema-predecessor-mismatch"
+  | typeof schemaPredecessorMismatch
   | "candidate-file-scope"
   | "candidate-schema-unchanged";
 
@@ -493,6 +517,7 @@ const directDraftReconciliationScope = (
   subject: DirectProductionSubject,
   failedGrant: DirectProductionGrant,
   onFailure?: (reason: ReconciliationCandidateFailure) => void,
+  options?: { proveCorrectedPredecessor?: true },
 ) => {
   const reviewBinding = reviewedDraftReconciliation(state);
   const { revision } = subject;
@@ -584,9 +609,14 @@ const directDraftReconciliationScope = (
   ]);
   const cue = review.baseChanges.find(({ path }) => path === cuePath);
   const candidateCueSha256 = cue?.after?.digest;
+  const priorCueSha256 = cue?.before?.digest;
+  const priorCueChanged = priorCueSha256 !== revision.schemaChange.priorCueSha256;
+  const allowCorrectedPredecessor =
+    options?.proveCorrectedPredecessor === true && previous.reconciliation === undefined;
   const correctBase =
-    cue?.before?.digest === revision.schemaChange.priorCueSha256 &&
-    cue.before.mode === cue.after?.mode;
+    priorCueSha256 !== undefined &&
+    cue?.before?.mode === cue?.after?.mode &&
+    (!priorCueChanged || allowCorrectedPredecessor);
   const sameFileScope = review.baseChanges.every((change) => {
     const mode = change.after?.mode;
     const unchangedMode = mode === change.before?.mode;
@@ -601,9 +631,9 @@ const directDraftReconciliationScope = (
   const correctedBytes =
     candidateCueSha256 !== undefined &&
     candidateCueSha256 !== revision.schemaChange.candidateCueSha256 &&
-    candidateCueSha256 !== revision.schemaChange.priorCueSha256;
+    candidateCueSha256 !== priorCueSha256;
   if (!correctBase) {
-    onFailure?.("schema-predecessor-mismatch");
+    onFailure?.(schemaPredecessorMismatch);
     return null;
   }
   if (!sameFileScope) {
@@ -614,11 +644,12 @@ const directDraftReconciliationScope = (
     onFailure?.("candidate-schema-unchanged");
     return null;
   }
+  const schemaChange = { ...revision.schemaChange, priorCueSha256, candidateCueSha256 };
   const corrected = directProductionSubjectSchema.safeParse({
     ...subject,
     revision: {
       ...revision,
-      schemaChange: { ...revision.schemaChange, candidateCueSha256 },
+      schemaChange,
       reconciliation: {
         digest: proposal.digest,
         originPublicationDigest,
@@ -639,7 +670,7 @@ const directDraftReconciliationScope = (
     subject: corrected.data,
     proposal,
     originPublicationDigest,
-    schemaChange: { ...revision.schemaChange, candidateCueSha256 },
+    schemaChange,
     selection,
   };
 };
@@ -699,7 +730,8 @@ const priorRevisionDelivery = (
   priorGrant: DirectProductionGrant,
   purpose: "restore-predecessor" | typeof readAnchoredMerge = "restore-predecessor",
 ) => {
-  const prior = priorGrant.subject;
+  const correction = retainedCorrectionForGrant(priorGrant);
+  const prior = correction?.correctedSubject ?? priorGrant.subject;
   const [owner = "", name = ""] = prior.repositoryFullName.split("/");
   const history = ownedDraftPublicationHistory({
     sessionId: prior.sessionId,
@@ -724,6 +756,7 @@ const priorRevisionDelivery = (
     [
       call.cancelled !== true || purpose === readAnchoredMerge,
       call.directProductionGrantDigest === priorGrant.digest,
+      call.directProductionCorrectionDigest === correction?.digest,
       call.subject.appId === prior.appId,
       call.subject.appSpecDigest === prior.appSpecDigest,
       call.subject.installationId === prior.installationId,
@@ -790,6 +823,7 @@ interface ReconciliationObservationPorts {
     >
   >;
   verifyCompatibility?: typeof verifyDraftOptionalFieldRelease;
+  verifyEquivalentCorrection?: typeof readOptionalFieldCorrectionProof;
 }
 
 export type ProductionReconciliationFailure =
@@ -830,6 +864,9 @@ export const prepareDirectProductionDraftReconciliation = async (
   if (grant.subject.proposalDigest !== state.proposal.digest) {
     return approvedReleaseMismatch;
   }
+  if (currentDirectProductionDeliveryAuthorization(ctx, state.appSpec)?.correction !== undefined) {
+    return null;
+  }
   const predecessor = revisionPredecessor(state.proposal.digest);
   if (predecessor === undefined) {
     return "prior-approved-revision-unavailable";
@@ -839,9 +876,16 @@ export const prepareDirectProductionDraftReconciliation = async (
     return approvedReleaseMismatch;
   }
   let candidateFailure: ReconciliationCandidateFailure = candidateReviewMismatch;
-  const corrected = directDraftReconciliationScope(state, subject, grant, (reason) => {
-    candidateFailure = reason;
-  });
+  const proofOptions = { proveCorrectedPredecessor: true } as const;
+  const corrected = directDraftReconciliationScope(
+    state,
+    subject,
+    grant,
+    (reason) => {
+      candidateFailure = reason;
+    },
+    proofOptions,
+  );
   if (corrected === null) {
     return candidateFailure;
   }
@@ -891,9 +935,13 @@ export const prepareDirectProductionDraftReconciliation = async (
       isDeepStrictEqual(appBuilderWorkflowState.get(), state) &&
       isDeepStrictEqual(authorization.get().grant, grant) &&
       isDeepStrictEqual(priorRevisionDelivery(state, predecessor, readAnchoredMerge), prior) &&
-      isDeepStrictEqual(directDraftReconciliationScope(state, subject, grant), corrected)
+      isDeepStrictEqual(
+        directDraftReconciliationScope(state, subject, grant, undefined, proofOptions),
+        corrected,
+      )
     );
   };
+  let priorMergeSha: string | undefined;
   try {
     const runtime = await (ports.publication ?? githubPublicationRuntimeForSession)(
       ctx.session.auth,
@@ -972,12 +1020,53 @@ export const prepareDirectProductionDraftReconciliation = async (
       merged?.baseBranch === proposal.baseBranch,
       merged?.pullRequestNumber !== proposal.pullRequestNumber,
     ].every(Boolean);
-    if (!predecessorMerged) {
+    if (!predecessorMerged || previous?.mergeCommitSha === undefined) {
       return "github-prior-merge-mismatch";
     }
+    priorMergeSha = previous.mergeCommitSha;
   } catch {
     ctx.abortSignal.throwIfAborted();
     return "github-read-unavailable";
+  }
+  const priorCueChanged =
+    corrected.schemaChange.priorCueSha256 !== grant.subject.revision.schemaChange.priorCueSha256;
+  if (priorCueChanged) {
+    const readProof =
+      ports.verifyEquivalentCorrection ??
+      (async (input: Parameters<typeof readOptionalFieldCorrectionProof>[0]) => {
+        const { readOptionalFieldCorrectionProof: read } =
+          await import("./optional-field-correction-proof");
+        return await read(input);
+      });
+    const proof = await readProof({
+      ctx,
+      current: state,
+      candidate,
+      originalGrant: grant,
+      predecessorGrant: predecessor,
+      predecessorAnchor:
+        retainedCorrectionForGrant(predecessor)?.correctedSubject.revision?.reconciliation,
+      corrected,
+      priorMergeSha,
+    });
+    if (!isCurrent()) {
+      return releaseSelectionChanged;
+    }
+    if (proof === null) {
+      return schemaPredecessorMismatch;
+    }
+    const correction = createDirectProductionCorrection({
+      version: 1,
+      originalGrantDigest: grant.digest,
+      correctedSubject: corrected.subject,
+      installed: proof.installed,
+      candidate: proof.candidate,
+    });
+    if (readDirectProductionCorrection(grant, correction) === undefined) {
+      return approvedReleaseMismatch;
+    }
+    authorization.update((current) => ({ ...current, correction }));
+    return null;
   }
   let compatibility: Awaited<ReturnType<typeof verifyDraftOptionalFieldRelease>>;
   try {
@@ -1105,7 +1194,10 @@ export const restoreDirectProductionRevisionPredecessor = async (
         live.destination?.repositoryFullName === subject.repositoryFullName,
       ].every(Boolean)
     ) {
-      recordDirectProductionProgress(grant.digest, "live");
+      recordDirectProductionProgress(
+        directProductionEffectDigest(grant, retainedCorrectionForGrant(grant)),
+        "live",
+      );
     }
   } catch {
     // Missing provider evidence cannot restore the previous live grant.
@@ -1171,6 +1263,59 @@ export const currentDirectProductionGrant = (
   return grant;
 };
 
+/** A checked correction can continue delivery under the settled grant that approved its exact addition. */
+export const currentDirectProductionDeliveryAuthorization = (
+  ctx: OwnerContext,
+  match: SubjectMatch,
+):
+  | {
+      grant: DirectProductionGrant;
+      subject: DirectProductionSubject;
+      effectDigest: string;
+      correction?: DirectProductionCorrection;
+    }
+  | undefined => {
+  const strictGrant = currentDirectProductionGrant(ctx, match);
+  if (strictGrant !== undefined) {
+    return { grant: strictGrant, subject: strictGrant.subject, effectDigest: strictGrant.digest };
+  }
+  const { grant, correction: saved } = authorization.get();
+  const correction = readDirectProductionCorrection(grant, saved ?? undefined);
+  const state = appBuilderWorkflowState.get();
+  if (
+    state.phase !== "reviewed" ||
+    grant === undefined ||
+    correction === undefined ||
+    grant.subject.appId !== match.appId
+  ) {
+    return undefined;
+  }
+  const matchesDestination = (
+    ["repositoryId", "repositoryFullName", "baseBranch", "installationId"] as const
+  ).every((key) => match[key] === undefined || match[key] === grant.subject[key]);
+  const original = subjectForProposal(ctx, state, [], revisionPredecessor(state.proposal.digest));
+  if (!matchesDestination || !sameSubject(original, grant.subject) || original === undefined) {
+    return undefined;
+  }
+  const candidate = directDraftReconciliationScope(state, original, grant, undefined, {
+    proveCorrectedPredecessor: true,
+  });
+  const matchesCandidate = [
+    sameSubject(candidate?.subject, correction.correctedSubject),
+    candidate?.selection.releaseId === correction.candidate.releaseId,
+    candidate?.selection.schemaSha256 === correction.candidate.artifactSha256,
+    candidate?.selection.manifestSha256 === correction.candidate.manifestSha256,
+  ].every(Boolean);
+  return matchesCandidate
+    ? {
+        grant,
+        subject: correction.correctedSubject,
+        effectDigest: correction.digest,
+        correction,
+      }
+    : undefined;
+};
+
 /** Read-only identity for an approved schema release even while its private draft repair is pending. */
 export const retainedDirectProductionSchemaReadbackGrant = (
   ctx: OwnerContext,
@@ -1205,8 +1350,8 @@ export const currentDirectProductionProposalIsDelivered = (ctx: OwnerContext): b
   if (!delivered || !("proposal" in state)) {
     return false;
   }
-  const grant = currentDirectProductionGrant(ctx, { appId: state.appSpec.appId });
-  return grant !== undefined && progress?.grantDigest === grant.digest;
+  const current = currentDirectProductionDeliveryAuthorization(ctx, { appId: state.appSpec.appId });
+  return current !== undefined && progress?.grantDigest === current.effectDigest;
 };
 
 export const requestDirectProductionGrant = (
@@ -1263,10 +1408,17 @@ export const recordDirectProductionGrant = (
     );
   }
   const revisionAnchor =
-    priorGrant === undefined ? undefined : { proposalDigest: subject.proposalDigest, priorGrant };
+    priorGrant === undefined
+      ? undefined
+      : {
+          proposalDigest: subject.proposalDigest,
+          priorGrant,
+          priorCorrection: retainedCorrectionForGrant(priorGrant),
+        };
   authorization.update((current) => ({
     ...current,
     grant: pending,
+    correction: null,
     pending: remaining,
     revisionAnchor,
   }));

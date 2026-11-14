@@ -695,6 +695,18 @@ and merge. If the base moves while the original draft head is unchanged,
 Builder can reseal the correction for a fresh approval. A changed draft head
 uses the ordinary owned-draft recovery process.
 
+Builder can continue a previously approved optional text-field addition when
+the published draft used stale casing for an existing field label in its
+predecessor. This applies only when the protected operator verifies the
+installed predecessor, the previous reviewed merge has the same checked
+release and CUE, and both checked additions are equivalent. Builder verifies
+that the draft correction changes only the CUE and regenerated members for the
+same unissued release. The original Build consent remains bound to its original
+input. The exact correction has its own digest binding the retained consent to
+the reviewed draft and the corrected release. Draft update, Ready, merge, and
+schema settlement use that same binding. If any comparison is unavailable,
+Builder preserves the draft and the live app.
+
 The already approved revision retains the live predecessor it extended. If a
 previous delivery was stopped during observation, Builder can use its retained
 call to locate the owned PR and independently verify the exact merge. That

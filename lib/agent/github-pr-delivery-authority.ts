@@ -1,4 +1,5 @@
 import { tenantKeyFor } from "../eve/hosted-auth";
+import { readDirectProductionCorrection } from "./direct-production-correction";
 import type { WorkflowStepToolContext } from "eve/tools";
 import { isDeepStrictEqual } from "node:util";
 import type { ApprovedBuildDecision } from "./approved-build-continuation";
@@ -182,11 +183,20 @@ export const readGitHubPrDeliveryAuthority = async (
   if (!sameCall || !sameSubject) {
     throw unavailable(capturedCallMismatch);
   }
+  const grant = decision.directProduction;
+  const correction = readDirectProductionCorrection(grant, decision.schemaCorrection);
+  const approved = correction?.correctedSubject ?? grant?.subject;
+  if (
+    (decision.schemaCorrection !== undefined && correction === undefined) ||
+    (call.directProductionCorrectionDigest !== undefined &&
+      call.directProductionGrantDigest === undefined)
+  ) {
+    throw unavailable(capturedCallMismatch);
+  }
   if (call.directProductionGrantDigest !== undefined) {
-    const grant = decision.directProduction;
-    const approved = grant?.subject;
     const matchesRelease = [
       grant?.digest === call.directProductionGrantDigest,
+      correction?.digest === call.directProductionCorrectionDigest,
       approved?.appId === spec.appId,
       approved?.appSpecDigest === spec.appSpecDigest,
       approved?.proposalDigest === spec.proposalDigest,
@@ -212,9 +222,9 @@ export const readGitHubPrDeliveryAuthority = async (
     return authority;
   }
   const direct = { ...authority, directProduction: true as const };
-  const revision = decision.directProduction?.subject.revision;
-  if (revision?.schemaChange !== undefined && decision.directProduction !== undefined) {
-    return { ...direct, productionSchemaApprovalCallId: decision.directProduction.callId };
+  const revision = approved?.revision;
+  if (revision?.schemaChange !== undefined && grant !== undefined) {
+    return { ...direct, productionSchemaApprovalCallId: grant.callId };
   }
   return revision === undefined ? direct : { ...direct, productionRevision: true as const };
 };
@@ -228,6 +238,7 @@ export const captureGitHubPrDeliveryAuthority = async (
     readOwner?: GitHubPrDeliveryOwnerReader;
     persist?: typeof emitCurrentBuildWorkflowProjection;
     directProductionGrantDigest?: string;
+    directProductionCorrectionDigest?: string;
   } = {},
 ) => {
   ctx.abortSignal.throwIfAborted();
@@ -255,6 +266,7 @@ export const captureGitHubPrDeliveryAuthority = async (
     before,
     ctx.session.turn,
     ports.directProductionGrantDigest,
+    ports.directProductionCorrectionDigest,
   );
   await (ports.persist ?? emitCurrentBuildWorkflowProjection)(ctx);
   const after = await readOwner(ctx);

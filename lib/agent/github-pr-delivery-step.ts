@@ -43,21 +43,22 @@ export async function approveGitHubPrDelivery(
   }
   const input = ctx.toolInput;
   const { reconciliationDigest, installationId } = input;
-  const { currentDirectProductionGrant } = await import("./direct-production-state");
+  const { currentDirectProductionDeliveryAuthorization } =
+    await import("./direct-production-state");
   const productionTarget = {
     appId: subject.appId,
     repositoryId: input.repositoryId,
     repositoryFullName: `${input.owner}/${input.name}`,
   };
-  const directGrant =
+  const directAuthorization =
     installationId === undefined || installationId !== subject.installationId
       ? undefined
-      : currentDirectProductionGrant(ctx, {
+      : currentDirectProductionDeliveryAuthorization(ctx, {
           ...productionTarget,
           baseBranch: input.baseBranch,
           installationId,
         });
-  const approvedRepair = directGrant?.subject.revision?.reconciliation;
+  const approvedRepair = directAuthorization?.subject.revision?.reconciliation;
   if (
     approvedRepair !== undefined &&
     (approvedRepair.digest !== reconciliationDigest ||
@@ -66,7 +67,7 @@ export async function approveGitHubPrDelivery(
   ) {
     return { reason: "The reviewed draft update has changed.", type: "denied" };
   }
-  if (reconciliationDigest !== undefined || directGrant !== undefined) {
+  if (reconciliationDigest !== undefined || directAuthorization !== undefined) {
     const { reconciliation } = subject;
     const selectedInstallationId = subject.installationId;
     if (
@@ -92,7 +93,7 @@ export async function approveGitHubPrDelivery(
         return { reason: "The reviewed draft revision could not be verified.", type: "denied" };
       }
     }
-    if (directGrant !== undefined) {
+    if (directAuthorization !== undefined) {
       const observed = await runtime.inspectPublishedPullRequest?.(
         input.proposalDigest,
         reconciledHead,
@@ -101,7 +102,7 @@ export async function approveGitHubPrDelivery(
       const resumableSchema =
         observed?.state === "merged" &&
         observed.mergeCommitSha !== undefined &&
-        directGrant.subject.revision?.schemaChange !== undefined;
+        directAuthorization.subject.revision?.schemaChange !== undefined;
       const matchesReviewedRevision = [
         observed?.state === "open" || resumableSchema,
         observed?.reviewedRevision === true,
@@ -123,7 +124,7 @@ export async function approveGitHubPrDelivery(
           productionTarget,
           ctx,
           observed.mergeCommitSha,
-          directGrant.digest,
+          directAuthorization.effectDigest,
         );
         if (settled !== undefined) {
           return {
@@ -137,12 +138,13 @@ export async function approveGitHubPrDelivery(
   }
   ctx.abortSignal.throwIfAborted();
   const { captureGitHubPrDeliveryAuthority } = await import("./github-pr-delivery-authority");
-  if (directGrant === undefined) {
+  if (directAuthorization === undefined) {
     await captureGitHubPrDeliveryAuthority(input, ctx);
     return "user-approval";
   }
   await captureGitHubPrDeliveryAuthority(input, ctx, {
-    directProductionGrantDigest: directGrant.digest,
+    directProductionGrantDigest: directAuthorization.grant.digest,
+    directProductionCorrectionDigest: directAuthorization.correction?.digest,
   });
   return "approved";
 }

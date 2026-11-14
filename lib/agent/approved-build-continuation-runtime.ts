@@ -1,5 +1,5 @@
 import {
-  currentDirectProductionGrant,
+  currentDirectProductionDeliveryAuthorization,
   retainedDirectProductionSchemaReadbackGrant,
 } from "./direct-production-state";
 import { directProductionProgressState } from "./direct-production-progress";
@@ -120,17 +120,18 @@ export const recordApprovedBuildDecision = async (
   decision: ApprovedBuildDecision,
 ): Promise<void> => {
   const projection = currentGitHubPrDeliveryAuthorityProjection();
-  const directProduction =
+  const delivery =
     decision.currentSpec === undefined
       ? undefined
-      : currentDirectProductionGrant(ctx, decision.currentSpec);
+      : currentDirectProductionDeliveryAuthorization(ctx, decision.currentSpec);
   const schemaPredecessorReadback =
     decision.currentSpec === undefined
       ? undefined
       : retainedDirectProductionSchemaReadbackGrant(ctx, decision.currentSpec);
   const parsed = approvedBuildDecisionSchema.parse({
     ...decision,
-    directProduction,
+    directProduction: delivery?.grant,
+    schemaCorrection: delivery?.correction,
     githubDelivery: projection,
     schemaPredecessorReadback,
   });
