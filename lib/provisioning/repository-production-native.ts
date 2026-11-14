@@ -73,6 +73,7 @@ import {
   completeRepositoryProductionFromStatus,
 } from "./repository-production-completion-status";
 import type { RepositoryProductionManagementSubject } from "./repository-production-management-subject";
+import { createRepositoryProductionApprovalCheckpoint } from "./repository-production-approval-checkpoint";
 import { resolveRepositoryProductionDestination } from "./repository-production-destination";
 import {
   repositoryProductionApprovalInput,
@@ -1592,7 +1593,28 @@ export const createRepositoryProductionNativeHandler =
           if (!transport.observePrivateHistory) {
             throw new Error("repository_production_approval_unavailable");
           }
+          const checkpointInput: Parameters<
+            typeof createRepositoryProductionApprovalCheckpoint
+          >[0] = {
+            database,
+            plan: currentPlan,
+            owner: owner.ownerContext,
+            callId: approvedByCallId,
+            assertCurrentOwner: assertDirectApproval,
+          };
+          if (directProduction !== undefined) {
+            checkpointInput.directGrantDigest = directProduction.digest;
+          }
+          const checkpoint = createRepositoryProductionApprovalCheckpoint(checkpointInput);
+          const state = await checkpoint.read();
+          const observation: NonNullable<
+            Parameters<typeof readRepositoryProductionApproval>[0]["observation"]
+          > = { save: checkpoint.save };
+          if (state !== undefined) {
+            observation.state = state;
+          }
           const approvalInput: Parameters<typeof readRepositoryProductionApproval>[0] = {
+            observation,
             plan: currentPlan,
             callId: approvedByCallId,
             owner: owner.ownerContext,
