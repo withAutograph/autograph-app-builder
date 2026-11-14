@@ -1,4 +1,5 @@
 /* oxlint-disable unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
+import { isDeepStrictEqual } from "node:util";
 import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
 import { observeNormalizedChangeSet } from "./change_set_status";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
@@ -320,7 +321,7 @@ const prepareOwnedDraftRecovery = async (input: {
 
 export default defineTool({
   description:
-    "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. A fresh-template build that already published its own draft uses that verified owned publication and preserves its original starter source; it does not replace the occupied source through resolve_github_source. For an existing-repository app, retry normal preparation without a recovery flag: Builder can reuse this candidate's retained original app-review lineage while the same app, source and apply bindings still match, preserving its unpublished edits. Explicit recovery: reopen-current-owned-draft applies only to a reviewed starter-created app's verified owned publication; it starts a fresh candidate from that same draft and base without replaying the old review or candidate. Private work is preserved for inspection and deliberate current-candidate edits; normal retries retain this recovery mode. The new candidate needs validation, review and separate exact publication approval. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts. Builder preserves original approved root registration through the repository's automatic merge result. Set restoreInitialAppSource only to recover a first owned draft that omitted the app package. Builder stages the retained original app and its registration into a fresh private candidate for validation, review, and approved update. If candidate validation reports outside-app metadata changes, run this tool again: Builder preserves the old checkout, creates a fresh private candidate, and carries app repairs across the same verified draft/head/review lineage, merging current base app changes when the base advances. This technical recovery needs no human lockfile edit or new private-worktree approval. For a verified acquired-source first draft with stale composition, use repairOriginalPublication with discardAddedPaths: [] to rebuild shared registration and the lockfile. Only a starter-created app can also select unwanted original additions from its published diff for cleanup. Builder verifies its own original publication and unchanged file ownership, preserves previous private app repairs, reconstructs composition from current target metadata plus this app, and regenerates the lock. Never ask the creator for paths or edit shared files through the app editor. The corrected candidate still needs normal review and exact update approval.",
+    "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. A fresh-template build that already published its own draft uses that verified owned publication and preserves its original starter source; it does not replace the occupied source through resolve_github_source. For an existing-repository app, retry normal preparation without a recovery flag: Builder can reuse this candidate's retained original app-review lineage while the same app, source and apply bindings still match, preserving its unpublished edits. After an approved correction already reached the draft, prepare again from that verified head before recompiling its unissued schema; Builder preserves the corrected source instead of replaying superseded bytes. Explicit recovery: reopen-current-owned-draft applies only to a reviewed starter-created app's verified owned publication; it starts a fresh candidate from that same draft and base without replaying the old review or candidate. Private work is preserved for inspection and deliberate current-candidate edits; normal retries retain this recovery mode. The new candidate needs validation, review and separate exact publication approval. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts. Builder preserves original approved root registration through the repository's automatic merge result. Set restoreInitialAppSource only to recover a first owned draft that omitted the app package. Builder stages the retained original app and its registration into a fresh private candidate for validation, review, and approved update. If candidate validation reports outside-app metadata changes, run this tool again: Builder preserves the old checkout, creates a fresh private candidate, and carries app repairs across the same verified draft/head/review lineage, merging current base app changes when the base advances. This technical recovery needs no human lockfile edit or new private-worktree approval. For a verified acquired-source first draft with stale composition, use repairOriginalPublication with discardAddedPaths: [] to rebuild shared registration and the lockfile. Only a starter-created app can also select unwanted original additions from its published diff for cleanup. Builder verifies its own original publication and unchanged file ownership, preserves previous private app repairs, reconstructs composition from current target metadata plus this app, and regenerates the lock. Never ask the creator for paths or edit shared files through the app editor. The corrected candidate still needs normal review and exact update approval.",
   // oxlint-disable-next-line eslint/complexity -- Preserve source recovery and the existing independent owner/draft guards.
   async execute(input, ctx) {
     ctx.abortSignal?.throwIfAborted();
@@ -489,8 +490,23 @@ export default defineTool({
           reviewDigest: state.reviewReceipt.digest,
         });
       }
+      // A provider-proved update from this exact retained review supersedes the
+      // original private bytes. Replaying them would undo the approved update.
+      const publishedCorrection = source.publishedReconciliation;
+      const publicationAlreadyContainsReview =
+        publishedCorrection !== undefined &&
+        source.publishedHeadSha === source.draft.headSha &&
+        draftReconciliationCompletions
+          .get()
+          .some(
+            (completion) =>
+              completion.preparation === "sealed-before-approval" &&
+              completion.appId === state.appSpec.appId &&
+              completion.appReview.digest === state.reviewReceipt.digest &&
+              isDeepStrictEqual(completion.proposal, publishedCorrection),
+          );
       let unpublished: DraftReconciliationInput["unpublished"];
-      if (state.reviewReceipt.changes.length !== 0) {
+      if (state.reviewReceipt.changes.length !== 0 && !publicationAlreadyContainsReview) {
         const changes = { changes: state.reviewReceipt.changes };
         const prior: Pick<
           NonNullable<DraftReconciliationInput["unpublished"]>,
@@ -571,13 +587,20 @@ export default defineTool({
       });
       const {
         created: _created,
-        preservedCandidateRoot: _preserved,
+        preservedCandidateRoot,
         replayedAppChanges: _replayed,
         ...preparedCandidate
       } = prepared;
       void _created;
-      void _preserved;
       void _replayed;
+      const preservedWorkspaces = [...(original?.preservedWorkspaces ?? [])];
+      if (original !== null && preservedCandidateRoot === original.root) {
+        preservedWorkspaces.push({
+          kind: "draft-candidate",
+          root: original.root,
+          reviewDigest: original.originalReviewDigest,
+        });
+      }
       const candidate = {
         ...preparedCandidate,
         ...retainedPublishedReconciliation(
@@ -594,7 +617,8 @@ export default defineTool({
       updateExactDraftReconciliation({
         expected: original,
         operation: "preparing the isolated merge candidate",
-        transition: () => candidate,
+        transition: () =>
+          preservedWorkspaces.length === 0 ? candidate : { ...candidate, preservedWorkspaces },
       });
       const result = {
         baseSha: prepared.baseSha,

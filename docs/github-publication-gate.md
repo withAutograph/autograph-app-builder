@@ -670,7 +670,11 @@ sealed compiler output before offering the combined approval. The generated
 data operations and online transition plan must agree on the exact previous
 release and optional field. If the already approved draft update was published
 without a compatible generated cut, Builder verifies that update as the
-starting point for a newly reviewed correction.
+starting point for a newly reviewed correction. When the verified update
+already includes the same app review, preparation starts with the corrected
+draft source. If preparation instead needs to replay reviewed local edits, the
+private worktree retains the exact replay commit and verifies its single
+parent before moving any unissued generated cut.
 
 The combined approval binds the corrected CUE, both reviewed diffs, and the exact draft
 head, base, app and repository.
