@@ -20,6 +20,8 @@ import {
   restoreDirectProductionRevisionPredecessor,
 } from "../../lib/agent/direct-production-state";
 import type { ProductionReconciliationFailure } from "../../lib/agent/direct-production-state";
+import { emitCurrentBuildWorkflowProjection } from "../../lib/agent/approved-build-continuation-runtime";
+import { readOptionalFieldCorrectionProof } from "../../lib/agent/optional-field-correction-proof";
 import { assertApprovedPrivateApplySession } from "../../lib/agent/private-apply-authority";
 import { appBuilderWorkflowState } from "../../lib/agent/workflow-state";
 import { repositoryAccessRuntimeForSession } from "../../lib/agent/deployment-repository-access-runtime";
@@ -144,7 +146,9 @@ export default defineTool({
     }
     const reconciliationFailure =
       input.directProduction === undefined
-        ? await prepareDirectProductionDraftReconciliation(ctx)
+        ? await prepareDirectProductionDraftReconciliation(ctx, {
+            verifyEquivalentCorrection: readOptionalFieldCorrectionProof,
+          })
         : null;
     let subject = directProductionSubjectForPlan(ctx);
     if (subject === undefined && input.directProduction === undefined) {
@@ -181,8 +185,6 @@ export default defineTool({
       if (authorized?.correction !== undefined) {
         const nextCall = directProductionReconciliationContinuation(authorized.subject);
         if (nextCall !== null) {
-          const { emitCurrentBuildWorkflowProjection } =
-            await import("../../lib/agent/approved-build-continuation-runtime");
           await emitCurrentBuildWorkflowProjection(ctx);
           return { status: "production-release-approved" as const, nextCall };
         }

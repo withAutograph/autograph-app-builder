@@ -28,7 +28,7 @@ import {
   readDirectProductionCorrection,
 } from "./direct-production-correction";
 import type { DirectProductionCorrection } from "./direct-production-correction";
-import { readOptionalFieldCorrectionProof } from "./optional-field-correction-proof";
+import type { readOptionalFieldCorrectionProof } from "./optional-field-correction-proof";
 import { githubPublicationRuntimeForSession } from "./deployment-github-publication-runtime";
 import { observeMergedAppProduction } from "./app-production-observation";
 import type { GitHubPublicationRuntime } from "./github-publication-runtime";
@@ -842,6 +842,77 @@ export type ProductionReconciliationFailure =
   | "candidate-schema-compatibility-missing"
   | "candidate-schema-compatibility-unavailable";
 
+export const currentDirectProductionGrant = (
+  ctx: OwnerContext,
+  match: SubjectMatch,
+): DirectProductionGrant | undefined => {
+  const { grant } = authorization.get();
+  if (grant === undefined || grant.subject.appId !== match.appId) {
+    return undefined;
+  }
+  const { subject } = grant;
+  const matchesDestination = (
+    ["repositoryId", "repositoryFullName", "baseBranch", "installationId"] as const
+  ).every((key) => match[key] === undefined || match[key] === subject[key]);
+  if (!matchesDestination || !sameSubject(directProductionSubjectForPlan(ctx), subject)) {
+    return undefined;
+  }
+  return grant;
+};
+
+/** A checked correction can continue delivery under the settled grant that approved its exact addition. */
+export const currentDirectProductionDeliveryAuthorization = (
+  ctx: OwnerContext,
+  match: SubjectMatch,
+):
+  | {
+      grant: DirectProductionGrant;
+      subject: DirectProductionSubject;
+      effectDigest: string;
+      correction?: DirectProductionCorrection;
+    }
+  | undefined => {
+  const strictGrant = currentDirectProductionGrant(ctx, match);
+  if (strictGrant !== undefined) {
+    return { grant: strictGrant, subject: strictGrant.subject, effectDigest: strictGrant.digest };
+  }
+  const { grant, correction: saved } = authorization.get();
+  const correction = readDirectProductionCorrection(grant, saved ?? undefined);
+  const state = appBuilderWorkflowState.get();
+  if (
+    state.phase !== "reviewed" ||
+    grant === undefined ||
+    correction === undefined ||
+    grant.subject.appId !== match.appId
+  ) {
+    return undefined;
+  }
+  const matchesDestination = (
+    ["repositoryId", "repositoryFullName", "baseBranch", "installationId"] as const
+  ).every((key) => match[key] === undefined || match[key] === grant.subject[key]);
+  const original = subjectForProposal(ctx, state, [], revisionPredecessor(state.proposal.digest));
+  if (!matchesDestination || !sameSubject(original, grant.subject) || original === undefined) {
+    return undefined;
+  }
+  const candidate = directDraftReconciliationScope(state, original, grant, undefined, {
+    proveCorrectedPredecessor: true,
+  });
+  const matchesCandidate = [
+    sameSubject(candidate?.subject, correction.correctedSubject),
+    candidate?.selection.releaseId === correction.candidate.releaseId,
+    candidate?.selection.schemaSha256 === correction.candidate.artifactSha256,
+    candidate?.selection.manifestSha256 === correction.candidate.manifestSha256,
+  ].every(Boolean);
+  return matchesCandidate
+    ? {
+        grant,
+        subject: correction.correctedSubject,
+        effectDigest: correction.digest,
+        correction,
+      }
+    : undefined;
+};
+
 /** A new combined decision can replace the grant for an exact still-draft schema revision. */
 export const prepareDirectProductionDraftReconciliation = async (
   ctx: ToolContext,
@@ -1031,8 +1102,7 @@ export const prepareDirectProductionDraftReconciliation = async (
   const priorCueChanged =
     corrected.schemaChange.priorCueSha256 !== grant.subject.revision.schemaChange.priorCueSha256;
   if (priorCueChanged) {
-    const readProof = ports.verifyEquivalentCorrection ?? readOptionalFieldCorrectionProof;
-    const proof = await readProof({
+    const proof = await ports.verifyEquivalentCorrection?.({
       ctx,
       current: state,
       candidate,
@@ -1046,7 +1116,7 @@ export const prepareDirectProductionDraftReconciliation = async (
     if (!isCurrent()) {
       return releaseSelectionChanged;
     }
-    if (proof === null) {
+    if (proof == null) {
       return schemaPredecessorMismatch;
     }
     const correction = createDirectProductionCorrection({
@@ -1237,77 +1307,6 @@ export const currentPlannedDirectProductionAuthoring = (ctx: OwnerContext): stri
     return undefined;
   }
   return proposalDigest;
-};
-
-export const currentDirectProductionGrant = (
-  ctx: OwnerContext,
-  match: SubjectMatch,
-): DirectProductionGrant | undefined => {
-  const { grant } = authorization.get();
-  if (grant === undefined || grant.subject.appId !== match.appId) {
-    return undefined;
-  }
-  const { subject } = grant;
-  const matchesDestination = (
-    ["repositoryId", "repositoryFullName", "baseBranch", "installationId"] as const
-  ).every((key) => match[key] === undefined || match[key] === subject[key]);
-  if (!matchesDestination || !sameSubject(directProductionSubjectForPlan(ctx), subject)) {
-    return undefined;
-  }
-  return grant;
-};
-
-/** A checked correction can continue delivery under the settled grant that approved its exact addition. */
-export const currentDirectProductionDeliveryAuthorization = (
-  ctx: OwnerContext,
-  match: SubjectMatch,
-):
-  | {
-      grant: DirectProductionGrant;
-      subject: DirectProductionSubject;
-      effectDigest: string;
-      correction?: DirectProductionCorrection;
-    }
-  | undefined => {
-  const strictGrant = currentDirectProductionGrant(ctx, match);
-  if (strictGrant !== undefined) {
-    return { grant: strictGrant, subject: strictGrant.subject, effectDigest: strictGrant.digest };
-  }
-  const { grant, correction: saved } = authorization.get();
-  const correction = readDirectProductionCorrection(grant, saved ?? undefined);
-  const state = appBuilderWorkflowState.get();
-  if (
-    state.phase !== "reviewed" ||
-    grant === undefined ||
-    correction === undefined ||
-    grant.subject.appId !== match.appId
-  ) {
-    return undefined;
-  }
-  const matchesDestination = (
-    ["repositoryId", "repositoryFullName", "baseBranch", "installationId"] as const
-  ).every((key) => match[key] === undefined || match[key] === grant.subject[key]);
-  const original = subjectForProposal(ctx, state, [], revisionPredecessor(state.proposal.digest));
-  if (!matchesDestination || !sameSubject(original, grant.subject) || original === undefined) {
-    return undefined;
-  }
-  const candidate = directDraftReconciliationScope(state, original, grant, undefined, {
-    proveCorrectedPredecessor: true,
-  });
-  const matchesCandidate = [
-    sameSubject(candidate?.subject, correction.correctedSubject),
-    candidate?.selection.releaseId === correction.candidate.releaseId,
-    candidate?.selection.schemaSha256 === correction.candidate.artifactSha256,
-    candidate?.selection.manifestSha256 === correction.candidate.manifestSha256,
-  ].every(Boolean);
-  return matchesCandidate
-    ? {
-        grant,
-        subject: correction.correctedSubject,
-        effectDigest: correction.digest,
-        correction,
-      }
-    : undefined;
 };
 
 /** Read-only identity for an approved schema release even while its private draft repair is pending. */
