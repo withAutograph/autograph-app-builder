@@ -398,6 +398,17 @@ describe("read-only evidence for retaining a Production schema approval", () => 
     expect(reads.verify).not.toHaveBeenCalled();
   });
 
+  it("distinguishes a failed exact review comparison without returning private inputs", async () => {
+    const { input, reads } = fixture();
+    reads.verify.mockImplementation((_input, reportFailure) => {
+      reportFailure?.("reviewed-head-diff");
+      return false;
+    });
+    await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toEqual({
+      reason: "correction-equivalence-reviewed-head-diff",
+    });
+  });
+
   it("stops before readback when the retained review does not hash to the proposal", async () => {
     const { input, reads } = fixture();
     input.corrected.proposal.headChangesDigest = digest("stale");

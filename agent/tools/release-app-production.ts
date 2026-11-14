@@ -30,7 +30,7 @@ import { parseRepositoryReference } from "../../lib/integrations/repository-acce
 
 const managedReleaseUnavailable = "managed-release-unavailable" as const;
 
-const reconciliationGuidance: Record<ProductionReconciliationFailure, string> = {
+const reconciliationGuidance = {
   "candidate-review-unavailable":
     "Recover the current review for the same owned draft and verify both diffs before sealing the correction.",
   "retained-draft-review-only":
@@ -88,6 +88,15 @@ const reconciliationGuidance: Record<ProductionReconciliationFailure, string> = 
     "Builder could not verify the earlier schema used by the original draft.",
   "correction-equivalence":
     "The checked comparison did not prove the same approved optional field.",
+};
+
+const guidanceForFailure = (failure: ProductionReconciliationFailure): string => {
+  if (Object.hasOwn(reconciliationGuidance, failure)) {
+    // SAFETY: The own-property check verifies that the failure is a declared guidance key.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    return reconciliationGuidance[failure as keyof typeof reconciliationGuidance];
+  }
+  return reconciliationGuidance["correction-equivalence"];
 };
 
 const approvedPrivateBuild = (subject: z.infer<typeof directProductionSubjectSchema>) => {
@@ -220,7 +229,7 @@ export default defineTool({
         return {
           status: managedReleaseUnavailable,
           reason: reconciliationFailure,
-          guidance: reconciliationGuidance[reconciliationFailure],
+          guidance: guidanceForFailure(reconciliationFailure),
         };
       }
       return starterPlan === undefined
