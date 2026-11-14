@@ -5,7 +5,7 @@ import getAppProduction from "../../agent/tools/get-app-production";
 
 const mocks = vi.hoisted(() => ({
   subject: vi.fn(),
-  grant: vi.fn(),
+  review: vi.fn(),
   project: vi.fn(),
   runtime: vi.fn(),
   inspect: vi.fn(),
@@ -17,9 +17,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./github-pr-delivery-subject", () => ({
   resolveGitHubPrDeliverySubject: mocks.subject,
 }));
-vi.mock("./direct-production-state", () => ({
-  currentDirectProductionGrant: mocks.grant,
-  retainedDirectProductionSchemaReadbackGrant: mocks.grant,
+vi.mock("./draft-reviewed-lineage", () => ({
+  resolveDraftReviewedWorkflow: mocks.review,
 }));
 vi.mock("./approved-build-continuation-runtime", () => ({
   emitCurrentBuildWorkflowProjection: mocks.project,
@@ -36,7 +35,6 @@ vi.mock("./prepare-app-production-step", () => ({ nextProductionDeliveryCall: {}
 
 const appId = "fixture-app";
 const repoId = "123";
-const repositoryName = "example/repo";
 const installationId = "456";
 const headSha = "a".repeat(40);
 const proposalDigest = "b".repeat(64);
@@ -56,6 +54,18 @@ const target = {
   owner: "example",
   name: "repo",
   pullRequestNumber: 123,
+};
+const reviewed = {
+  appSpec: { digest: "e".repeat(64) },
+  reviewReceipt: { digest: "f".repeat(64) },
+  githubSource: {
+    repository: {
+      repositoryId: repoId,
+      owner: target.owner,
+      name: target.name,
+      defaultBranch: target.baseBranch,
+    },
+  },
 };
 const session: ToolContext["session"] = {
   auth: { current: null, initiator: null },
@@ -86,15 +96,7 @@ describe("read installed schema through the saved app tool", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.subject.mockReturnValue({ appId, installationId, proposalDigest });
-    mocks.grant.mockReturnValue({
-      digest: "d".repeat(64),
-      subject: {
-        repositoryId: repoId,
-        repositoryFullName: repositoryName,
-        baseBranch: target.baseBranch,
-        revision: { schemaChange: { kind: "add-optional-text-field" } },
-      },
-    });
+    mocks.review.mockReturnValue(reviewed);
     mocks.runtime.mockResolvedValue({
       inspectPublishedPullRequest: mocks.inspect,
       inspectPublishedReconciliationHead: mocks.inspectReconciliation,
@@ -154,14 +156,35 @@ describe("read installed schema through the saved app tool", () => {
     expect(mocks.project).toHaveBeenCalledOnce();
   });
 
-  it("does not reveal a diagnostic when the approved grant changes while the operator reads", async () => {
+  it("uses the exact published reconciliation for a reviewed draft revision", async () => {
+    const reconciliation = { digest: "b".repeat(64), pullRequestNumber: target.pullRequestNumber };
+    mocks.subject.mockReturnValue({ appId, installationId, proposalDigest, reconciliation });
+    mocks.inspectReconciliation.mockResolvedValue(headSha);
+    await expect(getAppProduction.execute(readback, ctx)).resolves.toEqual(identity);
+    expect(mocks.inspectReconciliation).toHaveBeenCalledExactlyOnceWith(
+      proposalDigest,
+      reconciliation,
+    );
+    expect(mocks.inspect).toHaveBeenCalledExactlyOnceWith(proposalDigest, headSha);
+    expect(mocks.predecessor).toHaveBeenCalledExactlyOnceWith(appId, repoId, headSha);
+  });
+
+  it("rejects a draft outside the saved repository before calling the operator", async () => {
+    mocks.inspect.mockResolvedValue({
+      ...observation,
+      reviewedTarget: { ...target, repositoryId: "999" },
+    });
+    await expect(getAppProduction.execute(readback, ctx)).rejects.toThrow("draft-changed");
+    expect(mocks.project).not.toHaveBeenCalled();
+    expect(mocks.client).not.toHaveBeenCalled();
+  });
+
+  it("drops a diagnostic when the current review changes while the operator reads", async () => {
     mocks.predecessor.mockImplementation(async () => {
-      mocks.grant.mockReturnValue(null);
+      mocks.review.mockReturnValue({ ...reviewed, reviewReceipt: { digest: "0".repeat(64) } });
       return await Promise.resolve(identity);
     });
-    await expect(getAppProduction.execute(readback, ctx)).rejects.toThrow(
-      "could not verify the installed schema",
-    );
+    await expect(getAppProduction.execute(readback, ctx)).rejects.toThrow("review-changed");
     expect(mocks.predecessor).toHaveBeenCalledOnce();
   });
 });

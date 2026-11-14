@@ -124,6 +124,7 @@ import { createRepositoryProductionRuntimeBinding } from "./repository-productio
 import { resolveRepositoryProductionSignupIntent } from "./repository-production-signup-policy";
 import { createRepositoryProductionSignupNative } from "./repository-production-signup-native";
 import { retainRepositoryProductionApproval } from "./repository-production-approval-retention";
+import { observeRepositoryProductionPhase } from "./repository-production-diagnostic";
 import { assertOptionalTextProductionTransition } from "./repository-production-schema-revision";
 import {
   assertRepositoryProductionSchemaPredecessorSource,
@@ -1379,21 +1380,35 @@ export const createRepositoryProductionNativeHandler =
             appId: owner.appId,
             repositoryId: target.expectedRepositoryId,
           });
-        const session = await readSession(owner);
-        const authority = readAuthority(session);
-        const { subject } = authority.grant;
-        const { scope } = await managed(owner);
-        if (
-          scope.repositoryId !== subject.repositoryId ||
-          scope.repositoryFullName !== subject.repositoryFullName
-        ) {
-          throw schemaRevisionUnverified();
-        }
-        const row = await store.read(scope);
-        if (row === undefined) {
-          throw schemaRevisionUnverified();
-        }
-        assertRepositoryProductionManagementRecord(owner, scope, row);
+        const { session, authority } = await observeRepositoryProductionPhase(
+          "schema_predecessor_owner",
+          "authorization_unavailable",
+          async () => {
+            const saved = await readSession(owner);
+            return { session: saved, authority: readAuthority(saved) };
+          },
+          request.signal,
+        );
+        const { scope, row } = await observeRepositoryProductionPhase(
+          "schema_predecessor_setup",
+          "setup_unavailable",
+          async () => {
+            const found = await managed(owner);
+            if (
+              found.scope.repositoryId !== authority.repositoryId ||
+              found.scope.repositoryFullName !== authority.repositoryFullName
+            ) {
+              throw schemaRevisionUnverified();
+            }
+            const saved = await store.read(found.scope);
+            if (saved === undefined) {
+              throw schemaRevisionUnverified();
+            }
+            assertRepositoryProductionManagementRecord(owner, found.scope, saved);
+            return { scope: found.scope, row: saved };
+          },
+          request.signal,
+        );
         const cancelEpoch = session.cancellationRevision ?? 0;
         const assertCurrent = async () => {
           const latest = await readSession(owner);
@@ -1420,7 +1435,7 @@ export const createRepositoryProductionNativeHandler =
               authority: owner.ownerContext.authority,
               target: { appId: owner.appId, sessionId: owner.sessionId },
             },
-            subject.appSpecDigest,
+            authority.appSpecDigest,
           );
           return assertRepositoryProductionSchemaPredecessorSource(
             authority,
@@ -1428,16 +1443,34 @@ export const createRepositoryProductionNativeHandler =
             target,
           );
         };
-        const publishedSource = await readPublishedSource();
-        const predecessor = await readInstalledRepositoryProductionSchemaPredecessor({
-          row,
-          assertCurrent,
-          readRelease: readGeneratedRelease,
-          inspect: async (context) => await workers(scope).reconcile(context),
-        });
-        if (!isDeepStrictEqual(await readPublishedSource(), publishedSource)) {
-          throw schemaRevisionUnverified();
-        }
+        const publishedSource = await observeRepositoryProductionPhase(
+          "schema_predecessor_publication",
+          "authorization_unavailable",
+          readPublishedSource,
+          request.signal,
+        );
+        const predecessor = await observeRepositoryProductionPhase(
+          "schema_predecessor_installation",
+          "setup_unavailable",
+          async () =>
+            await readInstalledRepositoryProductionSchemaPredecessor({
+              row,
+              assertCurrent,
+              readRelease: readGeneratedRelease,
+              inspect: async (context) => await workers(scope).reconcile(context),
+            }),
+          request.signal,
+        );
+        await observeRepositoryProductionPhase(
+          "schema_predecessor_publication",
+          "authorization_unavailable",
+          async () => {
+            if (!isDeepStrictEqual(await readPublishedSource(), publishedSource)) {
+              throw schemaRevisionUnverified();
+            }
+          },
+          request.signal,
+        );
         return predecessor;
       };
       const assertSchemaActivation = async (

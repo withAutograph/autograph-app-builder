@@ -53,7 +53,6 @@ import {
   recordDirectProductionGrant,
   requestDirectProductionGrant,
   restoreDirectProductionRevisionPredecessor,
-  retainedDirectProductionSchemaReadbackGrant,
 } from "./direct-production-state";
 import {
   draftReconciliationState,
@@ -1519,11 +1518,7 @@ describe("direct Production Build authority", () => {
         current === null ? current : { ...current, publishedReconciliation: proposal },
       );
       expect(currentDirectProductionGrant(releaseContext, subject)).toEqual(repaired);
-      expect(retainedDirectProductionSchemaReadbackGrant(releaseContext, subject)).toEqual(
-        repaired,
-      );
       draftReconciliationState.update(() => null);
-      expect(retainedDirectProductionSchemaReadbackGrant(releaseContext, subject)).toBeUndefined();
       expect(currentDirectProductionGrant(releaseContext, subject)).toBeUndefined();
       recordDirectProductionProgress(repaired.digest, "schema-settled");
       installPlan();
@@ -1532,38 +1527,6 @@ describe("direct Production Build authority", () => {
         priorGrantDigest: repaired.digest,
         priorProposalDigest: repaired.subject.proposalDigest,
       });
-    });
-  });
-
-  it("reads the owned approved schema while an incompatible private repair cannot authorize delivery", () => {
-    contextStorage.run(new ContextContainer(), () => {
-      const fixture = retainSealedSchemaCorrection("predecessor");
-      const { failed } = fixture;
-      expect(currentDirectProductionGrant(releaseContext, failed.subject)).toBeUndefined();
-      expect(retainedDirectProductionSchemaReadbackGrant(releaseContext, failed.subject)).toEqual(
-        failed,
-      );
-      expect(
-        retainedDirectProductionSchemaReadbackGrant(releaseContext, {
-          appId,
-          installationId: "999",
-        }),
-      ).toBeUndefined();
-      expect(
-        retainedDirectProductionSchemaReadbackGrant(context("other-owner"), failed.subject),
-      ).toBeUndefined();
-      draftReconciliationState.update((candidate) => {
-        if (candidate === null) {
-          return null;
-        }
-        const unsealed = { ...candidate };
-        delete unsealed.proposal;
-        return unsealed;
-      });
-      expect(currentDirectProductionGrant(releaseContext, failed.subject)).toBeUndefined();
-      expect(retainedDirectProductionSchemaReadbackGrant(releaseContext, failed.subject)).toEqual(
-        failed,
-      );
     });
   });
 
