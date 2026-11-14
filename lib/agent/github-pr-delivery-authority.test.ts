@@ -39,6 +39,7 @@ import type { AppBuilderWorkflowState } from "./workflow-state";
 import { managedProductionDeliveryRequirements } from "./production-delivery-requirement";
 import { resolveGitHubProductionDeliveryReadiness } from "./github-production-delivery-readiness";
 import { createDirectProductionGrant } from "./direct-production-authorization";
+import { createDirectProductionCorrection } from "./direct-production-correction";
 
 const sessionId = "owned-parent-session";
 const appId = "control-notes";
@@ -253,7 +254,7 @@ const delivery = (snapshot: GitHubPrDeliveryOwnerSnapshot, alreadyReady = false)
 };
 
 describe("GitHub delivery authority across workflow child contexts", () => {
-  it.each(["first", "presentation", "additive"] as const)(
+  it.each(["first", "presentation", "additive", "corrected-additive"] as const)(
     "rechecks the retained %s Production grant before a delegated delivery workflow wakes",
     async (releaseKind) => {
       const input = { ...approval, owner: "withAutograph", name: "arrusted-development" };
@@ -262,7 +263,7 @@ describe("GitHub delivery authority across workflow child contexts", () => {
         priorProposalDigest: "b".repeat(64),
       };
       const revision =
-        releaseKind === "additive"
+        releaseKind === "additive" || releaseKind === "corrected-additive"
           ? {
               ...predecessor,
               schemaChange: {
@@ -298,7 +299,77 @@ describe("GitHub delivery authority across workflow child contexts", () => {
       });
       const { ctx, snapshot } = capturedParent(input, false, original);
       const readOwner = async () => await Promise.resolve(snapshot);
-      const authority = await readGitHubPrDeliveryAuthority(input, ctx, readOwner);
+      const deliveryInput = { ...input };
+      if (releaseKind === "corrected-additive") {
+        const reconciliation = {
+          digest: "e".repeat(64),
+          originPublicationDigest: input.proposalDigest,
+          originPublicationReceiptDigest: "2".repeat(64),
+          pullRequestNumber: input.pullRequestNumber,
+          expectedHeadSha: "1".repeat(40),
+          expectedBaseSha: "2".repeat(40),
+          resolvedTree: "3".repeat(40),
+          reviewDigest: "3".repeat(64),
+        };
+        const correction = createDirectProductionCorrection({
+          version: 1,
+          originalGrantDigest: original.digest,
+          correctedSubject: {
+            ...original.subject,
+            revision: {
+              ...predecessor,
+              reconciliation,
+              schemaChange: {
+                kind: "add-optional-text-field",
+                priorCueSha256: "5".repeat(64),
+                candidateCueSha256: "6".repeat(64),
+              },
+            },
+          },
+          installed: {
+            releaseId: "v8",
+            artifactSha256: "7".repeat(64),
+            manifestSha256: "8".repeat(64),
+            cueSha256: "5".repeat(64),
+          },
+          candidate: {
+            releaseId: "v9",
+            artifactSha256: "9".repeat(64),
+            manifestSha256: "a".repeat(64),
+          },
+        });
+        const projection = snapshot.decision.githubDelivery;
+        const call = projection?.calls[0];
+        if (projection === undefined || projection.current === null || call === undefined) {
+          throw new Error("Missing controlled GitHub delivery projection");
+        }
+        deliveryInput.reconciliationDigest = reconciliation.digest;
+        projection.current.reconciliationDigest = reconciliation.digest;
+        call.subject.reconciliationDigest = reconciliation.digest;
+        call.inputDigest = githubPrDeliveryInputDigest(deliveryInput);
+        call.directProductionCorrectionDigest = correction.digest;
+
+        // The approved wake cannot run with only the original, superseded identity.
+        await expect(
+          readGitHubPrDeliveryAuthority(deliveryInput, ctx, readOwner),
+        ).rejects.toMatchObject({
+          reason: "captured-call-mismatch",
+        });
+        snapshot.decision.schemaCorrection = correction;
+        await expect(
+          readGitHubPrDeliveryAuthority(deliveryInput, ctx, readOwner),
+        ).resolves.toMatchObject({
+          productionSchemaApprovalCallId: original.callId,
+        });
+        await expect(
+          readGitHubPrDeliveryAuthority(
+            { ...deliveryInput, headSha: "f".repeat(40) },
+            ctx,
+            readOwner,
+          ),
+        ).rejects.toMatchObject({ reason: "captured-call-mismatch" });
+      }
+      const authority = await readGitHubPrDeliveryAuthority(deliveryInput, ctx, readOwner);
       expect(authority).toMatchObject({ subject: { appId }, directProduction: true });
       expect("productionRevision" in authority).toBe(releaseKind === "presentation");
       snapshot.decision.directProduction = createDirectProductionGrant({
@@ -306,11 +377,15 @@ describe("GitHub delivery authority across workflow child contexts", () => {
         toolName: original.toolName,
         subject: original.subject,
       });
-      await expect(readGitHubPrDeliveryAuthority(input, ctx, readOwner)).rejects.toMatchObject({
+      await expect(
+        readGitHubPrDeliveryAuthority(deliveryInput, ctx, readOwner),
+      ).rejects.toMatchObject({
         reason: "captured-call-mismatch",
       });
       delete snapshot.decision.directProduction;
-      await expect(readGitHubPrDeliveryAuthority(input, ctx, readOwner)).rejects.toMatchObject({
+      await expect(
+        readGitHubPrDeliveryAuthority(deliveryInput, ctx, readOwner),
+      ).rejects.toMatchObject({
         reason: "captured-call-mismatch",
       });
     },

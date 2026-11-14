@@ -39,6 +39,7 @@ export const githubPrDeliveryCallScopeSchema = z.strictObject({
   cancelled: z.literal(true).optional(),
   inputDigest: digest,
   directProductionGrantDigest: digest.optional(),
+  directProductionCorrectionDigest: digest.optional(),
   subject: githubPrDeliveryReviewScopeSchema,
   requirements: z.array(githubPrDeliveryManagedRequirementSchema),
 });

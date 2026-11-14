@@ -80,7 +80,7 @@ const hooks = vi.hoisted(() => {
   return {
     sandbox: vi.fn(),
     assertApproval: vi.fn(),
-    readGrant: vi.fn(),
+    readAuthorization: vi.fn(),
     assertOwner: vi.fn<() => Promise<void>>(),
     applied: vi.fn(),
     completions,
@@ -124,7 +124,9 @@ const hooks = vi.hoisted(() => {
 });
 
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T) => tool }));
-vi.mock("./direct-production-state", () => ({ currentDirectProductionGrant: hooks.readGrant }));
+vi.mock("./direct-production-state", () => ({
+  currentDirectProductionDeliveryAuthorization: hooks.readAuthorization,
+}));
 vi.mock("eve/context", async (importOriginal) => {
   const original = await importOriginal<{ defineState: typeof defineState }>();
   return {
@@ -296,7 +298,7 @@ describe("publication records actual source for its compiled app release", () =>
     hooks.sandbox.mockResolvedValue({});
     hooks.record.mockReset().mockResolvedValue({ status: "recorded" });
     hooks.assertApproval.mockReset();
-    hooks.readGrant.mockReset();
+    hooks.readAuthorization.mockReset();
     // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires an explicit resolved value for its Promise<void> mock.
     hooks.assertOwner.mockReset().mockResolvedValue(undefined);
     hooks.applied.mockReset().mockResolvedValue({ applied: false });

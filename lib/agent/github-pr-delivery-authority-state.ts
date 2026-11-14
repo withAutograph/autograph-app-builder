@@ -81,6 +81,7 @@ export const captureGitHubPrDeliveryCallScope = (
   owner: GitHubPrDeliveryOwnerBinding,
   turn: { id: string; sequence: number },
   directProductionGrantDigest?: string,
+  directProductionCorrectionDigest?: string,
 ) => {
   const projection = currentGitHubPrDeliveryAuthorityProjection();
   const subject = projection.current;
@@ -106,6 +107,9 @@ export const captureGitHubPrDeliveryCallScope = (
   if (directProductionGrantDigest !== undefined) {
     capture.directProductionGrantDigest = directProductionGrantDigest;
   }
+  if (directProductionCorrectionDigest !== undefined) {
+    capture.directProductionCorrectionDigest = directProductionCorrectionDigest;
+  }
   const previous = calls.get().find((entry) => entry.callId === callId);
   if (
     previous !== undefined &&
@@ -116,6 +120,7 @@ export const captureGitHubPrDeliveryCallScope = (
       isDeepStrictEqual(previous.owner, capture.owner),
       previous.inputDigest === capture.inputDigest,
       previous.directProductionGrantDigest === capture.directProductionGrantDigest,
+      previous.directProductionCorrectionDigest === capture.directProductionCorrectionDigest,
       isDeepStrictEqual(previous.subject, capture.subject),
     ].every(Boolean)
   ) {

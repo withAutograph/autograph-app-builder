@@ -14,14 +14,16 @@ const mocks = vi.hoisted(() => ({
   production: vi.fn(),
   captureAuthority: vi.fn(),
   readAuthority: vi.fn(),
-  readGrant: vi.fn(),
+  readAuthorization: vi.fn(),
   liveProduction: vi.fn(),
 }));
 vi.mock("./github-pr-delivery-authority", () => ({
   captureGitHubPrDeliveryAuthority: mocks.captureAuthority,
   readGitHubPrDeliveryAuthority: mocks.readAuthority,
 }));
-vi.mock("./direct-production-state", () => ({ currentDirectProductionGrant: mocks.readGrant }));
+vi.mock("./direct-production-state", () => ({
+  currentDirectProductionDeliveryAuthorization: mocks.readAuthorization,
+}));
 vi.mock("./app-production-observation", () => ({
   readSettledMergedAppProductionSchema: mocks.liveProduction,
 }));
@@ -45,6 +47,14 @@ vi.mock("./deployment-github-publication-runtime", () => ({
       runPublishedPullRequestEffect: mocks.run,
     }),
 }));
+
+const mockGrant = (grant: { digest: string; subject: unknown }) => {
+  mocks.readAuthorization.mockReturnValue({
+    grant,
+    subject: grant.subject,
+    effectDigest: grant.digest,
+  });
+};
 
 const reviewedTarget = {
   baseBranch: "main",
@@ -93,7 +103,7 @@ const step = (input: GitHubPrDeliveryApproval, cycle?: string) =>
 
 beforeEach(() => {
   mocks.captureAuthority.mockReset();
-  mocks.readGrant.mockReset();
+  mocks.readAuthorization.mockReset();
   mocks.liveProduction.mockReset();
   mocks.captureAuthority.mockResolvedValue(null);
   mocks.readAuthority.mockReset();
@@ -139,7 +149,7 @@ it("uses the original Production grant only for the exact current reviewed GitHu
     ...mocks.getState(),
     githubDestinationReview: { installation: { installationId } },
   });
-  mocks.readGrant.mockReturnValue({ digest: grantDigest, subject: {} });
+  mockGrant({ digest: grantDigest, subject: {} });
   mocks.inspect.mockResolvedValue(observe({ draft: true }));
 
   await expect(approve(approved)).resolves.toBe("approved");
@@ -161,7 +171,7 @@ it("reuses the combined approval only for the exact already-merged schema revisi
   });
   mocks.inspect.mockResolvedValue(observe({ state: "merged", mergeCommitSha }));
   const digest = "7".repeat(64);
-  mocks.readGrant.mockReturnValue({
+  mockGrant({
     digest,
     subject: { revision: { schemaChange: { kind: "add-optional-text-field" } } },
   });
@@ -173,7 +183,7 @@ it("reuses the combined approval only for the exact already-merged schema revisi
     type: "denied",
   });
   expect(mocks.liveProduction).toHaveBeenCalledOnce();
-  mocks.readGrant.mockReturnValue({ digest, subject: { revision: {} } });
+  mockGrant({ digest, subject: { revision: {} } });
   await expect(approve(input)).resolves.toMatchObject({ type: "denied" });
   expect(mocks.run).not.toHaveBeenCalled();
 });
@@ -194,7 +204,7 @@ it.each(["live", "awaiting-activation"] as const)(
       githubDestinationReview: { installation: { installationId } },
     });
     mocks.inspect.mockResolvedValue(observe({ state: "merged", mergeCommitSha }));
-    mocks.readGrant.mockReturnValue({
+    mockGrant({
       digest,
       subject: { revision: { schemaChange: { kind: "add-optional-text-field" } } },
     });
@@ -235,24 +245,24 @@ it("requires provider proof of the retained reconciliation before approving its 
   );
 });
 
-it("uses the same Production approval only for its sealed correction and exact updated head", async () => {
-  const installationId = "10";
-  const digest = "7".repeat(64);
-  const reconciliation = { digest: "e".repeat(64) };
-  const reconciled = { ...approval, installationId, reconciliationDigest: reconciliation.digest };
-  mocks.getState.mockReturnValue({
-    ...mocks.getState(),
-    githubDestinationReview: { installation: { installationId } },
-  });
-  mocks.getCandidate.mockReturnValue({
-    appId: "example-app",
-    originalReviewDigest: "original-review",
-    githubSourceDigest: "selected-source",
-    publishedReconciliation: reconciliation,
-  });
-  mocks.readGrant.mockReturnValue({
-    digest,
-    subject: {
+it.each([false, true])(
+  "uses the same Production approval only for its sealed correction and exact updated head (schema proof: %s)",
+  async (usesSchemaProof) => {
+    const installationId = "10";
+    const digest = "7".repeat(64);
+    const reconciliation = { digest: "e".repeat(64) };
+    const reconciled = { ...approval, installationId, reconciliationDigest: reconciliation.digest };
+    mocks.getState.mockReturnValue({
+      ...mocks.getState(),
+      githubDestinationReview: { installation: { installationId } },
+    });
+    mocks.getCandidate.mockReturnValue({
+      appId: "example-app",
+      originalReviewDigest: "original-review",
+      githubSourceDigest: "selected-source",
+      publishedReconciliation: reconciliation,
+    });
+    const correctedSubject = {
       revision: {
         reconciliation: {
           digest: reconciliation.digest,
@@ -260,19 +270,39 @@ it("uses the same Production approval only for its sealed correction and exact u
           pullRequestNumber: approval.pullRequestNumber,
         },
       },
-    },
-  });
-  mocks.inspectReconciled.mockResolvedValue(reconciled.headSha);
-  mocks.inspect.mockResolvedValue(observe({ draft: true }));
-  await expect(approve({ ...approval, installationId })).resolves.toMatchObject({ type: "denied" });
-  await expect(approve({ ...reconciled, pullRequestNumber: 999 })).resolves.toMatchObject({
-    type: "denied",
-  });
-  await expect(approve(reconciled)).resolves.toBe("approved");
-  expect(mocks.captureAuthority).toHaveBeenCalledExactlyOnceWith(reconciled, expect.anything(), {
-    directProductionGrantDigest: digest,
-  });
-});
+    };
+    const correction = { digest: "8".repeat(64) };
+    if (usesSchemaProof) {
+      mocks.readAuthorization.mockReturnValue({
+        grant: {
+          digest,
+          subject: { revision: { schemaChange: { kind: "add-optional-text-field" } } },
+        },
+        subject: correctedSubject,
+        effectDigest: correction.digest,
+        correction,
+      });
+    } else {
+      mockGrant({ digest, subject: correctedSubject });
+    }
+    mocks.inspectReconciled.mockResolvedValue(reconciled.headSha);
+    mocks.inspect.mockResolvedValue(observe({ draft: true }));
+    await expect(approve({ ...approval, installationId })).resolves.toMatchObject({
+      type: "denied",
+    });
+    await expect(approve({ ...reconciled, pullRequestNumber: 999 })).resolves.toMatchObject({
+      type: "denied",
+    });
+    await expect(approve({ ...reconciled, headSha: "f".repeat(40) })).resolves.toMatchObject({
+      type: "denied",
+    });
+    await expect(approve(reconciled)).resolves.toBe("approved");
+    expect(mocks.captureAuthority).toHaveBeenCalledExactlyOnceWith(reconciled, expect.anything(), {
+      directProductionGrantDigest: digest,
+      directProductionCorrectionDigest: usesSchemaProof ? correction.digest : undefined,
+    });
+  },
+);
 
 it("rechecks the approved proposal in the authenticated workflow without a model-carried session ID", async () => {
   mocks.inspect.mockResolvedValue(observe());

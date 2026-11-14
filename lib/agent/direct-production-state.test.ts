@@ -45,6 +45,7 @@ import {
   readRealmContinuationServiceIdentity,
 } from "../hosted/realm-continuation-authority";
 import {
+  currentDirectProductionDeliveryAuthorization,
   currentDirectProductionGrant,
   currentPlannedDirectProductionAuthoring,
   directProductionSubjectForPlan,
@@ -816,6 +817,7 @@ const retainSealedSchemaCorrection = (drift: "none" | "predecessor" | "outside-a
     failed,
     original,
     owned,
+    compilation,
     prior,
     priorMerge,
     priorPublicationDigest: publication.proposal.digest,
@@ -1565,21 +1567,96 @@ describe("direct Production Build authority", () => {
     });
   });
 
-  it.each(["predecessor", "outside-app"] as const)(
-    "does not offer a correction when the sealed candidate changes %s",
-    async (drift) => {
-      await contextStorage.run(new ContextContainer(), async () => {
-        const fixture = retainSealedSchemaCorrection(drift);
-        await expect(
-          prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports),
-        ).resolves.toBe(
-          drift === "predecessor" ? "schema-predecessor-mismatch" : "candidate-file-scope",
-        );
-        expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
-        expect(fixture.inspectExistingDraftReconciliationSource).not.toHaveBeenCalled();
+  it("uses the original immutable grant only for the proved exact correction", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const fixture = retainSealedSchemaCorrection("predecessor");
+      const { failed, compilation, priorMerge } = fixture;
+      if (compilation.release.status !== "published") {
+        throw new Error("Expected a sealed compiled fixture.");
+      }
+      const { selection } = compilation.release;
+      const verifyEquivalentCorrection = vi.fn().mockResolvedValue({
+        installed: {
+          releaseId: "fixture-release-v1",
+          artifactSha256: sha256("live schema"),
+          manifestSha256: sha256("live manifest"),
+          cueSha256: sha256("other live schema"),
+        },
+        candidate: {
+          releaseId: selection.releaseId,
+          artifactSha256: selection.schemaSha256,
+          manifestSha256: selection.manifestSha256,
+        },
       });
-    },
-  );
+      const ports = { ...fixture.ports, verifyEquivalentCorrection };
+      await expect(
+        prepareDirectProductionDraftReconciliation(releaseContext, ports),
+      ).resolves.toBeNull();
+      expect(verifyEquivalentCorrection).toHaveBeenCalledWith(
+        expect.objectContaining({
+          originalGrant: failed,
+          priorMergeSha: priorMerge.mergeCommitSha,
+        }),
+      );
+      const delivery = currentDirectProductionDeliveryAuthorization(releaseContext, failed.subject);
+      expect(delivery?.grant).toEqual(failed);
+      expect(delivery?.effectDigest).not.toBe(failed.digest);
+      expect(delivery?.subject.revision).toMatchObject({
+        schemaChange: { priorCueSha256: sha256("other live schema") },
+        reconciliation: { expectedHeadSha: fixture.proposal.expectedHeadSha },
+      });
+      expect(currentDirectProductionGrant(releaseContext, failed.subject)).toBeUndefined();
+      draftReconciliationState.update((candidate) =>
+        candidate === null ? null : { ...candidate, publishedReconciliation: fixture.proposal },
+      );
+      await expect(
+        prepareDirectProductionDraftReconciliation(releaseContext, ports),
+      ).resolves.toBeNull();
+      expect(verifyEquivalentCorrection).toHaveBeenCalledOnce();
+      expect(currentDirectProductionDeliveryAuthorization(releaseContext, failed.subject)).toEqual(
+        delivery,
+      );
+      expect(
+        currentDirectProductionDeliveryAuthorization(context("other-owner"), failed.subject),
+      ).toBeUndefined();
+      draftReconciliationState.update((candidate) =>
+        candidate === null ? null : { ...candidate, headSha: "9".repeat(40) },
+      );
+      expect(
+        currentDirectProductionDeliveryAuthorization(releaseContext, failed.subject),
+      ).toBeUndefined();
+    });
+  });
+
+  it("rejects a predecessor correction when the protected verification is unavailable", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const fixture = retainSealedSchemaCorrection("predecessor");
+      const verifyEquivalentCorrection = vi.fn().mockResolvedValue(null);
+      await expect(
+        prepareDirectProductionDraftReconciliation(releaseContext, {
+          ...fixture.ports,
+          verifyEquivalentCorrection,
+        }),
+      ).resolves.toBe("schema-predecessor-mismatch");
+      expect(fixture.inspectExistingDraftReconciliationSource).toHaveBeenCalledOnce();
+      expect(verifyEquivalentCorrection).toHaveBeenCalledOnce();
+      expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
+      expect(
+        currentDirectProductionDeliveryAuthorization(releaseContext, fixture.failed.subject),
+      ).toBeUndefined();
+    });
+  });
+
+  it("rejects a sealed correction with a change outside the approved app scope", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const fixture = retainSealedSchemaCorrection("outside-app");
+      await expect(
+        prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports),
+      ).resolves.toBe("candidate-file-scope");
+      expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
+      expect(fixture.inspectExistingDraftReconciliationSource).not.toHaveBeenCalled();
+    });
+  });
 
   it("uses a stopped prior Finish only to read the anchored merge, then requires a fresh correction approval", async () => {
     await contextStorage.run(new ContextContainer(), async () => {

@@ -1,16 +1,20 @@
 /* oxlint-disable eslint/require-await -- In-memory ports retain asynchronous setup and lease contracts. */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { createDirectProductionGrant } from "../agent/direct-production-authorization";
+import { createDirectProductionCorrection } from "../agent/direct-production-correction";
+import { approvedBuildDecisionSchema } from "../agent/approved-build-continuation";
 import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
 import {
   appliedRepositoryProductionSchemaForGrant,
+  assertRepositoryProductionCorrectionRelease,
   createRepositoryProductionIntentBoundSetup,
   createRepositoryProductionSignupLeaseGuard,
   assertNoConflictingProductionSetup,
   completeRepositoryProductionInvitation,
   projectRepositoryProductionSchemaNativeStatus,
   repositoryProductionSchemaNativeStatusGrantMatches,
+  repositoryProductionSchemaEffectAuthority,
   readRepositoryProductionCreatorAccess,
   resolveRepositoryProductionPlanRecipient,
 } from "./repository-production-native";
@@ -32,6 +36,8 @@ import {
 } from "./repository-production-approval";
 import type { RepositoryProductionNativeStatus } from "./repository-production-native-status-contract";
 import type { RepositoryProductionSetupPorts } from "./repository-production-setup";
+
+const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 
 const scope: RepositoryProductionScope = {
   authority: {
@@ -382,6 +388,114 @@ describe("schema-only Production continuation", () => {
         grant.digest,
       ),
     ).toBe(false);
+
+    const originalRevision = grant.subject.revision;
+    if (originalRevision?.schemaChange === undefined) {
+      throw new Error("The fixture needs an approved optional field.");
+    }
+    const installed = {
+      releaseId: "existing-release",
+      artifactSha256: "1".repeat(64),
+      manifestSha256: "2".repeat(64),
+      cueSha256: "3".repeat(64),
+    };
+    const correction = createDirectProductionCorrection({
+      version: 1,
+      originalGrantDigest: grant.digest,
+      correctedSubject: {
+        ...grant.subject,
+        revision: {
+          ...originalRevision,
+          schemaChange: {
+            ...originalRevision.schemaChange,
+            priorCueSha256: installed.cueSha256,
+            candidateCueSha256: "4".repeat(64),
+          },
+          reconciliation: {
+            digest: "5".repeat(64),
+            originPublicationDigest: "6".repeat(64),
+            originPublicationReceiptDigest: "7".repeat(64),
+            pullRequestNumber: 123,
+            expectedHeadSha: "8".repeat(40),
+            expectedBaseSha: "9".repeat(40),
+            resolvedTree: "c".repeat(40),
+            reviewDigest: "0".repeat(64),
+          },
+        },
+      },
+      installed,
+      candidate: {
+        releaseId: "candidate-release",
+        artifactSha256: "5".repeat(64),
+        manifestSha256: "6".repeat(64),
+      },
+    });
+    const corrected = approvedBuildDecisionSchema.parse({
+      ...decision,
+      schemaCorrection: correction,
+    });
+    expect(repositoryProductionSchemaEffectAuthority(corrected)).toEqual({
+      grant,
+      correction,
+      subject: correction.correctedSubject,
+      effectDigest: correction.digest,
+    });
+    expect(repositoryProductionSchemaNativeStatusGrantMatches(corrected, correction.digest)).toBe(
+      true,
+    );
+    expect(repositoryProductionSchemaNativeStatusGrantMatches(corrected, grant.digest)).toBe(false);
+    const otherApproval = createDirectProductionGrant({
+      subject: grant.subject,
+      toolName: grant.toolName,
+      callId: "other-build-call",
+    });
+    expect(
+      repositoryProductionSchemaEffectAuthority({ ...corrected, directProduction: otherApproval }),
+    ).toBeUndefined();
+    expect(repositoryProductionSchemaNativeStatusGrantMatches(decision, correction.digest)).toBe(
+      false,
+    );
+  });
+
+  it("requires correction identities to agree with the retained storage and its exact archive bytes", () => {
+    const files = {
+      "release-manifest.json": Buffer.from("verified manifest"),
+      "app-artifact.json": Buffer.from("verified artifact"),
+    };
+    const expected = {
+      releaseId: "candidate-release",
+      artifactSha256: sha256(files["app-artifact.json"]),
+      manifestSha256: sha256(files["release-manifest.json"]),
+    };
+    const storage: RepositoryProductionIntent["storage"] = {
+      kind: "postgres",
+      releaseId: expected.releaseId,
+      manifestSha256: expected.manifestSha256,
+      databaseEnvironment: "APP_DATABASE_URL",
+      artifactRef: "exact-checked-release",
+    };
+    expect(() => {
+      assertRepositoryProductionCorrectionRelease(expected, storage, files);
+    }).not.toThrow();
+    expect(() => {
+      assertRepositoryProductionCorrectionRelease(
+        expected,
+        { ...storage, releaseId: "other-release" },
+        files,
+      );
+    }).toThrow();
+    expect(() => {
+      assertRepositoryProductionCorrectionRelease(expected, storage, {
+        ...files,
+        "app-artifact.json": Buffer.from("different compiled bytes"),
+      });
+    }).toThrow();
+    expect(() => {
+      assertRepositoryProductionCorrectionRelease(expected, storage, {
+        ...files,
+        "release-manifest.json": Buffer.from("different manifest bytes"),
+      });
+    }).toThrow();
   });
 });
 

@@ -5,6 +5,7 @@ import { isExistingRepositoryDestination } from "./builder-session-destination-c
 /* oxlint-disable unicorn/no-await-expression-member -- These owner-scoped async reads are immediately projected; no mutable state is reused across awaits. */
 /* oxlint-disable eslint/no-use-before-define, sonarjs/no-wildcard-import -- Lazy mutually composed callbacks share one request-scoped owner, journal and Drizzle schema. */
 import { isDeepStrictEqual } from "node:util";
+import { createHash } from "node:crypto";
 import { and, eq, gt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -25,6 +26,11 @@ import type { AppAccessCommand } from "../app-access/contracts";
 import type { ManagedAppAccess } from "../app-access/management";
 import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
 import type { DirectProductionGrant } from "../agent/direct-production-authorization";
+import {
+  directProductionEffectDigest,
+  readDirectProductionCorrection,
+} from "../agent/direct-production-correction";
+import type { DirectProductionCorrection } from "../agent/direct-production-correction";
 import {
   assertDirectRepositoryProductionApproval,
   readRepositoryProductionApproval,
@@ -156,11 +162,53 @@ const currentRepositoryProductionSchemaGrant = (decision: ApprovedBuildDecision 
   return current ? grant : undefined;
 };
 
+/** Preserve the original settled approval and scope every corrected effect to its proof. */
+export const repositoryProductionSchemaEffectAuthority = (
+  decision: ApprovedBuildDecision | undefined,
+) => {
+  const grant = currentRepositoryProductionSchemaGrant(decision);
+  const supplied = decision?.schemaCorrection;
+  const correction = readDirectProductionCorrection(grant, supplied);
+  if (grant === undefined || (supplied !== undefined && correction === undefined)) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- An unverified authority is the optional result.
+    return undefined;
+  }
+  return {
+    grant,
+    correction,
+    subject: correction?.correctedSubject ?? grant.subject,
+    effectDigest: directProductionEffectDigest(grant, correction),
+  };
+};
+type SchemaEffectAuthority = NonNullable<
+  ReturnType<typeof repositoryProductionSchemaEffectAuthority>
+>;
+
 export const repositoryProductionSchemaNativeStatusGrantMatches = (
   decision: ApprovedBuildDecision | undefined,
   expectedSchemaGrantDigest: string,
 ): boolean =>
-  currentRepositoryProductionSchemaGrant(decision)?.digest === expectedSchemaGrantDigest;
+  repositoryProductionSchemaEffectAuthority(decision)?.effectDigest === expectedSchemaGrantDigest;
+
+const fileSha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
+export const assertRepositoryProductionCorrectionRelease = (
+  expected: DirectProductionCorrection["candidate"],
+  storage: RepositoryProductionIntent["storage"],
+  files: { "release-manifest.json": Buffer; "app-artifact.json": Buffer } | undefined,
+): void => {
+  if (storage.kind !== "postgres" || files === undefined) {
+    throw schemaRevisionUnverified();
+  }
+  const matches = [
+    storage.releaseId === expected.releaseId,
+    storage.manifestSha256 === expected.manifestSha256,
+    fileSha256(files["release-manifest.json"]) === expected.manifestSha256,
+    fileSha256(files["app-artifact.json"]) === expected.artifactSha256,
+  ].every(Boolean);
+  if (!matches) {
+    throw schemaRevisionUnverified();
+  }
+};
 
 /** Keep the app's availability and the candidate's completed data setup separate. */
 export const projectRepositoryProductionSchemaNativeStatus = async (
@@ -777,6 +825,7 @@ export const createRepositoryProductionNativeHandler =
         change: NonNullable<
           NonNullable<DirectProductionGrant["subject"]["revision"]>["schemaChange"]
         >,
+        correction?: DirectProductionCorrection,
       ) => {
         const { scope, intent } = prior.record;
         const saved = intent.storage;
@@ -787,6 +836,14 @@ export const createRepositoryProductionNativeHandler =
           readGeneratedRelease(prior),
           readGeneratedRelease({ ...prior, record: { ...prior.record, intent: candidate } }),
         ]);
+        if (correction !== undefined) {
+          assertRepositoryProductionCorrectionRelease(correction.installed, saved, oldFiles);
+          assertRepositoryProductionCorrectionRelease(
+            correction.candidate,
+            candidate.storage,
+            newFiles,
+          );
+        }
         assertOptionalTextProductionTransition({
           appId: scope.appId,
           prior: { ...saved, files: oldFiles },
@@ -1266,21 +1323,24 @@ export const createRepositoryProductionNativeHandler =
       const assertReviewedSchemaSource = (
         found: Awaited<ReturnType<typeof resolve>>,
         session: Awaited<ReturnType<typeof readSession>>,
-        grant: DirectProductionGrant,
+        authority: SchemaEffectAuthority,
         reviewedHeadSha?: string,
       ) => {
-        const { compiledPublication, intent, scope } = found;
+        const { capture, compiledPublication, intent, scope } = found;
         const review = session.privateBuildDecision?.githubDelivery?.current;
-        const approvedReconciliation = grant.subject.revision?.reconciliation;
+        const { grant, correction, subject } = authority;
+        const approvedReconciliation = subject.revision?.reconciliation;
         const matches = [
           session.status !== "cancelled",
           review !== undefined && review !== null,
           review?.appId === scope.appId,
-          review?.appSpecDigest === grant.subject.appSpecDigest,
-          session.privateBuildDecision?.currentSpec?.proposalDigest ===
-            grant.subject.proposalDigest,
-          review?.installationId === grant.subject.installationId,
-          isDeepStrictEqual(session.privateBuildDecision?.directProduction, grant),
+          review?.appSpecDigest === subject.appSpecDigest,
+          session.privateBuildDecision?.currentSpec?.proposalDigest === subject.proposalDigest,
+          review?.installationId === subject.installationId,
+          isDeepStrictEqual(
+            repositoryProductionSchemaEffectAuthority(session.privateBuildDecision),
+            authority,
+          ),
           compiledPublication !== undefined,
           compiledPublication?.gitSha === intent.sourceSha,
           intent.sourceSha === reviewedHeadSha,
@@ -1289,9 +1349,19 @@ export const createRepositoryProductionNativeHandler =
           approvedReconciliation?.digest === review?.reconciliationDigest,
           approvedReconciliation === undefined ||
             approvedReconciliation.originPublicationDigest === review?.proposalDigest,
+          correction === undefined ||
+            (compiledPublication?.gitTree === approvedReconciliation?.resolvedTree &&
+              compiledPublication?.repositoryId === grant.subject.repositoryId),
         ].every(Boolean);
         if (!matches) {
           throw schemaRevisionUnverified();
+        }
+        if (correction !== undefined) {
+          assertRepositoryProductionCorrectionRelease(
+            correction.candidate,
+            intent.storage,
+            capture?.files,
+          );
         }
         return defined(review ?? undefined);
       };
@@ -1374,13 +1444,13 @@ export const createRepositoryProductionNativeHandler =
         owner: RepositoryProductionRequestOwner,
         found: Awaited<ReturnType<typeof resolve>>,
         session: Awaited<ReturnType<typeof readSession>>,
-        grant: DirectProductionGrant,
+        authority: SchemaEffectAuthority,
         activation: RepositoryProductionSchemaActivation,
       ) => {
         const review = assertReviewedSchemaSource(
           found,
           session,
-          grant,
+          authority,
           activation.reviewedHeadSha,
         );
         const call = session.privateBuildDecision?.githubDelivery?.calls.find(
@@ -1395,7 +1465,8 @@ export const createRepositoryProductionNativeHandler =
         if (
           call === undefined ||
           call.cancelled === true ||
-          call.directProductionGrantDigest !== grant.digest ||
+          call.directProductionGrantDigest !== authority.grant.digest ||
+          call.directProductionCorrectionDigest !== authority.correction?.digest ||
           !isDeepStrictEqual(call.owner, canonicalOwner) ||
           !isDeepStrictEqual(call.subject, review)
         ) {
@@ -1405,7 +1476,7 @@ export const createRepositoryProductionNativeHandler =
           database,
           owner.ownerContext.authority,
         ).read(activation.mergeIntentDigest);
-        const { subject } = grant;
+        const { subject } = authority;
         if (receipt?.status !== "succeeded" || receipt.evidence.kind !== "pr-merge") {
           throw schemaRevisionUnverified();
         }
@@ -1417,6 +1488,8 @@ export const createRepositoryProductionNativeHandler =
           `${intent.owner}/${intent.name}` === subject.repositoryFullName,
           intent.baseBranch === subject.baseBranch,
           intent.headSha === activation.reviewedHeadSha,
+          authority.correction === undefined ||
+            intent.pullRequestNumber === subject.revision?.reconciliation?.pullRequestNumber,
           receipt.evidence.mergeCommitSha === activation.mergeSha,
         ].every(Boolean);
         if (!matches) {
@@ -1488,9 +1561,11 @@ export const createRepositoryProductionNativeHandler =
               ) {
                 return false;
               }
-              const grant = currentRepositoryProductionSchemaGrant(session.privateBuildDecision);
-              if (grant === undefined) {
-                return true;
+              const authority = repositoryProductionSchemaEffectAuthority(
+                session.privateBuildDecision,
+              );
+              if (authority === undefined) {
+                return session.privateBuildDecision?.schemaCorrection === undefined;
               }
               const found = await resolve(owner);
               const sameObservedApp =
@@ -1513,7 +1588,7 @@ export const createRepositoryProductionNativeHandler =
                   return false;
                 }
               }
-              return appliedRepositoryProductionSchemaForGrant(row, found, grant.digest);
+              return appliedRepositoryProductionSchemaForGrant(row, found, authority.effectDigest);
             },
             expectedSchemaGrantDigest === undefined ? undefined : true,
           );
@@ -1521,21 +1596,27 @@ export const createRepositoryProductionNativeHandler =
         readDeliveryStatus: async (owner, target) => {
           const status = await readDeliveryStatus(owner, target);
           const session = await readSession(owner);
-          const grant = session.privateBuildDecision?.directProduction;
-          const schemaChange = grant?.subject.revision?.schemaChange;
+          const authority = repositoryProductionSchemaEffectAuthority(session.privateBuildDecision);
+          const schemaChange = authority?.subject.revision?.schemaChange;
+          if (
+            session.privateBuildDecision?.schemaCorrection !== undefined &&
+            authority === undefined
+          ) {
+            throw schemaRevisionUnverified();
+          }
           if (
             !status.applicable ||
-            grant === undefined ||
+            authority === undefined ||
             schemaChange === undefined ||
             target.reviewedHeadSha === undefined
           ) {
             return status;
           }
           const found = await resolve(owner);
-          assertReviewedSchemaSource(found, session, grant, target.reviewedHeadSha);
+          assertReviewedSchemaSource(found, session, authority, target.reviewedHeadSha);
           assertDirectRepositoryProductionApproval({
             plan: repositoryProductionApprovalInput(found.scope, found.intent),
-            grant,
+            grant: authority.grant,
             decision: session.privateBuildDecision,
             destination: session.builderDestination,
             logicalSessionId:
@@ -1553,13 +1634,26 @@ export const createRepositoryProductionNativeHandler =
             throw schemaRevisionUnverified();
           }
           if (isDeepStrictEqual(row.record.intent.storage, found.intent.storage)) {
-            if (retainedRepositoryProductionSchemaPredecessor(row, grant.digest) === undefined) {
+            if (
+              retainedRepositoryProductionSchemaPredecessor(row, authority.effectDigest) ===
+              undefined
+            ) {
               throw schemaRevisionUnverified();
             }
           } else {
-            await verifyCompiledSchemaTransition(row, found.intent, schemaChange);
+            await verifyCompiledSchemaTransition(
+              row,
+              found.intent,
+              schemaChange,
+              authority.correction,
+            );
           }
-          await found.assertCurrentOwner();
+          assertReviewedSchemaSource(
+            found,
+            await readSession(owner),
+            authority,
+            target.reviewedHeadSha,
+          );
           return { ...status, schemaTransitionVerified: true as const };
         },
         resolvePlan: async (owner, creatorEmail) => {
@@ -1585,10 +1679,18 @@ export const createRepositoryProductionNativeHandler =
           const found = await resolve(owner);
           const session = await readSession(owner);
           const savedGrant = session.privateBuildDecision?.directProduction;
+          const schemaAuthority = repositoryProductionSchemaEffectAuthority(
+            session.privateBuildDecision,
+          );
           const directProduction = savedGrant?.callId === approvedByCallId ? savedGrant : undefined;
-          const schemaChange = directProduction?.subject.revision?.schemaChange;
+          const schemaChange = schemaAuthority?.subject.revision?.schemaChange;
           const schemaRevision = schemaChange !== undefined;
-          if (schemaRevision !== (activation !== undefined)) {
+          if (
+            schemaRevision !== (activation !== undefined) ||
+            (activation !== undefined && directProduction === undefined) ||
+            (session.privateBuildDecision?.schemaCorrection !== undefined &&
+              schemaAuthority === undefined)
+          ) {
             throw schemaRevisionUnverified();
           }
           if (savedGrant?.subject.revision?.schemaChange !== undefined && !schemaRevision) {
@@ -1618,7 +1720,7 @@ export const createRepositoryProductionNativeHandler =
               assertReviewedSchemaSource(
                 found,
                 currentOwnerSession,
-                directProduction,
+                defined(schemaAuthority),
                 activation.reviewedHeadSha,
               );
             }
@@ -1638,12 +1740,17 @@ export const createRepositoryProductionNativeHandler =
             await assertDirectApproval();
           }
           const schemaSetup: RepositoryProductionSetupPorts["schemaRevision"] =
-            activation === undefined || directProduction === undefined || schemaChange === undefined
+            activation === undefined || schemaAuthority === undefined || schemaChange === undefined
               ? undefined
               : {
-                  grantDigest: directProduction.digest,
+                  grantDigest: schemaAuthority.effectDigest,
                   verify: async (prior, candidate) => {
-                    await verifyCompiledSchemaTransition(prior.row, candidate, schemaChange);
+                    await verifyCompiledSchemaTransition(
+                      prior.row,
+                      candidate,
+                      schemaChange,
+                      schemaAuthority.correction,
+                    );
                     await verifyInstalledSchemaPredecessor(prior);
                   },
                   assertActive: async () => {
@@ -1651,7 +1758,7 @@ export const createRepositoryProductionNativeHandler =
                       owner,
                       found,
                       await readSession(owner),
-                      directProduction,
+                      schemaAuthority,
                       activation,
                     );
                   },
@@ -1686,7 +1793,8 @@ export const createRepositoryProductionNativeHandler =
             assertCurrentOwner: assertDirectApproval,
           };
           if (directProduction !== undefined) {
-            checkpointInput.directGrantDigest = directProduction.digest;
+            checkpointInput.directGrantDigest =
+              schemaAuthority?.effectDigest ?? directProduction.digest;
           }
           const checkpoint = createRepositoryProductionApprovalCheckpoint(checkpointInput);
           const state = await checkpoint.read();

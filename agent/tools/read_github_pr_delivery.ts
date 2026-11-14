@@ -6,7 +6,7 @@ import { z } from "zod";
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
-import { currentDirectProductionGrant } from "@/lib/agent/direct-production-state";
+import { currentDirectProductionDeliveryAuthorization } from "@/lib/agent/direct-production-state";
 import { recordDirectProductionProgress } from "@/lib/agent/direct-production-progress";
 import { readSettledMergedAppProductionSchema } from "@/lib/agent/app-production-observation";
 import { resolveGitHubPrDeliverySubject } from "@/lib/agent/github-pr-delivery-subject";
@@ -48,15 +48,15 @@ export default defineTool({
       repositoryId: observation.reviewedTarget.repositoryId,
       repositoryFullName: `${observation.reviewedTarget.owner}/${observation.reviewedTarget.name}`,
     };
-    const grantScope: Parameters<typeof currentDirectProductionGrant>[1] = {
+    const grantScope: Parameters<typeof currentDirectProductionDeliveryAuthorization>[1] = {
       ...targetScope,
       baseBranch: observation.reviewedTarget.baseBranch,
     };
     if (installation !== undefined) {
       grantScope.installationId = installation;
     }
-    const grant = currentDirectProductionGrant(ctx, grantScope);
-    const revision = grant?.subject.revision;
+    const authorization = currentDirectProductionDeliveryAuthorization(ctx, grantScope);
+    const revision = authorization?.subject.revision;
     const approvedRepair = revision?.reconciliation;
     if (
       approvedRepair !== undefined &&
@@ -73,12 +73,12 @@ export default defineTool({
     if (!observation.reviewedRevision || !reconciliationIsReady || !canContinue) {
       return result;
     }
-    if (grant !== undefined && schemaMergeSha !== undefined) {
+    if (authorization !== undefined && schemaMergeSha !== undefined) {
       const nativeProduction = await readSettledMergedAppProductionSchema(
         targetScope,
         ctx,
         schemaMergeSha,
-        grant.digest,
+        authorization.effectDigest,
       );
       const currentSubject = resolveGitHubPrDeliverySubject(
         appBuilderWorkflowState.get(),
@@ -92,16 +92,17 @@ export default defineTool({
       ].every(Boolean);
       if (
         !reviewMatches ||
-        currentDirectProductionGrant(ctx, grantScope)?.digest !== grant.digest
+        currentDirectProductionDeliveryAuthorization(ctx, grantScope)?.effectDigest !==
+          authorization.effectDigest
       ) {
         return result;
       }
       if (nativeProduction !== undefined) {
         if (nativeProduction.requestedRevision === "live") {
-          recordDirectProductionProgress(grant.digest, "live");
+          recordDirectProductionProgress(authorization.effectDigest, "live");
         } else {
           recordDirectProductionProgress(
-            grant.digest,
+            authorization.effectDigest,
             nativeProduction.status === "available"
               ? "schema-settled"
               : "schema-settled-availability-unconfirmed",

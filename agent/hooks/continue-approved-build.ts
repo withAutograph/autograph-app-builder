@@ -1,4 +1,4 @@
-import { currentDirectProductionGrant } from "../../lib/agent/direct-production-state";
+import { currentDirectProductionDeliveryAuthorization } from "../../lib/agent/direct-production-state";
 import { repositoryProductionNativeStatusSchema } from "../../lib/provisioning/repository-production-native-status-contract";
 import {
   invalidateGitHubPrDeliveryCallsForTurn,
@@ -87,13 +87,17 @@ const boundary = defineState<{ pendingInputs: string[]; blocked: boolean }>(
 const record = async (ctx: HookContext, forced?: "working" | "blocked") => {
   const current = boundary.get();
   const state = appBuilderWorkflowState.get();
-  const grant = "appSpec" in state ? currentDirectProductionGrant(ctx, state.appSpec) : undefined;
+  const authorization =
+    "appSpec" in state
+      ? currentDirectProductionDeliveryAuthorization(ctx, state.appSpec)
+      : undefined;
+  const grant = authorization?.grant;
   const progress = directProductionProgressState.get();
   const decision = decideApprovedBuildContinuation({
     directProduction: grant,
     releaseFinished:
       progress !== null &&
-      progress.grantDigest === grant?.digest &&
+      progress.grantDigest === authorization?.effectDigest &&
       (directProductionDeliverySettled(progress.stage) || progress.stage === activationUnavailable),
     adapterSessionId: ctx.session.id,
     repositoryAccess: repositoryAccessReceiptState.get(),
@@ -153,23 +157,25 @@ export default defineHook({
       const { result, status } = event.data;
       if (status === "completed" && result.kind === "tool-result" && result.isError !== true) {
         const state = appBuilderWorkflowState.get();
-        const grant =
-          "appSpec" in state ? currentDirectProductionGrant(ctx, state.appSpec) : undefined;
+        const authorization =
+          "appSpec" in state
+            ? currentDirectProductionDeliveryAuthorization(ctx, state.appSpec)
+            : undefined;
         const observed = z.json().safeParse(result.output);
         const stage =
-          grant !== undefined && observed.success
+          authorization !== undefined && observed.success
             ? deliveryProgress(result.toolName, observed.data)
             : null;
-        if (grant !== undefined && stage !== null) {
+        if (authorization !== undefined && stage !== null) {
           const current = directProductionProgressState.get();
           // A standalone status read cannot mark an unmerged release as live.
           const canRecord =
             result.toolName !== observeProductionTool ||
-            (current?.grantDigest === grant.digest &&
+            (current?.grantDigest === authorization.effectDigest &&
               (current.stage === activationUnavailable ||
                 current.stage === "schema-settled-availability-unconfirmed"));
           if (canRecord) {
-            recordDirectProductionProgress(grant.digest, stage);
+            recordDirectProductionProgress(authorization.effectDigest, stage);
           }
         }
         if (state.phase === "validated") {

@@ -12,7 +12,7 @@ import { createHash } from "node:crypto";
 import { defineTool } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { defineState } from "eve/context";
-import { currentDirectProductionGrant } from "@/lib/agent/direct-production-state";
+import { currentDirectProductionDeliveryAuthorization } from "@/lib/agent/direct-production-state";
 import { z } from "zod";
 
 import {
@@ -40,18 +40,18 @@ import { assertReconciliationCompletionOwnerForSession } from "@/lib/agent/compi
 import { inspectDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
 
 const directReconciliationCalls = defineState<
-  { callId: string; grantDigest: string; proposalDigest: string }[]
+  { callId: string; grantDigest: string; correctionDigest?: string; proposalDigest: string }[]
 >("autograph-app-builder.direct-production-reconciliation-calls.v1", () => []);
 
-const directReconciliationGrant = (
-  ctx: Parameters<typeof currentDirectProductionGrant>[0],
+const directReconciliationAuthorization = (
+  ctx: Parameters<typeof currentDirectProductionDeliveryAuthorization>[0],
   proposalDigest: string,
-): ReturnType<typeof currentDirectProductionGrant> => {
+): ReturnType<typeof currentDirectProductionDeliveryAuthorization> => {
   const candidate = draftReconciliationState.get();
   if (candidate === null || candidate.proposal?.digest !== proposalDigest) {
     return undefined;
   }
-  const grant = currentDirectProductionGrant(ctx, {
+  const grant = currentDirectProductionDeliveryAuthorization(ctx, {
     appId: candidate.appId,
     repositoryId: candidate.repositoryId,
   });
@@ -114,9 +114,9 @@ export default defineTool({
       return "user-approval";
     }
     const { expectedProposalDigest, approvalReceipt } = input;
-    const grant = directReconciliationGrant(ctx, expectedProposalDigest);
+    const authorization = directReconciliationAuthorization(ctx, expectedProposalDigest);
     const proposal = draftReconciliationState.get()?.proposal;
-    if (grant === undefined || proposal === undefined) {
+    if (authorization === undefined || proposal === undefined) {
       return "user-approval";
     }
     assertApprovalReceipt({
@@ -125,13 +125,23 @@ export default defineTool({
       subjectDigest: proposal.digest,
       target: approvalTargetFromExistingDraftReconciliation(proposal),
     });
+    const { grant, correction } = authorization;
     const prior = directReconciliationCalls.get().find((call) => call.callId === ctx.callId);
     if (prior === undefined) {
       directReconciliationCalls.update((calls) => [
         ...calls,
-        { callId: ctx.callId, proposalDigest: proposal.digest, grantDigest: grant.digest },
+        {
+          callId: ctx.callId,
+          proposalDigest: proposal.digest,
+          grantDigest: grant.digest,
+          correctionDigest: correction?.digest,
+        },
       ]);
-    } else if (prior.proposalDigest !== proposal.digest || prior.grantDigest !== grant.digest) {
+    } else if (
+      prior.proposalDigest !== proposal.digest ||
+      prior.grantDigest !== grant.digest ||
+      prior.correctionDigest !== correction?.digest
+    ) {
       throw new Error("The reviewed draft update no longer matches its Production approval.");
     }
     return "approved";
@@ -145,11 +155,14 @@ export default defineTool({
     const directCall = directReconciliationCalls.get().find((call) => call.callId === ctx.callId);
     const assertEffectCurrent = () => {
       ctx.abortSignal?.throwIfAborted();
+      if (directCall === undefined) {
+        return;
+      }
+      const authorization = directReconciliationAuthorization(ctx, input.expectedProposalDigest);
       if (
-        directCall !== undefined &&
-        (directCall.proposalDigest !== input.expectedProposalDigest ||
-          directReconciliationGrant(ctx, input.expectedProposalDigest)?.digest !==
-            directCall.grantDigest)
+        directCall.proposalDigest !== input.expectedProposalDigest ||
+        authorization?.grant.digest !== directCall.grantDigest ||
+        authorization.correction?.digest !== directCall.correctionDigest
       ) {
         throw new Error("The reviewed draft update no longer matches its Production approval.");
       }
