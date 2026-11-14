@@ -51,7 +51,7 @@ mkdirSync(privateRoot, { recursive: true, mode: 448 });
 const key = createHash("sha256").update(input.sessionId).digest("hex");
 const planPath = join(privateRoot, key + ".json");
 let checkpointRef = input.checkpointRef ?? "refs/app-builder/source-checkpoints/" + key;
-if (!/^refs\/app-builder\/source-checkpoints\/[a-f0-9]+(?:\/[a-f0-9]+)?$/.test(checkpointRef)) throw Error("Source checkpoint identity is invalid.");
+if (!/^refs\/app-builder\/source-checkpoints\/[a-f0-9]+(?:[-\/][a-f0-9]+)?$/.test(checkpointRef)) throw Error("Source checkpoint identity is invalid.");
 const temporary = mkdtempSync(join(privateRoot, "index-"));
 const { APP_BUILDER_SOURCE_READ_TOKEN: sourceReadToken, ...childEnvironment } = process.env;
 const baseEnv = { ...childEnvironment, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_SYSTEM: "/dev/null", GIT_CONFIG_GLOBAL: "/dev/null", GIT_ATTR_NOSYSTEM: "1", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "/usr/bin/false", SSH_ASKPASS: "/usr/bin/false", GIT_AUTHOR_NAME: "Autograph Builder", GIT_AUTHOR_EMAIL: "builder@autograph.so", GIT_COMMITTER_NAME: "Autograph Builder", GIT_COMMITTER_EMAIL: "builder@autograph.so" };
@@ -205,7 +205,7 @@ try {
       sourceSha = git(["commit-tree", sourceTree, "-p", oldHead], { input: "Current trusted local planning source\n", env: { GIT_AUTHOR_DATE: "2000-01-01T00:00:00Z", GIT_COMMITTER_DATE: "2000-01-01T00:00:00Z" } }).trim();
     } else sourceSha = oldHead;
   }
-  if (oldHead === sourceSha && !input.localSource) { rmSync(temporary, { force: true, recursive: true }); console.log(JSON.stringify({ changed: false, checkpointRef, sourceSha, sourceTree })); process.exit(0); }
+  if (oldHead === sourceSha && !input.localSource && !publishedRelease) { rmSync(temporary, { force: true, recursive: true }); console.log(JSON.stringify({ changed: false, checkpointRef, sourceSha, sourceTree })); process.exit(0); }
   const oldEntries = entries(oldHead);
   const targetEntries = entries(sourceSha);
   const inPublishedRelease = verifyPublishedRelease(sourceSha, oldEntries, targetEntries);
@@ -232,6 +232,8 @@ try {
   }
   updateIndex(records);
   const snapshotTree = git(["write-tree"], { env: indexEnv }).trim();
+  // Repeated same-head repair must leave each displaced snapshot reachable.
+  if (!input.localSource && inPublishedRelease) checkpointRef += "-" + snapshotTree;
   const snapshotCommit = git(["commit-tree", snapshotTree, "-p", oldHead], { input: "Checkpoint source before current-platform reconciliation\n" }).trim();
   git(["update-ref", checkpointRef, snapshotCommit]);
   const snapshotEntries = entries(snapshotTree);

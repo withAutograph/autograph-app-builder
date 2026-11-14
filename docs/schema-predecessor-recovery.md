@@ -28,6 +28,17 @@ release and returns `schema_release_identity_reused` before recording a current
 operator selection. The internal build agent authors the new ID and compiles
 again; this recovery never changes authored CUE or the generated pointer itself.
 
+A combined Production approval for an optional field in the connected app uses
+the repository's checked history. A private validation installation cannot
+replace published files, even when it reports the same release ID. If the saved
+workspace still has a conflicting copy of an earlier repaired release, Builder
+restores only the generated files confirmed by that app's merged publication
+and current repository tree. It checkpoints the displaced files and retains
+the accepted CUE and app edits. If an exact unissued compilation used the wrong
+predecessor, Builder keeps that cut in private storage and recompiles from the
+published history within the same approval. The protected Production installer
+still verifies the active predecessor before applying the field.
+
 After a successful compilation and capture, Builder retains the original
 predecessor references in the owned session. Validation reuses those inputs for
 `app:check` and `app:test`, including prepared runtime execution. Runtime

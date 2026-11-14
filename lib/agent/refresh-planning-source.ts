@@ -16,7 +16,14 @@ import {
   PlanningReleaseConflictError,
   reconcilePlanningSource,
 } from "../repository/planning-source-reconciliation";
-import { readMergedReleaseSourceRecovery } from "./merged-release-source-recovery";
+import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
+import { readConnectedSchemaSavedPredecessor } from "./connected-schema-saved-predecessor";
+import type { PublishedPlanningRelease } from "../repository/planning-source-reconciliation";
+import { preserveUnissuedConnectedSchemaRelease } from "../repository/connected-schema-release-recovery";
+import {
+  readMergedReleaseSourceRecovery,
+  retainedMergedSchemaReleaseId,
+} from "./merged-release-source-recovery";
 import { readAppBaselineMarker } from "../repository/app-baseline";
 import { resolveVercelSessionGitSource } from "../sandbox/vercel-session-source";
 
@@ -40,6 +47,7 @@ const canRefreshSource = (
 export const refreshPlanningSource = async (
   ctx: ToolContext,
   purpose: "planning" | "schema-compilation" = "planning",
+  options: { approvedSchemaCueSha256?: string | undefined } = {},
 ) => {
   if (purpose === "planning") {
     const local = await refreshLocalPlanningSource(ctx);
@@ -107,23 +115,61 @@ export const refreshPlanningSource = async (
       if (baseline !== undefined) {
         reconciliation.baseline = baseline.selection;
       }
+      const recover =
+        purpose === schemaCompilation && "applyReceipt" in current
+          ? async (releaseId: string) =>
+              await readMergedReleaseSourceRecovery({
+                current,
+                ctx,
+                installationId: access.scope.installationId,
+                releaseId,
+              })
+          : undefined;
+      const saved =
+        options.approvedSchemaCueSha256 !== undefined && "applyReceipt" in current
+          ? await readConnectedSchemaSavedPredecessor({
+              adapterSessionId: ctx.session.id,
+              appId: current.appSpec.appId,
+              appSpecDigest: current.appSpec.digest,
+              callId: ctx.callId,
+              callbackExecution: hostedOperatorCallbackExecution(ctx.session),
+              expectedCueSha256: options.approvedSchemaCueSha256,
+              root: current.applyReceipt.applyRoot,
+              sessionAuth: ctx.session.auth,
+              signal: ctx.abortSignal,
+            })
+          : null;
+      const prior = saved?.prior;
+      const recoverReleaseId =
+        options.approvedSchemaCueSha256 !== undefined && "applyReceipt" in current
+          ? (retainedMergedSchemaReleaseId(current.proposal.digest, current.appSpec.appId) ??
+            prior?.releaseId)
+          : undefined;
+      let recovered: PublishedPlanningRelease | null = null;
+      if (recoverReleaseId !== undefined && recover !== undefined) {
+        const published = await recover(recoverReleaseId);
+        if (published !== null) {
+          recovered = published;
+          reconciliation.publishedRelease = published;
+        }
+      }
+      ctx.abortSignal.throwIfAborted();
+      assertExactWorkflowState(
+        appBuilderWorkflowState.get(),
+        current,
+        "refresh the approved app checkout",
+      );
       try {
         await reconcilePlanningSource(reconciliation);
       } catch (error) {
-        if (
-          purpose !== schemaCompilation ||
-          !(error instanceof PlanningReleaseConflictError) ||
-          !("applyReceipt" in current)
-        ) {
+        if (recover === undefined || !(error instanceof PlanningReleaseConflictError)) {
           throw error;
         }
-        const publishedRelease = await readMergedReleaseSourceRecovery({
-          current,
-          ctx,
-          installationId: access.scope.installationId,
-          releaseId: error.releaseId,
-        });
-        if (publishedRelease === null) {
+        if (reconciliation.publishedRelease?.releaseId === error.releaseId) {
+          throw error;
+        }
+        recovered = await recover(error.releaseId);
+        if (recovered === null) {
           throw error;
         }
         ctx.abortSignal.throwIfAborted();
@@ -132,7 +178,51 @@ export const refreshPlanningSource = async (
           current,
           "restore checked history while compiling the approved app",
         );
-        await reconcilePlanningSource({ ...reconciliation, publishedRelease });
+        await reconcilePlanningSource({ ...reconciliation, publishedRelease: recovered });
+      }
+      const publishedManifestSha256 = recovered?.files["release-manifest.json"];
+      const publishedArtifactSha256 = recovered?.files["app-artifact.json"];
+      const candidate = saved?.candidate;
+      const originalPrior = prior?.releaseId === recovered?.releaseId ? prior : undefined;
+      const needsRegeneration =
+        originalPrior?.onlineProof !== true ||
+        publishedArtifactSha256 !== originalPrior.artifactSha256 ||
+        (originalPrior.previousManifestSha256 !== undefined &&
+          publishedManifestSha256 !== originalPrior.previousManifestSha256);
+      const exactRecovery =
+        recovered !== null &&
+        publishedManifestSha256 !== undefined &&
+        publishedArtifactSha256 !== undefined;
+      if (
+        exactRecovery &&
+        needsRegeneration &&
+        candidate !== undefined &&
+        options.approvedSchemaCueSha256 !== undefined
+      ) {
+        ctx.abortSignal.throwIfAborted();
+        assertExactWorkflowState(
+          appBuilderWorkflowState.get(),
+          current,
+          "regenerate the unissued schema against published history",
+        );
+        await preserveUnissuedConnectedSchemaRelease({
+          appId: current.appSpec.appId,
+          expectedArtifactSha256: candidate.schemaSha256,
+          expectedCueSha256: options.approvedSchemaCueSha256,
+          expectedManifestSha256: candidate.manifestSha256,
+          expectedPredecessorArtifactSha256:
+            originalPrior?.artifactSha256 ?? publishedArtifactSha256,
+          expectedSourceSha: revision.headSha,
+          releaseId: candidate.releaseId,
+          restoredPublishedPredecessor: {
+            previousManifestSha256:
+              originalPrior?.previousManifestSha256 ?? publishedManifestSha256,
+            publishedManifestSha256,
+            releaseId: recovered.releaseId,
+          },
+          sandbox,
+          signal: ctx.abortSignal,
+        });
       }
       return sandbox;
     },

@@ -285,6 +285,47 @@ describe("owned planning source reconciliation", () => {
     }
   });
 
+  it("repairs a verified published release when HEAD already matches current source", () => {
+    const f = publishedFixture();
+    try {
+      f.git("checkout", "--quiet", "--force", "--detach", f.currentSource);
+      const sql = `${releaseDirectory}/sql-bundle.sql`;
+      const product = "apps/spend-review/product.txt";
+      const displaced = "Regenerated predecessor SQL\n";
+      const authored = "Unrelated authored work  \n\n";
+      f.write(sql, displaced);
+      const extra = "Unpublished output inside the same release\n";
+      f.write(scratchFile, extra);
+      f.write(product, authored);
+
+      const result = f.run(planningSourceReconciliationProgram, f.currentSource, f.proof);
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      const { changed, checkpointRef } = z
+        .object({ changed: z.boolean(), checkpointRef: z.string() })
+        .parse(JSON.parse(result.stdout));
+      expect(changed).toBe(true);
+      expect(f.git("rev-parse", "HEAD")).toBe(f.currentSource);
+      expect(readFileSync(path.join(f.root, sql), "utf-8")).toBe("Merged sql-bundle.sql\n");
+      expect(() => readFileSync(path.join(f.root, scratchFile))).toThrow();
+      expect(readFileSync(path.join(f.root, product), "utf-8")).toBe(authored);
+      for (const [file, original] of [
+        [sql, displaced],
+        [scratchFile, extra],
+        [product, authored],
+      ]) {
+        expect(
+          execFileSync("/usr/bin/git", ["-C", f.root, "show", `${checkpointRef}:${file}`], {
+            encoding: "utf-8",
+          }),
+        ).toBe(original);
+      }
+    } finally {
+      rmSync(f.root, { force: true, recursive: true });
+      rmSync(f.stateRoot, { force: true, recursive: true });
+    }
+  });
+
   it.each([
     { failure: "hash" },
     { failure: "unmerged" },
