@@ -5,6 +5,7 @@ import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled
 import { safeCommandOutput } from "@/lib/agent/command-output";
 import { z } from "zod";
 import { refreshPlanningSource } from "@/lib/agent/refresh-planning-source";
+import { currentDirectProductionGrant } from "@/lib/agent/direct-production-state";
 import { invalidateProductBehaviorEvidence } from "@/lib/agent/product-behavior-state";
 import {
   assertCompiledSchemaReleaseIdentity,
@@ -135,7 +136,13 @@ export default defineTool({
       });
     }
     invalidateProductBehaviorEvidence("source-repair");
-    const sandbox = await refreshPlanningSource(ctx, "schema-compilation");
+    const schemaChange =
+      state.githubSource !== undefined && state.applyReceipt.applyRoot === "/workspace/repository"
+        ? currentDirectProductionGrant(ctx, state.appSpec)?.subject.revision?.schemaChange
+        : undefined;
+    const sandbox = await refreshPlanningSource(ctx, "schema-compilation", {
+      approvedSchemaCueSha256: schemaChange?.candidateCueSha256,
+    });
     const refreshed = appBuilderWorkflowState.get();
     if (
       refreshed.phase !== "applied" &&
@@ -156,7 +163,12 @@ export default defineTool({
     };
     let prepared;
     try {
-      prepared = await prepareCanonicalSchemaPredecessorsForSession({ ...session, sandbox });
+      // The production installer verifies its installed predecessor independently.
+      // A private validation cluster must not replace the checked Production cut.
+      prepared =
+        schemaChange === undefined
+          ? await prepareCanonicalSchemaPredecessorsForSession({ ...session, sandbox })
+          : { environment: {}, predecessors: [] };
     } catch (error) {
       return {
         code: "canonical_schema_predecessor_unavailable" as const,

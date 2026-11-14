@@ -26,6 +26,9 @@ const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
   reconcile: vi.fn(),
   recoverRelease: vi.fn(),
+  retainedReleaseId: vi.fn(),
+  readSavedRelease: vi.fn(),
+  preserve: vi.fn(),
   sandbox: { id: "owned-sandbox" },
   sourceUpdate: vi.fn(),
   state: {} as FixtureState,
@@ -69,6 +72,16 @@ vi.mock("../repository/planning-source-reconciliation", async (importOriginal) =
 }));
 vi.mock("./merged-release-source-recovery", () => ({
   readMergedReleaseSourceRecovery: mocks.recoverRelease,
+  retainedMergedSchemaReleaseId: mocks.retainedReleaseId,
+}));
+vi.mock("../provisioning/hosted-operator-callback-owner", () => ({
+  hostedOperatorCallbackExecution: vi.fn(),
+}));
+vi.mock("./connected-schema-saved-predecessor", () => ({
+  readConnectedSchemaSavedPredecessor: mocks.readSavedRelease,
+}));
+vi.mock("../repository/connected-schema-release-recovery", () => ({
+  preserveUnissuedConnectedSchemaRelease: mocks.preserve,
 }));
 vi.mock("../sandbox/vercel-session-source", () => ({
   resolveVercelSessionGitSource: async () =>
@@ -179,6 +192,49 @@ describe("shared source refresh before schema compilation", () => {
       applyReceipt: original.applyReceipt,
       proposal: original.proposal,
     });
+  });
+  it("recovers the published predecessor for a saved, unpublished online revision", async () => {
+    const artifact = "a".repeat(64);
+    const oldManifest = "b".repeat(64);
+    const publishedManifest = "c".repeat(64);
+    const approvedCue = "d".repeat(64);
+    const proof = {
+      mergeSha: "c".repeat(40),
+      releaseId: "v8",
+      files: { "app-artifact.json": artifact, "release-manifest.json": publishedManifest },
+    };
+    mocks.retainedReleaseId.mockReturnValueOnce("v8");
+    mocks.recoverRelease.mockResolvedValueOnce(proof);
+    mocks.readSavedRelease.mockResolvedValueOnce({
+      candidate: { releaseId: "v9", schemaSha256: "e".repeat(64), manifestSha256: "f".repeat(64) },
+      prior: {
+        releaseId: "v8",
+        artifactSha256: artifact,
+        onlineProof: true,
+        previousManifestSha256: oldManifest,
+      },
+    });
+    mocks.preserve.mockResolvedValueOnce(true);
+    await expect(
+      refreshPlanningSource(ctx as never, "schema-compilation", {
+        approvedSchemaCueSha256: approvedCue,
+      }),
+    ).resolves.toBe(mocks.sandbox);
+    expect(mocks.reconcile).toHaveBeenCalledWith(
+      expect.objectContaining({ publishedRelease: proof }),
+    );
+    expect(mocks.preserve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedCueSha256: approvedCue,
+        expectedPredecessorArtifactSha256: artifact,
+        releaseId: "v9",
+        restoredPublishedPredecessor: {
+          releaseId: "v8",
+          previousManifestSha256: oldManifest,
+          publishedManifestSha256: publishedManifest,
+        },
+      }),
+    );
   });
   it("leaves the source conflict pending if the exact owned publication is unavailable", async () => {
     mocks.reconcile.mockRejectedValueOnce(new PlanningReleaseConflictError("v8"));

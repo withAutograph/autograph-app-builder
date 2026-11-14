@@ -13,6 +13,7 @@ import compileTool, {
 const hooks = vi.hoisted(() => ({
   invalidate: vi.fn(),
   predecessor: vi.fn(),
+  grant: vi.fn(),
   publish: vi.fn(),
   releaseIdentity: vi.fn(),
   remember: vi.fn(),
@@ -20,6 +21,8 @@ const hooks = vi.hoisted(() => ({
   state: {
     appSpec: { appId: "spend-review", digest: "a".repeat(64) },
     applyReceipt: { applyRoot: "/workspace/repository" },
+    // SAFETY: The test only checks whether the saved repository binding exists.
+    githubSource: null as object | null,
     phase: "applied",
   },
 }));
@@ -39,6 +42,7 @@ vi.mock("./schema-predecessor-state", () => ({
   rememberCanonicalSchemaRelease: hooks.remember,
   rememberCompiledSchemaPredecessors: hooks.rememberInputs,
 }));
+vi.mock("./direct-production-state", () => ({ currentDirectProductionGrant: hooks.grant }));
 vi.mock("./product-behavior-state", () => ({
   invalidateProductBehaviorEvidence: hooks.invalidate,
 }));
@@ -53,6 +57,8 @@ vi.mock("./compiled-operator-artifacts", () => ({
 describe("private app schema release compilation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Reflect.deleteProperty(hooks.state, "githubSource");
+    hooks.grant.mockReset();
     hooks.predecessor.mockResolvedValue({ environment: {}, predecessors: [] });
     hooks.publish.mockResolvedValue({ status: "not-required" });
   });
@@ -115,6 +121,32 @@ describe("private app schema release compilation", () => {
         signal: ctx.abortSignal,
       }),
     );
+  });
+  it("uses the checked app history for an approved connected optional field", async () => {
+    hooks.state.githubSource = {};
+    hooks.grant.mockReturnValue({
+      subject: {
+        revision: {
+          schemaChange: {
+            kind: "add-optional-text-field",
+            candidateCueSha256: "b".repeat(64),
+          },
+        },
+      },
+    });
+    hooks.predecessor.mockRejectedValue(new Error("private validation installation unavailable"));
+    const run = vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "compiled" });
+    const ctx = {
+      abortSignal: new AbortController().signal,
+      callId: "compile",
+      getSandbox: async () => await Promise.resolve({ run }),
+      session: { auth: {}, id: "saved-session" },
+    };
+    // SAFETY: The identity defineTool fixture supplies every context field this hook consumes.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    expect(await compileTool.execute({}, ctx as never)).toMatchObject({ status: "compiled" });
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ env: {} }));
+    expect(hooks.rememberInputs).toHaveBeenCalledWith("spend-review", [], undefined);
   });
   it("retains original prepared references only after successful capture", async () => {
     const selection = { appId: "spend-review", releaseId: "original-v13" };

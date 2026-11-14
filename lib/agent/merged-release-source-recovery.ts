@@ -7,6 +7,22 @@ import { readExactCompiledOperatorReleaseForSession } from "./compiled-operator-
 import type { ImmutableGitHubSourceReceipt } from "../repository/github-publication";
 import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 
+/** Locate the exact earlier repair; provider and owned archive checks still follow. */
+export const retainedMergedSchemaReleaseId = (proposalDigest: string, appId: string) => {
+  const anchor = retainedProductionSourceReconciliation(proposalDigest);
+  const prior = draftReconciliationCompletions
+    .get()
+    .find(
+      (entry) =>
+        entry.appId === appId &&
+        entry.preparation === "sealed-before-approval" &&
+        entry.proposal.digest === anchor?.digest,
+    );
+  return prior?.compilation.release.status === "published"
+    ? prior.compilation.release.selection.releaseId
+    : undefined;
+};
+
 export const readMergedReleaseSourceRecovery = async (input: {
   current: {
     appSpec: { appId: string; digest: string };
