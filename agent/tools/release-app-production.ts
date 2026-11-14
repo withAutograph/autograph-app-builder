@@ -62,6 +62,10 @@ const reconciliationGuidance: Record<ProductionReconciliationFailure, string> = 
     "Verify the previous approved revision’s merge for this same app before requesting the correction’s approval.",
   "github-read-unavailable":
     "Retry the read of this same owned draft and its prior delivery when GitHub is available.",
+  "candidate-schema-compatibility-missing":
+    "The checked release does not prove compatibility with the app’s installed schema. Regenerate the unissued cut in the same draft candidate, then validate, review and seal it before requesting approval.",
+  "candidate-schema-compatibility-unavailable":
+    "Builder could not read the exact checked schema release. Preserve this draft and retry its saved validation and release review.",
 };
 
 const approvedPrivateBuild = (subject: z.infer<typeof directProductionSubjectSchema>) => {

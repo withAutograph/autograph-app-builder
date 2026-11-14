@@ -1,5 +1,6 @@
 /* oxlint-disable unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
+import { draftInspectionRecoveryForSession } from "@/lib/agent/prepare-published-draft-repair";
 import {
   currentDraftCandidateSource,
   draftCandidateInstallation,
@@ -153,6 +154,14 @@ export default defineTool({
           owner,
           priorPublishedProposalDigest,
           pullRequestNumber: candidate.pullRequestNumber,
+          recovery: draftInspectionRecoveryForSession({
+            ctx,
+            appId: candidate.appId,
+            appSpecDigest: state.appSpec.digest,
+            root: candidate.root,
+            pullRequestNumber: candidate.pullRequestNumber,
+            priorPublishedProposalDigest,
+          }),
           repositoryId,
         }),
         runtime.readSucceededDraftPublication?.(priorPublishedProposalDigest),

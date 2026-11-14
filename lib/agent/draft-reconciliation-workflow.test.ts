@@ -133,11 +133,15 @@ describe("draft reconciliation publication review", () => {
     });
   });
 
-  it.each(["current", "moved", "uncertain"] as const)(
+  it.each(["current", "reconciled", "moved", "uncertain"] as const)(
     "uses only the exact owned open draft and retires stale proof when the cut may have moved (%s)",
     async (mode) => {
       const path = "apps/spend-review/schema/release/2026-11-16.v2";
       mocks.candidate = { ...mocks.candidate, repositoryId: "1", proposal: { digest } };
+      const publishedReconciliation = { digest: "d".repeat(64) };
+      if (mode === "reconciled") {
+        mocks.candidate = { ...mocks.candidate, publishedReconciliation };
+      }
       mocks.workflow = { ...mocks.workflow, publishedGitHubDraftProposalDigest: digest };
       const original = mocks.candidate;
       mocks.readOwnedDraft.mockResolvedValue({ pullRequestId: "57", idempotencyKey: digest });
@@ -178,6 +182,12 @@ describe("draft reconciliation publication review", () => {
       await (mode === "uncertain"
         ? expect(attempted).rejects.toThrow("sandbox response lost")
         : expect(attempted).resolves.toMatchObject({ path, status: "candidate_edited" }));
+      if (mode === "reconciled") {
+        const [call] = mocks.inspectOwnedDraft.mock.calls;
+        const request: unknown = call?.[0];
+        expect(request).toMatchObject({ recovery: { reconciliations: [publishedReconciliation] } });
+        expect(mocks.candidate).toHaveProperty("publishedReconciliation", publishedReconciliation);
+      }
       expect(mocks.discardSchema).toHaveBeenCalledWith(
         expect.objectContaining({
           prepared: original,

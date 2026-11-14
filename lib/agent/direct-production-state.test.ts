@@ -58,6 +58,7 @@ import {
   retainDraftReconciliationCompletion,
 } from "./draft-reconciliation-state";
 import type { DraftReconciliationCompletion } from "./draft-reconciliation-state";
+import type { verifyDraftOptionalFieldRelease } from "./draft-optional-field-release";
 import {
   readPrivateApplyAuthority,
   recordApprovedPrivateApply,
@@ -807,6 +808,9 @@ const retainSealedSchemaCorrection = (drift: "none" | "predecessor" | "outside-a
     inspectExistingDraftReconciliationSource,
     inspectPublishedPullRequest,
   });
+  const verifyCompatibility = vi
+    .fn<typeof verifyDraftOptionalFieldRelease>()
+    .mockResolvedValue("verified");
   return {
     failed,
     original,
@@ -818,7 +822,7 @@ const retainSealedSchemaCorrection = (drift: "none" | "predecessor" | "outside-a
     readSucceededDraftPublication,
     inspectExistingDraftReconciliationSource,
     inspectPublishedPullRequest,
-    ports: { publication: publicationRead },
+    ports: { publication: publicationRead, verifyCompatibility },
   };
 };
 
@@ -1601,6 +1605,29 @@ describe("direct Production Build authority", () => {
     });
   });
 
+  it("does not offer a combined approval before the checked correction proves compatibility", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const fixture = retainSealedSchemaCorrection();
+      fixture.ports.verifyCompatibility
+        .mockResolvedValueOnce("incompatible")
+        .mockResolvedValueOnce("unavailable");
+      await expect(
+        prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports),
+      ).resolves.toBe("candidate-schema-compatibility-missing");
+      expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
+      await expect(
+        prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports),
+      ).resolves.toBe("candidate-schema-compatibility-unavailable");
+      expect(directProductionSubjectForPlan(releaseContext)).toBeUndefined();
+      await expect(
+        prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports),
+      ).resolves.toBeNull();
+      expect(directProductionSubjectForPlan(releaseContext)?.revision?.reconciliation?.digest).toBe(
+        fixture.proposal.digest,
+      );
+    });
+  });
+
   it("requires another exact decision if the base moves before the approved correction is published", async () => {
     await contextStorage.run(new ContextContainer(), async () => {
       const fixture = retainSealedSchemaCorrection();
@@ -1658,6 +1685,116 @@ describe("direct Production Build authority", () => {
         await authoredReleaseApproval()({
           ...releaseContext,
           callId: "release-corrected-draft-on-new-base",
+          toolInput: { directProduction: renewed },
+        }),
+      ).toBe("user-approval");
+      expect(currentDirectProductionGrant(releaseContext, renewed)).toBeUndefined();
+    });
+  });
+
+  it("reuses the same corrected draft only with an exact provider read of its approved update", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const fixture = retainSealedSchemaCorrection();
+      await prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports);
+      const first = requiredSubject(directProductionSubjectForPlan(releaseContext));
+      const firstInput = { directProduction: first };
+      expect(await authoredReleaseApproval()({ ...releaseContext, toolInput: firstInput })).toBe(
+        "user-approval",
+      );
+      await releaseAppProduction.execute(firstInput, releaseContext);
+
+      const candidate = draftReconciliationState.get();
+      if (candidate?.review === undefined || candidate.validation?.compilation === undefined) {
+        throw new Error("Expected the checked earlier correction.");
+      }
+      const headSha = "9".repeat(40);
+      const headTree = fixture.proposal.resolvedTree;
+      const resolvedTree = "7".repeat(40);
+      const review = createReconciliationReviewReceipt({
+        version: 1,
+        appId,
+        baseSha: candidate.baseSha,
+        baseTree: candidate.baseTree,
+        headSha,
+        headTree,
+        resolvedTree,
+        headChanges: candidate.review.headChanges,
+        baseChanges: candidate.review.baseChanges.map((change) =>
+          change.path.endsWith("transition-plan.json")
+            ? { ...change, after: { mode: "644", digest: sha256("rebuilt online plan") } }
+            : change,
+        ),
+      });
+      const proposal = {
+        ...fixture.proposal,
+        expectedHeadSha: headSha,
+        expectedHeadTree: headTree,
+        resolvedTree,
+        reviewDigest: review.digest,
+        digest: sha256("second same-draft correction"),
+      };
+      const { compilation } = candidate.validation;
+      retainDraftReconciliationCompletion({
+        preparation: "sealed-before-approval",
+        proposal,
+        review,
+        appReview: {
+          appSpecDigest: first.appSpecDigest,
+          changeSetDigest: fixture.original.changeSetDigest,
+          digest: candidate.originalReviewDigest,
+        },
+        appId,
+        githubSourceDigest: candidate.githubSourceDigest,
+        root: candidate.root,
+        compilation,
+      });
+      const recaptured = {
+        ...candidate,
+        headSha,
+        headTree,
+        review,
+        proposal,
+        validation: { ...candidate.validation, resolvedTree },
+      };
+      draftReconciliationState.update(() => recaptured);
+      await expect(
+        prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports),
+      ).resolves.toBe("github-origin-mismatch");
+      expect(currentDirectProductionGrant(releaseContext, first)).toBeUndefined();
+      const observed = {
+        ...fixture.owned,
+        draft: { ...fixture.owned.draft, headSha, headTree },
+        publishedHeadSha: headSha,
+      };
+      fixture.inspectExistingDraftReconciliationSource.mockResolvedValue(observed);
+      draftReconciliationState.update(() => ({
+        ...recaptured,
+        publishedReconciliation: fixture.proposal,
+      }));
+      await expect(
+        prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports),
+      ).resolves.toBe("github-origin-mismatch");
+      fixture.inspectExistingDraftReconciliationSource.mockResolvedValue({
+        ...observed,
+        publishedReconciliation: fixture.proposal,
+      });
+      await expect(
+        prepareDirectProductionDraftReconciliation(releaseContext, fixture.ports),
+      ).resolves.toBeNull();
+      expect(fixture.inspectExistingDraftReconciliationSource).toHaveBeenLastCalledWith(
+        expect.objectContaining({ publishedReconciliation: fixture.proposal }),
+      );
+      const renewed = requiredSubject(directProductionSubjectForPlan(releaseContext));
+      expect(renewed.revision?.schemaChange).toEqual(first.revision?.schemaChange);
+      expect(renewed.revision?.reconciliation).toMatchObject({
+        digest: proposal.digest,
+        expectedHeadSha: headSha,
+        resolvedTree,
+      });
+      expect(
+        await authoredReleaseApproval()({
+          ...releaseContext,
+          callId: "release-recompiled-draft",
           toolInput: { directProduction: renewed },
         }),
       ).toBe("user-approval");

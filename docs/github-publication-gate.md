@@ -665,8 +665,14 @@ If an earlier candidate failed before merge, Builder can prepare an ordinary
 reconciliation of its owned open draft and retains every checked release on
 the base. If the draft contains stale generated compatibility evidence,
 Builder can move that unissued cut aside inside the private workspace and
-recompile it after verifying the original draft and base. The combined
-approval binds the corrected CUE, both reviewed diffs, and the exact draft
+recompile it after verifying the original draft and base. Builder reads the
+sealed compiler output before offering the combined approval. The generated
+data operations and online transition plan must agree on the exact previous
+release and optional field. If the already approved draft update was published
+without a compatible generated cut, Builder verifies that update as the
+starting point for a newly reviewed correction.
+
+The combined approval binds the corrected CUE, both reviewed diffs, and the exact draft
 head, base, app and repository.
 Builder uses it to update that draft, then verifies the new head before Ready
 and merge. If the base moves while the original draft head is unchanged,
