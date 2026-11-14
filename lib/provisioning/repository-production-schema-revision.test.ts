@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { assertOptionalTextProductionTransition } from "./repository-production-schema-revision";
+import {
+  assertOptionalTextProductionTransition,
+  readOptionalTextReleasePredecessor,
+} from "./repository-production-schema-revision";
 import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launcher";
 
 const appId = "test-app";
@@ -126,6 +129,45 @@ const verify = (candidate: ReturnType<typeof release>) => {
     priorCueSha256,
   });
 };
+
+describe("Checked online optional field evidence", () => {
+  const withTransition = (runtimeProof?: "missing" | "wrong-field" | "wrong-artifact") => {
+    const candidate = release(
+      candidateArtifact(),
+      candidateCueSha256,
+      runtimeProof === undefined ? {} : { runtimeProof },
+    );
+    const artifactSha256 = hex(json(beforeArtifact));
+    candidate.files["transition-plan.json"] = json({
+      online_optional_text_addition: {
+        kind: "optional-text-addition-v1",
+        predecessor_artifact_sha256: artifactSha256,
+        predecessor_schema: beforeArtifact.schema,
+        model_id: "entry",
+        field_id: textField.id,
+      },
+    });
+    return { files: candidate.files, artifactSha256 };
+  };
+
+  it("locates the same predecessor only when both generated artifacts agree", () => {
+    const { files, artifactSha256 } = withTransition();
+    expect(readOptionalTextReleasePredecessor(files)).toEqual({
+      artifactSha256,
+      releaseId: beforeVersion,
+    });
+    expect(
+      readOptionalTextReleasePredecessor(release(candidateArtifact(), candidateCueSha256).files),
+    ).toBeNull();
+  });
+
+  it.each(["missing", "wrong-field", "wrong-artifact"] as const)(
+    "refuses %s runtime evidence even when the online transition is present",
+    (runtimeProof) => {
+      expect(readOptionalTextReleasePredecessor(withTransition(runtimeProof).files)).toBeNull();
+    },
+  );
+});
 
 describe("Exact optional text schema transition", () => {
   it("accepts an optional field and its existing edit operation", () => {

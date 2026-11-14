@@ -60,6 +60,43 @@ const transitionPlanSchema = z.looseObject({
   version: z.string(),
   retirements: z.tuple([]),
 });
+const onlinePlanSchema = z.looseObject({
+  online_optional_text_addition: z.looseObject({
+    kind: z.literal("optional-text-addition-v1"),
+    predecessor_artifact_sha256: z.string().regex(/^[a-f0-9]{64}$/u),
+    predecessor_schema: z.looseObject({ version: z.string().min(1) }),
+    model_id: z.string().min(1),
+    field_id: z.string().min(1),
+  }),
+});
+
+/** The two checked runtime artifacts must independently name the same predecessor and field. */
+export const readOptionalTextReleasePredecessor = (files: GeneratedAppReleaseFiles) => {
+  try {
+    const plan = onlinePlanSchema.parse(JSON.parse(files["transition-plan.json"].toString()));
+    const operation = compatibilityProofSchema.parse(
+      JSON.parse(files["operation-manifest.json"].toString()),
+    );
+    const proof = plan.online_optional_text_addition;
+    const matches = operation.predecessorCompatibility.predecessors.some(
+      (entry) =>
+        entry.artifactSha256 === proof.predecessor_artifact_sha256 &&
+        entry.field.fieldId === proof.field_id &&
+        entry.field.modelId === proof.model_id &&
+        isDeepStrictEqual(entry.schema, proof.predecessor_schema),
+    );
+    if (matches) {
+      return {
+        releaseId: proof.predecessor_schema.version,
+        artifactSha256: proof.predecessor_artifact_sha256,
+      };
+    }
+  } catch {
+    // Invalid checked data does not authorize the draft.
+  }
+  return null;
+};
+
 const optionalText = z.strictObject({
   id: z.string(),
   label: z.string(),

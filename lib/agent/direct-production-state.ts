@@ -31,6 +31,7 @@ import {
   draftReconciliationCompletions,
   draftReconciliationState,
 } from "./draft-reconciliation-state";
+import { verifyDraftOptionalFieldRelease } from "./draft-optional-field-release";
 import { currentDraftCandidateSource } from "./published-draft-repair";
 import {
   directProductionProgressState,
@@ -473,6 +474,7 @@ const reviewedDraftReconciliation = (state: ProposedWorkflow) => {
 const candidateReviewMismatch = "candidate-review-mismatch";
 const approvedReleaseMismatch = "approved-release-mismatch";
 const readAnchoredMerge = "read-anchored-merge";
+const releaseSelectionChanged = "release-selection-changed";
 
 type ReconciliationCandidateFailure =
   | "candidate-unsealed"
@@ -629,7 +631,13 @@ const directDraftReconciliationScope = (
     onFailure?.(candidateReviewMismatch);
     return null;
   }
-  return { subject: corrected.data, proposal, originPublicationDigest };
+  return {
+    subject: corrected.data,
+    proposal,
+    originPublicationDigest,
+    schemaChange: { ...revision.schemaChange, candidateCueSha256 },
+    selection,
+  };
 };
 
 const sameSubject = (first: DirectProductionSubject | undefined, second: DirectProductionSubject) =>
@@ -777,6 +785,7 @@ interface ReconciliationObservationPorts {
       | "readSucceededDraftPublication"
     >
   >;
+  verifyCompatibility?: typeof verifyDraftOptionalFieldRelease;
 }
 
 export type ProductionReconciliationFailure =
@@ -785,13 +794,15 @@ export type ProductionReconciliationFailure =
   | "prior-approved-revision-unavailable"
   | typeof approvedReleaseMismatch
   | "prior-delivery-unavailable"
-  | "release-selection-changed"
+  | typeof releaseSelectionChanged
   | "github-draft-mismatch"
   | "github-origin-mismatch"
   | "github-base-mismatch"
   | "github-installation-mismatch"
   | "github-prior-merge-mismatch"
-  | "github-read-unavailable";
+  | "github-read-unavailable"
+  | "candidate-schema-compatibility-missing"
+  | "candidate-schema-compatibility-unavailable";
 
 /** A new combined decision can replace the grant for an exact still-draft schema revision. */
 export const prepareDirectProductionDraftReconciliation = async (
@@ -837,16 +848,27 @@ export const prepareDirectProductionDraftReconciliation = async (
     return "prior-delivery-unavailable";
   }
   const approvedRepair = grant.subject.revision.reconciliation;
+  const previousRepair =
+    approvedRepair === undefined ||
+    approvedRepair.expectedHeadSha === corrected.proposal.expectedHeadSha
+      ? undefined
+      : candidate.publishedReconciliation;
   if (approvedRepair === undefined && !sameSubject(subject, grant.subject)) {
     return approvedReleaseMismatch;
   }
   if (approvedRepair !== undefined) {
     const repaired = corrected.subject.revision?.reconciliation;
+    const verifiedPreviousRepair = [
+      previousRepair?.digest === approvedRepair.digest,
+      previousRepair?.priorPublicationDigest === approvedRepair.originPublicationReceiptDigest,
+      previousRepair?.resolvedTree === approvedRepair.resolvedTree,
+      previousRepair?.resolvedTree === corrected.proposal.expectedHeadTree,
+    ].every(Boolean);
     const matchesDraft = [
       repaired?.originPublicationDigest === approvedRepair.originPublicationDigest,
       repaired?.originPublicationReceiptDigest === approvedRepair.originPublicationReceiptDigest,
       repaired?.pullRequestNumber === approvedRepair.pullRequestNumber,
-      repaired?.expectedHeadSha === approvedRepair.expectedHeadSha,
+      repaired?.expectedHeadSha === approvedRepair.expectedHeadSha || verifiedPreviousRepair,
     ].every(Boolean);
     if (!matchesDraft) {
       return "github-origin-mismatch";
@@ -874,23 +896,29 @@ export const prepareDirectProductionDraftReconciliation = async (
       { selectedInstallationId: subject.installationId },
     );
     if (!isCurrent()) {
-      return "release-selection-changed";
+      return releaseSelectionChanged;
+    }
+    const inspection: Parameters<
+      GitHubPublicationRuntime["inspectExistingDraftReconciliationSource"]
+    >[0] = {
+      repositoryId: proposal.repositoryId,
+      owner: proposal.owner,
+      name: proposal.name,
+      pullRequestNumber: proposal.pullRequestNumber,
+      priorPublishedProposalDigest: corrected.originPublicationDigest,
+    };
+    if (previousRepair !== undefined) {
+      inspection.publishedReconciliation = previousRepair;
     }
     const [owned, origin, previous] = await Promise.all([
-      runtime.inspectExistingDraftReconciliationSource({
-        repositoryId: proposal.repositoryId,
-        owner: proposal.owner,
-        name: proposal.name,
-        pullRequestNumber: proposal.pullRequestNumber,
-        priorPublishedProposalDigest: corrected.originPublicationDigest,
-      }),
+      runtime.inspectExistingDraftReconciliationSource(inspection),
       runtime.readSucceededDraftPublication?.(corrected.originPublicationDigest),
       observePriorRevisionPullRequest(runtime, prior),
     ]);
     if (!isCurrent()) {
-      return "release-selection-changed";
+      return releaseSelectionChanged;
     }
-    const { draft, base, publishedHeadSha } = owned;
+    const { draft, base, publishedHeadSha, publishedReconciliation } = owned;
     const draftMatches = [
       draft.state === "open",
       draft.draft,
@@ -909,11 +937,16 @@ export const prepareDirectProductionDraftReconciliation = async (
     if (!draftMatches) {
       return "github-draft-mismatch";
     }
+    const originalHead = [
+      origin?.branchSha === proposal.expectedHeadSha,
+      origin?.branchTree === proposal.expectedHeadTree,
+    ].every(Boolean);
+    const previousHead =
+      previousRepair !== undefined && isDeepStrictEqual(previousRepair, publishedReconciliation);
     const originMatches = [
       origin?.proposalDigest === corrected.originPublicationDigest,
       origin?.digest === proposal.priorPublicationDigest,
-      origin?.branchSha === proposal.expectedHeadSha,
-      origin?.branchTree === proposal.expectedHeadTree,
+      originalHead || previousHead,
     ].every(Boolean);
     if (!originMatches) {
       return "github-origin-mismatch";
@@ -938,15 +971,36 @@ export const prepareDirectProductionDraftReconciliation = async (
     if (!predecessorMerged) {
       return "github-prior-merge-mismatch";
     }
-    authorization.update((current) => ({
-      ...current,
-      reconciliation: { failedGrantDigest: grant.digest, subject: corrected.subject },
-    }));
-    return null;
   } catch {
     ctx.abortSignal.throwIfAborted();
     return "github-read-unavailable";
   }
+  let compatibility: Awaited<ReturnType<typeof verifyDraftOptionalFieldRelease>>;
+  try {
+    compatibility = await (ports.verifyCompatibility ?? verifyDraftOptionalFieldRelease)(
+      ctx,
+      candidate,
+      corrected.schemaChange,
+      corrected.selection,
+    );
+  } catch {
+    ctx.abortSignal.throwIfAborted();
+    return "candidate-schema-compatibility-unavailable";
+  }
+  if (!isCurrent()) {
+    return releaseSelectionChanged;
+  }
+  if (compatibility === "incompatible") {
+    return "candidate-schema-compatibility-missing";
+  }
+  if (compatibility === "unavailable") {
+    return "candidate-schema-compatibility-unavailable";
+  }
+  authorization.update((current) => ({
+    ...current,
+    reconciliation: { failedGrantDigest: grant.digest, subject: corrected.subject },
+  }));
+  return null;
 };
 
 export const directProductionReconciliationContinuation = (subject: DirectProductionSubject) => {
