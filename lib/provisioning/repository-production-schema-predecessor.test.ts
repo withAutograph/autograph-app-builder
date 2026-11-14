@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
+  ARRUSTED_PRODUCTION_REPOSITORY,
+  createDirectProductionGrant,
+} from "../agent/direct-production-authorization";
+import { approvedBuildDecisionSchema } from "../agent/approved-build-continuation";
+import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
+import {
   initialRepositoryProductionRecord,
   repositoryProductionOperationRef,
 } from "./repository-production-contract";
@@ -9,7 +15,12 @@ import type {
   RepositoryProductionScope,
 } from "./repository-production-contract";
 import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launcher";
-import { readInstalledRepositoryProductionSchemaPredecessor } from "./repository-production-schema-predecessor";
+import {
+  assertRepositoryProductionSchemaPredecessorSource,
+  readInstalledRepositoryProductionSchemaPredecessor,
+  readRepositoryProductionSchemaPredecessorAuthority,
+} from "./repository-production-schema-predecessor";
+import type { OperatorOwnerContext } from "./hosted-operator-contract";
 
 const appId = "bench-log";
 const releaseId = "release-1";
@@ -149,5 +160,153 @@ describe("installed Production schema predecessor", () => {
       expect(ports.inspect).not.toHaveBeenCalled();
     }
     expect(pending.readRelease).not.toHaveBeenCalled();
+  });
+});
+
+const readAuthorityFixture = () => {
+  const logicalSessionId = "logical-owner";
+  const owner: OperatorOwnerContext = {
+    kind: "direct",
+    authority: scope.authority,
+    principal: { ...scope.authority, scopes: ["autograph:send"] },
+    sessionId: "saved-session",
+    adapterSessionId: "current-worker",
+    adapterGeneration: 2,
+  };
+  const { repositoryId } = scope;
+  const installationId = "456";
+  const baseBranch = "main";
+  const grant = createDirectProductionGrant({
+    callId: "original-build",
+    toolName: "apply_app_creation",
+    subject: {
+      version: 1,
+      authority: scope.authority,
+      appId,
+      sessionId: logicalSessionId,
+      appSpecDigest: "1".repeat(64),
+      proposalDigest: "2".repeat(64),
+      buildWorkspaceId: "private-workspace",
+      repositoryId,
+      repositoryFullName: ARRUSTED_PRODUCTION_REPOSITORY,
+      installationId,
+      baseBranch,
+      storageKind: "postgres",
+      revision: {
+        priorGrantDigest: "3".repeat(64),
+        priorProposalDigest: "4".repeat(64),
+        schemaChange: {
+          kind: "add-optional-text-field",
+          priorCueSha256: "5".repeat(64),
+          candidateCueSha256: "6".repeat(64),
+        },
+      },
+    },
+  });
+  const { subject } = grant;
+  const reviewDigest = "7".repeat(64);
+  const decision: ApprovedBuildDecision = {
+    version: 1,
+    adapterSessionId: logicalSessionId,
+    turnId: "correction",
+    turnSequence: 2,
+    decision: "blocked",
+    workflowPhase: "reviewed",
+    currentSpec: {
+      appId,
+      appSpecDigest: subject.appSpecDigest,
+      proposalDigest: subject.proposalDigest,
+      sessionId: logicalSessionId,
+      workspaceId: subject.buildWorkspaceId,
+    },
+    schemaPredecessorReadback: grant,
+    githubDelivery: {
+      version: 1,
+      requirements: [],
+      calls: [],
+      current: {
+        appId,
+        appSpecDigest: subject.appSpecDigest,
+        proposalDigest: "8".repeat(64),
+        reviewDigest,
+        installationId,
+      },
+    },
+  };
+  const [repoOwner, repoName] = ARRUSTED_PRODUCTION_REPOSITORY.split("/");
+  const published = {
+    repositoryId,
+    branch: "published-draft",
+    gitSha: "a".repeat(40),
+    gitTree: "b".repeat(40),
+    changeSetDigest: "9".repeat(64),
+    reviewDigest,
+  };
+  return {
+    input: {
+      decision: approvedBuildDecisionSchema.parse(decision),
+      destination: {
+        version: 1 as const,
+        kind: "existing-repository" as const,
+        confirmedByCallId: "select",
+        appId,
+        installationId,
+        repository: {
+          repositoryId,
+          owner: repoOwner,
+          name: repoName,
+          defaultBranch: baseBranch,
+        },
+      },
+      owner,
+      logicalSessionId,
+      appId,
+      repositoryId,
+    },
+    grant,
+    published,
+    target: { expectedRepositoryId: repositoryId, reviewedHeadSha: published.gitSha },
+  };
+};
+
+describe("published draft readback authority", () => {
+  it("uses retained approval and published review even when no draft correction may proceed", () => {
+    const { input, grant, target, published } = readAuthorityFixture();
+    const authority = readRepositoryProductionSchemaPredecessorAuthority(input);
+    expect(authority.grant).toEqual(grant);
+    expect(input.decision.directProduction).toBeUndefined();
+    expect(assertRepositoryProductionSchemaPredecessorSource(authority, published, target)).toEqual(
+      published,
+    );
+    expect(() =>
+      assertRepositoryProductionSchemaPredecessorSource(
+        authority,
+        { ...published, gitSha: "f".repeat(40) },
+        target,
+      ),
+    ).toThrow();
+    expect(() =>
+      assertRepositoryProductionSchemaPredecessorSource(
+        authority,
+        { ...published, reviewDigest: "d".repeat(64) },
+        target,
+      ),
+    ).toThrow();
+  });
+
+  it("rejects a changed tenant owner, repository, logical session, or specification", () => {
+    const { input } = readAuthorityFixture();
+    const changes = [
+      {
+        ...input,
+        owner: { ...input.owner, authority: { ...scope.authority, ownerUserId: "other" } },
+      },
+      { ...input, repositoryId: "999" },
+      { ...input, logicalSessionId: "other-session" },
+      { ...input, decision: { ...input.decision, workflowPhase: "applied" } },
+    ];
+    for (const changed of changes) {
+      expect(() => readRepositoryProductionSchemaPredecessorAuthority(changed)).toThrow();
+    }
   });
 });

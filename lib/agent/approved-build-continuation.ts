@@ -30,6 +30,7 @@ export const approvedBuildDecisionSchema = z.strictObject({
   adapterSessionId: z.string().min(1),
   githubDelivery: githubPrDeliveryAuthorityProjectionSchema.optional(),
   directProduction: directProductionGrantSchema.optional(),
+  schemaPredecessorReadback: directProductionGrantSchema.optional(),
   currentSpec: z
     .strictObject({
       appId: z.string(),

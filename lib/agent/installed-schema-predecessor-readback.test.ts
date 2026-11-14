@@ -6,6 +6,7 @@ import getAppProduction from "../../agent/tools/get-app-production";
 const mocks = vi.hoisted(() => ({
   subject: vi.fn(),
   grant: vi.fn(),
+  project: vi.fn(),
   runtime: vi.fn(),
   inspect: vi.fn(),
   inspectReconciliation: vi.fn(),
@@ -16,7 +17,13 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./github-pr-delivery-subject", () => ({
   resolveGitHubPrDeliverySubject: mocks.subject,
 }));
-vi.mock("./direct-production-state", () => ({ currentDirectProductionGrant: mocks.grant }));
+vi.mock("./direct-production-state", () => ({
+  currentDirectProductionGrant: mocks.grant,
+  retainedDirectProductionSchemaReadbackGrant: mocks.grant,
+}));
+vi.mock("./approved-build-continuation-runtime", () => ({
+  emitCurrentBuildWorkflowProjection: mocks.project,
+}));
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: mocks.runtime,
 }));
@@ -106,6 +113,7 @@ describe("read installed schema through the saved app tool", () => {
     expect(mocks.inspect.mock.calls[0]?.[0]).toBe(proposalDigest);
     expect(mocks.inspect.mock.calls[0]?.[1]).toBeUndefined();
     expect(mocks.predecessor).toHaveBeenCalledExactlyOnceWith(appId, repoId, headSha);
+    expect(mocks.project).toHaveBeenCalledExactlyOnceWith(ctx);
     expect(mocks.status).not.toHaveBeenCalled();
   });
 
@@ -129,6 +137,22 @@ describe("read installed schema through the saved app tool", () => {
       expect(mocks.client).not.toHaveBeenCalled();
     },
   );
+
+  it("reports a safe readback authority failure and does not call the operator", async () => {
+    mocks.project.mockRejectedValue(new Error("opaque test internals"));
+    await expect(getAppProduction.execute(readback, ctx)).rejects.toThrow(
+      "readback-authority-unavailable",
+    );
+    expect(mocks.client).not.toHaveBeenCalled();
+  });
+
+  it("reports a safe operator failure after projecting current authority", async () => {
+    mocks.predecessor.mockRejectedValue(new Error("opaque test internals"));
+    await expect(getAppProduction.execute(readback, ctx)).rejects.toThrow(
+      "operator-read-unavailable",
+    );
+    expect(mocks.project).toHaveBeenCalledOnce();
+  });
 
   it("does not reveal a diagnostic when the approved grant changes while the operator reads", async () => {
     mocks.predecessor.mockImplementation(async () => {

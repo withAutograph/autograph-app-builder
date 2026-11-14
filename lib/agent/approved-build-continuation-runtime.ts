@@ -1,4 +1,7 @@
-import { currentDirectProductionGrant } from "./direct-production-state";
+import {
+  currentDirectProductionGrant,
+  retainedDirectProductionSchemaReadbackGrant,
+} from "./direct-production-state";
 import { directProductionProgressState } from "./direct-production-progress";
 import {
   currentGitHubPrDeliveryAuthorityProjection,
@@ -121,10 +124,15 @@ export const recordApprovedBuildDecision = async (
     decision.currentSpec === undefined
       ? undefined
       : currentDirectProductionGrant(ctx, decision.currentSpec);
+  const schemaPredecessorReadback =
+    decision.currentSpec === undefined
+      ? undefined
+      : retainedDirectProductionSchemaReadbackGrant(ctx, decision.currentSpec);
   const parsed = approvedBuildDecisionSchema.parse({
     ...decision,
     directProduction,
     githubDelivery: projection,
+    schemaPredecessorReadback,
   });
   if (hasTestCapability("simulated-target")) {
     diagnosticBuildDecisionState.update(() => parsed);

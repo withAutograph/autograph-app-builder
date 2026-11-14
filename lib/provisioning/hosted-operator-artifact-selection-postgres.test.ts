@@ -192,5 +192,41 @@ describe.skipIf(tools === undefined)(
         await expect(selections.readExact?.(context, lookup)).rejects.toThrow("owner revoked");
       },
     );
+
+    it("keeps the latest published identity while the same spec has a newer private compilation", async () => {
+      const selections = createPostgresOperatorArtifactSelections({
+        database: drizzle(client(), { schema }),
+        assertCurrentOwner: async () => {},
+      });
+      const publication = {
+        ...selected,
+        appSpecDigest: "e".repeat(64),
+        publishedSource: {
+          repositoryId: "123",
+          branch: "owned-draft",
+          gitSha: "a".repeat(40),
+          gitTree: "b".repeat(40),
+          reviewDigest: "c".repeat(64),
+          changeSetDigest: "d".repeat(64),
+        },
+      };
+      const newCompilation = {
+        ...selected,
+        appSpecDigest: publication.appSpecDigest,
+        manifestSha256: "f".repeat(64),
+      };
+      await selections.record(context, "published", publication);
+      await selections.record(context, "private-compile", newCompilation);
+      expect(await selections.read(context, publication.appSpecDigest)).toEqual(newCompilation);
+      expect(await selections.readPublishedRelease?.(context, publication.appSpecDigest)).toEqual(
+        publication,
+      );
+      expect(
+        await selections.readPublishedRelease?.(
+          { ...context, authority: { ...context.authority, ownerUserId: "missing-owner" } },
+          publication.appSpecDigest,
+        ),
+      ).toBeUndefined();
+    });
   },
 );

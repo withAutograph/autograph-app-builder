@@ -224,6 +224,11 @@ export interface OperatorArtifactSelections {
     context: OperatorArtifactContext,
     appSpecDigest: string,
   ) => Promise<CompiledOperatorReleaseSelection | undefined>;
+  /** Current published capture; private compilations without Git completion do not supersede it. */
+  readPublishedRelease?: (
+    context: OperatorArtifactContext,
+    appSpecDigest: string,
+  ) => Promise<CompiledOperatorReleaseSelection | undefined>;
   /** Optional for legacy writers; supported hosted/local stores retain exact historical markers. */
   readExact?: (
     context: OperatorArtifactContext,
@@ -296,6 +301,44 @@ export const createPostgresOperatorArtifactSelections = (input: {
   };
   const nextCreatedAt = (scope: ReturnType<typeof scoped>) =>
     sql`greatest(clock_timestamp(), (select max(${prototypeArtifactChunks.createdAt}) + interval '1 microsecond' from ${prototypeArtifactChunks} where ${predicate(scope)}))`;
+  const readSelection = async (
+    context: OperatorArtifactContext,
+    appSpecDigest: string,
+    publishedOnly = false,
+  ): Promise<CompiledOperatorReleaseSelection | undefined> => {
+    const scope = scoped(context, appSpecDigest);
+    const selected = predicate(scope);
+    // Other artifact rows can contain HTML. Guard the cast even if SQL reorders predicates.
+    const publishedSource = sql`case when ${selected} then ${prototypeArtifactChunks.content}::jsonb -> 'publishedSource' end`;
+    const filter = publishedOnly
+      ? and(selected, sql`jsonb_typeof(${publishedSource}) = 'object'`)
+      : selected;
+    await input.assertCurrentOwner(context);
+    const [row] = await input.database
+      .select({
+        chunkDigest: prototypeArtifactChunks.chunkDigest,
+        content: prototypeArtifactChunks.content,
+      })
+      .from(prototypeArtifactChunks)
+      .where(filter)
+      .orderBy(
+        desc(prototypeArtifactChunks.createdAt),
+        desc(prototypeArtifactChunks.transferDigest),
+      )
+      .limit(1);
+    await input.assertCurrentOwner(context);
+    if (row === undefined) {
+      return undefined;
+    }
+    if (row.chunkDigest !== hash(row.content)) {
+      throw operatorArtifactUnavailable();
+    }
+    const selection = compiledOperatorReleaseSelectionSchema.parse(JSON.parse(row.content));
+    if (selection.appId !== context.target.appId || selection.appSpecDigest !== appSpecDigest) {
+      throw operatorArtifactUnavailable();
+    }
+    return selection;
+  };
   return {
     async readDestination(context, appSpecDigest) {
       const scope = scoped(context, appSpecDigest, "app-publication");
@@ -392,37 +435,9 @@ export const createPostgresOperatorArtifactSelections = (input: {
         return destination;
       });
     },
-    async read(
-      context: OperatorArtifactContext,
-      appSpecDigest: string,
-    ): Promise<CompiledOperatorReleaseSelection | undefined> {
-      const scope = scoped(context, appSpecDigest);
-      await input.assertCurrentOwner(context);
-      const rows = await input.database
-        .select({
-          chunkDigest: prototypeArtifactChunks.chunkDigest,
-          content: prototypeArtifactChunks.content,
-        })
-        .from(prototypeArtifactChunks)
-        .where(predicate(scope))
-        .orderBy(
-          desc(prototypeArtifactChunks.createdAt),
-          desc(prototypeArtifactChunks.transferDigest),
-        )
-        .limit(1);
-      await input.assertCurrentOwner(context);
-      const row = rows.at(0);
-      if (row === undefined) {
-        return undefined;
-      }
-      if (row.chunkDigest !== hash(row.content)) {
-        throw operatorArtifactUnavailable();
-      }
-      const selection = compiledOperatorReleaseSelectionSchema.parse(JSON.parse(row.content));
-      if (selection.appId !== context.target.appId || selection.appSpecDigest !== appSpecDigest) {
-        throw operatorArtifactUnavailable();
-      }
-      return selection;
+    read: readSelection,
+    async readPublishedRelease(context, appSpecDigest) {
+      return await readSelection(context, appSpecDigest, true);
     },
     async readExact(context, lookupInput) {
       const lookup = exactCompiledOperatorReleaseLookupSchema.parse(lookupInput);
