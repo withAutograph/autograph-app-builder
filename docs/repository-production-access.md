@@ -461,12 +461,12 @@ external qualification or mandatory app-test gate.
 
 If a saved optional-field draft cannot proceed, Builder can ask the protected
 operator to identify the predecessor actually installed for that app. This
-read is scoped to the same owner, saved database and reviewed draft. The
-operator checks its retained release and reads the installed schema through
-the existing protected worker observation. It returns only release identity
-and digests for comparison; it does not disclose credentials, SQL, records,
-or grant another approval. The check is for diagnosis and does not run as a
-required step on a normal delivery. A disagreement between installed and
+read is scoped to the same owner, saved database and reviewed draft. It uses
+the approval that belongs to the published draft, even while Builder is preparing
+a private correction. The operator verifies that binding, checks the retained
+release and observes the installed schema through the protected worker.
+The response includes only the release identity and digests. The read performs
+no delivery or database writes and is available on demand. A disagreement between installed and
 published history leaves both intact for reconciliation.
 
 A missing saved destination is reported explicitly. Failed plan and status reads

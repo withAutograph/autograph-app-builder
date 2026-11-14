@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
+import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
+import { isExistingRepositoryDestination } from "./builder-session-destination-contract";
+import type { BuilderSessionDestination } from "./builder-session-destination-contract";
+import type { PublishedAppSource } from "./hosted-operator-artifact-selection";
+import type { OperatorOwnerContext } from "./hosted-operator-contract";
 import { repositoryProductionScopeSchema } from "./repository-production-contract";
 import type { RepositoryProductionRow } from "./repository-production-contract";
 import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launcher";
@@ -42,6 +48,84 @@ const archivedArtifactSchema = z.object({
 });
 const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 const unavailable = () => new Error("repository_production_schema_predecessor_unavailable");
+
+/** This retained review can authorize only predecessor inspection, never delivery effects. */
+export const readRepositoryProductionSchemaPredecessorAuthority = (input: {
+  decision: ApprovedBuildDecision | undefined;
+  destination: BuilderSessionDestination | undefined;
+  owner: OperatorOwnerContext;
+  logicalSessionId: string;
+  appId: string;
+  repositoryId: string;
+}) => {
+  const { decision, destination, owner, logicalSessionId, appId, repositoryId } = input;
+  const grant = decision?.schemaPredecessorReadback ?? decision?.directProduction;
+  const spec = decision?.currentSpec;
+  const review = decision?.githubDelivery?.current;
+  if (!grant || !spec || !review || decision.workflowPhase !== "reviewed") {
+    throw unavailable();
+  }
+  const { subject } = grant;
+  const { revision } = subject;
+  const existing =
+    destination !== undefined && isExistingRepositoryDestination(destination)
+      ? destination
+      : undefined;
+  const source = decision.existingRepositorySource;
+  const repository = existing?.repository ?? source?.repository;
+  const installationId = existing?.installationId ?? source?.scope.installationId;
+  const current = [
+    existing === undefined || existing.appId === appId,
+    isDeepStrictEqual(subject.authority, owner.authority),
+    subject.appId === appId,
+    spec.appId === appId,
+    review.appId === appId,
+    subject.sessionId === logicalSessionId,
+    spec.sessionId === logicalSessionId,
+    subject.buildWorkspaceId === spec.workspaceId,
+    subject.appSpecDigest === spec.appSpecDigest,
+    subject.appSpecDigest === review.appSpecDigest,
+    subject.proposalDigest === spec.proposalDigest,
+    spec.access?.mode !== "self-signup",
+    subject.repositoryId === repositoryId,
+    repository?.repositoryId === repositoryId,
+    `${repository?.owner}/${repository?.name}` === subject.repositoryFullName,
+    repository?.defaultBranch === subject.baseBranch,
+    subject.installationId === installationId,
+    subject.installationId === review.installationId,
+    subject.storageKind === "postgres",
+    revision?.schemaChange !== undefined,
+    revision?.reconciliation?.digest === review.reconciliationDigest,
+    revision?.reconciliation === undefined ||
+      revision.reconciliation.originPublicationDigest === review.proposalDigest,
+  ].every(Boolean);
+  if (!current) {
+    throw unavailable();
+  }
+  return { grant, review };
+};
+
+export const assertRepositoryProductionSchemaPredecessorSource = (
+  authority: ReturnType<typeof readRepositoryProductionSchemaPredecessorAuthority>,
+  source: PublishedAppSource | undefined,
+  target: RepositoryProductionSchemaPredecessorTarget,
+): PublishedAppSource => {
+  const { grant, review } = authority;
+  const approved = grant.subject.revision?.reconciliation;
+  if (source === undefined) {
+    throw unavailable();
+  }
+  const matches = [
+    source.repositoryId === target.expectedRepositoryId,
+    source.gitSha === target.reviewedHeadSha,
+    source.reviewDigest === (approved?.reviewDigest ?? review.reviewDigest),
+    approved === undefined || source.gitTree === approved.resolvedTree,
+  ].every(Boolean);
+  if (!matches) {
+    throw unavailable();
+  }
+  return source;
+};
 
 /** Verify the already enrolled release through the worker's inspect operation. */
 export const readInstalledRepositoryProductionSchemaPredecessor = async (input: {

@@ -119,7 +119,11 @@ import { resolveRepositoryProductionSignupIntent } from "./repository-production
 import { createRepositoryProductionSignupNative } from "./repository-production-signup-native";
 import { retainRepositoryProductionApproval } from "./repository-production-approval-retention";
 import { assertOptionalTextProductionTransition } from "./repository-production-schema-revision";
-import { readInstalledRepositoryProductionSchemaPredecessor } from "./repository-production-schema-predecessor";
+import {
+  assertRepositoryProductionSchemaPredecessorSource,
+  readInstalledRepositoryProductionSchemaPredecessor,
+  readRepositoryProductionSchemaPredecessorAuthority,
+} from "./repository-production-schema-predecessor";
 import type { RepositoryProductionSchemaPredecessorTarget } from "./repository-production-schema-predecessor";
 
 const creatorAccessEffect = "creator-access";
@@ -1295,32 +1299,26 @@ export const createRepositoryProductionNativeHandler =
         owner: RepositoryProductionRequestOwner,
         target: RepositoryProductionSchemaPredecessorTarget,
       ) => {
+        const readAuthority = (session: Awaited<ReturnType<typeof readSession>>) =>
+          readRepositoryProductionSchemaPredecessorAuthority({
+            decision: session.privateBuildDecision,
+            destination: session.builderDestination,
+            logicalSessionId:
+              session.nativeRecoveryBinding?.logicalSessionId ?? session.adapterSessionId,
+            owner: owner.ownerContext,
+            appId: owner.appId,
+            repositoryId: target.expectedRepositoryId,
+          });
         const session = await readSession(owner);
-        const decision = session.privateBuildDecision;
-        const grant = currentRepositoryProductionSchemaGrant(decision);
-        const { expectedRepositoryId, reviewedHeadSha } = target;
-        if (grant?.subject.repositoryId !== expectedRepositoryId) {
-          throw schemaRevisionUnverified();
-        }
-        const found = await resolve(owner);
-        const { scope, intent, compiledPublication } = found;
-        const review = assertReviewedSchemaSource(found, session, grant, reviewedHeadSha);
+        const authority = readAuthority(session);
+        const { subject } = authority.grant;
+        const { scope } = await managed(owner);
         if (
-          scope.repositoryId !== expectedRepositoryId ||
-          compiledPublication?.repositoryId !== expectedRepositoryId
+          scope.repositoryId !== subject.repositoryId ||
+          scope.repositoryFullName !== subject.repositoryFullName
         ) {
           throw schemaRevisionUnverified();
         }
-        assertDirectRepositoryProductionApproval({
-          plan: repositoryProductionApprovalInput(scope, intent),
-          grant,
-          decision,
-          destination: session.builderDestination,
-          logicalSessionId:
-            session.nativeRecoveryBinding?.logicalSessionId ?? session.adapterSessionId,
-          owner: owner.ownerContext,
-          publishedDescription: found.publishedDescription,
-        });
         const row = await store.read(scope);
         if (row === undefined) {
           throw schemaRevisionUnverified();
@@ -1333,9 +1331,7 @@ export const createRepositoryProductionNativeHandler =
             latest.status === "cancelled" ||
             (latest.cancellationRevision ?? 0) !== cancelEpoch ||
             (latest.resumedCancellationRevision ?? 0) !== cancelEpoch ||
-            currentRepositoryProductionSchemaGrant(latest.privateBuildDecision)?.digest !==
-              grant.digest ||
-            !isDeepStrictEqual(latest.privateBuildDecision?.githubDelivery?.current, review)
+            !isDeepStrictEqual(readAuthority(latest), authority)
           ) {
             throw schemaRevisionUnverified();
           }
@@ -1344,25 +1340,32 @@ export const createRepositoryProductionNativeHandler =
             throw schemaRevisionUnverified();
           }
         };
+        const selections = createPostgresOperatorArtifactSelections({
+          assertCurrentOwner: assertCurrent,
+          database,
+        });
+        const readPublishedSource = async () => {
+          const selection = await selections.readPublishedRelease?.(
+            {
+              authority: owner.ownerContext.authority,
+              target: { appId: owner.appId, sessionId: owner.sessionId },
+            },
+            subject.appSpecDigest,
+          );
+          return assertRepositoryProductionSchemaPredecessorSource(
+            authority,
+            selection?.publishedSource,
+            target,
+          );
+        };
+        const publishedSource = await readPublishedSource();
         const predecessor = await readInstalledRepositoryProductionSchemaPredecessor({
           row,
           assertCurrent,
           readRelease: readGeneratedRelease,
           inspect: async (context) => await workers(scope).reconcile(context),
         });
-        // The head can be republished for the same review while the worker is running.
-        const selections = createPostgresOperatorArtifactSelections({
-          assertCurrentOwner: assertCurrent,
-          database,
-        });
-        const latestSelection = await selections.read(
-          {
-            authority: owner.ownerContext.authority,
-            target: { appId: owner.appId, sessionId: owner.sessionId },
-          },
-          grant.subject.appSpecDigest,
-        );
-        if (!isDeepStrictEqual(latestSelection?.publishedSource, compiledPublication)) {
+        if (!isDeepStrictEqual(await readPublishedSource(), publishedSource)) {
           throw schemaRevisionUnverified();
         }
         return predecessor;

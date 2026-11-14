@@ -1171,6 +1171,32 @@ export const currentDirectProductionGrant = (
   return grant;
 };
 
+/** Read-only identity for an approved schema release even while its private draft repair is pending. */
+export const retainedDirectProductionSchemaReadbackGrant = (
+  ctx: OwnerContext,
+  match: SubjectMatch,
+): DirectProductionGrant | undefined => {
+  const strict = currentDirectProductionGrant(ctx, match);
+  if (strict?.subject.revision?.schemaChange !== undefined) {
+    return strict;
+  }
+  const { grant } = authorization.get();
+  const state = appBuilderWorkflowState.get();
+  if (
+    state.phase !== "reviewed" ||
+    grant?.subject.appId !== match.appId ||
+    grant.subject.revision?.schemaChange === undefined ||
+    grant.subject.revision.reconciliation !== undefined
+  ) {
+    return undefined;
+  }
+  const matchesDestination = (
+    ["repositoryId", "repositoryFullName", "baseBranch", "installationId"] as const
+  ).every((key) => match[key] === undefined || match[key] === grant.subject[key]);
+  const original = subjectForProposal(ctx, state, [], revisionPredecessor(state.proposal.digest));
+  return matchesDestination && sameSubject(original, grant.subject) ? grant : undefined;
+};
+
 /** A completed delivery is the predecessor for a new change, not a fresh approval subject. */
 export const currentDirectProductionProposalIsDelivered = (ctx: OwnerContext): boolean => {
   const state = appBuilderWorkflowState.get();
