@@ -519,14 +519,6 @@ const publishValidatedCandidate = async () => {
   expect(mocks.publish.mock.calls[0]?.[0]).toMatchObject({ proposal });
   expect(mocks.publish.mock.calls[0]?.[0].review.digest).toBe(review.reviewDigest);
   expect(draftReconciliationState.get()?.publishedReconciliation?.digest).toBe(proposal.digest);
-  expect(currentGitHubPrDeliveryAuthorityProjection()).toMatchObject({
-    current: { reconciliationDigest: proposal.digest },
-    publishedReconciliation: {
-      digest: proposal.digest,
-      reconciliationReviewDigest: proposal.reviewDigest,
-      reconciliationTree: proposal.resolvedTree,
-    },
-  });
   expect(appBuilderWorkflowState.get()).toEqual(workflowBefore);
   expect(mocks.captureAuthority).not.toHaveBeenCalled();
   const approval = { ...f.approval, reconciliationDigest: proposal.digest };

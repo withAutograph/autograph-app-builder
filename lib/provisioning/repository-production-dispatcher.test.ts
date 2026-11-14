@@ -337,11 +337,11 @@ describe("protected repository Production dispatcher", () => {
 
   it("returns only the installed schema proof to the authenticated Builder workload", async () => {
     const f = fixture();
-    const target = { expectedRepositoryId: "123", reviewedHeadSha: "a".repeat(40) };
+    const expectedRepositoryId = "123";
     const proof = {
       version: 1,
       appId: owner.appId,
-      repositoryId: target.expectedRepositoryId,
+      repositoryId: expectedRepositoryId,
       releaseId: "release-1",
       artifactSha256: "b".repeat(64),
       manifestSha256: "c".repeat(64),
@@ -349,7 +349,7 @@ describe("protected repository Production dispatcher", () => {
     } as const;
     const read = vi.fn(async () => proof);
     f.deps.readSchemaPredecessor = read;
-    const request = { version: 1, ...owner, ...target, action: "schema-predecessor" };
+    const request = { version: 1, ...owner, action: "schema-predecessor" };
     expect((await f.send(request, "auth")).status).toBe(403);
     expect((await f.send({ ...request, sessionId: "other" })).status).toBe(403);
     expect((await f.send({ ...request, reviewedHeadSha: "main" })).status).toBe(400);
@@ -358,7 +358,15 @@ describe("protected repository Production dispatcher", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.json()).toEqual(proof);
-    expect(read).toHaveBeenCalledExactlyOnceWith(owner, target);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(read.mock.calls[0]).toEqual([owner, undefined]);
+    const legacy = await f.send({
+      ...request,
+      expectedRepositoryId,
+      reviewedHeadSha: "a".repeat(40),
+    });
+    expect(legacy.status).toBe(200);
+    expect(read).toHaveBeenLastCalledWith(owner, expectedRepositoryId);
     expect(f.prepared).not.toHaveBeenCalled();
     expect(f.deps.resolveSetup).not.toHaveBeenCalled();
     expect(f.deps.management.execute).not.toHaveBeenCalled();
