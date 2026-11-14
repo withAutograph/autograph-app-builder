@@ -5,10 +5,14 @@ import { readMergedReleaseSourceRecovery } from "./merged-release-source-recover
 
 const mocks = vi.hoisted(() => ({
   completions: vi.fn(),
+  anchor: vi.fn(),
   runtime: vi.fn(),
   inspectHead: vi.fn(),
   inspectPullRequest: vi.fn(),
   readRelease: vi.fn(),
+}));
+vi.mock("./direct-production-state", () => ({
+  retainedProductionSourceReconciliation: mocks.anchor,
 }));
 vi.mock("./draft-reconciliation-state", () => ({
   draftReconciliationCompletions: { get: mocks.completions },
@@ -37,12 +41,17 @@ const resolvedTree = "4".repeat(40);
 const mergeSha = "5".repeat(40);
 const artifactRef = "retained-v8";
 const appSpecDigest = "6".repeat(64);
+const selectedSchema = "9".repeat(64);
+const selectedManifest = "a".repeat(64);
+const reconciliationDigest = "b".repeat(64);
+const priorReviewDigest = "c".repeat(64);
 const artifact = Buffer.from('{"version":"2026-11-16.v8"}');
 const sql = Buffer.from("checked release member");
 
 const request = (changes: readonly string[] = [`apps/${appId}/app/page.tsx`]): RecoveryRequest => {
   const current = {
     appSpec: { appId, digest: "7".repeat(64) },
+    proposal: { digest: "8".repeat(64) },
     applyReceipt: {
       applyRoot: "/workspace/repository",
       changes: changes.map((path) => ({ path })),
@@ -67,7 +76,10 @@ const request = (changes: readonly string[] = [`apps/${appId}/app/page.tsx`]): R
 
 const completion = (repositoryId = repository.repositoryId) => ({
   appId,
+  preparation: "sealed-before-approval",
   proposal: {
+    digest: reconciliationDigest,
+    reviewDigest: priorReviewDigest,
     ...repository,
     repositoryId,
     baseBranch: "main",
@@ -79,7 +91,16 @@ const completion = (repositoryId = repository.repositoryId) => ({
   publishedOrigin: { publicationProposalDigest: originalProposalDigest },
   publicationScope: { proposal: { digest: originalProposalDigest } },
   compilation: {
-    release: { status: "published", selection: { releaseId, artifactRef, appSpecDigest } },
+    release: {
+      status: "published",
+      selection: {
+        releaseId,
+        artifactRef,
+        appSpecDigest,
+        schemaSha256: selectedSchema,
+        manifestSha256: selectedManifest,
+      },
+    },
   },
 });
 
@@ -101,7 +122,12 @@ describe("recover a checked release from the app's merged source", () => {
     mocks.inspectHead.mockResolvedValue(reviewedHead);
     mocks.inspectPullRequest.mockResolvedValue(mergedPullRequest);
     mocks.readRelease.mockResolvedValue({
-      selection: { publishedSource: { gitTree: resolvedTree } },
+      selection: {
+        releaseId,
+        schemaSha256: selectedSchema,
+        manifestSha256: selectedManifest,
+        publishedSource: { gitTree: resolvedTree },
+      },
       files: { "app-artifact.json": artifact, "schema.sql": sql },
     });
   });
@@ -132,11 +158,6 @@ describe("recover a checked release from the app's merged source", () => {
         lookup: {
           artifactRef,
           appSpecDigest,
-          publishedSource: {
-            repositoryId: repository.repositoryId,
-            branch: completion().proposal.branchName,
-            gitSha: reviewedHead,
-          },
         },
         sessionAuth: contextSession.auth,
       }),
@@ -156,9 +177,42 @@ describe("recover a checked release from the app's merged source", () => {
     expect(mocks.readRelease).not.toHaveBeenCalled();
   });
 
+  it("uses the retained predecessor when a legacy seal has no embedded publication origin", async () => {
+    const { appId: preservedAppId, preparation, proposal, compilation } = completion();
+    mocks.completions.mockReturnValue([
+      { appId: preservedAppId, preparation, proposal, compilation },
+    ]);
+    const anchor = {
+      digest: reconciliationDigest,
+      originPublicationDigest: originalProposalDigest,
+      originPublicationReceiptDigest: originalReceiptDigest,
+      resolvedTree,
+      pullRequestNumber: proposal.pullRequestNumber,
+      reviewDigest: priorReviewDigest,
+    };
+    mocks.anchor.mockReturnValue({ ...anchor, reviewDigest: "d".repeat(64) });
+    await expect(readMergedReleaseSourceRecovery(request())).resolves.toBeNull();
+    expect(mocks.inspectHead).not.toHaveBeenCalled();
+    mocks.anchor.mockReturnValue(anchor);
+    mocks.readRelease.mockResolvedValue({
+      selection: { releaseId, schemaSha256: selectedSchema, manifestSha256: selectedManifest },
+      files: { "app-artifact.json": artifact, "sql-bundle.sql": sql },
+    });
+    await expect(readMergedReleaseSourceRecovery(request())).resolves.toMatchObject({
+      mergeSha,
+      releaseId,
+    });
+    expect(mocks.inspectHead).toHaveBeenCalledWith(originalProposalDigest, proposal);
+  });
+
   it("refuses an archived release from a different reviewed tree", async () => {
     mocks.readRelease.mockResolvedValue({
-      selection: { publishedSource: { gitTree: "e".repeat(40) } },
+      selection: {
+        releaseId,
+        schemaSha256: selectedSchema,
+        manifestSha256: selectedManifest,
+        publishedSource: { gitTree: "e".repeat(40) },
+      },
       files: { "app-artifact.json": artifact, "schema.sql": sql },
     });
     await expect(readMergedReleaseSourceRecovery(request())).resolves.toBeNull();

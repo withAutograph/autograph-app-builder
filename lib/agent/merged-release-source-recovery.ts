@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ToolContext } from "eve/tools";
+import { retainedProductionSourceReconciliation } from "./direct-production-state";
 import { draftReconciliationCompletions } from "./draft-reconciliation-state";
 import { githubPublicationRuntimeForSession } from "./deployment-github-publication-runtime";
 import { readExactCompiledOperatorReleaseForSession } from "./compiled-operator-artifacts";
@@ -9,6 +10,7 @@ import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator
 export const readMergedReleaseSourceRecovery = async (input: {
   current: {
     appSpec: { appId: string; digest: string };
+    proposal: { digest: string };
     applyReceipt: { applyRoot: string; changes: readonly { path: string }[] };
     githubSource?: Pick<ImmutableGitHubSourceReceipt, "repository" | "resolvedRef"> | undefined;
   };
@@ -27,9 +29,11 @@ export const readMergedReleaseSourceRecovery = async (input: {
     return null;
   }
 
+  const anchor = retainedProductionSourceReconciliation(current.proposal.digest);
   const matches = draftReconciliationCompletions.get().filter((completion) => {
     const { proposal, compilation } = completion;
     const sameSource = [
+      completion.preparation === "sealed-before-approval",
       completion.appId === appId,
       proposal.repositoryId === source.repository.repositoryId,
       proposal.owner === source.repository.owner,
@@ -63,9 +67,19 @@ export const readMergedReleaseSourceRecovery = async (input: {
       continue;
     }
     const { selection } = compilation.release;
+    const anchored =
+      anchor !== undefined &&
+      [
+        anchor.digest === proposal.digest,
+        anchor.originPublicationReceiptDigest === proposal.priorPublicationDigest,
+        anchor.resolvedTree === proposal.resolvedTree,
+        anchor.reviewDigest === proposal.reviewDigest,
+        anchor.pullRequestNumber === proposal.pullRequestNumber,
+      ].every(Boolean);
     const publicationDigest =
       completion.publishedOrigin?.publicationProposalDigest ??
-      completion.publicationScope?.proposal.digest;
+      completion.publicationScope?.proposal.digest ??
+      (anchored ? anchor.originPublicationDigest : undefined);
     if (publicationDigest === undefined) {
       continue;
     }
@@ -98,17 +112,16 @@ export const readMergedReleaseSourceRecovery = async (input: {
       lookup: {
         artifactRef: selection.artifactRef,
         appSpecDigest: selection.appSpecDigest,
-        publishedSource: {
-          repositoryId: proposal.repositoryId,
-          branch: proposal.branchName,
-          gitSha: head,
-        },
       },
     });
-    if (
-      retained === undefined ||
-      retained.selection.publishedSource?.gitTree !== proposal.resolvedTree
-    ) {
+    const retainedMatches = [
+      retained?.selection.releaseId === releaseId,
+      retained?.selection.schemaSha256 === selection.schemaSha256,
+      retained?.selection.manifestSha256 === selection.manifestSha256,
+      retained?.selection.publishedSource === undefined ||
+        retained.selection.publishedSource.gitTree === proposal.resolvedTree,
+    ].every(Boolean);
+    if (retained === undefined || !retainedMatches) {
       continue;
     }
     ctx.abortSignal.throwIfAborted();

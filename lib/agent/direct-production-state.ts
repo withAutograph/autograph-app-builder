@@ -221,6 +221,10 @@ const revisionPredecessor = (proposalDigest: string): DirectProductionGrant | un
     : undefined;
 };
 
+/** The retained decision locates the previous approved repair; it grants no source or deployment effect. */
+export const retainedProductionSourceReconciliation = (proposalDigest: string) =>
+  revisionPredecessor(proposalDigest)?.subject.revision?.reconciliation;
+
 type AppFileChange = Pick<OverlayChange, "path" | "before" | "after">;
 
 const isExistingPresentationEdit = (change: AppFileChange, appPath: string): boolean => {

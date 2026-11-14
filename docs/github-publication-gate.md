@@ -665,7 +665,9 @@ activation. The same approval covers the checked schema update on the existing
 database. An approved follow-up can recover a conflicting private copy of
 a previously merged generated release. Builder checkpoints the old bytes,
 then verifies the earlier owned publication and the entire captured release
-against the selected branch before restoring only that release. It preserves
+against the selected branch before restoring only that release. The earlier
+Production approval can locate the same sealed publication when a legacy
+completion lacks its origin metadata. Builder preserves
 the new proposal and leaves an unverified conflict for reconciliation.
 
 If an earlier candidate failed before merge, Builder can prepare an ordinary
