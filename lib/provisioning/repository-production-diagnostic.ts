@@ -13,7 +13,6 @@ const failureSchema = z.strictObject({
     "setup_projection",
     "schema_predecessor_owner",
     "schema_predecessor_setup",
-    "schema_predecessor_publication",
     "schema_predecessor_installation",
     "connection_authority",
     "worker_authority",

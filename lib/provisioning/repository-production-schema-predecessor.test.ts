@@ -1,8 +1,5 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { ARRUSTED_PRODUCTION_REPOSITORY } from "../agent/direct-production-authorization";
-import { approvedBuildDecisionSchema } from "../agent/approved-build-continuation";
-import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
 import {
   initialRepositoryProductionRecord,
   repositoryProductionOperationRef,
@@ -12,12 +9,7 @@ import type {
   RepositoryProductionScope,
 } from "./repository-production-contract";
 import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launcher";
-import {
-  assertRepositoryProductionSchemaPredecessorSource,
-  readInstalledRepositoryProductionSchemaPredecessor,
-  readRepositoryProductionSchemaPredecessorAuthority,
-} from "./repository-production-schema-predecessor";
-import type { OperatorOwnerContext } from "./hosted-operator-contract";
+import { readInstalledRepositoryProductionSchemaPredecessor } from "./repository-production-schema-predecessor";
 
 const appId = "bench-log";
 const releaseId = "release-1";
@@ -157,164 +149,5 @@ describe("installed Production schema predecessor", () => {
       expect(ports.inspect).not.toHaveBeenCalled();
     }
     expect(pending.readRelease).not.toHaveBeenCalled();
-  });
-});
-
-const readAuthorityFixture = () => {
-  const logicalSessionId = "logical-owner";
-  const owner: OperatorOwnerContext = {
-    kind: "direct",
-    authority: scope.authority,
-    principal: { ...scope.authority, scopes: ["autograph:send"] },
-    sessionId: "saved-session",
-    adapterSessionId: "current-worker",
-    adapterGeneration: 2,
-  };
-  const { repositoryId } = scope;
-  const installationId = "456";
-  const baseBranch = "main";
-  const appSpecDigest = "1".repeat(64);
-  const reviewDigest = "7".repeat(64);
-  const decision: ApprovedBuildDecision = {
-    version: 1,
-    adapterSessionId: owner.adapterSessionId,
-    turnId: "correction",
-    turnSequence: 2,
-    decision: "blocked",
-    workflowPhase: "reviewed",
-    currentSpec: {
-      appId,
-      appSpecDigest,
-      proposalDigest: "2".repeat(64),
-      sessionId: logicalSessionId,
-      workspaceId: "private-workspace",
-    },
-    githubDelivery: {
-      version: 1,
-      requirements: [],
-      calls: [],
-      current: {
-        appId,
-        appSpecDigest,
-        proposalDigest: "8".repeat(64),
-        reviewDigest,
-        installationId,
-      },
-    },
-  };
-  const [repoOwner, repoName] = ARRUSTED_PRODUCTION_REPOSITORY.split("/");
-  const published = {
-    repositoryId,
-    branch: "published-draft",
-    gitSha: "a".repeat(40),
-    gitTree: "b".repeat(40),
-    changeSetDigest: "9".repeat(64),
-    reviewDigest,
-  };
-  return {
-    input: {
-      decision: approvedBuildDecisionSchema.parse(decision),
-      destination: {
-        version: 1 as const,
-        kind: "existing-repository" as const,
-        confirmedByCallId: "select",
-        appId,
-        installationId,
-        repository: {
-          repositoryId,
-          owner: repoOwner,
-          name: repoName,
-          defaultBranch: baseBranch,
-        },
-      },
-      owner,
-      logicalSessionId,
-      appId,
-      repositoryId,
-    },
-    published,
-    target: { expectedRepositoryId: repositoryId, reviewedHeadSha: published.gitSha },
-  };
-};
-
-describe("published draft readback authority", () => {
-  it("uses the owner-reviewed publication without requiring permission to correct it", () => {
-    const { input, target, published } = readAuthorityFixture();
-    const authority = readRepositoryProductionSchemaPredecessorAuthority(input);
-    expect(authority.repositoryFullName).toBe(ARRUSTED_PRODUCTION_REPOSITORY);
-    expect(input.decision.directProduction).toBeUndefined();
-    expect(assertRepositoryProductionSchemaPredecessorSource(authority, published, target)).toEqual(
-      published,
-    );
-    expect(() =>
-      assertRepositoryProductionSchemaPredecessorSource(
-        authority,
-        { ...published, gitSha: "f".repeat(40) },
-        target,
-      ),
-    ).toThrow();
-    expect(() =>
-      assertRepositoryProductionSchemaPredecessorSource(
-        authority,
-        { ...published, reviewDigest: "d".repeat(64) },
-        target,
-      ),
-    ).toThrow();
-  });
-
-  it("rejects a changed physical owner, repository, logical session, or installation", () => {
-    const { input } = readAuthorityFixture();
-    const changes = [
-      {
-        ...input,
-        owner: { ...input.owner, adapterSessionId: "another-worker" },
-      },
-      { ...input, repositoryId: "999" },
-      { ...input, logicalSessionId: "other-session" },
-      { ...input, destination: { ...input.destination, installationId: "999" } },
-      { ...input, decision: { ...input.decision, workflowPhase: "planned" } },
-    ];
-    for (const changed of changes) {
-      expect(() => readRepositoryProductionSchemaPredecessorAuthority(changed)).toThrow();
-    }
-  });
-
-  it("accepts a retained published reconciliation only with its exact review and tree", () => {
-    const { input, published, target } = readAuthorityFixture();
-    const reconciliationDigest = "3".repeat(64);
-    const reconciled = {
-      digest: reconciliationDigest,
-      reconciliationReviewDigest: "4".repeat(64),
-      reconciliationTree: "5".repeat(40),
-    };
-    const { githubDelivery } = input.decision;
-    if (githubDelivery === undefined || githubDelivery.current === null) {
-      throw new Error("Expected an existing reviewed draft fixture.");
-    }
-    const current = { ...githubDelivery.current, reconciliationDigest };
-    const partial = {
-      ...input.decision,
-      workflowPhase: "validated",
-      githubDelivery: { ...githubDelivery, current },
-    };
-    expect(() =>
-      readRepositoryProductionSchemaPredecessorAuthority({ ...input, decision: partial }),
-    ).toThrow();
-    const decision = {
-      ...partial,
-      githubDelivery: { ...githubDelivery, current, publishedReconciliation: reconciled },
-    };
-    const authority = readRepositoryProductionSchemaPredecessorAuthority({ ...input, decision });
-    expect(() =>
-      assertRepositoryProductionSchemaPredecessorSource(authority, published, target),
-    ).toThrow();
-    const result = {
-      ...published,
-      reviewDigest: reconciled.reconciliationReviewDigest,
-      gitTree: reconciled.reconciliationTree,
-    };
-    expect(assertRepositoryProductionSchemaPredecessorSource(authority, result, target)).toEqual(
-      result,
-    );
   });
 });

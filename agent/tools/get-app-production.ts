@@ -6,7 +6,7 @@ import { nextProductionDeliveryCall } from "../../lib/agent/prepare-app-producti
 export default defineTool({
   availableInSubagents: false,
   description:
-    "Read the saved app's Production setup progress. Retains its original database, destination and account-link state across interrupted setup and revisions. Use after an uncertain response, or while waiting for the one-time app sign-in. For an approved optional-field revision blocked at setup, includeSchemaPredecessor checks the installed schema behind the exact current owned draft and returns checked identities. This read-only diagnostic does not run ordinary setup or continuation.",
+    "Read the saved app's Production setup progress. Retains its original database, destination and account-link state across interrupted setup and revisions. Use after an uncertain response, or while waiting for the one-time app sign-in. Use includeSchemaPredecessor to read the installed schema identity for this session’s existing app, including while an optional-field revision is blocked. This read only returns schema identifiers and hashes.",
   inputSchema: z.strictObject({
     appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
     includeSchemaPredecessor: z.literal(true).optional(),

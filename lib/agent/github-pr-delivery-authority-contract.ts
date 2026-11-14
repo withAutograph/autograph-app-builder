@@ -47,6 +47,7 @@ export const githubPrDeliveryCallScopeSchema = z.strictObject({
 export const githubPrDeliveryAuthorityProjectionSchema = z.strictObject({
   version: z.literal(1),
   current: githubPrDeliveryReviewScopeSchema.nullable(),
+  // Kept for stored projections written by older Builder deployments.
   publishedReconciliation: z
     .strictObject({
       digest,

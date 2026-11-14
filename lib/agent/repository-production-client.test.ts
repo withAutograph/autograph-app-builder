@@ -207,10 +207,6 @@ describe("native Production revision transport", () => {
 });
 
 describe("installed schema readback transport", () => {
-  const exactTarget = {
-    expectedRepositoryId: repository.repositoryId,
-    reviewedHeadSha: reviewedTarget.reviewedHeadSha,
-  };
   const identity = {
     version: 1,
     appId: status.appId,
@@ -221,41 +217,33 @@ describe("installed schema readback transport", () => {
     cueSha256: "c".repeat(64),
   };
 
-  it("reads only the existing setup for the exact app, repository and draft head", async () => {
+  it("reads only the existing setup for the owned app", async () => {
     const f = deliveryClient();
     f.fetch.mockResolvedValueOnce(Response.json(identity));
-    await expect(
-      f.client.schemaPredecessor(
-        status.appId,
-        exactTarget.expectedRepositoryId,
-        exactTarget.reviewedHeadSha,
-      ),
-    ).resolves.toEqual(identity);
+    await expect(f.client.schemaPredecessor(status.appId)).resolves.toEqual(identity);
     expect(f.fetch).toHaveBeenCalledExactlyOnceWith(
       new URL("https://operator.test/v1/repository-production"),
       expect.objectContaining({
         method: "POST",
-        body: f.requestBody(exactTarget, "schema-predecessor"),
+        body: f.requestBody({}, "schema-predecessor"),
       }),
     );
   });
 
   it("rejects ambiguous or malformed identity instead of falling back to ordinary setup", async () => {
     const f = deliveryClient();
-    for (const response of [
-      Response.json({ ...identity, repositoryId: "999" }),
-      Response.json({ ...identity, connection: "private configuration" }),
-      Response.json({ code: "request_invalid" }, { status: 400 }),
-    ]) {
+    for (const [response, stage] of [
+      [Response.json({ ...identity, appId: "different-app" }), "identity-invalid"],
+      [Response.json({ ...identity, connection: "private configuration" }), "identity-invalid"],
+      [Response.json({ code: "request_invalid" }, { status: 400 }), "operator-unavailable"],
+      [
+        Response.json({ code: "protected_owner_unavailable" }, { status: 403 }),
+        "owner-unavailable",
+      ],
+    ] as const) {
       f.fetch.mockReset().mockResolvedValueOnce(response);
       // oxlint-disable-next-line eslint/no-await-in-loop -- Keep each mock scoped to one failed request.
-      await expect(
-        f.client.schemaPredecessor(
-          status.appId,
-          exactTarget.expectedRepositoryId,
-          exactTarget.reviewedHeadSha,
-        ),
-      ).rejects.toThrow();
+      await expect(f.client.schemaPredecessor(status.appId)).rejects.toThrow(stage);
       expect(f.fetch).toHaveBeenCalledOnce();
     }
   });

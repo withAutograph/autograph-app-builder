@@ -224,11 +224,6 @@ export interface OperatorArtifactSelections {
     context: OperatorArtifactContext,
     appSpecDigest: string,
   ) => Promise<CompiledOperatorReleaseSelection | undefined>;
-  /** Current published capture; private compilations without Git completion do not supersede it. */
-  readPublishedRelease?: (
-    context: OperatorArtifactContext,
-    appSpecDigest: string,
-  ) => Promise<CompiledOperatorReleaseSelection | undefined>;
   /** Optional for legacy writers; supported hosted/local stores retain exact historical markers. */
   readExact?: (
     context: OperatorArtifactContext,
@@ -304,15 +299,8 @@ export const createPostgresOperatorArtifactSelections = (input: {
   const readSelection = async (
     context: OperatorArtifactContext,
     appSpecDigest: string,
-    publishedOnly = false,
   ): Promise<CompiledOperatorReleaseSelection | undefined> => {
     const scope = scoped(context, appSpecDigest);
-    const selected = predicate(scope);
-    // Other artifact rows can contain HTML. Guard the cast even if SQL reorders predicates.
-    const publishedSource = sql`case when ${selected} then ${prototypeArtifactChunks.content}::jsonb -> 'publishedSource' end`;
-    const filter = publishedOnly
-      ? and(selected, sql`jsonb_typeof(${publishedSource}) = 'object'`)
-      : selected;
     await input.assertCurrentOwner(context);
     const [row] = await input.database
       .select({
@@ -320,7 +308,7 @@ export const createPostgresOperatorArtifactSelections = (input: {
         content: prototypeArtifactChunks.content,
       })
       .from(prototypeArtifactChunks)
-      .where(filter)
+      .where(predicate(scope))
       .orderBy(
         desc(prototypeArtifactChunks.createdAt),
         desc(prototypeArtifactChunks.transferDigest),
@@ -436,9 +424,6 @@ export const createPostgresOperatorArtifactSelections = (input: {
       });
     },
     read: readSelection,
-    async readPublishedRelease(context, appSpecDigest) {
-      return await readSelection(context, appSpecDigest, true);
-    },
     async readExact(context, lookupInput) {
       const lookup = exactCompiledOperatorReleaseLookupSchema.parse(lookupInput);
       const authority = hostedTenantAuthoritySchema.parse(context.authority);
