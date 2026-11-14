@@ -6,6 +6,7 @@ import { isEquivalentCompiledOperatorRelease } from "../provisioning/hosted-oper
 import type { CompiledOperatorReleaseSelection } from "../provisioning/hosted-operator-artifact-selection";
 import { GENERATED_RELEASE_MEMBERS } from "../provisioning/hosted-operator-sandbox-launcher";
 import { verifyOptionalFieldCorrectionEquivalence } from "../provisioning/optional-field-correction-equivalence";
+import type { OptionalFieldCorrectionFailure } from "../provisioning/optional-field-correction-equivalence";
 import { readOptionalTextReleasePredecessor } from "../provisioning/repository-production-schema-revision";
 import type { ExistingDraftReconciliationProposal } from "../repository/github-draft-reconciliation";
 import { readExactCompiledOperatorReleaseForSession } from "./compiled-operator-artifacts";
@@ -51,7 +52,8 @@ export type OptionalFieldCorrectionProofFailure =
   | "installed-predecessor-archive"
   | "original-predecessor-marker"
   | "original-predecessor-archive"
-  | "correction-equivalence";
+  | "correction-equivalence"
+  | `correction-equivalence-${OptionalFieldCorrectionFailure}`;
 
 type CorrectionProofResult =
   | { reason: OptionalFieldCorrectionProofFailure }
@@ -323,24 +325,30 @@ export const readOptionalFieldCorrectionProof = async (
   if (originalPrior !== undefined) {
     approvedPair.prior = { ...originalPrior.selection, files: originalPrior.files };
   }
-  const verified = reads.verify({
-    appId,
-    original: approvedPair,
-    corrected: {
-      ...schemaChange,
-      prior: { ...activePrior.selection, files: activePrior.files },
-      candidate: { ...next.selection, files: next.files },
+  let equivalenceFailure: OptionalFieldCorrectionFailure | undefined;
+  const verified = reads.verify(
+    {
+      appId,
+      original: approvedPair,
+      corrected: {
+        ...schemaChange,
+        prior: { ...activePrior.selection, files: activePrior.files },
+        candidate: { ...next.selection, files: next.files },
+      },
+      published: {
+        releaseId: published.releaseId,
+        artifactSha256: published.files["app-artifact.json"] ?? "",
+        manifestSha256: published.files["release-manifest.json"] ?? "",
+        cueSha256: published.cueSha256,
+      },
+      publishedPriorCue: published.cueBytes,
+      installed: predecessor,
+      headChanges: review.headChanges,
     },
-    published: {
-      releaseId: published.releaseId,
-      artifactSha256: published.files["app-artifact.json"] ?? "",
-      manifestSha256: published.files["release-manifest.json"] ?? "",
-      cueSha256: published.cueSha256,
+    (reason) => {
+      equivalenceFailure = reason;
     },
-    publishedPriorCue: published.cueBytes,
-    installed: predecessor,
-    headChanges: review.headChanges,
-  });
+  );
   return verified
     ? {
         proof: {
@@ -350,5 +358,10 @@ export const readOptionalFieldCorrectionProof = async (
           candidate: releaseIdentity(next),
         },
       }
-    : { reason: "correction-equivalence" };
+    : {
+        reason:
+          equivalenceFailure === undefined
+            ? "correction-equivalence"
+            : `correction-equivalence-${equivalenceFailure}`,
+      };
 };

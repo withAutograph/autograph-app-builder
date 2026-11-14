@@ -5,6 +5,7 @@ import type { OverlayChange } from "../repository/target-apply";
 import { GENERATED_RELEASE_MEMBERS } from "./hosted-operator-sandbox-launcher";
 import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launcher";
 import { verifyOptionalFieldCorrectionEquivalence } from "./optional-field-correction-equivalence";
+import type { OptionalFieldCorrectionFailure } from "./optional-field-correction-equivalence";
 
 const appId = "equipment-log";
 const baseVersion = "release-v8";
@@ -242,6 +243,25 @@ const replayFixture = (input: { oldLabel?: string; originalExtraSource?: string 
 describe("Recompiling an approved optional field against its published predecessor", () => {
   it("keeps the original field and write access while correcting an existing label's casing", () => {
     expect(verifyOptionalFieldCorrectionEquivalence(fixture())).toBe(true);
+  });
+
+  it("reports a single closed failure stage for each rejected proof", () => {
+    const correct = replayFixture();
+    const changedCue = { ...correct.original, priorCueSha256: originalPriorCue };
+    const stages: OptionalFieldCorrectionFailure[] = [];
+    const report = (stage: OptionalFieldCorrectionFailure) => {
+      stages.push(stage);
+    };
+    expect(verifyOptionalFieldCorrectionEquivalence(correct, report)).toBe(true);
+    expect(
+      verifyOptionalFieldCorrectionEquivalence({ ...correct, original: changedCue }, report),
+    ).toBe(false);
+    expect(verifyOptionalFieldCorrectionEquivalence({ ...correct, headChanges: [] }, report)).toBe(
+      false,
+    );
+    correct.corrected.candidate.files["sql-bundle.sql"] = Buffer.from("wrong checked SQL");
+    expect(verifyOptionalFieldCorrectionEquivalence(correct, report)).toBe(false);
+    expect(stages).toEqual(["original-predecessor-cue", "reviewed-head-diff", "corrected-release"]);
   });
 
   it.each([

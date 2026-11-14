@@ -15,6 +15,20 @@ type ReleasePair = Omit<Transition, "appId">;
 type OriginalRelease = Omit<ReleasePair, "prior"> & {
   prior?: ReleasePair["prior"] | undefined;
 };
+const recoveredArtifactFailure = "original-predecessor-artifact";
+type RecoveredPairFailure =
+  | "original-predecessor-cue"
+  | typeof recoveredArtifactFailure
+  | "deterministic-cue-replay";
+export type OptionalFieldCorrectionFailure =
+  | RecoveredPairFailure
+  | "release-coordinates"
+  | "corrected-release"
+  | "installed-predecessor"
+  | "original-archive"
+  | "schema-equivalence"
+  | "compiler-inputs"
+  | "reviewed-head-diff";
 
 interface PredecessorIdentity {
   releaseId: string;
@@ -91,6 +105,15 @@ const compilerInputs = (candidate: ReleasePair["candidate"], cuePath: string) =>
   return { compiler, sources };
 };
 
+class RecoveredPairError extends Error {
+  readonly reason: RecoveredPairFailure;
+  constructor(reason: RecoveredPairFailure, options?: ErrorOptions) {
+    super(reason, options);
+    this.name = "RecoveredPairError";
+    this.reason = reason;
+  }
+}
+
 const changedExistingLabels = (prior: Artifact, candidate: Artifact) =>
   prior.schema.models.flatMap((model) => {
     const candidateModel = candidate.schema.models.find(({ id }) => id === model.id);
@@ -100,15 +123,19 @@ const changedExistingLabels = (prior: Artifact, candidate: Artifact) =>
     });
   });
 
-const replaceSingleLabel = (bytes: Buffer, labels: { canonical: string; stale: string }) => {
+const replaceSingleLabel = (
+  bytes: Buffer,
+  labels: { canonical: string; stale: string },
+  failure: RecoveredPairFailure,
+) => {
   const raw = bytes.toString("utf-8");
   if (!Buffer.from(raw).equals(bytes)) {
-    throw new Error("The checked label source is not UTF-8.");
+    throw new RecoveredPairError(failure);
   }
   const canonical = JSON.stringify(labels.canonical);
   const index = raw.indexOf(canonical);
   if (index === -1 || index !== raw.lastIndexOf(canonical)) {
-    throw new Error("The checked label does not have a unique literal.");
+    throw new RecoveredPairError(failure);
   }
   return raw.slice(0, index) + JSON.stringify(labels.stale) + raw.slice(index + canonical.length);
 };
@@ -129,44 +156,54 @@ const recoverOriginalPair = (input: {
     labels === undefined ||
     labels.canonical.toLowerCase() !== labels.stale.toLowerCase()
   ) {
-    throw new Error("The original draft must differ by exactly one existing label's casing.");
+    throw new RecoveredPairError(recoveredArtifactFailure);
   }
-  const staleCue = replaceSingleLabel(canonicalCue, labels);
+  const staleCue = replaceSingleLabel(canonicalCue, labels, "original-predecessor-cue");
   if (
     sha256(canonicalCue) !== corrected.priorCueSha256 ||
     sha256(staleCue) !== original.priorCueSha256
   ) {
-    throw new Error("The deterministic predecessor source does not match the reviewed CUE.");
+    throw new RecoveredPairError("original-predecessor-cue");
   }
   const recoveredArtifact = Buffer.from(
-    replaceSingleLabel(corrected.prior.files["app-artifact.json"], labels),
+    replaceSingleLabel(
+      corrected.prior.files["app-artifact.json"],
+      labels,
+      recoveredArtifactFailure,
+    ),
   );
-  const field = readTransitionForRecoveredOptionalField({
-    appId,
-    publishedPrior: corrected.prior,
-    publishedPriorCueSha256: corrected.priorCueSha256,
-    recoveredArtifact,
-    candidate: original.candidate,
-    candidateCueSha256: original.candidateCueSha256,
-  });
+  let field: ReturnType<typeof readTransitionForRecoveredOptionalField>;
+  try {
+    field = readTransitionForRecoveredOptionalField({
+      appId,
+      publishedPrior: corrected.prior,
+      publishedPriorCueSha256: corrected.priorCueSha256,
+      recoveredArtifact,
+      candidate: original.candidate,
+      candidateCueSha256: original.candidateCueSha256,
+    });
+  } catch (error) {
+    throw new RecoveredPairError(recoveredArtifactFailure, { cause: error });
+  }
   const replay = (cue: string, pair: OriginalRelease) => {
-    const result = addOptionalTextField(cue, field);
-    return (
-      result.releaseId === pair.candidate.releaseId &&
-      sha256(result.content) === pair.candidateCueSha256
-    );
+    try {
+      const result = addOptionalTextField(cue, field);
+      return (
+        result.releaseId === pair.candidate.releaseId &&
+        sha256(result.content) === pair.candidateCueSha256
+      );
+    } catch {
+      return false;
+    }
   };
   if (!replay(staleCue, original) || !replay(canonicalCue.toString("utf-8"), corrected)) {
-    throw new Error("The reviewed addition cannot be replayed exactly against both predecessors.");
+    throw new RecoveredPairError("deterministic-cue-replay");
   }
   const prior = artifactSchema.parse(JSON.parse(recoveredArtifact.toString("utf-8")));
   return { prior, candidate };
 };
 
-const readOriginalPair = (
-  input: Parameters<typeof verifyOptionalFieldCorrectionEquivalence>[0],
-  canonicalPrior: Artifact,
-) => {
+const readOriginalPair = (input: CorrectionEquivalenceInput, canonicalPrior: Artifact) => {
   const { appId, original, corrected, publishedPriorCue } = input;
   const { prior } = original;
   if (prior === undefined) {
@@ -221,12 +258,7 @@ const matchesDraftChanges = (input: {
   });
 };
 
-/**
- * Compare the original approved and corrected checked releases. The caller
- * supplies the exact owner-bound installed identity, verified Git history and
- * sealed draft changes. This check grants no authority to retrieve those inputs.
- */
-export const verifyOptionalFieldCorrectionEquivalence = (input: {
+interface CorrectionEquivalenceInput {
   appId: string;
   original: OriginalRelease;
   corrected: ReleasePair;
@@ -234,7 +266,11 @@ export const verifyOptionalFieldCorrectionEquivalence = (input: {
   published: PredecessorIdentity;
   headChanges: readonly OverlayChange[];
   publishedPriorCue?: Buffer | undefined;
-}): boolean => {
+}
+
+const checkOptionalFieldCorrection = (
+  input: CorrectionEquivalenceInput,
+): OptionalFieldCorrectionFailure | null => {
   const { appId, original, corrected, installed, published } = input;
   if (
     ![
@@ -245,21 +281,24 @@ export const verifyOptionalFieldCorrectionEquivalence = (input: {
       original.candidateCueSha256 !== corrected.candidateCueSha256,
     ].every(Boolean)
   ) {
-    return false;
+    return "release-coordinates";
   }
   const cuePath = `apps/${appId}/schema/${appId}.cue`;
+  let stage: OptionalFieldCorrectionFailure = "corrected-release";
   try {
     const nextPair = checkedOnlinePair(appId, corrected);
     const sameActiveRelease =
       isDeepStrictEqual(nextPair.identity, installed) &&
       isDeepStrictEqual(nextPair.identity, published);
     if (!sameActiveRelease) {
-      return false;
+      return "installed-predecessor";
     }
+    stage = "original-archive";
     const oldPair = readOriginalPair(input, nextPair.prior);
     if (oldPair === null) {
-      return false;
+      return stage;
     }
+    stage = "schema-equivalence";
     const sameExistingSchema = isDeepStrictEqual(
       lowerCaseExistingLabels(oldPair.prior, oldPair.prior),
       lowerCaseExistingLabels(nextPair.prior, nextPair.prior),
@@ -268,15 +307,37 @@ export const verifyOptionalFieldCorrectionEquivalence = (input: {
       lowerCaseExistingLabels(oldPair.candidate, oldPair.prior),
       lowerCaseExistingLabels(nextPair.candidate, nextPair.prior),
     );
+    if (!sameExistingSchema || !sameRequestedChange) {
+      return stage;
+    }
+    stage = "compiler-inputs";
     const sameCompilerInputs = isDeepStrictEqual(
       compilerInputs(original.candidate, cuePath),
       compilerInputs(corrected.candidate, cuePath),
     );
-    if (![sameExistingSchema, sameRequestedChange, sameCompilerInputs].every(Boolean)) {
-      return false;
+    if (!sameCompilerInputs) {
+      return stage;
     }
-    return matchesDraftChanges({ ...input, cuePath });
-  } catch {
-    return false;
+    stage = "reviewed-head-diff";
+    return matchesDraftChanges({ ...input, cuePath }) ? null : stage;
+  } catch (error) {
+    return error instanceof RecoveredPairError ? error.reason : stage;
   }
+};
+
+/**
+ * Compare the original approved and corrected checked releases. The caller
+ * supplies the exact owner-bound installed identity, verified Git history and
+ * sealed draft changes. This check grants no authority to retrieve those inputs.
+ */
+export const verifyOptionalFieldCorrectionEquivalence = (
+  input: CorrectionEquivalenceInput,
+  reportFailure?: (reason: OptionalFieldCorrectionFailure) => void,
+): boolean => {
+  const failure = checkOptionalFieldCorrection(input);
+  if (failure === null) {
+    return true;
+  }
+  reportFailure?.(failure);
+  return false;
 };
