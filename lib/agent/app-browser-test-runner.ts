@@ -196,11 +196,15 @@ export const runAppBrowserTests = async (input: {
         };
       }
       const diagnostic = privateBrowserFailureDiagnostic(result.stdout);
+      const locations =
+        diagnostic.locations.length > 0
+          ? ` Failing test locations: ${diagnostic.locations.join(", ")}.`
+          : "";
       return {
         command,
         diagnostic,
         exitCode: result.exitCode,
-        problem: `The selected app's browser test task exited with status ${result.exitCode}. ${privateBrowserFailureRecovery(diagnostic)}`,
+        problem: `The selected app's browser test task exited with status ${result.exitCode}.${locations} ${privateBrowserFailureRecovery(diagnostic)}`,
         status: "failed" as const,
         stderr,
         stdout,

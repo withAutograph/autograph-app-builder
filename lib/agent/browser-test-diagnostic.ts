@@ -25,7 +25,17 @@ export const privateBrowserFailureDiagnostic = (stdout: string) => {
   const categories = testCategories.filter((category) =>
     lines.has(`[private browser category] ${category}`),
   );
-  return { categories, stages };
+  const locations = [...lines]
+    .flatMap((line) => {
+      const match =
+        /^\[private browser failure\] ((?:[A-Za-z0-9_-][A-Za-z0-9_.-]*\/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(?:ts|tsx|js|jsx|mjs|cjs):[1-9]\d{0,6})$/u.exec(
+          line,
+        );
+      const location = match?.[1];
+      return location !== undefined && location.length <= 240 ? [location] : [];
+    })
+    .slice(0, 4);
+  return { categories, stages, locations };
 };
 
 export const privateBrowserFailureRecovery = (
