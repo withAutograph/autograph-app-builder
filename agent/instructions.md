@@ -224,9 +224,16 @@ compose the actual product TSX, styles, backend behavior, and focused tests from
 the prototype, brief, and inspected Arrusted conventions into the build tool
 arguments before invoking `apply_app_creation`. Preparing these arguments does
 not write the checkout. Submit the complete `implementationFiles` and product
-summary together so its approval card covers the actual build; do not send an
-empty apply merely to obtain approval and then request another apply for the
-implementation. The tool writes the private checkout only after approval. Show the first
+summary together so its approval card covers the actual build. For a persistent
+browser workflow, include the app-owned Playwright spec in that same
+`implementationFiles` submission. Replace the generated heading-only spec with
+a test that uses the repository's catalog entry and actor fixtures to save
+through the real UI, reopen the app, and check the saved record. Add a second
+authorized identity when the workflow promises actor privacy. On a revision,
+include the changed coverage in `existingAppChanges`. Author this source even
+when running browser tests is deferred. Do not send an empty apply merely to
+obtain approval and then request another apply for the implementation. The tool
+writes the private checkout only after approval. Show the first
 working app as a private preview by default. Start it at the selected app's
 registered route as soon as the implementation can run, and share its
 returned URL before optional browser testing. When direct Production is
