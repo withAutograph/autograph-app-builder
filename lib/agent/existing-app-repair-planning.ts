@@ -465,6 +465,7 @@ const inspectUnapprovedPlan = (
 };
 
 export const inspectExistingAppRepair = async (input: {
+  assertSettledSourcePlanning?: (() => void) | undefined;
   current: AppBuilderWorkflowState;
   changes: readonly ExistingAppChange[] | undefined;
   sandbox: SandboxSession;
@@ -501,6 +502,19 @@ export const inspectExistingAppRepair = async (input: {
     throw new Error(
       "Finish or reconcile the current private operation before preparing an explicit app repair.",
     );
+  }
+  if (current.phase === "reviewed" && input.assertSettledSourcePlanning !== undefined) {
+    const assertSource = input.assertSettledSourcePlanning;
+    const assertCurrent = () => {
+      assertSource();
+      assertRepairApproval(current, ctx.session.id);
+    };
+    assertCurrent();
+    validateRepairChanges(changes, current);
+    // A settled delivery is source context for a new Build. Do not record a
+    // resumable repair predecessor that could replay its original approval.
+    // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
+    return { requestDigest, approvedBase: undefined, reuse: false, assertCurrent };
   }
   assertRepairBinding(current, base, sandbox, ctx.session.id);
   assertRepairApproval(base, ctx.session.id);

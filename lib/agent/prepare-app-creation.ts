@@ -71,10 +71,16 @@ export const prepareAppCreation = async (
       "Finalize the UI and accept a build-ready AppSpec before running target planning.",
     );
   }
+  let assertSettledSourcePlanning: (() => void) | undefined;
   const sandboxForPlanning =
     optionalTextField === undefined
       ? await refreshPlanningSource(ctx)
-      : await refreshPlanningSource(ctx, "planning", { optionalFieldPlanning: true });
+      : await refreshPlanningSource(ctx, "planning", {
+          optionalFieldPlanning: true,
+          recordSettledSourcePlanningProof(proof) {
+            assertSettledSourcePlanning = proof;
+          },
+        });
   const planningState = appBuilderWorkflowState.get();
   let existingAppChanges = authoredChanges;
   let schemaPreimage: { digest: string; path: string } | undefined;
@@ -102,6 +108,7 @@ export const prepareAppCreation = async (
     schemaPreimage = { digest: sha256(source), path: schemaPath };
   }
   const repair = await inspectExistingAppRepair({
+    assertSettledSourcePlanning,
     current: planningState,
     changes: existingAppChanges,
     sandbox: sandboxForPlanning,

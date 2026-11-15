@@ -60,8 +60,12 @@ before changing validation.
 Record Check completion and merge from GitHub. Record provider build start and
 readiness, observed activity at the Production URL, any protected data update,
 and Builder's live confirmation. The driver's `deliveryTiming` retains Builder's
-reported phase start and latest observation across polling and resume. Use
-GitHub and Vercel for the authoritative provider timestamps. Label a client
+reported phase start and latest observation across polling and resume. The
+public event index orders status changes that share an observation timestamp.
+A repeated live observation retains the first confirmed time until a new
+delivery phase appears. If the first available event is a later exact
+saved-session Production check, use that observed time. Use GitHub and Vercel for
+the authoritative provider timestamps. Label a client
 observation as such. Missing stage timings stay unavailable, including before
 the historical instrumentation was deployed.
 

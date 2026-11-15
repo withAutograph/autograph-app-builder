@@ -1549,6 +1549,27 @@ const deliveryProgressEvent = (index: number, delivery: DeliveryProgress): Inter
 
 const deliveryProgressOutputSchema = z.object({ deliveryProgress: deliveryProgressSchema });
 
+const savedLiveDelivery = (observed?: z.infer<typeof nativeObservationSchema>) => {
+  if (
+    observed?.status !== "available" ||
+    observed.requestedRevision !== "live" ||
+    observed.destination === undefined
+  ) {
+    return null;
+  }
+  // The saved Production read checks the current reviewed merge and any schema grant.
+  // Record when Builder saw it live without replacing the existing pending stage on an inconclusive read.
+  const { observedAt, app } = observed;
+  const delivery = deliveryProgressSchema.safeParse({
+    phase: "live",
+    disposition: "active",
+    startedAt: observedAt,
+    observedAt,
+    appUrl: app.url,
+  });
+  return delivery.success ? delivery.data : null;
+};
+
 /** Project only a new native observation. Historical merge results retain their public cursor. */
 const nativeProductionEvents = (
   result: { toolName: string; callId: string; output: unknown; isError?: boolean },
@@ -1566,12 +1587,14 @@ const nativeProductionEvents = (
         .object({ status: z.literal("merged"), nativeProduction: nativeObservationSchema })
         .safeParse(result.output)
     : undefined;
-  const delivery =
+  const workflowDelivery =
     merged && completed && result.isError !== true
       ? deliveryProgressOutputSchema.safeParse(result.output).data?.deliveryProgress
       : undefined;
   if (merged && output?.success !== true) {
-    return delivery === undefined ? undefined : [deliveryProgressEvent(index, delivery)];
+    return workflowDelivery === undefined
+      ? undefined
+      : [deliveryProgressEvent(index, workflowDelivery)];
   }
 
   const parsed =
@@ -1579,10 +1602,11 @@ const nativeProductionEvents = (
       ? { success: true as const, data: output.data.nativeProduction }
       : nativeObservationSchema.safeParse(result.output);
   const observed = completed && result.isError !== true && parsed.success ? parsed.data : undefined;
+  const delivery = merged ? (workflowDelivery ?? null) : savedLiveDelivery(observed);
   const state: ProgressState =
     observed?.status === "available" || observed?.status === "pending" ? "completed" : "failed";
   const progress: InternalEveEvent =
-    delivery === undefined
+    delivery === null
       ? { index, label: nativeProductionLabel, state, type: "progress" }
       : deliveryProgressEvent(index, delivery);
   if (observed === undefined) {

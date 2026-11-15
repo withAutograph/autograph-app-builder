@@ -54,6 +54,7 @@ import {
   requestDirectProductionGrant,
   retainedPrivateDraftSchemaGrant,
   restoreDirectProductionRevisionPredecessor,
+  settledDirectProductionDelivery,
 } from "./direct-production-state";
 import {
   draftReconciliationState,
@@ -1604,6 +1605,9 @@ describe("direct Production Build authority", () => {
         }),
       );
       const delivery = currentDirectProductionDeliveryAuthorization(releaseContext, failed.subject);
+      if (delivery === undefined) {
+        throw new Error("Expected the effective corrected delivery.");
+      }
       expect(delivery?.grant).toEqual(failed);
       expect(delivery?.effectDigest).not.toBe(failed.digest);
       expect(delivery?.subject.revision).toMatchObject({
@@ -1621,6 +1625,10 @@ describe("direct Production Build authority", () => {
       expect(currentDirectProductionDeliveryAuthorization(releaseContext, failed.subject)).toEqual(
         delivery,
       );
+      recordDirectProductionProgress(failed.digest, "schema-settled");
+      expect(settledDirectProductionDelivery(releaseContext)).toBeUndefined();
+      recordDirectProductionProgress(delivery.effectDigest, "schema-settled");
+      expect(settledDirectProductionDelivery(releaseContext)).toEqual(delivery);
       expect(
         currentDirectProductionDeliveryAuthorization(context("other-owner"), failed.subject),
       ).toBeUndefined();
@@ -1630,6 +1638,7 @@ describe("direct Production Build authority", () => {
       expect(
         currentDirectProductionDeliveryAuthorization(releaseContext, failed.subject),
       ).toBeUndefined();
+      expect(settledDirectProductionDelivery(releaseContext)).toBeUndefined();
     });
   });
 

@@ -2342,6 +2342,56 @@ describe("native app availability progress", () => {
     expect(JSON.stringify(events)).not.toContain("gateway-read");
   });
 
+  it("records an exact live recheck after the saved delivery ended pending", () => {
+    const before = complete("finish-github-pr-delivery", {
+      ...merged,
+      nativeProduction: { ...nativeProduction, requestedRevision: "awaiting-activation" },
+      deliveryProgress: {
+        phase: "deploying",
+        disposition: "retrying",
+        startedAt: "2026-11-10T23:50:00Z",
+        observedAt: nativeProduction.observedAt,
+        appUrl,
+      },
+    });
+    const unconfirmed = complete("observe-app-production", nativeProduction);
+    const pending = projectInstalledEveEvents([before, unconfirmed]);
+    expect(
+      pending.filter((event) => event.type === "progress" && event.delivery !== undefined),
+    ).toMatchObject([{ delivery: { phase: "deploying", disposition: "retrying", appUrl } }]);
+    const observedAt = "2026-11-11T00:06:00Z";
+    const confirmed = complete("observe-app-production", {
+      ...nativeProduction,
+      observedAt,
+      requestedRevision: "live",
+      schemaSetupSettled: true,
+    });
+    const after = projectInstalledEveEvents([before, unconfirmed, confirmed]);
+    expect(after.slice(0, pending.length)).toEqual(pending);
+    expect(after.slice(pending.length)).toMatchObject([
+      {
+        type: "progress",
+        state: "completed",
+        delivery: {
+          phase: "live",
+          disposition: "active",
+          appUrl,
+          startedAt: observedAt,
+          observedAt,
+        },
+      },
+      { type: "assistant_message" },
+    ]);
+    expect(JSON.stringify(after)).not.toContain("private-repository-id");
+  });
+
+  it("omits structured live progress when a recheck lacks the saved repository binding", () => {
+    const unbound = { ...nativeProduction, requestedRevision: "live" };
+    Reflect.deleteProperty(unbound, "destination");
+    const events = projectInstalledEveEvents([complete("observe-app-production", unbound)]);
+    expect(events.find((event) => event.type === "progress")).not.toHaveProperty("delivery");
+  });
+
   it.each(["finish-github-pr-delivery", "observe-app-production"])(
     "confirms the requested revision and public app link after %s",
     (tool) => {

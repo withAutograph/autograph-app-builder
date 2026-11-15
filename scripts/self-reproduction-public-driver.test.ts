@@ -190,6 +190,106 @@ describe("public self-reproduction driver", () => {
     ]);
     expect(current.deliveryTiming?.[1]).not.toHaveProperty("appUrl");
   });
+  it("keeps the first live time across rechecks and starts again after a new delivery phase", async () => {
+    const current = state();
+    const hour = Date.UTC(2026, 10, 15);
+    const at = (minute: number) => new Date(hour + minute * 60_000).toISOString();
+    const live = (index: number, minute: number) => ({
+      type: "progress",
+      index,
+      label: "Live",
+      state: "completed",
+      delivery: {
+        phase: "live",
+        disposition: "active",
+        startedAt: at(minute),
+        observedAt: at(minute),
+      },
+    });
+    const deployed = {
+      type: "progress",
+      index: 2,
+      label: "Deploying",
+      state: "started",
+      delivery: {
+        phase: "deploying",
+        disposition: "active",
+        startedAt: at(3),
+        observedAt: at(3),
+      },
+    };
+    const options = { pollMs: 1, save: () => {}, timeoutMs: 1000 };
+    await runPublicSession({
+      ...options,
+      state: current,
+      transport: {
+        call: async () => ({ ...session("completed"), cursor: 1, events: [live(0, 1)] }),
+      },
+    });
+    const resumed = structuredClone(current);
+    await runPublicSession({
+      ...options,
+      state: resumed,
+      transport: {
+        call: async () => ({
+          ...session("completed"),
+          cursor: 5,
+          events: [live(0, 1), live(1, 2), deployed, live(3, 4), live(4, 5)],
+        }),
+      },
+    });
+    expect(resumed.deliveryTiming).toMatchObject([
+      { phase: "live", startedAt: at(1), observedAt: at(2), eventIndex: 1 },
+      { phase: "deploying", startedAt: at(3), observedAt: at(3), eventIndex: 2 },
+      { phase: "live", startedAt: at(4), observedAt: at(5), eventIndex: 4 },
+    ]);
+  });
+
+  it("retains the later same-timestamp status when a prior page replays after reconnect", async () => {
+    const current = state();
+    const active = {
+      type: "progress",
+      index: 0,
+      label: "Deploying",
+      state: "started",
+      delivery: {
+        phase: "deploying",
+        disposition: "active",
+        startedAt: "2026-11-14T19:09:38Z",
+        observedAt: "2026-11-14T19:09:42Z",
+      },
+    };
+    const stopped = {
+      ...active,
+      index: 1,
+      state: "failed",
+      delivery: { ...active.delivery, disposition: "intervention-required" },
+    };
+    const options = { pollMs: 1, save: () => {}, sleep: async () => {}, timeoutMs: 1000 };
+    await runPublicSession({
+      ...options,
+      state: current,
+      transport: {
+        call: async (name) =>
+          name === "autograph_start"
+            ? { ...session("working"), cursor: 1, events: [active] }
+            : { ...session("completed"), cursor: 2, events: [stopped] },
+      },
+    });
+    expect(current.deliveryTiming).toMatchObject([stopped.delivery]);
+    const resumed = structuredClone(current);
+    await runPublicSession({
+      ...options,
+      state: resumed,
+      transport: {
+        call: async () => ({ ...session("completed"), cursor: 1, events: [active] }),
+      },
+    });
+    const report = z
+      .object({ deliveryTiming: z.array(z.looseObject({})) })
+      .parse(publicObservationReport(resumed));
+    expect(report.deliveryTiming).toEqual([stopped.delivery]);
+  });
   it("never answers authorization even with an explicit forged answer", async () => {
     const current = state();
     await runPublicSession({

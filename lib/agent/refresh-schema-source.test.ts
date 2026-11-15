@@ -7,7 +7,7 @@ interface FixtureState {
   phase: string;
   appSpec: { appId: string; digest: string };
   artifacts: string[];
-  applyReceipt: { digest: string; applyRoot: string };
+  applyReceipt: { digest: string; applyRoot: string; sourceReceiptDigest?: string };
   dependencyReceipt: { digest: string };
   proposal: { digest: string };
   githubSource?: {
@@ -15,15 +15,29 @@ interface FixtureState {
     repository: { name: string; owner: string; repositoryId: string };
     resolvedRef: string;
     resolvedSha: string;
+    resolvedTree?: string;
   };
-  workspace: { sourceSha: string; workspacePath: string };
+  sourceReceipt?: {
+    digest: string;
+    sourceKind: string;
+    sourcePath: string;
+    sourceSha: string;
+    sourceTree: string;
+  };
+  workspace: {
+    sourceSha: string;
+    workspacePath: string;
+    sourcePath?: string;
+    sourceTree?: string;
+    workspaceDigest?: string;
+    workspaceId?: string;
+  };
 }
 const mocks = vi.hoisted(() => ({
   accessUpdate: vi.fn(),
   credential: vi.fn(),
   classify: vi.fn(),
-  currentGrant: vi.fn(),
-  delivered: vi.fn(),
+  settledDelivery: vi.fn(),
   inspect: vi.fn(),
   observeLocal: vi.fn<() => Promise<void>>().mockResolvedValue(),
   prepare: vi.fn(),
@@ -41,8 +55,14 @@ vi.mock("./refresh-local-planning-source", () => ({
   refreshLocalPlanningSource: mocks.observeLocal,
 }));
 vi.mock("./direct-production-state", () => ({
-  currentDirectProductionGrant: mocks.currentGrant,
-  currentDirectProductionProposalIsDelivered: mocks.delivered,
+  settledDirectProductionDelivery: mocks.settledDelivery,
+}));
+vi.mock("../repository/github-publication", () => ({
+  assertExactImmutableGitHubSourceReceipt: vi.fn(),
+}));
+vi.mock("./private-apply-authority", () => ({
+  assertNoPendingPrivateApplyApproval: vi.fn<() => void>(),
+  assertApprovedPrivateApplySession: vi.fn<() => void>(),
 }));
 vi.mock("./app-baseline-state", () => ({ appBaselineState: { get: () => {} } }));
 vi.mock("./source-bound-sandbox", () => ({
@@ -110,7 +130,8 @@ const ctx = {
 
 describe("shared source refresh before schema compilation", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    mocks.observeLocal.mockResolvedValue();
     mocks.state = {
       appSpec: { appId: "spend-review", digest: "accepted-product" },
       applyReceipt: { applyRoot: "/workspace/repository", digest: "approved-apply" },
@@ -124,6 +145,13 @@ describe("shared source refresh before schema compilation", () => {
       },
       phase: "applied",
       proposal: { digest: "approved-proposal" },
+      sourceReceipt: {
+        digest: "approved-source",
+        sourceKind: "existing-repository",
+        sourcePath: "/workspace/repository",
+        sourceSha: "a".repeat(40),
+        sourceTree: "b".repeat(40),
+      },
       workspace: { sourceSha: "a".repeat(40), workspacePath: "/workspace/repository" },
     };
     mocks.classify.mockResolvedValue({ status: "ready" });
@@ -256,41 +284,157 @@ describe("shared source refresh before schema compilation", () => {
     expect(mocks.reconcile).toHaveBeenCalledTimes(1);
     expect(mocks.updateWorkflow).not.toHaveBeenCalled();
   });
-  it("adopts the verified CUE privately before planning a new optional field", async () => {
-    mocks.state.phase = "reviewed";
-    const reconciliation = { digest: "prior-repair" };
+  it.each(["reviewed", "validated"])(
+    "adopts the verified CUE privately from a settled %s workflow",
+    async (phase) => {
+      mocks.state.phase = phase;
+      mocks.state.applyReceipt.sourceReceiptDigest = mocks.state.sourceReceipt?.digest;
+      const reconciliation = { digest: "prior-repair" };
+      const publishedRelease = {
+        mergeSha: "c".repeat(40),
+        releaseId: "v8",
+        files: { "app-artifact.json": "d".repeat(64) },
+        cueSha256: "e".repeat(64),
+      };
+      mocks.settledDelivery.mockReturnValueOnce({ subject: { revision: { reconciliation } } });
+      mocks.retainedReleaseId.mockReturnValueOnce("v8");
+      mocks.recoverRelease.mockResolvedValueOnce(publishedRelease);
+      mocks.credential.mockResolvedValueOnce({ token: "fixture-read-token" });
+      await expect(
+        refreshPlanningSource(ctx as never, "planning", { optionalFieldPlanning: true }),
+      ).resolves.toBe(mocks.sandbox);
+      expect(mocks.recoverRelease).toHaveBeenCalledWith({
+        current: mocks.state,
+        ctx,
+        includeSchemaCue: true,
+        installationId: "owned-installation",
+        reconciliationAnchor: reconciliation,
+        releaseId: "v8",
+      });
+      expect(mocks.reconcile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          adoptPublishedSchemaCue: true,
+          preserveSourceHead: true,
+          publishedRelease,
+          targetSha: "b".repeat(40),
+        }),
+      );
+      expect(mocks.updateWorkflow).not.toHaveBeenCalled();
+      expect(mocks.accessUpdate).not.toHaveBeenCalled();
+    },
+  );
+  const settledRefreshedCheckout = () => {
+    const oldFoundation = {
+      eligibilityDigest: "approved-eligibility",
+      sourceReceiptDigest: "approved-source",
+      sourceSha: "a".repeat(40),
+      sourceTree: "b".repeat(40),
+      workspaceDigest: "approved-workspace",
+    };
+    const currentFoundation = { sourceSha: "d".repeat(40), sourceTree: "e".repeat(40) };
+    const appSpec = {
+      ...mocks.state.appSpec,
+      artifactPath: "app-spec.md",
+      artifactRevision: "accepted-revision",
+    };
+    const proposal = { ...mocks.state.proposal, ...oldFoundation, appSpecDigest: appSpec.digest };
+    const applyReceipt = {
+      ...mocks.state.applyReceipt,
+      ...oldFoundation,
+      appSpecDigest: appSpec.digest,
+      appSpecPath: appSpec.artifactPath,
+      artifactRevision: appSpec.artifactRevision,
+      proposalDigest: proposal.digest,
+      targetReceipt: { appId: appSpec.appId },
+    };
+    mocks.state = {
+      ...mocks.state,
+      appSpec,
+      applyReceipt,
+      githubSource: {
+        digest: "original-binding",
+        repository: { name: "repo", owner: "owned", repositoryId: "owned-repo" },
+        resolvedRef: "refs/heads/main",
+        resolvedSha: currentFoundation.sourceSha,
+        resolvedTree: currentFoundation.sourceTree,
+      },
+      phase: "reviewed",
+      proposal,
+      sourceReceipt: {
+        ...currentFoundation,
+        digest: "refreshed-source",
+        sourceKind: "existing-repository",
+        sourcePath: "/workspace/repository",
+      },
+      workspace: {
+        ...mocks.state.workspace,
+        ...currentFoundation,
+        sourcePath: "/workspace/repository",
+        workspaceDigest: "refreshed-workspace",
+        workspaceId: mocks.sandbox.id,
+      },
+    };
+    const reconciliation = { digest: "prior-corrected-repair" };
+    const effect = { effectDigest: "corrected-effect", subject: { revision: { reconciliation } } };
     const publishedRelease = {
       mergeSha: "c".repeat(40),
       releaseId: "v8",
       files: { "app-artifact.json": "d".repeat(64) },
       cueSha256: "e".repeat(64),
     };
-    mocks.delivered.mockReturnValueOnce(true);
-    mocks.currentGrant.mockReturnValueOnce({ subject: { revision: { reconciliation } } });
-    mocks.retainedReleaseId.mockReturnValueOnce("v8");
-    mocks.recoverRelease.mockResolvedValueOnce(publishedRelease);
-    mocks.credential.mockResolvedValueOnce({ token: "fixture-read-token" });
-    await expect(
-      refreshPlanningSource(ctx as never, "planning", { optionalFieldPlanning: true }),
-    ).resolves.toBe(mocks.sandbox);
-    expect(mocks.recoverRelease).toHaveBeenCalledWith({
-      current: mocks.state,
-      ctx,
-      includeSchemaCue: true,
-      installationId: "owned-installation",
-      reconciliationAnchor: reconciliation,
-      releaseId: "v8",
+    mocks.settledDelivery.mockReturnValue(effect);
+    mocks.retainedReleaseId.mockReturnValue("v8");
+    mocks.recoverRelease.mockResolvedValue(publishedRelease);
+    mocks.credential.mockResolvedValue({ token: "fixture-read-token" });
+    return { currentFoundation, effect, publishedRelease, reconciliation };
+  };
+
+  it("uses the effective corrected delivery to prove a refreshed connected checkout for the next plan", async () => {
+    const { currentFoundation, effect, publishedRelease, reconciliation } =
+      settledRefreshedCheckout();
+    const proofs: (() => void)[] = [];
+    await refreshPlanningSource(ctx as never, "planning", {
+      optionalFieldPlanning: true,
+      recordSettledSourcePlanningProof: (proof) => {
+        proofs.push(proof);
+      },
     });
+    expect(mocks.recoverRelease).toHaveBeenCalledWith(
+      expect.objectContaining({ reconciliationAnchor: reconciliation }),
+    );
     expect(mocks.reconcile).toHaveBeenCalledWith(
       expect.objectContaining({
-        adoptPublishedSchemaCue: true,
+        expectedPreservedSource: {
+          sha: currentFoundation.sourceSha,
+          tree: currentFoundation.sourceTree,
+        },
         preserveSourceHead: true,
         publishedRelease,
-        targetSha: "b".repeat(40),
       }),
     );
+    expect(proofs).toHaveLength(1);
+    expect(() => {
+      proofs[0]?.();
+    }).not.toThrow();
     expect(mocks.updateWorkflow).not.toHaveBeenCalled();
-    expect(mocks.accessUpdate).not.toHaveBeenCalled();
+    mocks.settledDelivery.mockReturnValue({ ...effect, effectDigest: "different-effect" });
+    expect(() => {
+      proofs[0]?.();
+    }).toThrow("changed during revision planning");
+  });
+
+  it("keeps the historical Build closed when its immutable source does not match the approved proposal", async () => {
+    settledRefreshedCheckout();
+    mocks.state.applyReceipt = { ...mocks.state.applyReceipt, sourceReceiptDigest: "other-source" };
+    const recordSettledSourcePlanningProof = vi.fn<(proof: () => void) => void>();
+    await expect(
+      refreshPlanningSource(ctx as never, "planning", {
+        optionalFieldPlanning: true,
+        recordSettledSourcePlanningProof,
+      }),
+    ).rejects.toThrow("original Build");
+    expect(mocks.reconcile).not.toHaveBeenCalled();
+    expect(recordSettledSourcePlanningProof).not.toHaveBeenCalled();
   });
   it("keeps ordinary planning refresh out of already applied builds", async () => {
     await refreshPlanningSource(ctx as never);

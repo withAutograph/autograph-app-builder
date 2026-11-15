@@ -673,6 +673,12 @@ Production approval can locate the same sealed publication when a legacy
 completion lacks its origin metadata. Builder preserves
 the new proposal and leaves an unverified conflict for reconciliation.
 
+When planning a new optional field after a settled Production correction,
+Builder restores the verified merged schema in the same connected checkout.
+If schema compilation refreshed the checkout during the previous Build,
+Builder retains that Build's original source binding and uses the refreshed
+source for a new proposal. The new proposal receives its own Build approval.
+
 If an earlier candidate failed before merge, Builder can prepare an ordinary
 reconciliation of its owned open draft and retains every checked release on
 the base. If the draft contains stale generated compatibility evidence,

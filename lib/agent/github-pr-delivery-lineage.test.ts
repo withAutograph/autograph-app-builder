@@ -13,6 +13,7 @@ import type { ExistingDraftReconciliationProposal } from "../repository/github-d
 import { sealExistingDraftReconciliation } from "../repository/github-draft-reconciliation";
 import type { ExistingDraftObservation } from "../repository/github-draft-update";
 import {
+  createDraftPullRequestProposal,
   createGitHubInstallationIdentity,
   createRepositoryObservation,
 } from "../repository/github-publication";
@@ -47,7 +48,8 @@ import type {
 import type { getSourceBoundSandbox } from "./source-bound-sandbox";
 import type { validationLogStoreForSession } from "./validation-log-store-for-session";
 import { approveGitHubPrDelivery } from "./github-pr-delivery-step";
-import { freshFixture, workflowKey } from "../eve/test-support/draft-reviewed-recovery";
+import { resolveSavedGitHubPrObservationSubject } from "./github-pr-delivery-subject";
+import { fixture, freshFixture, workflowKey } from "../eve/test-support/draft-reviewed-recovery";
 
 const mocks = vi.hoisted(() => ({
   inspect: vi.fn<NonNullable<GitHubPublicationRuntime["inspectPublishedPullRequest"]>>(),
@@ -598,6 +600,78 @@ it("refuses a projection label without the underlying exact private Build grant"
     await expect(approve(f.approval)).rejects.toThrow();
     expect(mocks.persist).not.toHaveBeenCalled();
     expect(mocks.run).not.toHaveBeenCalled();
+  });
+});
+
+it("binds a saved Production recheck to the current sealed review instead of its inherited PR", () => {
+  const { reviewed } = fixture();
+  const inheritedDigest = "9".repeat(64);
+  const { githubSource } = reviewed;
+  if (githubSource === undefined) {
+    throw new Error("The review fixture requires an existing GitHub source.");
+  }
+  const repositoryId = "100";
+  const installation = createGitHubInstallationIdentity({
+    accountId: "20",
+    accountLogin: githubSource.repository.owner,
+    accountType: "Organization",
+    installationId: "10",
+    operation: "publish-draft-pull-request",
+    repositorySelection: "selected",
+    selectedRepositoryIds: [repositoryId],
+  });
+  const repository = createRepositoryObservation({
+    defaultBranch: githubSource.repository.defaultBranch,
+    headSha: githubSource.repository.headSha,
+    headTree: githubSource.repository.headTree,
+    installationIdentityDigest: installation.digest,
+    name: githubSource.repository.name,
+    owner: githubSource.repository.owner,
+    releaseGate: githubSource.repository.releaseGate,
+    repositoryId,
+    visibility: githubSource.repository.visibility,
+  });
+  const workflow = {
+    ...reviewed,
+    githubSource: { ...githubSource, repository },
+    publishedGitHubDraftProposalDigest: inheritedDigest,
+  };
+  expect(resolveSavedGitHubPrObservationSubject(workflow, null)).toBeNull();
+
+  const proposal = createDraftPullRequestProposal({
+    installation,
+    repository,
+    review: reviewed.reviewReceipt,
+    changedPathsSinceBase: [],
+    title: "Current reviewed draft",
+  });
+  const sealed = {
+    ...workflow,
+    githubDraftProposal: {
+      proposal,
+      githubSourceDigest: githubSource.digest,
+      sourceReceiptDigest: reviewed.sourceReceipt.digest,
+    },
+  };
+  expect(resolveSavedGitHubPrObservationSubject(sealed, null)).toMatchObject({
+    appId: reviewed.appSpec.appId,
+    proposalDigest: proposal.digest,
+  });
+});
+
+it("uses only the published reconciliation of the current exact candidate for a saved recheck", async () => {
+  await contextStorage.run(new ContextContainer(), async () => {
+    const previous = await recovered(false);
+    expect(
+      resolveSavedGitHubPrObservationSubject(previous.workflow, previous.candidate),
+    ).toBeNull();
+
+    const current = await publishValidatedCandidate();
+    const reviewed = resolveSavedGitHubPrObservationSubject(
+      appBuilderWorkflowState.get(),
+      draftReconciliationState.get(),
+    );
+    expect(reviewed?.reconciliation?.digest).toBe(current.proposal.digest);
   });
 });
 

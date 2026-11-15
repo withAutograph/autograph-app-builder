@@ -8,7 +8,7 @@ import {
   RepositoryProductionNativeAccessChangedError,
 } from "./repository-production-client";
 import { githubPublicationRuntimeForSession } from "./deployment-github-publication-runtime";
-import { resolveGitHubPrDeliverySubject } from "./github-pr-delivery-subject";
+import { resolveSavedGitHubPrObservationSubject } from "./github-pr-delivery-subject";
 import { appBuilderWorkflowState } from "./workflow-state";
 import { draftReconciliationState } from "./draft-reconciliation-state";
 
@@ -159,7 +159,10 @@ export const readSettledMergedAppProductionSchema = async (
 };
 
 const currentReviewedDelivery = () =>
-  resolveGitHubPrDeliverySubject(appBuilderWorkflowState.get(), draftReconciliationState.get());
+  resolveSavedGitHubPrObservationSubject(
+    appBuilderWorkflowState.get(),
+    draftReconciliationState.get(),
+  );
 
 const readSavedAppProduction = async (
   appId: string,
