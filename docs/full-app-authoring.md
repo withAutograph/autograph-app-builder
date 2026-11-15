@@ -161,6 +161,16 @@ submission, concurrent decisions and paged audit history when those behaviors
 apply. Report only scenarios actually run; source inspection and mock tests do
 not establish database or identity behavior.
 
+Author browser coverage alongside a durable UI workflow. Replace the generated
+heading smoke test if it is still a scaffold, or extend existing app-owned
+coverage. Use the selected catalog entry path and repository actor fixtures.
+Submit through the UI and verify the saved outcome on a fresh load. Where the
+app promises private access, use a second actor without the required permission
+to verify that the saved record is not visible. For additive field revisions
+with both fixture states available, check that saves succeed with the field
+pending and that its value persists after activation. Selected browser results
+are recorded separately from Production delivery.
+
 The agreed app requirements guide implementation and validation. Repository
 publication, provider resources, production data changes, and activation remain
 separately approved outward effects. A blocked public run must retain its
@@ -178,8 +188,9 @@ delivery root directory. An absent declaration remains valid for older source.
 Use `app:runtime prepare` for isolated authenticated validation;
 its protected environment and session files are injected by Builder into app
 validation and Preview startup. Author `test-e2e` to consume `APP_TEST_IDENTITIES_FILE`
-and exercise real browser submissions with those sessions. Backend validation
-runs this task after repository checks and reports missing tasks as blocked.
+and exercise real browser submissions with those sessions. Selected browser
+validation runs this task after repository checks and reports unavailable
+coverage separately.
 The shared `@autograph/playwright-config` configuration uses `APP_TEST_BASE_URL`
 for the prepared Preview and omits its local server when that origin is supplied.
 Where the selected repository exposes `@autograph/playwright-config/normal-actors`,

@@ -24,14 +24,22 @@ deployment. A partial or uncertain operation resumes from the original
 journal and reconciles provider readback before retrying. Sharing alone
 requires no source change or deployment.
 
-## Current implementation and remaining change
+## Direct Arrusted Production delivery
 
-The implementation below still requires a verified synthetic runtime
-receipt. Replace that prerequisite with verified preparation of the
-approved live target. Check that the protected operator has valid resource
-ownership and can read back the installed release and access bindings.
-Dropping the receipt predicate alone would leave those facts unproven.
-Keep older frozen operations and receipts scoped to their original effects.
+For an eligible private Arrusted app, Builder uses the direct Production
+workflow. It binds the approved repository and app, validates the reviewed
+source, prepares managed data and access for the target as needed, and observes
+native activation on the final URL. Follow the
+[normal Builder lifecycle](autograph-app-builder-lifecycle.md#6-run-and-review-the-app)
+and the [direct release tool](../agent/tools/release-app-production.ts).
+
+## Separate public-release pilot
+
+The operator flow below uses its own saved plan and requires a verified
+synthetic runtime receipt. Its approvals and journal apply to that pilot
+operation. Any future move for this operator flow to live target preparation
+must independently verify resource ownership, installed release, and access
+bindings before it replaces the receipt requirement.
 
 The normal Builder app keeps one owned Services project at the repository root.
 `plan-app-public-release` resolves the current saved app's normal provisioning
