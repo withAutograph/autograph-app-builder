@@ -1566,9 +1566,10 @@ const nativeProductionEvents = (
         .object({ status: z.literal("merged"), nativeProduction: nativeObservationSchema })
         .safeParse(result.output)
     : undefined;
-  const delivery = merged && completed && result.isError !== true
-    ? deliveryProgressOutputSchema.safeParse(result.output).data?.deliveryProgress
-    : undefined;
+  const delivery =
+    merged && completed && result.isError !== true
+      ? deliveryProgressOutputSchema.safeParse(result.output).data?.deliveryProgress
+      : undefined;
   if (merged && output?.success !== true) {
     return delivery === undefined ? undefined : [deliveryProgressEvent(index, delivery)];
   }
