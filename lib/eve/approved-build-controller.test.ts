@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   InMemoryHostedEveStore,
   toDurableHostedSessionRecord,
+  hostedCheckpointRefSchema,
   assertBuilderDestinationPendingOperations,
   hostedOperationRecordSchema,
 } from "./hosted-store";
@@ -13,6 +14,7 @@ import type { HostedPrincipal } from "./hosted-auth";
 import type { HostedEveTransport } from "./hosted-service";
 import { SubmissionRejectedBeforeDispatchError } from "./hosted-errors";
 import { readInternalBuildMarker } from "../agent/approved-build-continuation";
+import { nativeObservationStateSchema } from "./native-observation-state";
 
 const principal: HostedPrincipal = {
   audience: "https://builder.example/mcp",
@@ -48,7 +50,10 @@ const decision = {
   version: 1 as const,
   workflowPhase: "validation_failed",
 };
-const fixture = async (recordPriorDecision = true) => {
+const fixture = async (
+  recordPriorDecision = true,
+  checkpointRef?: z.infer<typeof hostedCheckpointRefSchema>,
+) => {
   const store = new InMemoryHostedEveStore();
   const start = {
     clientRequestId: "original-start",
@@ -62,21 +67,31 @@ const fixture = async (recordPriorDecision = true) => {
     version: 1 as const,
   };
   await store.reserveOperation(principal, start);
+  const original = {
+    adapterSessionId: decision.adapterSessionId,
+    createdAtEpochMs: 1,
+    principal,
+    sessionId: result.sessionId,
+    status: "waiting",
+    updatedAtEpochMs: 1,
+    version: 1,
+  } as const;
+  const session =
+    checkpointRef === undefined
+      ? original
+      : {
+          ...toDurableHostedSessionRecord(original),
+          checkpointRef,
+          checkpointDigest: checkpointRef.digest,
+          checkpointProgressDigest: checkpointRef.digest,
+        };
   await store.settleSucceeded({
     nowEpochMs: 1,
     operationId: start.operationId,
     principal,
     requestDigest: start.requestDigest,
     result,
-    session: {
-      adapterSessionId: decision.adapterSessionId,
-      createdAtEpochMs: 1,
-      principal,
-      sessionId: result.sessionId,
-      status: "waiting",
-      updatedAtEpochMs: 1,
-      version: 1,
-    },
+    session,
   });
   if (recordPriorDecision) {
     await store.recordPrivateBuildDecision({ decision, principal, sessionId: result.sessionId });
@@ -99,6 +114,43 @@ const fixture = async (recordPriorDecision = true) => {
     store,
     transport,
   };
+};
+
+const seededFixture = async () => {
+  const checkpointRef = hostedCheckpointRefSchema.parse({
+    digest: `sha256:${"c".repeat(64)}`,
+    eventCount: result.cursor,
+    id: "3a1d750f-70ec-4de8-9b1c-500486fe9be9",
+  });
+  const f = await fixture(true, checkpointRef);
+  const nativeObservationState = nativeObservationStateSchema.parse({
+    adapterSessionId: decision.adapterSessionId,
+    artifactReadback: {
+      incompleteArtifacts: [],
+      incompleteUiPreviews: [],
+      legacy: false,
+      markdownCalls: [],
+      pending: [],
+      references: { requested: [], requestedUiPreview: [] },
+    },
+    boundary: "waiting",
+    invalidInput: false,
+    nextNativeIndex: 87_045,
+    pendingRequests: [],
+    prototypeProjector: { artifactReadRequests: [], readChunks: [], requested: [], transfers: [] },
+    prototypeReference: { requested: [], requestedUiPreview: [] },
+    publicEventCount: checkpointRef.eventCount,
+    version: 1,
+  });
+  const readCheckpointMetadata = vi
+    .fn<NonNullable<Parameters<typeof continueApprovedHostedBuild>[0]["readCheckpointMetadata"]>>()
+    .mockResolvedValue({
+      capturedAtEpochMs: 1,
+      nativeObservationState,
+      status: "waiting",
+      version: 1,
+    });
+  return { ...f, checkpointRef, nativeObservationState, readCheckpointMetadata };
 };
 const acceptedApp = {
   adapterSessionId: decision.adapterSessionId,
@@ -443,6 +495,100 @@ describe("canonical approved private build continuation", () => {
       log.mockRestore();
     }
   });
+  it.each(["waiting", "new input", "new turn", "unverified tail"] as const)(
+    "reads only the fresh native suffix of a long owned history before deciding on %s",
+    async (boundary) => {
+      const f = await seededFixture();
+      const nextNativeIndex = f.nativeObservationState.nextNativeIndex + 123;
+      const observation = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (request) => {
+        // This model reader refuses to replay the fixture's entire native history.
+        if (
+          request.nativeObservationState?.nextNativeIndex !==
+          f.nativeObservationState.nextNativeIndex
+        ) {
+          throw new Error("old history exceeded the read deadline");
+        }
+        const pendingRequests =
+          boundary === "new input"
+            ? [
+                {
+                  allowFreeform: false,
+                  title: "Review a new approval",
+                  description: "This input arrived after the saved checkpoint.",
+                  kind: "approval" as const,
+                  requestId: "newly-pending-approval",
+                },
+              ]
+            : [];
+        return await Promise.resolve({
+          activeTurnId: boundary === "new turn" ? "newly-active-turn" : undefined,
+          artifactProjectionRequiresLegacyReadback: false,
+          installedEventCount: nextNativeIndex,
+          nativeObservationState: { ...f.nativeObservationState, nextNativeIndex, pendingRequests },
+          nativeTailIndex: boundary === "unverified tail" ? nextNativeIndex : nextNativeIndex - 1,
+          nextNativeIndex,
+          observationComplete: true,
+          pendingRequests,
+          publicEventCount: result.cursor,
+          status: "waiting" as const,
+        });
+      });
+      f.transport.observe = observation;
+      const continued = await continueApprovedHostedBuild(f);
+      expect(f.readCheckpointMetadata).toHaveBeenCalledWith(
+        expect.objectContaining({
+          adapterSessionId: decision.adapterSessionId,
+          checkpointRef: f.checkpointRef,
+          principal,
+          sessionId: result.sessionId,
+        }),
+      );
+      expect(observation).toHaveBeenCalledOnce();
+      if (boundary === "waiting") {
+        expect(continued.status).toBe("working");
+        expect(f.sendAccepted).toHaveBeenCalledOnce();
+      } else {
+        expect(continued.error?.code).toBe("approved_build_continuation_blocked");
+        expect(f.sendAccepted).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("refuses an older waiting tail after the current owned checkpoint changes", async () => {
+    const f = await seededFixture();
+    const readSession = f.store.getSession.bind(f.store);
+    f.transport.observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => {
+      const newerDigest = `sha256:${"e".repeat(64)}`;
+      vi.spyOn(f.store, "getSession").mockImplementation(async (owner, id) => {
+        const current = await readSession(owner, id);
+        if (current === null) {
+          return null;
+        }
+        return {
+          ...toDurableHostedSessionRecord(current),
+          checkpointDigest: newerDigest,
+          checkpointProgressDigest: newerDigest,
+          checkpointRef: { ...f.checkpointRef, digest: newerDigest },
+        };
+      });
+      const { nextNativeIndex } = f.nativeObservationState;
+      return await Promise.resolve({
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: nextNativeIndex,
+        nativeObservationState: f.nativeObservationState,
+        nativeTailIndex: nextNativeIndex - 1,
+        nextNativeIndex,
+        observationComplete: true,
+        pendingRequests: [],
+        publicEventCount: result.cursor,
+        status: "waiting",
+      });
+    });
+    const continued = await continueApprovedHostedBuild(f);
+    expect(continued.error?.code).toBe("approved_build_continuation_blocked");
+    expect(f.sendAccepted).not.toHaveBeenCalled();
+  });
+
   it("continues the same original stopped session exactly once after canonical settlement", async () => {
     const f = await fixture();
     expect(await continueApprovedHostedBuild(f)).toMatchObject({

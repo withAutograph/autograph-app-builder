@@ -139,6 +139,12 @@ changes grant no replay authority and never waive cancellation, ownership,
 approval or unknown-effect guards. A local reconciliation result remains separate
 from hosted activation and app acceptance.
 
+When a verified native checkpoint exists for the current adapter, automatic
+continuation of an approved build starts there. It reads the complete
+native tail, confirms the inbox is still waiting with no active turn or
+pending input, then rechecks the owner, checkpoint, and saved approval before
+dispatch. The public cursor and cached waiting status cannot authorize a send.
+
 `start`, `send`, and `respond` reserve a tenant-bound operation before dispatch.
 The client request ID is bound to a canonical request digest. A completed retry
 returns the stored public result. Reusing the ID for different request bytes is
