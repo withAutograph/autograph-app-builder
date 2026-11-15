@@ -31,6 +31,7 @@ import {
 } from "./hosted-template-foundation-binding";
 import type { OwnedCompletedAppPublication } from "./github-publication-runtime";
 import type { ExistingDraftReconciliationProposal } from "../repository/github-draft-reconciliation";
+import type { SettledSourcePlanningOutcome } from "./refresh-planning-source";
 
 const iterationOperation = "iterate-existing-app";
 
@@ -61,23 +62,71 @@ const settled = (state: AppBuilderWorkflowState): state is Settled =>
     ["command-failed", "tooling-prerequisite"].includes(state.validationFailure.reason));
 
 type Proposed = Extract<AppBuilderWorkflowState, { proposal: unknown }>;
-/* oxlint-disable sonarjs/expression-complexity -- Keep every immutable source/receipt comparison visible at one authorization boundary. */
+interface RepairBindingDiagnostic {
+  entryPhase: AppBuilderWorkflowState["phase"];
+  proofOutcome: SettledSourcePlanningOutcome | "not-requested" | "unobserved";
+  requestMode: "existing-files" | "optional-field" | "resume-approved";
+}
+
+// oxlint-disable-next-line sonarjs/max-union-size -- Closed diagnostic categories mirror the protected comparisons.
+type RepairBindingMismatch =
+  | "app-spec"
+  | "current-workspace"
+  | "current-source"
+  | "compute"
+  | "sandbox"
+  | "apply-proposal"
+  | "saved-workspace"
+  | "saved-source"
+  | "apply-root";
+
 const assertRepairBinding = (
   current: Proposed,
   base: Settled,
   sandbox: SandboxSession,
-  sessionId: string,
+  ctx: Pick<ToolContext, "callId" | "session">,
+  diagnostic: RepairBindingDiagnostic,
 ) => {
-  const recovered = resolveHostedTemplateFoundationBinding(base, sessionId);
+  const recovered = resolveHostedTemplateFoundationBinding(base, ctx.session.id);
   const approvedWorkspace = recovered?.approvedWorkspace ?? base.workspace;
   const approvedSource = recovered?.approvedSourceReceipt ?? base.sourceReceipt;
-  if (
-    base.appSpec.appId !== current.appSpec.appId ||
-    base.appSpec.digest !== current.appSpec.digest ||
+  const refuseWhen = (mismatched: boolean, mismatch: RepairBindingMismatch) => {
+    if (!mismatched) {
+      return;
+    }
+    try {
+      console.info(
+        JSON.stringify({
+          event: "app_builder.private_repair_binding_refused",
+          callId: ctx.callId,
+          entryPhase: diagnostic.entryPhase,
+          phase: current.phase,
+          mismatch,
+          proofOutcome: diagnostic.proofOutcome,
+          requestMode: diagnostic.requestMode,
+        }),
+      );
+    } catch {
+      // The binding refusal is authoritative even if the diagnostic fails.
+    }
+    throw new Error("The settled private repair source binding changed.");
+  };
+  // Keep the original comparison order, including the sandbox identity read.
+  refuseWhen(
+    base.appSpec.appId !== current.appSpec.appId || base.appSpec.digest !== current.appSpec.digest,
+    "app-spec",
+  );
+  refuseWhen(
     base.workspace.workspacePath !== current.workspace.workspacePath ||
-    base.workspace.workspaceDigest !== current.workspace.workspaceDigest ||
+      base.workspace.workspaceDigest !== current.workspace.workspaceDigest,
+    "current-workspace",
+  );
+  refuseWhen(
     base.workspace.sourceSha !== current.workspace.sourceSha ||
-    base.workspace.sourceTree !== current.workspace.sourceTree ||
+      base.workspace.sourceTree !== current.workspace.sourceTree,
+    "current-source",
+  );
+  refuseWhen(
     !(
       (base.proposal.target.privateCompute === undefined &&
         current.proposal.target.privateCompute === undefined) ||
@@ -86,18 +135,23 @@ const assertRepairBinding = (
           base.proposal.target.privateCompute,
           current.proposal.target.privateCompute,
         ))
-    ) ||
-    base.workspace.workspaceId !== current.workspace.workspaceId ||
-    base.sourceReceipt.digest !== current.sourceReceipt.digest ||
-    base.workspace.workspaceId !== getBuilderSandboxId(sandbox) ||
+    ),
+    "compute",
+  );
+  refuseWhen(base.workspace.workspaceId !== current.workspace.workspaceId, "current-workspace");
+  refuseWhen(base.sourceReceipt.digest !== current.sourceReceipt.digest, "current-source");
+  refuseWhen(base.workspace.workspaceId !== getBuilderSandboxId(sandbox), "sandbox");
+  refuseWhen(
     base.applyReceipt.appSpecDigest !== base.appSpec.digest ||
-    base.applyReceipt.proposalDigest !== base.proposal.digest ||
-    base.applyReceipt.workspaceDigest !== approvedWorkspace.workspaceDigest ||
-    base.applyReceipt.sourceReceiptDigest !== approvedSource.digest ||
-    base.applyReceipt.applyRoot !== base.workspace.workspacePath
-  ) {
-    throw new Error("The settled private repair source binding changed.");
-  }
+      base.applyReceipt.proposalDigest !== base.proposal.digest,
+    "apply-proposal",
+  );
+  refuseWhen(
+    base.applyReceipt.workspaceDigest !== approvedWorkspace.workspaceDigest,
+    "saved-workspace",
+  );
+  refuseWhen(base.applyReceipt.sourceReceiptDigest !== approvedSource.digest, "saved-source");
+  refuseWhen(base.applyReceipt.applyRoot !== base.workspace.workspacePath, "apply-root");
 };
 
 const assertRepairApproval = (base: Settled, sessionId: string) => {
@@ -131,7 +185,7 @@ const approvedRepairHistory = (proposalDigest: string, sessionId: string): Repai
 
 /** Resume the original execution scope while retaining the unapplied proposal in history. */
 export const resumeApprovedAppBuild = async (
-  ctx: Pick<ToolContext, "abortSignal" | "getSandbox" | "session">,
+  ctx: Pick<ToolContext, "abortSignal" | "callId" | "getSandbox" | "session">,
 ) => {
   ctx.abortSignal?.throwIfAborted();
   const current = appBuilderWorkflowState.get();
@@ -147,7 +201,11 @@ export const resumeApprovedAppBuild = async (
     throw new Error("The approved build history changed while opening the checkout.");
   }
   assertRepairApproval(base, ctx.session.id);
-  assertRepairBinding(current, base, sandbox, ctx.session.id);
+  assertRepairBinding(current, base, sandbox, ctx, {
+    entryPhase: current.phase,
+    proofOutcome: "not-requested",
+    requestMode: "resume-approved",
+  });
   if (base.githubSource?.digest !== current.githubSource?.digest) {
     throw new Error("The selected repository changed after the approved build.");
   }
@@ -466,6 +524,7 @@ const inspectUnapprovedPlan = (
 
 export const inspectExistingAppRepair = async (input: {
   assertSettledSourcePlanning?: (() => void) | undefined;
+  diagnostic?: RepairBindingDiagnostic;
   current: AppBuilderWorkflowState;
   changes: readonly ExistingAppChange[] | undefined;
   sandbox: SandboxSession;
@@ -516,7 +575,17 @@ export const inspectExistingAppRepair = async (input: {
     // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Preserve the existing explicit undefined value.
     return { requestDigest, approvedBase: undefined, reuse: false, assertCurrent };
   }
-  assertRepairBinding(current, base, sandbox, ctx.session.id);
+  assertRepairBinding(
+    current,
+    base,
+    sandbox,
+    ctx,
+    input.diagnostic ?? {
+      entryPhase: current.phase,
+      proofOutcome: "not-requested",
+      requestMode: "existing-files",
+    },
+  );
   assertRepairApproval(base, ctx.session.id);
   const assertCurrent = () => {
     ctx.abortSignal?.throwIfAborted();

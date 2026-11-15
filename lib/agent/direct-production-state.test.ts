@@ -1625,10 +1625,16 @@ describe("direct Production Build authority", () => {
       expect(currentDirectProductionDeliveryAuthorization(releaseContext, failed.subject)).toEqual(
         delivery,
       );
+      const unavailable = vi.fn<(reason: string) => void>();
+      recordDirectProductionProgress(failed.digest, "setup");
+      expect(settledDirectProductionDelivery(releaseContext, unavailable)).toBeUndefined();
+      expect(unavailable).toHaveBeenLastCalledWith("progress-not-settled");
       recordDirectProductionProgress(failed.digest, "schema-settled");
-      expect(settledDirectProductionDelivery(releaseContext)).toBeUndefined();
+      expect(settledDirectProductionDelivery(releaseContext, unavailable)).toBeUndefined();
+      expect(unavailable).toHaveBeenLastCalledWith("effect-progress-mismatch");
       recordDirectProductionProgress(delivery.effectDigest, "schema-settled");
-      expect(settledDirectProductionDelivery(releaseContext)).toEqual(delivery);
+      expect(settledDirectProductionDelivery(releaseContext, unavailable)).toEqual(delivery);
+      expect(unavailable).toHaveBeenCalledTimes(2);
       expect(
         currentDirectProductionDeliveryAuthorization(context("other-owner"), failed.subject),
       ).toBeUndefined();
@@ -1638,7 +1644,8 @@ describe("direct Production Build authority", () => {
       expect(
         currentDirectProductionDeliveryAuthorization(releaseContext, failed.subject),
       ).toBeUndefined();
-      expect(settledDirectProductionDelivery(releaseContext)).toBeUndefined();
+      expect(settledDirectProductionDelivery(releaseContext, unavailable)).toBeUndefined();
+      expect(unavailable).toHaveBeenLastCalledWith("effective-authorization-unavailable");
     });
   });
 

@@ -17,6 +17,7 @@ import {
   reconcilePlanningSource,
 } from "../repository/planning-source-reconciliation";
 import { settledDirectProductionDelivery } from "./direct-production-state";
+import type { UnsettledProductionDeliveryReason } from "./direct-production-state";
 import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
 import { assertExactImmutableGitHubSourceReceipt } from "../repository/github-publication";
 import {
@@ -37,6 +38,15 @@ import { resolveVercelSessionGitSource } from "../sandbox/vercel-session-source"
 const schemaCompilation = "schema-compilation";
 
 type SettledSourcePlanningProof = () => void;
+// oxlint-disable-next-line sonarjs/max-union-size -- Fixed server-side telemetry categories, not user input.
+export type SettledSourcePlanningOutcome =
+  | UnsettledProductionDeliveryReason
+  | "local-source"
+  | "not-reviewed"
+  | "reconciliation-anchor-missing"
+  | "connected-source-missing"
+  | "source-digests-unchanged"
+  | "proof-produced";
 
 type RefreshableSourceState = Extract<AppBuilderWorkflowState, { appSpec: AcceptedAppSpec }>;
 const canRefreshSource = (
@@ -60,27 +70,42 @@ export const refreshPlanningSource = async (
     approvedSchemaCueSha256?: string | undefined;
     optionalFieldPlanning?: true;
     recordSettledSourcePlanningProof?: (proof: SettledSourcePlanningProof) => void;
+    recordSettledSourcePlanningOutcome?: (outcome: SettledSourcePlanningOutcome) => void;
   } = {},
 ) => {
+  const recordOutcome = options.recordSettledSourcePlanningOutcome;
   if (purpose === "planning") {
     const local = await refreshLocalPlanningSource(ctx);
     if (local !== undefined) {
+      recordOutcome?.("local-source");
       return local;
     }
   }
   const current = appBuilderWorkflowState.get();
   const sandbox = await getSourceBoundSandbox(ctx);
+  if (current.phase !== "reviewed") {
+    recordOutcome?.("not-reviewed");
+  }
+  const recordOwnershipOutcome = current.phase === "reviewed" ? recordOutcome : undefined;
   const currentDelivery =
     options.optionalFieldPlanning === true && "applyReceipt" in current
-      ? settledDirectProductionDelivery(ctx)
+      ? settledDirectProductionDelivery(ctx, recordOwnershipOutcome)
       : undefined;
   const reconciliationAnchor = currentDelivery?.subject.revision?.reconciliation;
+  if (
+    current.phase === "reviewed" &&
+    currentDelivery !== undefined &&
+    reconciliationAnchor === undefined
+  ) {
+    recordOutcome?.("reconciliation-anchor-missing");
+  }
   const preserveSourceHead = reconciliationAnchor !== undefined && "applyReceipt" in current;
   if (!preserveSourceHead && !canRefreshSource(current, purpose)) {
     return sandbox;
   }
   const selected = current.githubSource;
   if (selected === undefined) {
+    recordOutcome?.("connected-source-missing");
     return sandbox;
   }
   const access = repositoryAccessReceiptState.get();
@@ -222,6 +247,9 @@ export const refreshPlanningSource = async (
     if (refreshedAfterApply) {
       assertPlanningScope();
       options.recordSettledSourcePlanningProof?.(assertPlanningScope);
+      recordOutcome?.("proof-produced");
+    } else if (current.phase === "reviewed") {
+      recordOutcome?.("source-digests-unchanged");
     }
     return sandbox;
   }

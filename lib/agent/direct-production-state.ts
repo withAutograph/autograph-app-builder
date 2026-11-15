@@ -1432,20 +1432,31 @@ export const currentPlannedDirectProductionAuthoring = (ctx: OwnerContext): stri
   return proposalDigest;
 };
 
+export type UnsettledProductionDeliveryReason =
+  | "progress-not-settled"
+  | "effective-authorization-unavailable"
+  | "effect-progress-mismatch";
+
 /** A completed delivery is the predecessor for a new change, not a fresh approval subject. */
 export const settledDirectProductionDelivery = (
   ctx: OwnerContext,
+  unavailable?: (reason: UnsettledProductionDeliveryReason) => void,
 ): ReturnType<typeof currentDirectProductionDeliveryAuthorization> => {
   const state = appBuilderWorkflowState.get();
   const progress = directProductionProgressState.get();
   const delivered = directProductionDeliverySettled(progress?.stage);
   if (!delivered || !("proposal" in state)) {
+    unavailable?.("progress-not-settled");
     return undefined;
   }
   const current = currentDirectProductionDeliveryAuthorization(ctx, { appId: state.appSpec.appId });
-  return current !== undefined && progress?.grantDigest === current.effectDigest
-    ? current
-    : undefined;
+  if (current === undefined || progress?.grantDigest !== current.effectDigest) {
+    unavailable?.(
+      current === undefined ? "effective-authorization-unavailable" : "effect-progress-mismatch",
+    );
+    return undefined;
+  }
+  return current;
 };
 
 export const currentDirectProductionProposalIsDelivered = (ctx: OwnerContext): boolean =>

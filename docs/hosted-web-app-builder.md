@@ -509,6 +509,12 @@ Emit structured, tenant-safe metrics and logs for:
 - draft-PR and deployment proposal, approval, denial, dispatch, provider
   readback, retry, and terminal outcome.
 
+A private repair binding refusal emits `app_builder.private_repair_binding_refused`
+with the existing tool call ID and fixed categories for request mode, entry and
+current workflow phase, settled-source proof outcome, and the first failed
+binding check. The event excludes application content, paths, digests,
+credentials, and approval data.
+
 Use the saved delivery workflow's observed stage transitions to distinguish
 waiting for checks, deploying, updating app data, and live. Measure the
 Build card from its first public observation, the approval from its settlement,
