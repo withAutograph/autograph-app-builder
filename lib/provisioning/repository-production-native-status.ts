@@ -359,6 +359,16 @@ export const createRepositoryProductionNativeStatus =
         if (!domainMatches || !aliasMatches || !deploymentMatches) {
           throw new NativeObservationReadError(domainBinding);
         }
+        const terminalDeployment = ["ERROR", "CANCELED", "CANCELLED", "BLOCKED"].includes(
+          deployment.readyState,
+        );
+        if (
+          terminalDeployment &&
+          requestedMerge !== undefined &&
+          currentNativeGitSha(deployment, project, scope) === requestedMerge
+        ) {
+          throw new NativeObservationReadError("deployment-failed");
+        }
         if (alias.deploymentId !== activeId) {
           const building = ["QUEUED", "INITIALIZING", "BUILDING"].includes(deployment.readyState);
           const awaitingAlias =
@@ -383,7 +393,7 @@ export const createRepositoryProductionNativeStatus =
               revisionSource = { deployment, sha };
             }
           }
-        } else if (["ERROR", "CANCELED", "CANCELLED", "BLOCKED"].includes(deployment.readyState)) {
+        } else if (terminalDeployment) {
           throw new NativeObservationReadError(providerRead);
         }
       }

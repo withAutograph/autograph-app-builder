@@ -711,6 +711,19 @@ export const executeProposalBoundValidation = (input: {
     );
     const startedAt = new Date().toISOString();
     const startedMonotonic = performance.now();
+    // Private repairs can change the checkout after the apply receipt. This
+    // correlates the authorized plan and command, not unobserved worktree bytes.
+    const validationPlanCorrelation =
+      input.sessionId === undefined
+        ? undefined
+        : sha256(
+            JSON.stringify([
+              "validation-plan-observation-v1",
+              input.sessionId,
+              attemptBinding(input.attempt),
+              planned.command,
+            ]),
+          );
     try {
       console.info(
         JSON.stringify({
@@ -719,6 +732,7 @@ export const executeProposalBoundValidation = (input: {
           event: validationCommandEvent,
           phase: "started",
           startedAt,
+          validationPlanCorrelation,
         }),
       );
       result = await input.executor({
@@ -760,6 +774,7 @@ export const executeProposalBoundValidation = (input: {
           finishedAt,
           phase: "finished",
           startedAt,
+          validationPlanCorrelation,
         }),
       );
     } catch (error) {
@@ -774,6 +789,7 @@ export const executeProposalBoundValidation = (input: {
           finishedAt: new Date().toISOString(),
           phase: "provider_error",
           startedAt,
+          validationPlanCorrelation,
         }),
       );
       const timedOut = error instanceof Error && error.name === "TimeoutError";

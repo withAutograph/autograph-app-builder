@@ -35,6 +35,12 @@ import {
 import { continuityStatusSchema } from "../provisioning/hosted-operator-continuity-contract";
 import { repositoryProductionNativeStatusSchema } from "../provisioning/repository-production-native-status-contract";
 import {
+  deliveryProgressDetail,
+  deliveryProgressLabels,
+  deliveryProgressSchema,
+} from "../delivery-progress";
+import type { DeliveryProgress } from "../delivery-progress";
+import {
   githubRepositoryAccessSchema,
   githubRepositoryAccessViewModel,
 } from "../integrations/store-in-view-model";
@@ -80,6 +86,7 @@ export interface InternalEveEvent {
   identityInvitation?: PublicIdentityInvitation;
   callId?: string;
   operationRef?: string;
+  delivery?: DeliveryProgress;
 }
 
 const authorizationCoordinatesSchema = z.object({
@@ -235,7 +242,14 @@ export const pendingBuilderOperation = (events: Iterable<PublicEveEvent>): strin
       pending.clear();
       continue;
     }
-    if (event.type !== "progress" || !visibleOperationLabels.has(event.label)) {
+    if (event.type !== "progress") {
+      continue;
+    }
+    if (event.delivery !== undefined) {
+      for (const label of Object.values(deliveryProgressLabels)) {
+        pending.delete(label);
+      }
+    } else if (!visibleOperationLabels.has(event.label)) {
       continue;
     }
     if (event.state === "started") {
@@ -1517,6 +1531,24 @@ const nativeObservationSchema = z.union([
   }),
 ]);
 
+const deliveryProgressEvent = (index: number, delivery: DeliveryProgress): InternalEveEvent => {
+  let state: ProgressState = "started";
+  if (delivery.phase === "live") {
+    state = "completed";
+  } else if (delivery.disposition === "intervention-required") {
+    state = "failed";
+  }
+  return {
+    index,
+    type: "progress",
+    label: deliveryProgressLabels[delivery.phase],
+    state,
+    delivery,
+  };
+};
+
+const deliveryProgressOutputSchema = z.object({ deliveryProgress: deliveryProgressSchema });
+
 /** Project only a new native observation. Historical merge results retain their public cursor. */
 const nativeProductionEvents = (
   result: { toolName: string; callId: string; output: unknown; isError?: boolean },
@@ -1534,8 +1566,12 @@ const nativeProductionEvents = (
         .object({ status: z.literal("merged"), nativeProduction: nativeObservationSchema })
         .safeParse(result.output)
     : undefined;
+  const delivery =
+    merged && completed && result.isError !== true
+      ? deliveryProgressOutputSchema.safeParse(result.output).data?.deliveryProgress
+      : undefined;
   if (merged && output?.success !== true) {
-    return undefined;
+    return delivery === undefined ? undefined : [deliveryProgressEvent(index, delivery)];
   }
 
   const parsed =
@@ -1545,22 +1581,28 @@ const nativeProductionEvents = (
   const observed = completed && result.isError !== true && parsed.success ? parsed.data : undefined;
   const state: ProgressState =
     observed?.status === "available" || observed?.status === "pending" ? "completed" : "failed";
-  const progress: InternalEveEvent = {
-    index,
-    label: nativeProductionLabel,
-    state,
-    type: "progress",
-  };
+  const progress: InternalEveEvent =
+    delivery === undefined
+      ? { index, label: nativeProductionLabel, state, type: "progress" }
+      : deliveryProgressEvent(index, delivery);
   if (observed === undefined) {
     return [progress];
   }
 
   let text: string;
   if (observed.status === "pending") {
-    text =
-      observed.requestedRevision === "awaiting-activation"
-        ? "Builder is still waiting to confirm the latest revision at the Production URL."
-        : "The app’s live availability is still pending.";
+    if (delivery?.phase === "updating-data") {
+      const detail =
+        deliveryProgressDetail(delivery) ?? "Builder is still checking the database update.";
+      const link =
+        delivery.appUrl === undefined ? "" : `\n\n[Open current app](<${delivery.appUrl}>)`;
+      text = `${detail}${link}`;
+    } else {
+      text =
+        observed.requestedRevision === "awaiting-activation"
+          ? "Builder is still waiting to confirm the latest revision at the Production URL."
+          : "The app’s live availability is still pending.";
+    }
   } else if (observed.status === "monitoring-stopped") {
     text = "Builder stopped checking the live app. Continue this session to check again.";
   } else {
@@ -1653,10 +1695,16 @@ export const projectInstalledEveEvent = (
       if (
         result.kind === toolResultKind &&
         result.toolName === finishGitHubDeliveryTool &&
-        result.isError !== true &&
-        recordStringField(result.output, "status") === "merged"
+        result.isError !== true
       ) {
-        return [{ index, label: nativeProductionLabel, state: "started", type: "progress" }];
+        const delivery = deliveryProgressOutputSchema.safeParse(result.output).data
+          ?.deliveryProgress;
+        if (delivery !== undefined && delivery.phase !== "live") {
+          return [deliveryProgressEvent(index, delivery)];
+        }
+        return recordStringField(result.output, "status") === "merged"
+          ? [{ index, label: nativeProductionLabel, state: "started", type: "progress" }]
+          : [];
       }
       if (
         result.kind !== toolResultKind ||
@@ -2068,7 +2116,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
       /* oxlint-enable typescript/strict-boolean-expressions */
       const progress: Pick<
         Extract<PublicEveEvent, { type: "progress" }>,
-        "index" | "label" | "state" | "turnId"
+        "index" | "label" | "state" | "turnId" | "delivery"
       > = {
         index: event.index,
         label: event.label,
@@ -2076,6 +2124,9 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
       };
       if (event.turnId !== undefined) {
         progress.turnId = event.turnId;
+      }
+      if (event.delivery !== undefined) {
+        progress.delivery = event.delivery;
       }
       return { ...progress, type: "progress" };
     }

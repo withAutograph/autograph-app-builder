@@ -5,6 +5,7 @@ import { directProductionGrantSchema } from "../agent/direct-production-authoriz
 import { githubPrDeliveryApprovalSchema } from "../agent/github-pr-delivery-approval";
 import { githubPrDeliveryCallScopeSchema } from "../agent/github-pr-delivery-authority-contract";
 import { githubPrDeliveryInputDigest } from "../agent/github-pr-delivery-authority-state";
+import { deliveryProgressSchema } from "../delivery-progress";
 import { APP_BUILDER_WORKFLOW_STATE_KEY } from "../agent/workflow-state";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import {
@@ -36,6 +37,7 @@ const committedDeliverySchema = z.strictObject({
   mergeCommitSha: repositoryProductionExpectedMergeShaSchema,
   nativeProduction: repositoryProductionNativeStatusSchema,
   schemaUpdatePending: z.literal(false).optional(),
+  deliveryProgress: deliveryProgressSchema.optional(),
 });
 const priorMergeProofSchema = z.strictObject({
   deliveryCallId: id,

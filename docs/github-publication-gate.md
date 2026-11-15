@@ -676,9 +676,11 @@ the new proposal and leaves an unverified conflict for reconciliation.
 If an earlier candidate failed before merge, Builder can prepare an ordinary
 reconciliation of its owned open draft and retains every checked release on
 the base. If the draft contains stale generated compatibility evidence,
-Builder can move that unissued cut aside inside the private workspace and
-recompile it after verifying the original draft and base. Builder reads the
-sealed compiler output before offering the combined approval. The generated
+Builder's validation can move that unissued cut aside and recompile before app
+checks. It verifies the original approval and draft, and matches the checked base
+release to the installed Production predecessor. A lost private move response
+preserves the previous compiler evidence and resumes in the same candidate.
+Builder reads the sealed compiler output before offering the combined approval. The generated
 data operations and online transition plan must agree on the exact previous
 release and optional field. If the already approved draft update was published
 without a compatible generated cut, Builder verifies that update as the

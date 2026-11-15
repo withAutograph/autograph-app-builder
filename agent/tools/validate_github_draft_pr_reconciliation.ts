@@ -1,4 +1,5 @@
 /* oxlint-disable unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
+import { recoverStaleDraftSchemaRelease } from "@/lib/agent/recover-stale-draft-schema-release";
 import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { currentDraftCandidateSource } from "@/lib/agent/published-draft-repair";
@@ -46,7 +47,7 @@ import {
   readTargetValidationTestShards,
   validationOutputExcerpt,
 } from "@/lib/repository/target-validation";
-import { ValidationLogWriter } from "@/lib/repository/validation-log";
+import { ValidationLogWriter, validationInputCorrelation } from "@/lib/repository/validation-log";
 import type { ValidationLogStore } from "@/lib/repository/validation-log";
 import { validationLogStoreForSession } from "@/lib/agent/validation-log-store-for-session";
 
@@ -328,12 +329,34 @@ const runCandidateCommandWithLogs = async <
       // Historical evidence is best effort and never changes the command result.
     }
   };
+  const startedAt = new Date().toISOString();
+  const startedMonotonic = performance.now();
+  const recordTiming = (exitCode: number | null) => {
+    console.info(
+      JSON.stringify({
+        event: "app_builder.validation_command",
+        callId: input.callId,
+        command: input.category,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        elapsedMs: Math.round(performance.now() - startedMonotonic),
+        exitCode,
+        phase: exitCode === null ? "provider_error" : "finished",
+        validationInputCorrelation: validationInputCorrelation(
+          input.sessionId,
+          input.resolvedTree,
+          input.command,
+        ),
+      }),
+    );
+  };
   try {
     let streamed = false;
     const result = await input.run(async (channel, content) => {
       streamed = true;
       await writers?.[channel].append(content);
     });
+    recordTiming(result.exitCode);
     if (writers !== undefined && !streamed) {
       try {
         if (result.stdout) {
@@ -349,6 +372,7 @@ const runCandidateCommandWithLogs = async <
     await finish(result.exitCode === null ? "interrupted" : "complete", result.exitCode);
     return result;
   } catch (error) {
+    recordTiming(null);
     await finish("interrupted", null);
     throw error;
   }
@@ -632,16 +656,36 @@ const runIncrementalValidation = async (
     runBrowserTests: boolean;
   },
   ctx: ToolContext,
-  candidate: DraftReconciliationCandidate,
+  savedCandidate: DraftReconciliationCandidate,
   sandbox: SandboxSession,
 ) => {
-  const before = await inspectDraftReconciliation({ prepared: candidate, sandbox });
+  let candidate = savedCandidate;
+  let before = await inspectDraftReconciliation({ prepared: candidate, sandbox });
   if (before.unresolvedConflicts.length > 0) {
     return {
       conflicts: before.unresolvedConflicts,
       problem: "Resolve every listed app-owned conflict before running candidate checks.",
       status: "needs_resolution" as const,
     };
+  }
+  if (candidate.validationRun?.resolvedTree !== before.resolvedTree) {
+    const workflow = appBuilderWorkflowState.get();
+    const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
+    const source = currentDraftCandidateSource(state, candidate);
+    if (state.phase === "reviewed" && source !== undefined) {
+      const recovered = await recoverStaleDraftSchemaRelease({
+        candidate,
+        ctx,
+        sandbox,
+        source,
+        state,
+        inspected: before,
+      });
+      if (recovered !== candidate) {
+        candidate = recovered;
+        before = await inspectDraftReconciliation({ prepared: candidate, sandbox });
+      }
+    }
   }
   const testShards = await readTargetValidationTestShards({
     sandbox,
@@ -857,6 +901,8 @@ const runIncrementalValidation = async (
     } else if (step.kind === "schema") {
       const schema = await compileAppSchemaRelease({
         appId: candidate.appId,
+        callId: ctx.callId,
+        observedInput: { sessionId: ctx.session.id, resolvedTree: before.resolvedTree },
         root: candidate.root,
         sandbox,
         signal: ctx.abortSignal,
@@ -1173,6 +1219,7 @@ const runIncrementalValidation = async (
         },
       };
       delete next.validationRun;
+      delete next.schemaRecoveryPreimageTree;
       return next;
     },
   });

@@ -245,6 +245,15 @@ outstanding requests. Events already discarded by an older writer cannot be
 reconstructed. See the [limit and recovery inventory](builder-build-limits-inventory.md)
 for the remaining compatibility boundaries.
 
+Production progress events can include a `delivery` object with the phase,
+its start and latest observation timestamps, and whether Builder
+is continuing, retrying, or needs intervention. The same saved events drive the
+Builder web and MCP views across reconnects. The timestamps mark observations
+in the delivery workflow. The optional app link is the verified Production
+entry and can remain available while a revision deploys or updates its data.
+Builder reports the new revision live after native activation and any required
+schema settlement.
+
 Hosted authorization advertises the matching `autograph:*` scopes. A caller
 must hold `autograph:session` before the request-scoped tenant service is
 constructed; operation-specific scope checks remain inside the shared service.

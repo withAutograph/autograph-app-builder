@@ -8,6 +8,7 @@ import {
   mkdirSync,
   readFileSync,
   readlinkSync,
+  readdirSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -37,7 +38,11 @@ import {
 } from "./sandbox-draft-reconciliation";
 
 import { GENERATED_RELEASE_MEMBERS } from "../provisioning/hosted-operator-sandbox-launcher";
-import { discardUnissuedDraftSchemaRelease } from "./sandbox-draft-schema-release";
+import {
+  discardUnissuedDraftSchemaRelease,
+  DraftSchemaReleaseMoveUncertainError,
+  preserveStaleDraftSchemaRelease,
+} from "./sandbox-draft-schema-release";
 import { retireUnusedDraftWorktrees } from "./retire-unused-draft-worktrees";
 import { attachCheckoutDependencyView } from "./dependency-cache";
 import { publicationContentSourceForReviewedWorkflow } from "../agent/github-publication-content-source";
@@ -303,14 +308,52 @@ describe("isolated draft reconciliation", () => {
     );
   });
 
-  const draftReleaseFixture = async (replayReviewedEdit = false) => {
+  const releaseCue = "apps/demo/schema/demo.cue";
+  const installedCue =
+    'manifest: {version: "2026-11-16.v1", fields: [{label: "Creator actor ID"}]}\n';
+  const originalCue =
+    'manifest: {version: "2026-11-16.v2", fields: [{label: "Creator Actor ID"}, {label: "Notes"}]}\n';
+  const correctedCue = originalCue.replace("Creator Actor ID", "Creator actor ID");
+  const predecessorArtifact = '{"schema":{"version":"2026-11-16.v1"}}';
+  const predecessorSchema = { version: "2026-11-16.v1" };
+  const onlineEvidence = (artifact: string, fieldId: string) => ({
+    "transition-plan.json": JSON.stringify({
+      online_optional_text_addition: {
+        kind: "optional-text-addition-v1",
+        predecessor_artifact_sha256: artifact,
+        predecessor_schema: predecessorSchema,
+        model_id: "notes",
+        field_id: fieldId,
+      },
+    }),
+    "operation-manifest.json": JSON.stringify({
+      predecessorCompatibility: {
+        kind: "optional-text-addition-v1",
+        predecessors: [
+          {
+            artifactSha256: artifact,
+            schema: predecessorSchema,
+            field: { modelId: "notes", fieldId },
+          },
+        ],
+      },
+    }),
+  });
+
+  const draftReleaseFixture = async (replayReviewedEdit = false, online = false) => {
     const f = fixture();
     const checkout = path.join(f.root, "repository");
     const releaseId = "2026-11-16.v2";
     const baseRelease = "2026-11-16.v1";
     const release = releaseCut(releaseId);
     const predecessor = `${releaseCut(baseRelease)}/release-manifest.json`;
-    const baseSha = advanceFixtureBase(f, { [predecessor]: "canonical predecessor" });
+    const predecessorManifest = "canonical predecessor";
+    const baseFiles = { [predecessor]: predecessorManifest };
+    if (online) {
+      baseFiles[releaseCue] = installedCue;
+      baseFiles[`${releaseCut(baseRelease)}/app-artifact.json`] = predecessorArtifact;
+    }
+    const baseSha = advanceFixtureBase(f, baseFiles);
     git(checkout, "switch", "draft");
     mkdirSync(path.join(checkout, release), { recursive: true });
     for (const member of GENERATED_RELEASE_MEMBERS) {
@@ -325,7 +368,15 @@ describe("isolated draft reconciliation", () => {
           : `generated ${member}`,
       );
     }
-    git(checkout, "add", "--", release);
+    if (online) {
+      writeFileSync(path.join(checkout, releaseCue), originalCue);
+      for (const [member, content] of Object.entries(
+        onlineEvidence(digest("stale predecessor"), "notes"),
+      )) {
+        writeFileSync(path.join(checkout, release, member), content);
+      }
+    }
+    git(checkout, "add", "--", release, ...(online ? [releaseCue] : []));
     git(
       checkout,
       "-c",
@@ -379,7 +430,18 @@ describe("isolated draft reconciliation", () => {
         sandbox: f.sandbox,
         validatedTree,
       });
-    return { checkout, discard, f, headSha, predecessor, prepared, release, releaseId, baseInput };
+    return {
+      checkout,
+      discard,
+      f,
+      headSha,
+      predecessor,
+      predecessorManifest,
+      prepared,
+      release,
+      releaseId,
+      baseInput,
+    };
   };
 
   it("preserves the base release, original draft, and other edits when preparing to regenerate a draft cut", async () => {
@@ -393,6 +455,119 @@ describe("isolated draft reconciliation", () => {
     expect(readFileSync(path.join(prepared.root, appFile), "utf-8")).toBe("private repair");
     expect(existsSync(path.join(checkout, release))).toBe(true);
     expect(git(f.root, "--git-dir=remote.git", "rev-parse", "draft")).toBe(headSha);
+  });
+
+  const stageAutomaticRecovery = async (
+    marker: "missing" | "compatible" | "wrong-field",
+    privateCue = correctedCue,
+  ) => {
+    const f = await draftReleaseFixture(false, true);
+    const { prepared, release } = f;
+    writeFileSync(path.join(prepared.root, releaseCue), privateCue);
+    const fieldId = marker === "wrong-field" ? "unapproved" : "notes";
+    const markers =
+      marker === "missing"
+        ? { "transition-plan.json": "{}", "operation-manifest.json": "{}" }
+        : onlineEvidence(digest(predecessorArtifact), fieldId);
+    for (const [member, content] of Object.entries(markers)) {
+      writeFileSync(path.join(prepared.root, release, member), content);
+    }
+    const inspected = await inspectDraftReconciliation({ prepared, sandbox: f.f.sandbox });
+    const move = async (
+      options: {
+        installedArtifact?: string;
+        sandbox?: Pick<SandboxSession, "run">;
+        markUncertain?: () => void;
+      } = {},
+    ) =>
+      await preserveStaleDraftSchemaRelease({
+        assertCurrent: vi.fn<() => void>(),
+        markUncertain: options.markUncertain ?? vi.fn<() => void>(),
+        prepared,
+        releaseId: f.releaseId,
+        validatedTree: inspected.resolvedTree,
+        sandbox: options.sandbox ?? f.f.sandbox,
+        recovery: {
+          approvedCandidateCueSha256: digest(originalCue),
+          approvedPriorCueSha256: digest(
+            installedCue.replace("Creator actor ID", "Creator Actor ID"),
+          ),
+          privateCueSha256: digest(privateCue),
+          inspectedTree: inspected.resolvedTree,
+          installed: {
+            releaseId: predecessorSchema.version,
+            artifactSha256: options.installedArtifact ?? digest(predecessorArtifact),
+            manifestSha256: digest(f.predecessorManifest),
+            cueSha256: digest(installedCue),
+          },
+        },
+      });
+    return { ...f, move, markers };
+  };
+
+  it.each(["missing", "wrong-field"] as const)(
+    "preserves exact unissued output with %s compatibility markers for recompilation",
+    async (marker) => {
+      const { f, prepared, release, releaseId, headSha, predecessor, move, markers } =
+        await stageAutomaticRecovery(marker);
+      await expect(move()).resolves.toEqual({ path: release });
+      expect(existsSync(path.join(prepared.root, release))).toBe(false);
+      expect(existsSync(path.join(prepared.root, predecessor))).toBe(true);
+      expect(readFileSync(path.join(prepared.root, releaseCue), "utf-8")).toBe(correctedCue);
+      expect(git(f.root, "--git-dir=remote.git", "rev-parse", "draft")).toBe(headSha);
+      const retained = readdirSync(path.join(f.root, ".app-builder")).find((name) =>
+        name.startsWith("draft-schema-recompile-"),
+      );
+      expect(
+        readFileSync(
+          path.join(f.root, ".app-builder", retained ?? "", releaseId, "transition-plan.json"),
+          "utf-8",
+        ),
+      ).toBe(markers["transition-plan.json"]);
+      const resumed = await inspectDraftReconciliation({ prepared, sandbox: f.sandbox });
+      expect(resumed.baseChanges.some(({ path: file }) => file.startsWith(`${release}/`))).toBe(
+        false,
+      );
+    },
+  );
+
+  it.each([
+    { marker: "compatible", source: correctedCue, installed: predecessorArtifact },
+    {
+      marker: "missing",
+      source: correctedCue.replace("Notes", "Renamed notes"),
+      installed: predecessorArtifact,
+    },
+    { marker: "missing", source: correctedCue, installed: "different artifact" },
+  ] as const)(
+    "preserves the cut when current evidence does not authorize regeneration %#",
+    async ({ marker, source, installed }) => {
+      const { move, prepared, release } = await stageAutomaticRecovery(marker, source);
+      await expect(move({ installedArtifact: digest(installed) })).resolves.toBeUndefined();
+      expect(existsSync(path.join(prepared.root, release))).toBe(true);
+    },
+  );
+
+  it("can observe the same preserved cut after the sandbox loses the move response", async () => {
+    const { f, move, prepared, release } = await stageAutomaticRecovery("missing");
+    const markUncertain = vi.fn<() => void>();
+    await expect(
+      move({
+        markUncertain,
+        sandbox: {
+          async run(input) {
+            await f.sandbox.run(input);
+            throw new Error("sandbox reply unavailable");
+          },
+        },
+      }),
+    ).rejects.toBeInstanceOf(DraftSchemaReleaseMoveUncertainError);
+    expect(markUncertain).toHaveBeenCalledOnce();
+    expect(existsSync(path.join(prepared.root, release))).toBe(false);
+    const resumed = await inspectDraftReconciliation({ prepared, sandbox: f.sandbox });
+    expect(resumed.baseChanges.some(({ path: file }) => file.startsWith(`${release}/`))).toBe(
+      false,
+    );
   });
 
   it("rejects an established cut, path escape, and links without altering either release", async () => {

@@ -149,6 +149,10 @@ export const applicationSourceReviewCacheSessionId = (
     ? undefined
     : hash(JSON.stringify(["source-review-cache-affinity-v1", sessionId, reviewKey]));
 
+/** A session-scoped diagnostic can correlate exact review input without logging its contents. */
+export const sourceReviewInputCorrelation = (sessionId: string, reviewKey: string): string =>
+  hash(JSON.stringify(["source-review-input-observation-v1", sessionId, reviewKey]));
+
 const evidenceSubmissionSchema = sourceJudgmentSchema.extend({
   findings: z.array(
     sourceJudgmentSchema.shape.findings.element.extend({

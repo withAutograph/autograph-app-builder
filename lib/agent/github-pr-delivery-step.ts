@@ -11,7 +11,8 @@ export async function continueGitHubPrDelivery(
 ) {
   "use step";
   const { continueGitHubPrDeliveryWithPorts } = await import("./github-pr-delivery-execution");
-  return await continueGitHubPrDeliveryWithPorts(approval, ctx, readyAt);
+  const result = await continueGitHubPrDeliveryWithPorts(approval, ctx, readyAt);
+  return { ...result, deliveryObservedAt: new Date().toISOString() };
 }
 
 // eslint-disable-next-line eslint/func-style -- Workflow approval runs in the Node step runtime.
@@ -155,6 +156,7 @@ export async function continueGitHubProductionSchema(
   input: GitHubPrDeliveryApproval,
   ctx: WorkflowStepToolContext,
   activation: RepositoryProductionSchemaActivation,
+  observeOnly?: true,
 ) {
   "use step";
   const { readGitHubPrDeliveryAuthority } = await import("./github-pr-delivery-authority");
@@ -183,7 +185,13 @@ export async function continueGitHubProductionSchema(
   if (observed.deployment.requestedRevisionActive !== true) {
     return observed.status === "available" ? pending : observed;
   }
-  const { repositoryProductionClientForContext } = await import("./repository-production-client");
+  if (observeOnly === true) {
+    return pending;
+  }
+  const {
+    repositoryProductionClientForContext,
+    RepositoryProductionSetupInterventionRequiredError,
+  } = await import("./repository-production-client");
   try {
     const client = await repositoryProductionClientForContext(ctx);
     const { approvalReference } = await client.plan(target.appId);
@@ -193,12 +201,35 @@ export async function continueGitHubProductionSchema(
       activation,
     );
     if (setup.state !== "ready") {
-      return pending;
+      return {
+        ...pending,
+        schemaUpdateDisposition:
+          setup.state === "identity-required"
+            ? ("intervention-required" as const)
+            : ("retrying" as const),
+      };
     }
-  } catch {
+  } catch (error) {
     // The protected operation retains its outcome. Polling reconciles this same receipt before another attempt.
     ctx.abortSignal.throwIfAborted();
-    return pending;
+    return {
+      ...pending,
+      schemaUpdateDisposition:
+        error instanceof RepositoryProductionSetupInterventionRequiredError
+          ? ("intervention-required" as const)
+          : ("retrying" as const),
+    };
   }
-  return await observeMergedAppProduction(target, ctx, activation.mergeSha);
+  const settled = await observeMergedAppProduction(
+    target,
+    ctx,
+    activation.mergeSha,
+    undefined,
+    authority.productionSchemaGrantDigest,
+  );
+  return settled.status === "available" &&
+    settled.requestedRevision === "live" &&
+    settled.schemaSetupSettled !== true
+    ? { ...settled, requestedRevision: "awaiting-activation" as const }
+    : settled;
 }

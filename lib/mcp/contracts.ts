@@ -2,6 +2,7 @@ import { applicationSourceExportReferenceSchema } from "../handoff/application-s
 import { z } from "zod";
 
 import { githubRepositoryAccessSchema } from "../integrations/store-in-view-model";
+import { deliveryProgressSchema } from "../delivery-progress";
 
 export const sessionStatusSchema = z.enum([
   "working",
@@ -102,6 +103,7 @@ export const publicEveEventSchema = z.discriminatedUnion("type", [
     index: z.number().int().nonnegative(),
     label: z.string(),
     state: z.enum(["started", "completed", "failed"]),
+    delivery: deliveryProgressSchema.optional(),
     turnId: z.string().optional(),
     type: z.literal("progress"),
   }),
@@ -124,6 +126,12 @@ export const publicEveEventSchema = z.discriminatedUnion("type", [
 ]);
 
 export type PublicEveEvent = z.infer<typeof publicEveEventSchema>;
+
+export const recentDeliveryProgress = (events: readonly PublicEveEvent[]) =>
+  events.findLast(
+    (event): event is Extract<PublicEveEvent, { type: "progress" }> =>
+      event.type === "progress" && event.delivery !== undefined,
+  );
 
 const sha256DigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 

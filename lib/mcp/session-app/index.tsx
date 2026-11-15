@@ -3,8 +3,12 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 
 import packageManifest from "../../../package.json";
-import { eveSessionResultSchema, retainPublicSessionCursor } from "../contracts";
-import type { EveSessionResult } from "../contracts";
+import {
+  eveSessionResultSchema,
+  recentDeliveryProgress,
+  retainPublicSessionCursor,
+} from "../contracts";
+import type { EveSessionResult, PublicEveEvent } from "../contracts";
 import {
   createBoundedAuthorizationRefresh,
   sessionAuthorizationRefreshKey,
@@ -21,10 +25,18 @@ const app = new App(
 );
 let latestResult: EveSessionResult | undefined;
 let identityInvitationState: IdentityInvitationState | undefined;
+let deliveryEvent: Extract<PublicEveEvent, { type: "progress" }> | null = null;
 const resultListeners = new Set<() => void>();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function publishResult(result?: EveSessionResult) {
+  if (latestResult?.sessionId !== result?.sessionId) {
+    deliveryEvent = null;
+  }
+  const progress = result === undefined ? undefined : recentDeliveryProgress(result.events);
+  if (progress !== undefined && progress.index > (deliveryEvent?.index ?? -1)) {
+    deliveryEvent = progress;
+  }
   identityInvitationState = result
     ? reduceIdentityInvitations(identityInvitationState, result)
     : undefined;
@@ -138,6 +150,7 @@ function SessionAppContainer() {
 
   return (
     <SessionAppView
+      deliveryProgress={deliveryEvent?.delivery}
       result={result}
       identityInvitations={identityInvitationState?.invitations ?? []}
       canCallTools={Boolean(capabilities?.serverTools)}

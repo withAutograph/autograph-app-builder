@@ -1,11 +1,7 @@
 /* oxlint-disable unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
+import { assertOwnedDraftSchemaCandidate } from "@/lib/agent/owned-draft-schema-candidate";
 import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
-import { draftInspectionRecoveryForSession } from "@/lib/agent/prepare-published-draft-repair";
-import {
-  currentDraftCandidateSource,
-  draftCandidateInstallation,
-} from "@/lib/agent/published-draft-repair";
-import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
+import { currentDraftCandidateSource } from "@/lib/agent/published-draft-repair";
 import { defineTool } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { z } from "zod";
@@ -127,64 +123,7 @@ export default defineTool({
       });
     };
     if (input.kind === "discard_unissued_schema_release") {
-      const { owner, name, repositoryId } = source.repository;
-      const priorPublishedProposalDigest =
-        candidate.publishedOrigin?.publicationProposalDigest ??
-        candidate.publicationScope?.proposal.digest ??
-        state.publishedGitHubDraftProposalDigest ??
-        state.githubDraftProposal?.proposal.digest;
-      if (
-        candidate.kind === "published-draft-repair" ||
-        candidate.appId !== state.appSpec.appId ||
-        candidate.repositoryId !== repositoryId ||
-        priorPublishedProposalDigest === undefined
-      ) {
-        throw new Error("Prepare ordinary reconciliation for this app's owned draft first.");
-      }
-      const installationId =
-        draftCandidateInstallation(candidate)?.selectedInstallationId ??
-        state.githubDestinationReview?.installation.installationId;
-      const runtime = await githubPublicationRuntimeForSession(
-        ctx.session.auth,
-        installationId === undefined ? undefined : { selectedInstallationId: installationId },
-      );
-      const [{ draft, base, publishedHeadSha }, publication] = await Promise.all([
-        runtime.inspectExistingDraftReconciliationSource({
-          name,
-          owner,
-          priorPublishedProposalDigest,
-          pullRequestNumber: candidate.pullRequestNumber,
-          recovery: draftInspectionRecoveryForSession({
-            ctx,
-            appId: candidate.appId,
-            appSpecDigest: state.appSpec.digest,
-            root: candidate.root,
-            pullRequestNumber: candidate.pullRequestNumber,
-            priorPublishedProposalDigest,
-          }),
-          repositoryId,
-        }),
-        runtime.readSucceededDraftPublication?.(priorPublishedProposalDigest),
-      ]);
-      const exactLiveCandidate = [
-        publication !== undefined,
-        draft.state === "open",
-        draft.draft,
-        draft.repositoryId === repositoryId,
-        draft.number === candidate.pullRequestNumber,
-        draft.pullRequestId === publication?.pullRequestId,
-        draft.verifiedBuilderOrigin?.marker === publication?.idempotencyKey,
-        draft.headSha === candidate.headSha,
-        draft.headTree === candidate.headTree,
-        publishedHeadSha === candidate.headSha,
-        base.headSha === candidate.baseSha,
-        base.headTree === candidate.baseTree,
-      ].every(Boolean);
-      if (!exactLiveCandidate) {
-        throw new Error(
-          "The owned draft or its base has changed. Prepare current reconciliation before editing.",
-        );
-      }
+      await assertOwnedDraftSchemaCandidate({ candidate, ctx, source, state });
       const releasePath = `apps/${candidate.appId}/schema/release/${input.releaseId}`;
       const { path } = await discardUnissuedDraftSchemaRelease({
         abortSignal: ctx.abortSignal,

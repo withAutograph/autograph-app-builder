@@ -48,7 +48,11 @@ export async function applicationReviewRoundStep(
   const { sourceReviewJournalForSession } = runtime;
   const { createApplicationReviewSandboxReader } = reader;
   const { createApplicationReviewEvidence } = evidenceModule;
-  const { assessApplicationSourceRound, applicationSourceReviewCacheSessionId } = engine;
+  const {
+    assessApplicationSourceRound,
+    applicationSourceReviewCacheSessionId,
+    sourceReviewInputCorrelation,
+  } = engine;
   const { unavailableSourceAssessment } = assessmentModule;
   const owner = {
     appId: reference.appId,
@@ -87,9 +91,16 @@ export async function applicationReviewRoundStep(
       visiblePaths: prepared.visiblePaths,
       restoredSourceReads: continuation?.references.map(([, value]) => value),
     });
+    const reviewInputCorrelation = sourceReviewInputCorrelation(ctx.session.id, prepared.reviewKey);
     const report = (event: string, detail: RequestDiagnostic) => {
       console.info(
-        JSON.stringify({ event, callId: ctx.callId, sessionId: ctx.session.id, ...detail }),
+        JSON.stringify({
+          event,
+          callId: ctx.callId,
+          sessionId: ctx.session.id,
+          reviewInputCorrelation,
+          ...detail,
+        }),
       );
     };
     const result = await assessApplicationSourceRound(

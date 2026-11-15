@@ -2,6 +2,7 @@ import type { runAppBrowserTests as runAppBrowserTestsPort } from "../../agent/t
 import type { SandboxSession } from "eve/sandbox";
 import path from "node:path";
 import type { resolvePreparedRuntimeExecution } from "./prepared-runtime-execution";
+import type { recoverStaleDraftSchemaRelease } from "./recover-stale-draft-schema-release";
 import type { samePersistedDraftCandidate } from "./draft-reconciliation-state";
 /* oxlint-disable anti-slop/no-module-mocking, anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns, typescript/no-unsafe-type-assertion, eslint/require-await -- Isolated Eve state and sandbox stubs exercise the real validation tool. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -36,6 +37,7 @@ const mocks = vi.hoisted(() => ({
   candidate: null as Record<string, unknown> | null,
   completions: [] as { root: string }[],
   retire: vi.fn<typeof retireUnusedDraftWorktrees>(),
+  recover: vi.fn<typeof recoverStaleDraftSchemaRelease>(),
   attempts: [] as Record<string, unknown>[],
   check: vi.fn(),
   compile: vi.fn(),
@@ -53,6 +55,9 @@ const mocks = vi.hoisted(() => ({
   workflow: null as Record<string, unknown> | null,
 }));
 
+vi.mock("./recover-stale-draft-schema-release", () => ({
+  recoverStaleDraftSchemaRelease: mocks.recover,
+}));
 vi.mock("../repository/retire-unused-draft-worktrees", () => ({
   retireUnusedDraftWorktrees: mocks.retire,
 }));
@@ -305,6 +310,7 @@ describe("draft reconciliation command progress", () => {
       phase: "reviewed",
       reviewReceipt: { digest },
     };
+    mocks.recover.mockImplementation(async ({ candidate }) => candidate);
     mocks.inspect.mockResolvedValue({
       baseChanges: [],
       headChanges: [],
@@ -335,6 +341,43 @@ describe("draft reconciliation command progress", () => {
     expect(installs[0].env).not.toHaveProperty("DATABASE_URL");
     expect(mocks.compile).not.toHaveBeenCalled();
     expect(mocks.check).not.toHaveBeenCalled();
+  });
+
+  it("compiles the recovered tree before checks and resumes the same validation", async () => {
+    const recoveredTree = "c".repeat(40);
+    mocks.recover.mockImplementationOnce(async ({ candidate }) => {
+      const recovered = { ...candidate };
+      mocks.candidate = recovered;
+      mocks.inspect.mockResolvedValue({
+        baseChanges: [],
+        headChanges: [],
+        resolvedTree: recoveredTree,
+        unresolvedConflicts: [],
+      });
+      return recovered;
+    });
+    await expect(candidateValidationCall()).resolves.toMatchObject({
+      command: installCommand,
+      nextCommand: schemaCommand,
+      status: "in_progress",
+    });
+    expect(mocks.compile).not.toHaveBeenCalled();
+    expect(mocks.check).not.toHaveBeenCalled();
+    await expect(candidateValidationCall(schemaCommand)).resolves.toMatchObject({
+      command: schemaCommand,
+      nextCommand: checkCommand,
+      status: "in_progress",
+    });
+    expect(mocks.compile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        observedInput: { sessionId: "adapter", resolvedTree: recoveredTree },
+      }),
+    );
+    await expect(candidateValidationCall(checkCommand)).resolves.toMatchObject({
+      command: checkCommand,
+      status: "in_progress",
+    });
+    expect(mocks.recover).toHaveBeenCalledTimes(1);
   });
 
   it("migrates an already compiled failed candidate before retrying its existing app check", async () => {

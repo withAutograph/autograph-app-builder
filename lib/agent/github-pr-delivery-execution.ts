@@ -7,7 +7,10 @@ import {
 import { isDeepStrictEqual } from "node:util";
 import type { WorkflowStepToolContext } from "eve/tools";
 import type { GitHubPrDeliveryApproval } from "./github-pr-delivery-approval";
-import type { AppProductionDeliveryTarget } from "./app-production-observation";
+import type {
+  AppProductionDeliveryTarget,
+  observeMergedAppProduction,
+} from "./app-production-observation";
 
 import type { GitHubPrDeliveryObservation } from "../repository/github-pr-delivery";
 import type { GitHubPrEffectReceipt } from "../repository/github-pr-effect-journal";
@@ -93,7 +96,41 @@ export interface GitHubPrDeliveryStepPorts {
   runtime?: () => Promise<GitHubDeliveryRuntime>;
   readAuthority?: typeof readGitHubPrDeliveryAuthority;
   readProduction?: typeof readGitHubProductionDeliveryReadiness;
+  observeCurrentApp?: typeof observeMergedAppProduction;
 }
+
+const readCurrentAppUrl = async (
+  target: AppProductionDeliveryTarget,
+  ctx: WorkflowStepToolContext,
+  observeCurrentApp: GitHubPrDeliveryStepPorts["observeCurrentApp"],
+): Promise<string | null> => {
+  const observer = await import("./app-production-observation");
+  const observe = observeCurrentApp ?? observer.observeMergedAppProduction;
+  // The existing link is optional display data. A slow provider read cannot
+  // keep a ready PR out of the required-checks loop.
+  const deadline = new AbortController();
+  const abortSignal = AbortSignal.any([ctx.abortSignal, deadline.signal]);
+  const stopped = Promise.withResolvers<null>();
+  const onAbort = () => {
+    stopped.resolve(null);
+  };
+  const timer = setTimeout(() => {
+    deadline.abort();
+  }, 3000);
+  abortSignal.addEventListener("abort", onAbort, { once: true });
+  try {
+    const current = await Promise.race([observe(target, { ...ctx, abortSignal }), stopped.promise]);
+    ctx.abortSignal.throwIfAborted();
+    return current?.status === "available" ? (current.app.url ?? null) : null;
+  } catch {
+    ctx.abortSignal.throwIfAborted();
+    return null;
+  } finally {
+    clearTimeout(timer);
+    abortSignal.removeEventListener("abort", onAbort);
+  }
+};
+
 /** The parent/current-owner projection, not ambient workflow child state, supplies app authority. */
 export const continueGitHubPrDeliveryWithPorts = async (
   approval: GitHubPrDeliveryApproval,
@@ -162,6 +199,14 @@ export const continueGitHubPrDeliveryWithPorts = async (
     repositoryId: reviewedTarget.repositoryId,
     repositoryFullName: `${reviewedTarget.owner}/${reviewedTarget.name}`,
   };
+  const managed =
+    directProduction ||
+    authority.requirements.some(
+      (requirement) =>
+        requirement.appId === productionTarget.appId &&
+        requirement.repositoryId === productionTarget.repositoryId &&
+        requirement.repositoryFullName === productionTarget.repositoryFullName,
+    );
   if (observed.state === "merged" && observed.mergeCommitSha !== undefined) {
     if (schemaRevision) {
       const approvedCycle = readyAt ?? observed.readyAt;
@@ -178,14 +223,6 @@ export const continueGitHubPrDeliveryWithPorts = async (
     if (readyAt !== undefined && observed.readyAt === readyAt) {
       await run({ ...effect, kind: "pr-merge", readyAt, reconcileOnly: true });
     }
-    const managed =
-      directProduction ||
-      authority.requirements.some(
-        (requirement) =>
-          requirement.appId === productionTarget.appId &&
-          requirement.repositoryId === productionTarget.repositoryId &&
-          requirement.repositoryFullName === productionTarget.repositoryFullName,
-      );
     return mergedDelivery(observed.mergeCommitSha, managed ? productionTarget : undefined);
   }
   if (observed.state !== "open") {
@@ -230,7 +267,7 @@ export const continueGitHubPrDeliveryWithPorts = async (
         };
       }
     }
-    return await startReadyCycle({
+    const ready = await startReadyCycle({
       approvedReadyAt,
       observed,
       runReady: async (reconcileOnly) => {
@@ -243,6 +280,21 @@ export const continueGitHubPrDeliveryWithPorts = async (
         return await run(readyEffect);
       },
     });
+    if (ready.status === WAITING_FOR_CHECKS && managed) {
+      const managedReady = { ...ready, nativeProductionPending: true as const };
+      if (productionRevision || schemaRevision) {
+        const currentAppUrl = await readCurrentAppUrl(
+          productionTarget,
+          ctx,
+          ports.observeCurrentApp,
+        );
+        if (currentAppUrl !== null) {
+          return { ...managedReady, currentAppUrl };
+        }
+      }
+      return managedReady;
+    }
+    return ready;
   }
   if (observed.draft || observed.readyAt !== readyAt) {
     return { status: READY_CYCLE_CHANGED } as const;

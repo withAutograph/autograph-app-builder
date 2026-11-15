@@ -110,6 +110,8 @@ interface DraftCandidateFields {
   };
   recoveryMode?: "reopen-current-owned-draft";
   preservedWorkspaces?: readonly PreservedDraftWorkspace[];
+  /** Previously validated bytes to reconcile if the provider lost a private move response. */
+  schemaRecoveryPreimageTree?: string;
   validation?: {
     resolvedTree: string;
     commands: readonly { command: string; exitCode: number }[];

@@ -33,3 +33,44 @@ the app; a live revision can be credited only after checking its Production
 URL and the intended change. Mark missing or unavailable evidence explicitly
 as failed, blocked, or unassessed. Keep credentials, private Preview
 capabilities, and synthetic records out of shareable logs.
+
+## Delivery timings
+
+Compare a first private app release, a text-only revision, and a revision that
+adds one optional field. Use the same app and destination for both revisions.
+Compare like cases across Builder revisions, keeping local recovery exercises
+separate from normal hosted runs. The public driver's `buildApprovals` report
+retains when it first saw each Build card and when Builder acknowledged the
+ordinary response. This evidence survives resuming the driver's saved state.
+Record these observations and any interventions, including equivalent evidence
+from the web flow. The private `app_builder.build_grant_recorded` event marks
+when Builder first records the approved grant for its current proposal.
+Compare it with the approval acknowledgement to see when execution begins.
+
+Use the existing `app_builder.validation_command` logs for elapsed time and
+outcome of the selected repository commands, including standalone
+`schema-compile` calls. When a repository build runs schema work internally,
+report its combined command time unless that command provides its own timing.
+The `validationPlanCorrelation` identifies the same approved source and
+dependency plan for one command in the same session. A private repair can change
+actual inputs under that plan. Candidate schema compile also supplies a
+`validationInputCorrelation` based on the exact inspected draft tree, which
+includes its lockfile. Use current input observations to confirm duplicate work
+before changing validation.
+Record Check completion and merge from GitHub. Record provider build start and
+readiness, observed activity at the Production URL, any protected data update,
+and Builder's live confirmation. The driver's `deliveryTiming` retains Builder's
+reported phase start and latest observation across polling and resume. Use
+GitHub and Vercel for the authoritative provider timestamps. Label a client
+observation as such. Missing stage timings stay unavailable, including before
+the historical instrumentation was deployed.
+
+Use `app_builder.source_review_input` to distinguish reuse of current completed
+evidence from preparation of a review. Group
+`app_builder.source_review_request_started` records by the session-scoped
+`reviewInputCorrelation` and inspect the native call and request ordinal to
+identify repeated requests for identical inputs. Count repeated native log
+observations once. Classify actual in-flight round retries separately from
+independent invocations that restarted an identical review. Report fresh
+requests, elapsed command time, and the explanation for repeated work before
+changing execution. Track hosted timing as advisory qualification evidence.

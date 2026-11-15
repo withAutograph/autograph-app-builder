@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/max-classes-per-file -- Keep separate status-read and setup response errors beside their shared dispatcher. */
 import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
 import type { WorkflowStepToolContext } from "eve/tools";
@@ -69,6 +70,13 @@ export class RepositoryProductionNativeAccessChangedError extends Error {
   }
 }
 
+export class RepositoryProductionSetupInterventionRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RepositoryProductionSetupInterventionRequiredError";
+  }
+}
+
 interface RepositoryProductionRequestExtras {
   approvedByCallId?: string;
   creatorEmail?: string;
@@ -91,6 +99,12 @@ const repositoryProductionErrorCode = async (response: Response): Promise<string
   }
 };
 
+const setupInterventionCodes = new Set([
+  "app_access_denied",
+  "request_invalid",
+  "request_id_conflict",
+]);
+
 /** A failed read is not evidence that preparation ran or changed a resource. */
 export const repositoryProductionResponseError = async (
   response: Response,
@@ -103,15 +117,18 @@ export const repositoryProductionResponseError = async (
   }
   const code = await repositoryProductionErrorCode(response);
   if (code === "app_setup_destination_required") {
-    return new Error(
+    return new RepositoryProductionSetupInterventionRequiredError(
       "Builder could not yet resolve this app's repository and current source for Production. Continue its saved delivery in the same session, then check Production setup again.",
     );
   }
-  return new Error(
+  const message =
     action === "prepare"
       ? "Your app setup is saved. Builder could not confirm the latest result. Check its status before retrying."
-      : "Builder could not read this app's Production setup. This read did not start setup. Keep the same app and session while restoring access to its saved setup.",
-  );
+      : "Builder could not read this app's Production setup. This read did not start setup. Keep the same app and session while restoring access to its saved setup.";
+  if ((action === "plan" || action === "prepare") && setupInterventionCodes.has(code ?? "")) {
+    return new RepositoryProductionSetupInterventionRequiredError(message);
+  }
+  return new Error(message);
 };
 
 const repositoryProductionEndpoint = (value: string) => {

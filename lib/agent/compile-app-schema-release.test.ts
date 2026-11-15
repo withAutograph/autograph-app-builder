@@ -1,5 +1,6 @@
 /* oxlint-disable anti-slop/no-module-mocking -- Eve state and owner publication ports isolate the actual production tool execute boundary. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import { validationOutputExcerpt } from "../repository/target-validation";
 import { safeCommandOutput } from "./command-output";
@@ -94,6 +95,37 @@ describe("private app schema release compilation", () => {
     });
     expect(failed).toMatchObject({ exitCode: 0, status: "failed" });
     expect(JSON.stringify(failed)).not.toContain("private resource");
+  });
+  it("correlates observed compiler inputs within a session while keeping source private", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const run = vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "private output" });
+    const compile = async (callId: string, resolvedTree: string) =>
+      await compileAppSchemaRelease({
+        appId: "spend-review",
+        callId,
+        observedInput: { resolvedTree, sessionId: "private session" },
+        root: "/workspace/repository",
+        sandbox: { run },
+      });
+    try {
+      await compile("first", "a".repeat(40));
+      await compile("retry", "a".repeat(40));
+      await compile("changed-source", "b".repeat(40));
+      const eventSchema = z.object({
+        validationInputCorrelation: z.string().regex(/^[a-f0-9]{64}$/u),
+      });
+      const [first, retry, changed] = info.mock.calls.map(
+        ([event]) =>
+          eventSchema.parse(JSON.parse(z.string().parse(event))).validationInputCorrelation,
+      );
+      expect(first).toBeDefined();
+      expect(retry).toBe(first);
+      expect(changed).toBeDefined();
+      expect(changed).not.toBe(first);
+      expect(JSON.stringify(info.mock.calls)).not.toMatch(/private|a{40}|b{40}|spend-review/u);
+    } finally {
+      info.mockRestore();
+    }
   });
   it("production execution supplies current session and approved workflow facts to capture", async () => {
     const sandbox = {

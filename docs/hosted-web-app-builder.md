@@ -509,6 +509,20 @@ Emit structured, tenant-safe metrics and logs for:
 - draft-PR and deployment proposal, approval, denial, dispatch, provider
   readback, retry, and terminal outcome.
 
+Use the saved delivery workflow's observed stage transitions to distinguish
+waiting for checks, deploying, updating app data, and live. Measure the
+Build card from its first public observation, the approval from its settlement,
+and private execution from its first recorded Build grant. Use GitHub and Vercel
+timestamps for provider work. Where the workflow first observes a provider
+transition after the fact, retain the observation time separately from the
+provider time.
+
+Count repeated work by session-scoped correlation for the same reviewed input
+or verified validation source. A repeated event delivery, an intentional
+provider retry, and a command restarted on an unchanged input are distinct
+observations. Timing and repeat counts are advisory evidence for Builder
+development and never affect app delivery.
+
 Logs and metrics must not contain prompts, event text, AppSpec content, source,
 credentials, session tokens, database addresses, provider response bodies, or
 raw tenant identifiers. Use stable nonreversible operational correlation values

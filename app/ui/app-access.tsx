@@ -24,6 +24,7 @@ import type {
 } from "@/lib/app-access/contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { BuilderDeliveryStatus } from "./builder-delivery-status";
 
 type ActionHandler = (intent: AppAccessIntent) => void;
 
@@ -734,7 +735,17 @@ export const AppAccessPage = ({
         </Button>
       ) : null}
       {data ? (
-        <AppAccessView data={data} disabled={pending || retry !== undefined} onAction={onAction} />
+        <>
+          <BuilderDeliveryStatus
+            sessionId={sessionId}
+            showAppLink={data.creator.status !== "ready" || data.appUrl === undefined}
+          />
+          <AppAccessView
+            data={data}
+            disabled={pending || retry !== undefined}
+            onAction={onAction}
+          />
+        </>
       ) : (
         <p role="status">Loading your app’s access…</p>
       )}
