@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { SubmissionRejectedBeforeDispatchError } from "./hosted-errors";
 import type { EveSessionResult } from "../mcp/contracts";
 import type { HostedPrincipal } from "./hosted-auth";
@@ -6,6 +7,7 @@ import type {
   DurableHostedSessionRecord,
   HostedEveStore,
   HostedOperationRecord,
+  HostedPagedCheckpointMetadata,
 } from "./hosted-store";
 import { hostedOperationRecordSchema, toDurableHostedSessionRecord } from "./hosted-store";
 import { digest, stableId } from "./hosted-operation-identifiers";
@@ -20,6 +22,9 @@ interface ControllerInput {
   assertCurrentOwner: (session: DurableHostedSessionRecord) => Promise<void>;
   now: () => number;
   principal: HostedPrincipal;
+  readCheckpointMetadata?: (
+    session: DurableHostedSessionRecord,
+  ) => Promise<HostedPagedCheckpointMetadata | null>;
   result: EveSessionResult;
   sessionId: string;
   store: HostedEveStore;
@@ -29,6 +34,14 @@ interface ReadyBuild {
   decision: ApprovedBuildDecision;
   session: DurableHostedSessionRecord;
 }
+const sameBuildEpoch = (current: DurableHostedSessionRecord, ready: ReadyBuild): boolean =>
+  [
+    current.adapterSessionId === ready.session.adapterSessionId,
+    current.adapterGeneration === ready.session.adapterGeneration,
+    current.cancellationRevision === ready.session.cancellationRevision,
+    current.resumedCancellationRevision === ready.session.resumedCancellationRevision,
+    isDeepStrictEqual(current.privateBuildDecision, ready.decision),
+  ].every(Boolean);
 const waitingForWork = (result: EveSessionResult) =>
   result.status === "waiting" || result.error?.code === "approved_build_continuation_pending";
 const knownWorkflowPhases = new Set([
@@ -157,6 +170,7 @@ type ContinuationPreflightReason =
   | "session_not_resumable"
   | "decision_changed"
   | "active_input_or_turn"
+  | "observation_incomplete"
   | "transport_unavailable";
 class ContinuationPreflightError extends Error {
   readonly reason: ContinuationPreflightReason;
@@ -190,39 +204,84 @@ const preflight = async (
   ready: ReadyBuild,
   enter: (stage: ContinuationStage) => void,
 ) => {
-  const { session, decision } = ready;
-  const current = await input.store.getSession(session.principal, session.sessionId);
-  if (current === null) {
-    throw new ContinuationPreflightError("session_unavailable");
-  }
-  const fresh = toDurableHostedSessionRecord(current);
-  if (fresh.status === "cancelled" || fresh.resumability !== "live") {
-    throw new ContinuationPreflightError("session_not_resumable");
-  }
-  const changed =
-    fresh.privateBuildDecision?.turnId !== decision.turnId ||
-    fresh.privateBuildDecision?.decision !== "runnable" ||
-    fresh.adapterSessionId !== session.adapterSessionId;
-  if (changed) {
-    throw new ContinuationPreflightError("decision_changed");
-  }
+  const { session } = ready;
+  const readCurrent = async () => {
+    const stored = await input.store.getSession(session.principal, session.sessionId);
+    if (stored === null) {
+      throw new ContinuationPreflightError("session_unavailable");
+    }
+    const current = toDurableHostedSessionRecord(stored);
+    if (current.status === "cancelled" || current.resumability !== "live") {
+      throw new ContinuationPreflightError("session_not_resumable");
+    }
+    if (!sameBuildEpoch(current, ready)) {
+      throw new ContinuationPreflightError("decision_changed");
+    }
+    return current;
+  };
+  const fresh = await readCurrent();
   enter("owner_preflight");
   await input.assertCurrentOwner(fresh);
   if (input.transport.observe === undefined) {
     return;
   }
   enter("transport_observation");
-  const observed = await input.transport.observe({
+  const metadata = await input.readCheckpointMetadata?.(fresh);
+  const seed = metadata?.nativeObservationState;
+  const incompleteInputState =
+    seed?.privateInputState === undefined &&
+    seed?.pendingRequests.some(({ kind }) => kind === "question") === true;
+  const observation: Parameters<NonNullable<HostedEveTransport["observe"]>>[0] = {
     adapterSessionId: session.adapterSessionId,
     onEvent() {
       /* Preflight consumes only the authoritative summary. */
     },
     principal: session.principal,
     sessionId: session.sessionId,
-  });
-  if (observed.status !== "waiting" || observed.pendingRequests.length > 0) {
+  };
+  // A checkpoint is only the reducer's starting point. The fresh native tail
+  // still decides whether this approval can continue.
+  if (
+    metadata?.coldReadProgress === undefined &&
+    seed?.adapterSessionId === fresh.adapterSessionId &&
+    seed.publicEventCount === fresh.checkpointRef?.eventCount &&
+    !incompleteInputState
+  ) {
+    observation.nativeObservationState = seed;
+  }
+  const observed = await input.transport.observe(observation);
+  if (observation.nativeObservationState !== undefined) {
+    const completeTail = [
+      observed.observationComplete === true,
+      observed.nextNativeIndex !== undefined &&
+        observed.nextNativeIndex >= observation.nativeObservationState.nextNativeIndex,
+      observed.nativeTailIndex !== undefined &&
+        observed.nextNativeIndex === observed.nativeTailIndex + 1,
+      observed.nextNativeIndex === observed.nativeObservationState?.nextNativeIndex,
+      observed.installedEventCount === observed.nextNativeIndex,
+      observed.nativeObservationState?.adapterSessionId === fresh.adapterSessionId,
+    ].every(Boolean);
+    if (!completeTail) {
+      throw new ContinuationPreflightError("observation_incomplete");
+    }
+  }
+  if (
+    observed.observationComplete === false ||
+    observed.status !== "waiting" ||
+    observed.activeTurnId !== undefined ||
+    observed.pendingRequests.length > 0
+  ) {
     throw new ContinuationPreflightError("active_input_or_turn");
   }
+  enter("owner_preflight");
+  const latest = await readCurrent();
+  if (
+    observation.nativeObservationState !== undefined &&
+    (latest.status !== "waiting" || !isDeepStrictEqual(latest.checkpointRef, fresh.checkpointRef))
+  ) {
+    throw new ContinuationPreflightError("decision_changed");
+  }
+  await input.assertCurrentOwner(latest);
 };
 const dispatch = async (
   input: ControllerInput,

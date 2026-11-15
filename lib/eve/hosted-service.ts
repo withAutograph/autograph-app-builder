@@ -2269,6 +2269,8 @@ export function createHostedEveSessionService(input: {
         assertCurrentOwner: assertHostedBuildDecisionOwner,
         now,
         principal,
+        // oxlint-disable-next-line eslint/no-use-before-define -- The checkpoint reader is initialized before any service call.
+        readCheckpointMetadata,
         result: controlled,
         sessionId,
         store: input.store,
