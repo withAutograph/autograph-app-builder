@@ -83,6 +83,7 @@ export const runAppBrowserTests = async (input: {
   runtime?: PreparedRuntimeExecution | null;
   selection?: BrowserTestSelection;
   privateBrowserEnvironment?: Readonly<Record<string, string>>;
+  localRuntimeStateDirectory?: string;
   continuation?: {
     commandId?: string;
     commandCheckpoint: (commandId: string) => Promise<void>;
@@ -142,9 +143,9 @@ export const runAppBrowserTests = async (input: {
             ].join(" ");
       const env = {
         ...input.privateBrowserEnvironment,
-        APP_RUNTIME_STATE_DIR: path.posix.dirname(
-          localRuntimeEnvironmentPath(input.root, input.appId),
-        ),
+        APP_RUNTIME_STATE_DIR:
+          input.localRuntimeStateDirectory ??
+          path.posix.dirname(localRuntimeEnvironmentPath(input.root, input.appId)),
       };
       return input.signal === undefined
         ? await input.sandbox.run({ command: privateCommand, env, workingDirectory: input.root })

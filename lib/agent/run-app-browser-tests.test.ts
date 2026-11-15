@@ -6,7 +6,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import { prepareAppLocalPreview } from "../../agent/tools/prepare-app-local-preview";
-import { localRuntimeEnvironmentPath } from "../repository/runtime-environment";
+import {
+  localRuntimeEnvironmentPath,
+  validationRuntimeStateDirectory,
+} from "../repository/runtime-environment";
 
 import browserTool, {
   appBrowserTestCommand,
@@ -577,6 +580,35 @@ describe("private app browser tests", () => {
       expect(files.size).toBe(1);
     },
   );
+
+  it("uses the validation runtime without replacing the saved local Preview database", async () => {
+    const appId = "spend-review";
+    const root = "/workspace/repository";
+    const retained = path.posix.dirname(localRuntimeEnvironmentPath(root, appId));
+    const isolated = validationRuntimeStateDirectory(root, appId, "approved-apply", {
+      id: "v10",
+      artifactHash: "checked-v10",
+    });
+    const fixtures = new Map([
+      [retained, "retained Preview data"],
+      [isolated, "new validation data"],
+    ]);
+    const run = vi.fn(async ({ env }: SandboxRunOptions) => {
+      const data = fixtures.get(env?.APP_RUNTIME_STATE_DIR ?? "");
+      return { exitCode: data === undefined ? 1 : 0, stderr: "", stdout: data ?? "" };
+    });
+    const input = { appId, root, sandbox: { run } };
+    expect(
+      await runAppBrowserTests({ ...input, localRuntimeStateDirectory: isolated }),
+    ).toMatchObject({
+      status: "passed",
+      stdout: "new validation data",
+    });
+    expect(await runAppBrowserTests(input)).toMatchObject({
+      status: "passed",
+      stdout: "retained Preview data",
+    });
+  });
 
   it.each([undefined, "https://canonical.example.test"])(
     "retains the hosted test origin %s across dependency recovery",

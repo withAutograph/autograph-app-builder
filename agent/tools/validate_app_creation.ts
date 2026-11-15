@@ -463,6 +463,7 @@ export const createAppValidationTool = (
         appBuilderWorkflowState.update(() => ({ ...base, phase: "applied" }));
         return schemaInput.result;
       }
+      let localRuntimeStateDirectory: string | undefined;
       if (!fixture) {
         validationPhase(ctx.callId, "preparing_declared_local_data");
         let recoveryAuthorityFailure: { error: unknown } | undefined;
@@ -471,8 +472,10 @@ export const createAppValidationTool = (
         try {
           // Repository-owned local setup keeps local services off the test runner's pipe.
           // No protected reference is resolved here; local technical data is not hosted evidence.
-          await prepareValidationLocalData({
+          const localData = await prepareValidationLocalData({
             appId: current.appSpec.appId,
+            approvedApplyDigest:
+              "operation" in current.proposal.target ? current.applyReceipt.digest : undefined,
             root: current.applyReceipt.applyRoot,
             sandbox,
             signal: ctx.abortSignal,
@@ -518,6 +521,9 @@ export const createAppValidationTool = (
               }
             },
           });
+          if (localData && "localRuntimeStateDirectory" in localData) {
+            ({ localRuntimeStateDirectory } = localData);
+          }
         } catch (error) {
           ctx.abortSignal?.throwIfAborted();
           if (recoveryAuthorityFailure !== undefined) {
@@ -544,7 +550,11 @@ export const createAppValidationTool = (
             return schemaInput.result;
           }
         }
-        validationPhase(ctx.callId, "declared_local_data_ready");
+        validationPhase(
+          ctx.callId,
+          "declared_local_data_ready",
+          localRuntimeStateDirectory === undefined ? undefined : "isolated_revision",
+        );
       }
       validationPhase(ctx.callId, "running_repository_commands");
       const testShards = await readTargetValidationTestShards({
@@ -579,7 +589,7 @@ export const createAppValidationTool = (
         environment: schemaInput.environment,
         executor: fixture
           ? fixtureValidationCommandExecutor()
-          : sandboxValidationCommandExecutor({ testShards }),
+          : sandboxValidationCommandExecutor({ localRuntimeStateDirectory, testShards }),
         logStore,
         sandbox,
         sessionId: ctx.session.id,
@@ -680,6 +690,7 @@ export const createAppValidationTool = (
           appId: current.appSpec.appId,
           root: current.applyReceipt.applyRoot,
           runtime,
+          localRuntimeStateDirectory,
           sandbox,
           signal: ctx.abortSignal,
         }));

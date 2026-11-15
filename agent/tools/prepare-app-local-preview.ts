@@ -10,9 +10,13 @@ import { z } from "zod";
 
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { describeSelectedApp } from "@/lib/repository/app-description";
+import type { AppDescription } from "@/lib/repository/app-description";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 import { resolvePreparedRuntimeExecution } from "@/lib/agent/prepared-runtime-execution";
-import { localRuntimeEnvironmentPath } from "@/lib/repository/runtime-environment";
+import {
+  localRuntimeEnvironmentPath,
+  validationRuntimeStateDirectory,
+} from "@/lib/repository/runtime-environment";
 import type {
   PreparedRuntimeExecution,
   PreparedRuntimeExecutionContext,
@@ -75,7 +79,10 @@ interface AppLocalPreviewInput {
   recover?: () => Promise<boolean>;
 }
 
-const prepareAppLocalPreviewOnce = async (input: AppLocalPreviewInput) => {
+const prepareAppLocalPreviewOnce = async (
+  input: AppLocalPreviewInput,
+  validationRuntime?: { description: AppDescription; stateDirectory: string },
+) => {
   const runtime = input.execution ? await resolvePreparedRuntimeExecution(input.execution) : null;
   if (runtime) {
     if (input.authOrigin !== undefined) {
@@ -99,21 +106,23 @@ const prepareAppLocalPreviewOnce = async (input: AppLocalPreviewInput) => {
           .parse(input.authOrigin);
   let command = localPreviewExecutionCommand(input.appId);
   try {
-    const description = await describeSelectedApp({
-      appId: input.appId,
-      root: input.root,
-      sandbox: input.sandbox,
-      signal: input.signal,
-    });
+    const description =
+      validationRuntime?.description ??
+      (await describeSelectedApp({
+        appId: input.appId,
+        root: input.root,
+        sandbox: input.sandbox,
+        signal: input.signal,
+      }));
     const roles =
       description.backend.kind === GENERATED_POSTGRES_BACKEND ? description.backend.roles : [];
     if (description.backend.kind === GENERATED_POSTGRES_BACKEND) {
       command = `${sourceDeclaredToolchainActivationCommand()}\n${command}`;
     }
     const env: LocalPreviewEnvironment = {
-      APP_RUNTIME_STATE_DIR: path.posix.dirname(
-        localRuntimeEnvironmentPath(input.root, input.appId),
-      ),
+      APP_RUNTIME_STATE_DIR:
+        validationRuntime?.stateDirectory ??
+        path.posix.dirname(localRuntimeEnvironmentPath(input.root, input.appId)),
     };
     if (roles.length > 0) {
       env.APP_RUNTIME_ROLES = roles.join(",");
@@ -201,6 +210,43 @@ export const prepareAppLocalPreview = async (input: AppLocalPreviewInput) => {
   return await prepareAppLocalPreviewOnce(localInput);
 };
 
+const unsupportedLocalPredecessor = z.object({
+  code: z.literal("schema_transition_conflict"),
+  details: z.tuple([
+    z.object({
+      code: z.literal("unsupported_predecessor"),
+      message: z
+        .string()
+        .regex(
+          /^the active base schema is not an exact compiler-owned transition predecessor \(version [^\r\n]+; canonical SHA-256 [a-f0-9]{64}\)$/u,
+        ),
+      path: z.literal("base_schema"),
+    }),
+  ]),
+});
+
+const hasUnsupportedLocalPredecessor = (stderr: string): boolean =>
+  stderr.split("\n").some((line) => {
+    const payload = /(?:^|\s)kernel_prepare_schema_revision: (?<payload>\{.+\})$/u.exec(
+      line.trimEnd(),
+    )?.groups?.payload;
+    if (payload === undefined) {
+      return false;
+    }
+    try {
+      return unsupportedLocalPredecessor.safeParse(JSON.parse(payload)).success;
+    } catch {
+      return false;
+    }
+  });
+
+const failedWithUnsupportedLocalPredecessor = (
+  setup: Awaited<ReturnType<typeof prepareAppLocalPreview>>,
+): boolean =>
+  setup.status === "failed" &&
+  setup.exitCode !== null &&
+  hasUnsupportedLocalPredecessor(setup.stderr);
+
 /** Start declared local data before validation so test runners do not own the server's output pipe. */
 export const prepareValidationLocalData = async (input: {
   appId: string;
@@ -209,7 +255,9 @@ export const prepareValidationLocalData = async (input: {
   signal?: AbortSignal;
   execution?: PreparedRuntimeExecutionContext;
   recover?: () => Promise<boolean>;
-}): Promise<PreparedRuntimeExecution | null> => {
+  /** Exact private apply identity from the selected workflow, never model input. */
+  approvedApplyDigest?: string;
+}): Promise<PreparedRuntimeExecution | { localRuntimeStateDirectory: string } | null> => {
   const runtime = input.execution ? await resolvePreparedRuntimeExecution(input.execution) : null;
   if (runtime) {
     return runtime;
@@ -217,13 +265,31 @@ export const prepareValidationLocalData = async (input: {
   if (!(await appDeclaresLocalSetup(input))) {
     return null;
   }
-  const setup = await prepareAppLocalPreview(input);
+  let setup = await prepareAppLocalPreview(input);
+  let localRuntimeStateDirectory: string | undefined;
+  const approvedApplyDigest = input.execution === undefined ? input.approvedApplyDigest : undefined;
+  if (approvedApplyDigest !== undefined && failedWithUnsupportedLocalPredecessor(setup)) {
+    input.signal?.throwIfAborted();
+    const description = await describeSelectedApp(input);
+    if (description.backend.kind === GENERATED_POSTGRES_BACKEND) {
+      localRuntimeStateDirectory = validationRuntimeStateDirectory(
+        input.root,
+        input.appId,
+        approvedApplyDigest,
+        description.backend.release,
+      );
+      setup = await prepareAppLocalPreviewOnce(input, {
+        description,
+        stateDirectory: localRuntimeStateDirectory,
+      });
+    }
+  }
   if (setup.status === "failed") {
     throw new Error(
       `Validation could not prepare the selected app's local data. ${setup.problem}\nCommand: ${setup.command}\n${setup.stderr || setup.stdout || "No command output was returned."}`,
     );
   }
-  return null;
+  return localRuntimeStateDirectory === undefined ? null : { localRuntimeStateDirectory };
 };
 
 export default defineTool({

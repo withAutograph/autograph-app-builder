@@ -479,6 +479,7 @@ export const sandboxValidationCommandExecutor =
   (options?: {
     runtime?: PreparedRuntimeExecution | null;
     alreadyCompiled?: true;
+    localRuntimeStateDirectory?: string;
     testShards?: readonly string[];
     reuseRetainedLocalRuntime?: false;
   }): ValidationCommandExecutor =>
@@ -513,10 +514,12 @@ export const sandboxValidationCommandExecutor =
         signal: abortSignal,
       });
     }
-    const environmentPath =
+    const { localRuntimeStateDirectory } = options ?? {};
+    const retainedRuntimeDirectory =
       options?.reuseRetainedLocalRuntime === false
         ? undefined
-        : localRuntimeEnvironmentPath(validationRoot, appId);
+        : nodePath.posix.dirname(localRuntimeEnvironmentPath(validationRoot, appId));
+    const runtimeDirectory = localRuntimeStateDirectory ?? retainedRuntimeDirectory;
     const env: NonNullable<Parameters<SandboxSession["run"]>[0]["env"]> = Object.fromEntries(
       Object.entries(environment ?? {}).filter(
         (entry): entry is [string, string] =>
@@ -526,18 +529,26 @@ export const sandboxValidationCommandExecutor =
           entry[0] !== "APP_BUILDER_DELIVERY_BUILD_ONLY",
       ),
     );
-    if (environmentPath !== undefined) {
-      env.APP_RUNTIME_STATE_DIR = nodePath.posix.dirname(environmentPath);
+    if (runtimeDirectory !== undefined) {
+      env.APP_RUNTIME_STATE_DIR = runtimeDirectory;
     }
     if (options?.alreadyCompiled === true) {
       env.APP_RUNTIME_ALREADY_COMPILED = "1";
+    }
+    let validationCommand: string = command;
+    if (!isDeliveryBuild && runtimeDirectory !== undefined) {
+      const repositoryTest = `mise run --no-deps app:runtime run ${appId} repository-test ${shard}`;
+      validationCommand =
+        localRuntimeStateDirectory === undefined
+          ? `if [ -f '${runtimeDirectory}/environment.json' ]; then ${repositoryTest}; else ${command}; fi`
+          : repositoryTest;
     }
     const executionCommand = `(
 set -e
 (
 ${sourceDeclaredToolchainActivationCommand()}
 )
-${isDeliveryBuild || environmentPath === undefined ? command : `if [ -f '${environmentPath}' ]; then mise run --no-deps app:runtime run ${appId} repository-test ${shard}; else ${command}; fi`}
+${validationCommand}
 )`;
     const detachedCommand = `set +e
 log=$(mktemp /tmp/app-builder-validation.XXXXXX) || exit $?

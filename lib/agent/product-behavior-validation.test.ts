@@ -46,6 +46,7 @@ const mocks = vi.hoisted(() => {
       removeStaged: vi.fn(),
     },
     browser: vi.fn(),
+    commandExecutor: vi.fn(),
     clear: vi.fn(),
     describe: vi.fn(),
     execute: vi.fn(),
@@ -112,7 +113,7 @@ vi.mock("../repository/target-validation", () => ({
   fixtureValidationCommandExecutor: vi.fn(),
   // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous validation shard fixture.
   readTargetValidationTestShards: async () => [],
-  sandboxValidationCommandExecutor: vi.fn(),
+  sandboxValidationCommandExecutor: mocks.commandExecutor,
 }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../testing/test-capability dependency used by this test.
 vi.mock("../testing/test-capability", () => ({ hasTestCapability: () => false }));
@@ -676,6 +677,40 @@ describe("behavior evidence invalidation during validation repair", () => {
       }
     },
   );
+  it("hands the chosen technical runtime to repository and requested local browser tests", async () => {
+    mocks.state.current = { ...workflow("validated"), phase: "applied" };
+    mocks.describe.mockResolvedValue(persistentDescription);
+    const stateDirectory = "/private/validation-revision";
+    mocks.prepare.mockResolvedValue({ localRuntimeStateDirectory: stateDirectory });
+    const sandbox = { id: "validation-sandbox" };
+    const context = {
+      callId: "validate_isolated_schema",
+      // oxlint-disable-next-line eslint/require-await -- Return the sandbox fixture through the asynchronous port.
+      getSandbox: async () => sandbox,
+      session: { auth: {}, id: "session" },
+    };
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- SAFETY: The fixture supplies every tool context field used by this scenario.
+    const toolContext = context as never;
+    const result = await validateAppCreation.execute(
+      { implementationFiles: [], runBrowserTests: true },
+      toolContext,
+    );
+    expect(mocks.prepare).toHaveBeenCalledWith(
+      expect.objectContaining({ approvedApplyDigest: "apply", sandbox }),
+    );
+    expect(mocks.commandExecutor).toHaveBeenCalledWith(
+      expect.objectContaining({ localRuntimeStateDirectory: stateDirectory }),
+    );
+    expect(mocks.browser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        localRuntimeStateDirectory: stateDirectory,
+        runtime: null,
+        sandbox,
+      }),
+    );
+    expect(result).toMatchObject({ status: "validated", technicalStatus: "passed" });
+  });
+
   it("leaves a declared browser task unassessed during ordinary build validation", async () => {
     mocks.state.current = { ...workflow("validated"), phase: "applied" };
     mocks.describe.mockResolvedValue({
