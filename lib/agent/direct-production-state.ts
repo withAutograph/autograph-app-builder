@@ -50,7 +50,10 @@ import {
   hasAvailableDirectProductionPredecessor,
   recordDirectProductionProgress,
 } from "./direct-production-progress";
-import { readPrivateApplyAuthority } from "./private-apply-authority";
+import {
+  assertApprovedPrivateApplySession,
+  readPrivateApplyAuthority,
+} from "./private-apply-authority";
 import { repositoryAccessReceiptState } from "./repository-access-state";
 import type { RepositoryAccessReceipt } from "./repository-access-state";
 import {
@@ -59,6 +62,7 @@ import {
 } from "./staged-implementation";
 import { appBuilderWorkflowState, sha256 } from "./workflow-state";
 import type { AppBuilderWorkflowState, PreparedAppCreation } from "./workflow-state";
+import type { PublishedPlanningRelease } from "../repository/planning-source-reconciliation";
 
 type OwnerContext = Pick<ToolContext, "session">;
 type GrantRequest = Pick<DirectProductionGrant, "callId" | "subject"> &
@@ -737,7 +741,9 @@ interface RevisionObservationPorts {
   ) => Promise<
     Pick<
       GitHubPublicationRuntime,
-      "inspectPublishedPullRequest" | "inspectPublishedReconciliationHead"
+      | "inspectPublishedPullRequest"
+      | "inspectPublishedReconciliationHead"
+      | "readMergedAppSchemaRelease"
     >
   >;
   observeProduction?: typeof observeMergedAppProduction;
@@ -879,6 +885,92 @@ export const currentDirectProductionGrant = (
     return undefined;
   }
   return grant;
+};
+
+/** The previous approved PR is a read-only locator for this app's checked release history. */
+export const readPriorApprovedMergedSchemaRelease = async (
+  ctx: ToolContext,
+  releaseId: string,
+  candidateCueSha256: string,
+  ports: RevisionObservationPorts = {},
+): Promise<PublishedPlanningRelease | null> => {
+  ctx.abortSignal.throwIfAborted();
+  const state = appBuilderWorkflowState.get();
+  if (!("applyReceipt" in state) || state.githubSource === undefined) {
+    return null;
+  }
+  const grant = currentDirectProductionGrant(ctx, state.appSpec);
+  const schemaChange = grant?.subject.revision?.schemaChange;
+  if (grant === undefined || schemaChange?.candidateCueSha256 !== candidateCueSha256) {
+    return null;
+  }
+  const predecessor = revisionPredecessor(state.proposal.digest);
+  const prior =
+    predecessor === undefined ? null : priorRevisionDelivery(state, predecessor, readAnchoredMerge);
+  if (prior === null) {
+    return null;
+  }
+  const { subject } = grant;
+  const assertPrivateApproval = () => {
+    assertApprovedPrivateApplySession({
+      appId: subject.appId,
+      appSpecDigest: subject.appSpecDigest,
+      proposalDigest: subject.proposalDigest,
+      sessionId: subject.sessionId,
+      workspaceId: subject.buildWorkspaceId,
+    });
+  };
+  try {
+    assertPrivateApproval();
+    const runtime = await (ports.publication ?? githubPublicationRuntimeForSession)(
+      ctx.session.auth,
+      {
+        selectedInstallationId: subject.installationId,
+      },
+    );
+    const observed = await observePriorRevisionPullRequest(runtime, prior);
+    ctx.abortSignal.throwIfAborted();
+    if (
+      observed?.state !== "merged" ||
+      !observed.reviewedRevision ||
+      observed.mergeCommitSha === undefined
+    ) {
+      return null;
+    }
+    const { reviewedTarget: target, mergeCommitSha } = observed;
+    if (
+      target.repositoryId !== subject.repositoryId ||
+      target.owner !== prior.owner ||
+      target.name !== prior.name ||
+      target.baseBranch !== subject.baseBranch
+    ) {
+      return null;
+    }
+    const published = await runtime.readMergedAppSchemaRelease?.({
+      appId: subject.appId,
+      releaseId,
+      merged: {
+        repositoryId: target.repositoryId,
+        owner: target.owner,
+        name: target.name,
+        baseBranch: target.baseBranch,
+        sha: mergeCommitSha,
+      },
+    });
+    ctx.abortSignal.throwIfAborted();
+    assertPrivateApproval();
+    const matchesPriorSource =
+      published?.mergeSha === mergeCommitSha &&
+      published.releaseId === releaseId &&
+      published.cueSha256 === schemaChange.priorCueSha256;
+    const approvalUnchanged =
+      isDeepStrictEqual(appBuilderWorkflowState.get(), state) &&
+      currentDirectProductionGrant(ctx, state.appSpec)?.digest === grant.digest;
+    return matchesPriorSource && approvalUnchanged ? published : null;
+  } catch {
+    ctx.abortSignal.throwIfAborted();
+    return null;
+  }
 };
 
 /** Locate the settled approval for a private repair without assigning it to a new draft. */

@@ -1,4 +1,5 @@
 /* oxlint-disable anti-slop/no-module-mocking, typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Controlled owner/read/reconciliation ports exercise the real refresh hook without provider calls. */
+import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { refreshPlanningSource } from "./refresh-planning-source";
 import { PlanningReleaseConflictError } from "../repository/planning-source-reconciliation";
@@ -7,7 +8,12 @@ interface FixtureState {
   phase: string;
   appSpec: { appId: string; digest: string };
   artifacts: string[];
-  applyReceipt: { digest: string; applyRoot: string; sourceReceiptDigest?: string };
+  applyReceipt: {
+    digest: string;
+    applyRoot: string;
+    sourceReceiptDigest?: string;
+    changes?: readonly { path: string }[];
+  };
   dependencyReceipt: { digest: string };
   proposal: { digest: string };
   githubSource?: {
@@ -43,10 +49,11 @@ const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
   reconcile: vi.fn(),
   recoverRelease: vi.fn(),
+  readPriorRelease: vi.fn(),
   retainedReleaseId: vi.fn(),
   readSavedRelease: vi.fn(),
   preserve: vi.fn(),
-  sandbox: { id: "owned-sandbox" },
+  sandbox: { id: "owned-sandbox", readBinaryFile: vi.fn() },
   sourceUpdate: vi.fn(),
   state: {} as FixtureState,
   updateWorkflow: vi.fn<(transition: (state: FixtureState) => FixtureState) => void>(),
@@ -55,6 +62,7 @@ vi.mock("./refresh-local-planning-source", () => ({
   refreshLocalPlanningSource: mocks.observeLocal,
 }));
 vi.mock("./direct-production-state", () => ({
+  readPriorApprovedMergedSchemaRelease: mocks.readPriorRelease,
   settledDirectProductionDelivery: mocks.settledDelivery,
 }));
 vi.mock("../repository/github-publication", () => ({
@@ -232,6 +240,80 @@ describe("shared source refresh before schema compilation", () => {
       proposal: original.proposal,
     });
   });
+  it.each([
+    "approved historical cut",
+    "current candidate cut",
+    "changed CUE",
+    "authored release",
+  ] as const)(
+    "uses the prior owned merged snapshot only for the approved historical conflict (%s)",
+    async (scenario) => {
+      const cue = Buffer.from('manifest: #AppManifest & {version: "v9"}');
+      const approvedCueHash = createHash("sha256").update(cue).digest("hex");
+      const releaseId = scenario === "current candidate cut" ? "v9" : "v8";
+      const conflict = new PlanningReleaseConflictError(releaseId);
+      const published = { mergeSha: "c".repeat(40), releaseId, files: {} };
+      mocks.state.workspace.workspaceId = mocks.sandbox.id;
+      mocks.state.applyReceipt.changes =
+        scenario === "authored release"
+          ? [{ path: "apps/spend-review/schema/release/v8/app-artifact.json" }]
+          : [];
+      mocks.reconcile.mockRejectedValueOnce(conflict);
+      mocks.recoverRelease.mockResolvedValueOnce(null);
+      mocks.readPriorRelease.mockResolvedValue(published);
+      mocks.sandbox.readBinaryFile.mockResolvedValue(
+        scenario === "changed CUE" ? Buffer.from("changed CUE") : cue,
+      );
+      const run = refreshPlanningSource(ctx as never, "schema-compilation", {
+        approvedSchemaCueSha256: approvedCueHash,
+      });
+      if (scenario === "approved historical cut") {
+        await expect(run).resolves.toBe(mocks.sandbox);
+        expect(mocks.readPriorRelease).toHaveBeenCalledWith(ctx, releaseId, approvedCueHash);
+        expect(mocks.reconcile).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            expectedApprovedSchemaCueSha256: approvedCueHash,
+            publishedRelease: published,
+          }),
+        );
+      } else {
+        await expect(run).rejects.toBe(conflict);
+        expect(mocks.readPriorRelease).not.toHaveBeenCalled();
+        expect(mocks.reconcile).toHaveBeenCalledTimes(1);
+      }
+    },
+  );
+
+  it("reproves the current approval on resume even when the legacy lookup found the same release", async () => {
+    const cue = Buffer.from('manifest: #AppManifest & {version: "v9"}');
+    const approvedSchemaCueSha256 = createHash("sha256").update(cue).digest("hex");
+    const published = { mergeSha: "c".repeat(40), releaseId: "v8", files: {} };
+    mocks.state.workspace.workspaceId = mocks.sandbox.id;
+    mocks.state.applyReceipt.changes = [];
+    mocks.sandbox.readBinaryFile.mockResolvedValue(cue);
+    mocks.retainedReleaseId.mockReturnValueOnce(published.releaseId);
+    mocks.recoverRelease.mockResolvedValueOnce(published);
+    mocks.reconcile.mockRejectedValueOnce(
+      new PlanningReleaseConflictError(published.releaseId, "approved-cue-required"),
+    );
+    mocks.readPriorRelease.mockResolvedValue(published);
+    await expect(
+      refreshPlanningSource(ctx as never, "schema-compilation", { approvedSchemaCueSha256 }),
+    ).resolves.toBe(mocks.sandbox);
+    expect(mocks.recoverRelease).toHaveBeenCalledOnce();
+    expect(mocks.readPriorRelease).toHaveBeenCalledWith(
+      ctx,
+      published.releaseId,
+      approvedSchemaCueSha256,
+    );
+    expect(mocks.reconcile).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        expectedApprovedSchemaCueSha256: approvedSchemaCueSha256,
+        publishedRelease: published,
+      }),
+    );
+  });
+
   it("recovers the published predecessor for a saved, unpublished online revision", async () => {
     const artifact = "a".repeat(64);
     const oldManifest = "b".repeat(64);

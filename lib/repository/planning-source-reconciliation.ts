@@ -6,6 +6,7 @@ import { GENERATED_RELEASE_MEMBERS } from "../provisioning/hosted-operator-sandb
 import { sanitizeValidationDiagnosticText } from "./validation-output-sanitize";
 
 const objectId = z.string().regex(/^[a-f0-9]{40,64}$/u);
+const sha256Digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const releaseIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 const publishedReleaseSchema = z.strictObject({
   cueSha256: z
@@ -25,13 +26,18 @@ export interface PublishedPlanningRelease {
 
 export class PlanningReleaseConflictError extends Error {
   readonly releaseId: string;
+  readonly reason: "release-conflict" | "approved-cue-required";
 
-  constructor(releaseId: string) {
+  constructor(
+    releaseId: string,
+    reason: PlanningReleaseConflictError["reason"] = "release-conflict",
+  ) {
     super(
       "A saved app release conflicts with the current repository source. Its original bytes are preserved.",
     );
     this.name = "PlanningReleaseConflictError";
     this.releaseId = releaseId;
+    this.reason = reason;
   }
 }
 
@@ -72,7 +78,11 @@ const entries = tree => new Map(git(["ls-tree", "-rz", "--full-tree", tree]).spl
 const indexEnv = { GIT_INDEX_FILE: join(temporary, "index") };
 const updateIndex = records => { if (records.length) git(["update-index", "-z", "--index-info"], { env: indexEnv, input: records.join("\0") + "\0" }); };
 const setEntry = (file, entry) => entry ? entry.mode + " " + entry.objectId + "\t" + file : "0 " + "0".repeat(40) + "\t" + file;
-const writePlan = plan => { writeFileSync(planPath + ".pending", JSON.stringify(plan), { mode: 384 }); renameSync(planPath + ".pending", planPath); };
+const writePlan = plan => {
+  if (plan.expectedApprovedSchemaCueSha256 !== undefined) verifyApprovedSchemaCue(plan, entries(plan.workingTree));
+  writeFileSync(planPath + ".pending", JSON.stringify(plan), { mode: 384 });
+  renameSync(planPath + ".pending", planPath);
+};
 const ownedApp = file => file.startsWith("apps/" + input.appId + "/") || [".config/app-specs/" + input.appId + ".cue", ".config/app-specs/" + input.appId + ".md"].includes(file);
 const product = file => ownedApp(file) && (input.localSource || !file.startsWith("apps/" + input.appId + "/.config/mise/"));
 const releasePrefix = "apps/" + input.appId + "/schema/release/";
@@ -80,7 +90,8 @@ const releaseMembers = ${JSON.stringify(GENERATED_RELEASE_MEMBERS)};
 const publishedRelease = input.publishedRelease;
 const adoptPublishedSchemaCue = input.adoptPublishedSchemaCue === true;
 const preserveSourceHead = input.preserveSourceHead === true;
-const publishedSchemaPath = adoptPublishedSchemaCue ? "apps/" + input.appId + "/schema/" + input.appId + ".cue" : undefined;
+const appSchemaPath = "apps/" + input.appId + "/schema/" + input.appId + ".cue";
+const publishedSchemaPath = adoptPublishedSchemaCue ? appSchemaPath : undefined;
 const isPublishedSchemaFile = file =>
   file === publishedSchemaPath || file === releasePrefix + publishedRelease.releaseId ||
   file.startsWith(releasePrefix + publishedRelease.releaseId + "/");
@@ -143,6 +154,21 @@ if (input.localSource && input.currentManifestDigest !== undefined) {
   if (!Array.isArray(files) || createHash("sha256").update(JSON.stringify(files)).digest("hex") !== input.currentManifestDigest) throw Error("Current workspace manifest changed before local source reconciliation.");
 }
 
+const verifyApprovedSchemaCue = (plan, finalEntries) => {
+  const expected = plan.expectedApprovedSchemaCueSha256 ?? input.expectedApprovedSchemaCueSha256;
+  if (expected !== undefined) {
+    const cue = resolve(root, appSchemaPath);
+    const plannedCue = finalEntries.get(appSchemaPath);
+    const digest = bytes => createHash("sha256").update(bytes).digest("hex");
+    if (input.expectedApprovedSchemaCueSha256 !== expected ||
+        adoptPublishedSchemaCue || !plannedCue || plannedCue.mode !== "100644" ||
+        realpathSync(cue) !== resolve(realpathSync(root), appSchemaPath) ||
+        !lstatSync(cue).isFile() || digest(readFileSync(cue)) !== expected ||
+        digest(git(["cat-file", "blob", plannedCue.objectId], { buffer: true })) !== expected) {
+      throw Error("The current approved schema CUE changed before its checked history could be restored.");
+    }
+  }
+};
 const complete = plan => {
   // The original bytes are already reachable through checkpointRef. Replaying this
   // transition repairs an interrupted checkout before another planning command runs.
@@ -150,6 +176,7 @@ const complete = plan => {
   if (sourceIsPreserved && git(["rev-parse", "HEAD"]).trim() !== plan.originalHead)
     throw Error("The approved source changed during the pending schema recovery.");
   const finalEntries = entries(plan.workingTree);
+  verifyApprovedSchemaCue(plan, finalEntries);
   const currentPaths = git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]).split("\0").filter(file => file && !file.startsWith(".app-builder/"));
   for (const file of currentPaths) {
     if (sourceIsPreserved && !isPublishedSchemaFile(file)) continue;
@@ -224,6 +251,13 @@ try {
         (pending.adoptPublishedSchemaCue === true &&
          (!adoptPublishedSchemaCue || pending.sourceSha !== input.targetSha))) {
       throw Error("Resume the pending source reconciliation with its selected published schema and source.");
+    }
+    if (pending.expectedApprovedSchemaCueSha256 !== undefined &&
+        pending.expectedApprovedSchemaCueSha256 !== input.expectedApprovedSchemaCueSha256) {
+      if (input.expectedApprovedSchemaCueSha256 === undefined && validReleaseId(pending.publishedRelease?.releaseId)) {
+        process.stderr.write("APP_BUILDER_RELEASE_APPROVAL_REQUIRED " + pending.publishedRelease.releaseId + "\n");
+      }
+      throw Error("Resume the pending source reconciliation with its current approved schema CUE.");
     }
     if (pending.publishedRelease !== undefined && !isDeepStrictEqual(pending.publishedRelease, publishedRelease)) {
       if (publishedRelease === undefined) releaseConflict(pending.publishedRelease.releaseId, releasePrefix);
@@ -370,7 +404,7 @@ try {
     unsigned.unexposedReleaseDigest = createHash("sha256").update(JSON.stringify(unexposedReleasePrefixes)).digest("hex");
     marker = { platformFiles, receipt: { ...unsigned, digest: createHash("sha256").update(JSON.stringify(unsigned)).digest("hex") }, unexposedReleasePrefixes };
   }
-  const plan = { baseline: input.baseline ?? null, marker, sessionId: input.sessionId, sourceSha, workingTree, publishedRelease, adoptPublishedSchemaCue };
+  const plan = { baseline: input.baseline ?? null, marker, sessionId: input.sessionId, sourceSha, workingTree, publishedRelease, adoptPublishedSchemaCue, expectedApprovedSchemaCueSha256: input.expectedApprovedSchemaCueSha256 };
   writePlan(plan);
   complete(plan);
   console.log(JSON.stringify({ changed: true, checkpointRef, sourceSha, sourceTree }));
@@ -383,6 +417,7 @@ export const reconcilePlanningSource = async (input: {
   appId: string;
   adoptPublishedSchemaCue?: true;
   baseline?: AppBaselineSelection;
+  expectedApprovedSchemaCueSha256?: string;
   expectedPreservedSource?: { sha: string; tree: string };
   branchRef: string;
   repository: string;
@@ -405,6 +440,10 @@ export const reconcilePlanningSource = async (input: {
         ? undefined
         : `/workspace/${appBaselineMarkerPath(input.baseline.appId)}`,
     branchRef: input.branchRef,
+    expectedApprovedSchemaCueSha256:
+      input.expectedApprovedSchemaCueSha256 === undefined
+        ? undefined
+        : sha256Digest.parse(input.expectedApprovedSchemaCueSha256),
     expectedPreservedSource:
       input.expectedPreservedSource === undefined
         ? undefined
@@ -430,11 +469,15 @@ export const reconcilePlanningSource = async (input: {
     workingDirectory: "/workspace/repository",
   });
   if (result.exitCode !== 0) {
-    const conflict = /^APP_BUILDER_RELEASE_CONFLICT (?<id>[A-Za-z0-9][A-Za-z0-9._-]*)$/mu.exec(
-      result.stderr,
-    )?.groups?.id;
-    if (conflict !== undefined) {
-      throw new PlanningReleaseConflictError(conflict);
+    const conflict =
+      /^APP_BUILDER_RELEASE_(?<reason>CONFLICT|APPROVAL_REQUIRED) (?<id>[A-Za-z0-9][A-Za-z0-9._-]*)$/mu.exec(
+        result.stderr,
+      )?.groups;
+    if (conflict?.id !== undefined) {
+      throw new PlanningReleaseConflictError(
+        conflict.id,
+        conflict.reason === "APPROVAL_REQUIRED" ? "approved-cue-required" : "release-conflict",
+      );
     }
     const diagnostic = sanitizeValidationDiagnosticText(result.stderr || result.stdout);
     throw new Error(

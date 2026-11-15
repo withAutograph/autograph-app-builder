@@ -1,4 +1,6 @@
 import { refreshLocalPlanningSource } from "./refresh-local-planning-source";
+import { createHash } from "node:crypto";
+import type { SandboxSession } from "eve/sandbox";
 import type { ToolContext } from "eve/tools";
 import { appBaselineState } from "./app-baseline-state";
 import { repositoryAccessRuntimeForSession } from "./deployment-repository-access-runtime";
@@ -16,7 +18,10 @@ import {
   PlanningReleaseConflictError,
   reconcilePlanningSource,
 } from "../repository/planning-source-reconciliation";
-import { settledDirectProductionDelivery } from "./direct-production-state";
+import {
+  readPriorApprovedMergedSchemaRelease,
+  settledDirectProductionDelivery,
+} from "./direct-production-state";
 import type { UnsettledProductionDeliveryReason } from "./direct-production-state";
 import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
 import { assertExactImmutableGitHubSourceReceipt } from "../repository/github-publication";
@@ -34,8 +39,42 @@ import {
 } from "./merged-release-source-recovery";
 import { readAppBaselineMarker } from "../repository/app-baseline";
 import { resolveVercelSessionGitSource } from "../sandbox/vercel-session-source";
+import { readGeneratedSchemaReleaseId } from "../repository/optional-text-field";
 
 const schemaCompilation = "schema-compilation";
+
+const recoverApprovedHistoricalRelease = async (input: {
+  current: Extract<AppBuilderWorkflowState, { applyReceipt: unknown }>;
+  ctx: ToolContext;
+  expectedCueSha256: string;
+  releaseId: string;
+  sandbox: SandboxSession;
+}) => {
+  const { current, ctx, expectedCueSha256, releaseId, sandbox } = input;
+  const appRoot = `apps/${current.appSpec.appId}/schema`;
+  const releaseRoot = `${appRoot}/release/${releaseId}`;
+  if (
+    current.applyReceipt.applyRoot !== "/workspace/repository" ||
+    current.workspace.workspaceId !== getBuilderSandboxId(sandbox) ||
+    current.applyReceipt.changes.some(
+      ({ path }) => path === releaseRoot || path.startsWith(`${releaseRoot}/`),
+    )
+  ) {
+    return null;
+  }
+  const cue = await sandbox.readBinaryFile({
+    abortSignal: ctx.abortSignal,
+    path: `repository/${appRoot}/${current.appSpec.appId}.cue`,
+  });
+  if (cue === null || createHash("sha256").update(cue).digest("hex") !== expectedCueSha256) {
+    return null;
+  }
+  const currentReleaseId = readGeneratedSchemaReleaseId(new TextDecoder().decode(cue));
+  if (currentReleaseId === null || currentReleaseId === releaseId) {
+    return null;
+  }
+  return await readPriorApprovedMergedSchemaRelease(ctx, releaseId, expectedCueSha256);
+};
 
 type SettledSourcePlanningProof = () => void;
 // oxlint-disable-next-line sonarjs/max-union-size -- Fixed server-side telemetry categories, not user input.
@@ -329,10 +368,24 @@ export const refreshPlanningSource = async (
         if (recover === undefined || !(error instanceof PlanningReleaseConflictError)) {
           throw error;
         }
-        if (reconciliation.publishedRelease?.releaseId === error.releaseId) {
+        const needsApprovalProof = error.reason === "approved-cue-required";
+        if (!needsApprovalProof && reconciliation.publishedRelease?.releaseId === error.releaseId) {
           throw error;
         }
-        recovered = await recover(error.releaseId);
+        recovered = needsApprovalProof ? null : await recover(error.releaseId);
+        const approvedCue = options.approvedSchemaCueSha256;
+        if (recovered === null && approvedCue !== undefined && "applyReceipt" in current) {
+          recovered = await recoverApprovedHistoricalRelease({
+            current,
+            ctx,
+            expectedCueSha256: approvedCue,
+            releaseId: error.releaseId,
+            sandbox,
+          });
+          if (recovered !== null) {
+            reconciliation.expectedApprovedSchemaCueSha256 = approvedCue;
+          }
+        }
         if (recovered === null) {
           throw error;
         }

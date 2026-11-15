@@ -50,6 +50,7 @@ import {
   currentPlannedDirectProductionAuthoring,
   directProductionSubjectForPlan,
   prepareDirectProductionDraftReconciliation,
+  readPriorApprovedMergedSchemaRelease,
   recordDirectProductionGrant,
   requestDirectProductionGrant,
   retainedPrivateDraftSchemaGrant,
@@ -1482,6 +1483,84 @@ describe("direct Production Build authority", () => {
         revision: { priorGrantDigest: previous.digest },
       });
       expect(readPrivateApplyAuthority().pending).toEqual([]);
+    });
+  });
+
+  it("reads checked schema history only from the prior owned reviewed PR of the approved build", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const previous = installPriorProduction();
+      const { proposal, target } = retainPriorPublication(previous);
+      installPlan("kernel");
+      const revisionPlan = installNotesRevision();
+      const approved = approveFixtureProduction("current-approved-schema-build", "setup");
+      installPlan("kernel", { phase: "applied", appliedPaths: [appliedCuePath] });
+      const applyFixture = appBuilderWorkflowState.get();
+      if (applyFixture.phase !== "applied") {
+        throw new Error("Expected the applied schema receipt fixture.");
+      }
+      const applied = {
+        ...revisionPlan,
+        phase: "applied" as const,
+        applyReceipt: applyFixture.applyReceipt,
+      };
+      appBuilderWorkflowState.update(() => applied);
+
+      const mergeSha = "d".repeat(40);
+      const reviewedMerge = {
+        state: "merged",
+        mergeCommitSha: mergeSha,
+        reviewedRevision: true,
+        reviewedTarget: target,
+      };
+      const inspectPublishedPullRequest = vi.fn().mockResolvedValue(reviewedMerge);
+      const published = {
+        mergeSha,
+        releaseId: "v8",
+        cueSha256: notesSchemaChange.priorCueSha256,
+        files: { "app-artifact.json": sha256("checked generated artifact") },
+      };
+      const readMergedAppSchemaRelease = vi.fn().mockResolvedValue(published);
+      const publication = vi
+        .fn()
+        .mockResolvedValue({ inspectPublishedPullRequest, readMergedAppSchemaRelease });
+      const ports = { publication };
+      const approvedCueHash = notesSchemaChange.candidateCueSha256;
+      await expect(
+        readPriorApprovedMergedSchemaRelease(releaseContext, "v8", sha256("other CUE"), ports),
+      ).resolves.toBeNull();
+      expect(publication).not.toHaveBeenCalled();
+      inspectPublishedPullRequest.mockResolvedValueOnce({
+        ...reviewedMerge,
+        reviewedRevision: false,
+      });
+      await expect(
+        readPriorApprovedMergedSchemaRelease(releaseContext, "v8", approvedCueHash, ports),
+      ).resolves.toBeNull();
+      expect(readMergedAppSchemaRelease).not.toHaveBeenCalled();
+      readMergedAppSchemaRelease.mockResolvedValueOnce({
+        ...published,
+        cueSha256: sha256("a different predecessor"),
+      });
+      await expect(
+        readPriorApprovedMergedSchemaRelease(releaseContext, "v8", approvedCueHash, ports),
+      ).resolves.toBeNull();
+      await expect(
+        readPriorApprovedMergedSchemaRelease(releaseContext, "v8", approvedCueHash, ports),
+      ).resolves.toEqual(published);
+      expect(inspectPublishedPullRequest).toHaveBeenLastCalledWith(proposal.digest);
+      expect(readMergedAppSchemaRelease).toHaveBeenLastCalledWith({
+        appId,
+        releaseId: "v8",
+        merged: {
+          repositoryId: target.repositoryId,
+          owner: target.owner,
+          name: target.name,
+          baseBranch: target.baseBranch,
+          sha: mergeSha,
+        },
+      });
+      expect(currentDirectProductionGrant(releaseContext, { appId })).toEqual(approved);
+      expect(appBuilderWorkflowState.get()).toEqual(applied);
     });
   });
 
