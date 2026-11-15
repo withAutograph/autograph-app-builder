@@ -207,6 +207,18 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    gap; do not substitute filesystem or browser persistence for a hosted app.
    Browser storage, timers, and local state may
    support transient presentation, but never stand in for those outcomes.
+   When implementing a durable browser workflow, include an app-owned
+   browser test in the same change. Replace the untouched scaffold heading
+   test, or extend the relevant existing coverage. Use the repository's
+   Playwright entry-path and actor fixtures when available. Enter through the
+   app's catalog route as an authorized actor, submit through the real UI, and
+   verify the saved result after a fresh page load. When the app promises
+   private access, verify that a separate actor without the corresponding
+   permission cannot see the saved record. For an additive field revision,
+   exercise saving with the field pending and saving its value after
+   activation when the repository supplies both fixture states. Run selected
+   coverage with `run-app-browser-tests` on an isolated runtime when verifying
+   browser behavior. Keep its result separate from Production release readiness.
    At persistence boundaries, inspect the selected repository's datetime codec
    and exact-replay contract. Keep server-issued timestamps consistent across
    writes, database readback, retained retries and pagination; preserve the
