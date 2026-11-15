@@ -210,9 +210,9 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    gap; do not substitute filesystem or browser persistence for a hosted app.
    Browser storage, timers, and local state may
    support transient presentation, but never stand in for those outcomes.
-   When implementing a durable browser workflow, include an app-owned
-   browser test in the same change. Replace the untouched scaffold heading
-   test, or extend the relevant existing coverage. Use the repository's
+   Author or run app-owned tests when the user asks for them or they help verify
+   the app. When authoring a durable browser test, replace the scaffold smoke
+   test or extend relevant existing coverage. Use the repository's
    Playwright entry-path and actor fixtures when available. Enter through the
    app's catalog route as an authorized actor, submit through the real UI, and
    verify the saved result after a fresh page load. When the app promises

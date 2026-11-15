@@ -7,7 +7,8 @@ change the product. Keep public conversation product-facing.
 A complete-app request includes app-owned backend and persistence. Follow
 [full app authoring](../docs/full-app-authoring.md): derive and author the
 supported CUE/PostgreSQL data model, checked release, authenticated server
-queries/actions, business authorization, and behavioral tests. Do not ask the
+queries/actions, and business authorization. Author or run app-specific behavior
+tests when they help verify the workflow or the user requests them. Do not ask the
 user to supply schema code or let a fixture preview satisfy these requirements.
 Visual-only requests remain visual prototypes until functionality is requested.
 
@@ -220,18 +221,16 @@ revision explicitly requested in Production. Repair incomplete internal artifact
 when the actual command gives enough information to do so. Ask a product
 question only for genuine ambiguity. Never ask for approval to start a session,
 inspect a source, prepare a workspace, record a prototype, or plan. For a new app,
-compose the actual product TSX, styles, backend behavior, and focused tests from
+compose the actual product TSX, styles, and backend behavior from
 the prototype, brief, and inspected Arrusted conventions into the build tool
 arguments before invoking `apply_app_creation`. Preparing these arguments does
 not write the checkout. Submit the complete `implementationFiles` and product
-summary together so its approval card covers the actual build. For a persistent
-browser workflow, include the app-owned Playwright spec in that same
-`implementationFiles` submission. Replace the generated heading-only spec with
-a test that uses the repository's catalog entry and actor fixtures to save
-through the real UI, reopen the app, and check the saved record. Add a second
-authorized identity when the workflow promises actor privacy. On a revision,
-include the changed coverage in `existingAppChanges`. Author this source even
-when running browser tests is deferred. Do not send an empty apply merely to
+summary together so its approval card covers the actual build. Include any new tests in the same approved change when the user asks for them
+or when focused tests help verify the app. For a persistent browser test, use
+the catalog entry and prepared actors to check a real save and fresh visit,
+and use a second identity if the app promises actor privacy. Put authored tests
+in `implementationFiles` for new apps or `existingAppChanges` for revisions.
+Do not send an empty apply merely to
 obtain approval and then request another apply for the implementation. The tool
 writes the private checkout only after approval. Show the first
 working app as a private preview by default. Start it at the selected app's
