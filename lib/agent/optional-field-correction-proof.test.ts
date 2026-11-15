@@ -249,6 +249,7 @@ const fixture = () => {
   const reads = {
     readInstalled: vi.fn<Reads["readInstalled"]>().mockResolvedValue(installed),
     readMergedSource: vi.fn<Reads["readMergedSource"]>().mockResolvedValue(published),
+    readMergedGenerated: vi.fn<Reads["readMergedGenerated"]>().mockResolvedValue(published),
     readRelease: vi
       .fn<Reads["readRelease"]>()
       .mockResolvedValueOnce(original)
@@ -258,6 +259,25 @@ const fixture = () => {
     verify: vi.fn<Reads["verify"]>().mockReturnValue(true),
   };
   return { input, reads, original, next, activePrior, installed, published };
+};
+
+const generatedOnlyFixture = () => {
+  const test = fixture();
+  const { input, original, next } = test;
+  const { candidate, originalGrant, predecessorGrant, corrected } = input;
+  const { review } = candidate;
+  if (review === undefined || originalGrant.subject.revision === undefined) {
+    throw new Error("Expected saved review and exact approval.");
+  }
+  originalGrant.subject.revision.schemaChange = corrected.schemaChange;
+  delete predecessorGrant.subject.revision;
+  original.files["app-artifact.json"] = next.files["app-artifact.json"];
+  original.selection.schemaSha256 = next.selection.schemaSha256;
+  review.headChanges = review.headChanges.filter(({ path }) =>
+    path.endsWith("/release-manifest.json"),
+  );
+  corrected.proposal.headChangesDigest = digest(JSON.stringify(review.headChanges));
+  return test;
 };
 
 describe("read-only evidence for retaining a Production schema approval", () => {
@@ -303,6 +323,42 @@ describe("read-only evidence for retaining a Production schema approval", () => 
       },
     });
     expect(reads.verify).toHaveBeenCalledOnce();
+  });
+
+  it("reads the exact already-merged predecessor for a generated-only repair without a prior correction receipt", async () => {
+    const { input, reads, original, next } = generatedOnlyFixture();
+    await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toMatchObject({
+      proof: { priorMergeSha, originalReleaseManifestSha256: original.selection.manifestSha256 },
+    });
+    expect(reads.readMergedGenerated).toHaveBeenCalledExactlyOnceWith({
+      ctx: input.ctx,
+      proposal: input.corrected.proposal,
+      appId,
+      installationId,
+      priorMergeSha,
+      releaseId: priorVersion,
+    });
+    expect(reads.readMergedSource).not.toHaveBeenCalled();
+    expect(reads.readRelease.mock.calls[0]?.[0].lookup).toMatchObject({
+      schemaSha256: next.selection.schemaSha256,
+    });
+    expect(reads.readRelease).toHaveBeenCalledTimes(3);
+    expect(reads.verify).toHaveBeenCalledOnce();
+  });
+
+  it("refuses a generated-only correction if prior-merge bytes disagree with installed archive", async () => {
+    const { input, reads, published } = generatedOnlyFixture();
+    reads.readMergedGenerated.mockResolvedValue({
+      ...published,
+      files: {
+        ...published.files,
+        "operation-manifest.json": digest("unrelated operation manifest"),
+      },
+    });
+    await expect(readOptionalFieldCorrectionProof(input, reads)).resolves.toEqual({
+      reason: "installed-predecessor-archive",
+    });
+    expect(reads.verify).not.toHaveBeenCalled();
   });
 
   it("stops when the installed schema still has the stale source", async () => {

@@ -56,7 +56,7 @@ const artifact = (label: string) => ({
 
 type Artifact = ReturnType<typeof artifact>;
 
-const release = (value: Artifact, cueSha256: string, prior?: Artifact) => {
+const release = (value: Artifact, cueSha256: string, prior?: Artifact, online = true) => {
   const { schema } = value;
   const coordinate = { app_id: appId, customer_id: schema.customer_id, version: schema.version };
   const files: GeneratedAppReleaseFiles = {
@@ -66,7 +66,7 @@ const release = (value: Artifact, cueSha256: string, prior?: Artifact) => {
     "data-operations.ts": Buffer.alloc(0),
     "data-server.ts": Buffer.from("same shared server binding"),
     "operation-manifest.json":
-      prior === undefined
+      prior === undefined || !online
         ? json({})
         : json({
             predecessorCompatibility: {
@@ -100,7 +100,7 @@ const release = (value: Artifact, cueSha256: string, prior?: Artifact) => {
       field_id: string;
     };
   } = { ...coordinate, retirements: [] };
-  if (prior !== undefined) {
+  if (prior !== undefined && online) {
     plan.online_optional_text_addition = {
       kind: "optional-text-addition-v1",
       predecessor_artifact_sha256: fingerprint(json(prior)),
@@ -139,6 +139,7 @@ const pair = (input: {
   addedLabel?: string;
   writeEnabled?: boolean;
   notes?: string;
+  online?: boolean;
 }) => {
   const prior = artifact(input.existingLabel);
   const candidate = structuredClone(prior);
@@ -153,7 +154,7 @@ const pair = (input: {
   candidate.extras.field_metadata.push({ model, field: optional.id, notes: input.notes ?? "" });
   return {
     prior: release(prior, input.priorCueSha256),
-    candidate: release(candidate, input.candidateCueSha256, prior),
+    candidate: release(candidate, input.candidateCueSha256, prior, input.online),
     priorCueSha256: input.priorCueSha256,
     candidateCueSha256: input.candidateCueSha256,
   };
@@ -189,7 +190,9 @@ const fixture = (
     cueSha256: corrected.priorCueSha256,
   };
   const headChanges = [
-    edit(cuePath, original.candidateCueSha256, corrected.candidateCueSha256),
+    ...(original.candidateCueSha256 === corrected.candidateCueSha256
+      ? []
+      : [edit(cuePath, original.candidateCueSha256, corrected.candidateCueSha256)]),
     ...GENERATED_RELEASE_MEMBERS.flatMap((member) => {
       const before = fingerprint(original.candidate.files[member]);
       const after = fingerprint(corrected.candidate.files[member]);
@@ -240,9 +243,60 @@ const replayFixture = (input: { oldLabel?: string; originalExtraSource?: string 
   };
 };
 
+const generatedReleaseFixture = (options: Partial<PairOptions> = {}) =>
+  fixture(
+    {},
+    {
+      existingLabel: "Creator actor ID",
+      priorCueSha256: correctedPriorCue,
+      candidateCueSha256: correctedCandidateCue,
+      online: false,
+      ...options,
+    },
+  );
+
 describe("Recompiling an approved optional field against its published predecessor", () => {
   it("keeps the original field and write access while correcting an existing label's casing", () => {
     expect(verifyOptionalFieldCorrectionEquivalence(fixture())).toBe(true);
+  });
+
+  it("allows exact generated-only recovery when the approved CUE and app artifact are unchanged", () => {
+    const correction = generatedReleaseFixture();
+    expect(verifyOptionalFieldCorrectionEquivalence(correction)).toBe(true);
+  });
+
+  it("refuses a generated-only correction if the checked artifact or authored source differs", () => {
+    expect(
+      verifyOptionalFieldCorrectionEquivalence(
+        generatedReleaseFixture({ addedLabel: "Different field" }),
+      ),
+    ).toBe(false);
+    const verified = generatedReleaseFixture();
+    for (const path of [cuePath, `apps/${appId}/app/page.tsx`]) {
+      expect(
+        verifyOptionalFieldCorrectionEquivalence({
+          ...verified,
+          headChanges: [...verified.headChanges, edit(path, "a".repeat(64), "b".repeat(64))],
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it("requires generated-only repair to add previously unavailable compatibility and verify installed identity", () => {
+    expect(
+      verifyOptionalFieldCorrectionEquivalence(generatedReleaseFixture({ online: true })),
+    ).toBe(false);
+    const verified = generatedReleaseFixture();
+    expect(
+      verifyOptionalFieldCorrectionEquivalence({
+        ...verified,
+        published: { ...verified.published, manifestSha256: "a".repeat(64) },
+      }),
+    ).toBe(false);
+    verified.original.candidate.files["data-server.ts"] = Buffer.from(
+      "not the draft's checked runtime",
+    );
+    expect(verifyOptionalFieldCorrectionEquivalence(verified)).toBe(false);
   });
 
   it("reports a single closed failure stage for each rejected proof", () => {

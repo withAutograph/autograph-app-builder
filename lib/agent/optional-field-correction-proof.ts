@@ -8,6 +8,7 @@ import { GENERATED_RELEASE_MEMBERS } from "../provisioning/hosted-operator-sandb
 import { verifyOptionalFieldCorrectionEquivalence } from "../provisioning/optional-field-correction-equivalence";
 import type { OptionalFieldCorrectionFailure } from "../provisioning/optional-field-correction-equivalence";
 import { readOptionalTextReleasePredecessor } from "../provisioning/repository-production-schema-revision";
+import { githubPublicationRuntimeForSession } from "./deployment-github-publication-runtime";
 import type { ExistingDraftReconciliationProposal } from "../repository/github-draft-reconciliation";
 import { readExactCompiledOperatorReleaseForSession } from "./compiled-operator-artifacts";
 import type {
@@ -70,13 +71,42 @@ interface CorrectionProofReads {
   readInstalled: typeof readInstalledSchemaPredecessor;
   readMergedSource: typeof readMergedReleaseSourceRecovery;
   readRelease: typeof readExactCompiledOperatorReleaseForSession;
+  readMergedGenerated: typeof readMergedGeneratedRelease;
   verify: typeof verifyOptionalFieldCorrectionEquivalence;
 }
+
+const readMergedGeneratedRelease = async (input: {
+  ctx: ToolContext;
+  proposal: ExistingDraftReconciliationProposal;
+  priorMergeSha: string;
+  installationId: string;
+  appId: string;
+  releaseId: string;
+}): Promise<Awaited<ReturnType<typeof readMergedReleaseSourceRecovery>>> => {
+  const { ctx, proposal, priorMergeSha, installationId, appId, releaseId } = input;
+  const runtime = await githubPublicationRuntimeForSession(ctx.session.auth, {
+    selectedInstallationId: installationId,
+  });
+  return (
+    (await runtime.readMergedAppSchemaRelease?.({
+      appId,
+      releaseId,
+      merged: {
+        repositoryId: proposal.repositoryId,
+        owner: proposal.owner,
+        name: proposal.name,
+        baseBranch: proposal.baseBranch,
+        sha: priorMergeSha,
+      },
+    })) ?? null
+  );
+};
 
 const defaultReads: CorrectionProofReads = {
   readInstalled: readInstalledSchemaPredecessor,
   readMergedSource: readMergedReleaseSourceRecovery,
   readRelease: readExactCompiledOperatorReleaseForSession,
+  readMergedGenerated: readMergedGeneratedRelease,
   verify: verifyOptionalFieldCorrectionEquivalence,
 };
 const digest = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
@@ -94,7 +124,13 @@ const readSourceScope = (input: CorrectionProofInput) => {
   const { review } = candidate;
   const originalChange = subject.revision?.schemaChange;
   const predecessorAnchor = input.predecessorAnchor ?? prior.revision?.reconciliation;
-  if (review === undefined || originalChange === undefined || predecessorAnchor === undefined) {
+  if (review === undefined || originalChange === undefined) {
+    return null;
+  }
+  const generatedOnly =
+    originalChange.priorCueSha256 === corrected.schemaChange.priorCueSha256 &&
+    originalChange.candidateCueSha256 === corrected.schemaChange.candidateCueSha256;
+  if (!generatedOnly && predecessorAnchor === undefined) {
     return null;
   }
   const expected = [
@@ -131,7 +167,7 @@ const readSourceScope = (input: CorrectionProofInput) => {
     review.resolvedTree === proposal.resolvedTree,
     review.digest === proposal.reviewDigest,
     digest(JSON.stringify(review.headChanges)) === proposal.headChangesDigest,
-    predecessorAnchor.pullRequestNumber !== proposal.pullRequestNumber,
+    predecessorAnchor?.pullRequestNumber !== proposal.pullRequestNumber,
   ].every(Boolean);
   const originalRepair = subject.revision?.reconciliation;
   const expectedOrigin =
@@ -142,7 +178,9 @@ const readSourceScope = (input: CorrectionProofInput) => {
       originalRepair.pullRequestNumber === proposal.pullRequestNumber,
       originalRepair.resolvedTree === proposal.expectedHeadTree,
     ].every(Boolean);
-  return expected && expectedOrigin ? { subject, review, originalChange, predecessorAnchor } : null;
+  return expected && expectedOrigin
+    ? { subject, review, originalChange, predecessorAnchor, generatedOnly }
+    : null;
 };
 
 const matchArchivedPrior = (
@@ -171,13 +209,15 @@ export const readOptionalFieldCorrectionProof = async (
   if (scope === null) {
     return { reason: "correction-source-scope" };
   }
-  const { subject, review, originalChange, predecessorAnchor } = scope;
+  const { subject, review, originalChange, predecessorAnchor, generatedOnly } = scope;
   const { appId, appSpecDigest, installationId, repositoryId } = subject;
   const { proposal, selection, schemaChange } = corrected;
   const directory = `apps/${appId}/schema/release/${selection.releaseId}`;
   const draftPreimage = (member: string) =>
     review.headChanges.find(({ path }) => path === `${directory}/${member}`)?.before?.digest;
-  const originalArtifact = draftPreimage("app-artifact.json");
+  const originalArtifact = generatedOnly
+    ? selection.schemaSha256
+    : draftPreimage("app-artifact.json");
   const originalManifest = draftPreimage("release-manifest.json");
   if (originalArtifact === undefined || originalManifest === undefined) {
     return { reason: "original-draft-preimage" };
@@ -203,22 +243,31 @@ export const readOptionalFieldCorrectionProof = async (
     installed.appId === appId,
     installed.repositoryId === repositoryId,
     installed.cueSha256 === schemaChange.priorCueSha256,
-    installed.cueSha256 !== originalChange.priorCueSha256,
+    generatedOnly || installed.cueSha256 !== originalChange.priorCueSha256,
   ].every(Boolean);
   if (!confirmsPrior) {
     return { reason: "installed-identity" };
   }
 
   const [publishedRead, originalRead, nextRead, activePriorRead] = await Promise.allSettled([
-    reads.readMergedSource({
-      current,
-      ctx,
-      installationId,
-      releaseId: installed.releaseId,
-      includeSchemaCue: true,
-      includeSchemaCueBytes: true,
-      reconciliationAnchor: predecessorAnchor,
-    }),
+    generatedOnly
+      ? reads.readMergedGenerated({
+          ctx,
+          proposal,
+          priorMergeSha,
+          appId,
+          installationId,
+          releaseId: installed.releaseId,
+        })
+      : reads.readMergedSource({
+          current,
+          ctx,
+          installationId,
+          releaseId: installed.releaseId,
+          includeSchemaCue: true,
+          includeSchemaCueBytes: true,
+          reconciliationAnchor: predecessorAnchor,
+        }),
     reads.readRelease({
       ...session,
       lookup: {
@@ -291,26 +340,28 @@ export const readOptionalFieldCorrectionProof = async (
   if (!expectedDraft) {
     return { reason: "original-draft-archive" };
   }
-  const originalPriorProof = readOptionalTextReleasePredecessor(original.files);
-  if (originalPriorProof === null || originalPriorProof.releaseId !== installed.releaseId) {
-    return { reason: "original-predecessor-marker" };
-  }
   let originalPrior: CapturedRelease | undefined;
-  try {
-    originalPrior = await reads.readRelease({
-      ...session,
-      lookup: {
-        releaseId: originalPriorProof.releaseId,
-        schemaSha256: originalPriorProof.artifactSha256,
-      },
-    });
-  } catch {
+  if (!generatedOnly) {
+    const originalPriorProof = readOptionalTextReleasePredecessor(original.files);
+    if (originalPriorProof === null || originalPriorProof.releaseId !== installed.releaseId) {
+      return { reason: "original-predecessor-marker" };
+    }
+    try {
+      originalPrior = await reads.readRelease({
+        ...session,
+        lookup: {
+          releaseId: originalPriorProof.releaseId,
+          schemaSha256: originalPriorProof.artifactSha256,
+        },
+      });
+    } catch {
+      ctx.abortSignal.throwIfAborted();
+      return { reason: "original-predecessor-archive" };
+    }
     ctx.abortSignal.throwIfAborted();
-    return { reason: "original-predecessor-archive" };
-  }
-  ctx.abortSignal.throwIfAborted();
-  if (originalPrior === undefined && published.cueBytes === undefined) {
-    return { reason: "original-predecessor-archive" };
+    if (originalPrior === undefined && published.cueBytes === undefined) {
+      return { reason: "original-predecessor-archive" };
+    }
   }
   const predecessor = {
     releaseId: installed.releaseId,

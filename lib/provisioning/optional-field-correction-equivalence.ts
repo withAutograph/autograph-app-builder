@@ -5,6 +5,7 @@ import { addOptionalTextField } from "../repository/optional-text-field";
 import type { OverlayChange } from "../repository/target-apply";
 import { GENERATED_RELEASE_MEMBERS } from "./hosted-operator-sandbox-launcher";
 import {
+  assertCheckedOptionalFieldReleaseSource,
   assertOptionalTextProductionTransition,
   readOptionalTextReleasePredecessor,
   readTransitionForRecoveredOptionalField,
@@ -28,7 +29,8 @@ export type OptionalFieldCorrectionFailure =
   | "original-archive"
   | "schema-equivalence"
   | "compiler-inputs"
-  | "reviewed-head-diff";
+  | "reviewed-head-diff"
+  | "original-release-compatible";
 
 interface PredecessorIdentity {
   releaseId: string;
@@ -229,9 +231,13 @@ const matchesDraftChanges = (input: {
 }) => {
   const { appId, cuePath, original, corrected, headChanges } = input;
   const releasePath = `apps/${appId}/schema/release/${corrected.candidate.releaseId}`;
-  const expected = new Map([
-    [cuePath, { before: original.candidateCueSha256, after: corrected.candidateCueSha256 }],
-  ]);
+  const expected = new Map<string, { before: string; after: string }>();
+  if (original.candidateCueSha256 !== corrected.candidateCueSha256) {
+    expected.set(cuePath, {
+      before: original.candidateCueSha256,
+      after: corrected.candidateCueSha256,
+    });
+  }
   for (const member of GENERATED_RELEASE_MEMBERS) {
     const before = sha256(original.candidate.files[member]);
     const after = sha256(corrected.candidate.files[member]);
@@ -268,17 +274,82 @@ interface CorrectionEquivalenceInput {
   publishedPriorCue?: Buffer | undefined;
 }
 
+const readCheckedOnlineAddition = (appId: string, pair: ReleasePair) =>
+  readTransitionForRecoveredOptionalField({
+    appId,
+    publishedPrior: pair.prior,
+    publishedPriorCueSha256: pair.priorCueSha256,
+    recoveredArtifact: pair.prior.files["app-artifact.json"],
+    candidate: pair.candidate,
+    candidateCueSha256: pair.candidateCueSha256,
+  });
+
+const originalHasCheckedOnlineAddition = (appId: string, pair: ReleasePair): boolean => {
+  try {
+    readCheckedOnlineAddition(appId, pair);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Same approved CUE and app artifact, with only exact generated member changes. */
+const checkGeneratedReleaseCorrection = (
+  input: CorrectionEquivalenceInput,
+  cuePath: string,
+): OptionalFieldCorrectionFailure | null => {
+  const { appId, original, corrected } = input;
+  try {
+    assertCheckedOptionalFieldReleaseSource({
+      appId,
+      release: original.candidate,
+      cueSha256: original.candidateCueSha256,
+    });
+  } catch {
+    return "original-archive";
+  }
+  try {
+    readCheckedOnlineAddition(appId, corrected);
+  } catch {
+    return "corrected-release";
+  }
+  if (
+    !original.candidate.files["app-artifact.json"].equals(
+      corrected.candidate.files["app-artifact.json"],
+    )
+  ) {
+    return "schema-equivalence";
+  }
+  if (
+    !isDeepStrictEqual(
+      compilerInputs(original.candidate, cuePath),
+      compilerInputs(corrected.candidate, cuePath),
+    )
+  ) {
+    return "compiler-inputs";
+  }
+  if (originalHasCheckedOnlineAddition(appId, { ...corrected, candidate: original.candidate })) {
+    return "original-release-compatible";
+  }
+  return matchesDraftChanges({ ...input, cuePath }) ? null : "reviewed-head-diff";
+};
+
 const checkOptionalFieldCorrection = (
   input: CorrectionEquivalenceInput,
 ): OptionalFieldCorrectionFailure | null => {
   const { appId, original, corrected, installed, published } = input;
+  const generatedOnly =
+    original.priorCueSha256 === corrected.priorCueSha256 &&
+    original.candidateCueSha256 === corrected.candidateCueSha256;
+  const casingCorrection =
+    original.priorCueSha256 !== corrected.priorCueSha256 &&
+    original.candidateCueSha256 !== corrected.candidateCueSha256;
   if (
     ![
       original.prior === undefined || original.prior.releaseId === corrected.prior.releaseId,
       original.candidate.releaseId === corrected.candidate.releaseId,
       /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u.test(corrected.candidate.releaseId),
-      original.priorCueSha256 !== corrected.priorCueSha256,
-      original.candidateCueSha256 !== corrected.candidateCueSha256,
+      generatedOnly || casingCorrection,
     ].every(Boolean)
   ) {
     return "release-coordinates";
@@ -292,6 +363,9 @@ const checkOptionalFieldCorrection = (
       isDeepStrictEqual(nextPair.identity, published);
     if (!sameActiveRelease) {
       return "installed-predecessor";
+    }
+    if (generatedOnly) {
+      return checkGeneratedReleaseCorrection(input, cuePath);
     }
     stage = "original-archive";
     const oldPair = readOriginalPair(input, nextPair.prior);

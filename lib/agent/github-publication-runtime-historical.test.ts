@@ -14,6 +14,7 @@ import type {
   ImmutableGitHubSourceReceipt,
   GitHubPublicationReceiptStore,
 } from "../repository/github-publication";
+import { GENERATED_RELEASE_MEMBERS } from "../provisioning/hosted-operator-sandbox-launcher";
 import type { ExistingDraftObservation } from "../repository/github-draft-update";
 import { createReconciliationReviewReceipt } from "../repository/github-draft-reconciliation";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
@@ -191,6 +192,50 @@ const ownedDraftFixture = (
     runtime,
   };
 };
+
+it("reads the complete checked release only at the verified prior merge", async () => {
+  const appId = "demo";
+  const releaseId = "fixture-v1";
+  const cuePath = `apps/${appId}/schema/${appId}.cue`;
+  const releasePath = `apps/${appId}/schema/release/${releaseId}`;
+  const paths = [cuePath, ...GENERATED_RELEASE_MEMBERS.map((member) => `${releasePath}/${member}`)];
+  const files = paths.map((path) => ({
+    path,
+    mode: "644",
+    digest: createHash("sha256").update(path).digest("hex"),
+  }));
+  const inspectDestinationFiles = vi
+    .fn<NonNullable<GitHubPublicationAdapter["inspectDestinationFiles"]>>()
+    .mockResolvedValue(files);
+  const { runtime, repository } = ownedDraftFixture({}, { inspectDestinationFiles });
+  const merged = {
+    repositoryId: repository.repositoryId,
+    owner: repository.owner,
+    name: repository.name,
+    baseBranch: repository.defaultBranch,
+    sha: repository.headSha,
+  };
+  const readRelease = runtime.readMergedAppSchemaRelease;
+  if (readRelease === undefined) {
+    throw new Error("Expected immutable release reads from the GitHub runtime.");
+  }
+  await expect(readRelease({ appId, releaseId, merged })).resolves.toMatchObject({
+    mergeSha: merged.sha,
+    releaseId,
+    cueSha256: files[0].digest,
+    files: {
+      "app-artifact.json": createHash("sha256")
+        .update(`${releasePath}/app-artifact.json`)
+        .digest("hex"),
+    },
+  });
+  await expect(
+    readRelease({ appId, releaseId, merged: { ...merged, sha: "9".repeat(40) } }),
+  ).resolves.toBeNull();
+  expect(inspectDestinationFiles).toHaveBeenCalledExactlyOnceWith({ paths, repository });
+  inspectDestinationFiles.mockResolvedValue(files.slice(0, -1));
+  await expect(readRelease({ appId, releaseId, merged })).resolves.toBeNull();
+});
 
 const firstAppManifest = "apps/demo/package.json";
 const firstAppCue = ".config/app-specs/demo.cue";
