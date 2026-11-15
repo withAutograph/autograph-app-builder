@@ -75,7 +75,8 @@ app-owned files and reuse the same component-backed preview flow.
    Use `inspect_repository` to read the selected checkout's
    `docs/guides/building-apps-with-app-builder.md`, then the app's `README.md`
    and `AGENTS.md`. For CUE-backed features, read `docs/generated-data-operations.md`
-   and `docs/schema-compiler.md`. Follow current repository docs and actual
+   and `docs/schema-compiler.md`, including the reserved system columns in
+   `docs/field-atlas.md`. Follow current repository docs and actual
    commands; missing documentation is context to investigate, not a build gate.
    Preserve unrelated changes.
    When the brief requests provider data or an integrations management surface,
@@ -157,6 +158,8 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    Use the Arrusted CUE/PostgreSQL data boundary for owned durable data: derive
    the CUE model and policies from the accepted product decisions, compile the
    checked release, and implement the authenticated server reads and actions.
+   Choose product field IDs that remain distinct from the documented system
+   columns after normalization. Keep the requested labels and behavior.
    For new CUE-backed Arrusted apps, build product features on the generator's
    protected request proxy, server-only data context, and Next release tracing.
    Put feature-specific reads and mutations in separate modules; do not author

@@ -117,6 +117,7 @@ const fixture = () => {
     publishedRelease?: PublishedPlanningRelease,
     adoptPublishedSchemaCue?: true,
     preserveSourceHead?: true,
+    expectedPreservedSource?: { sha: string; tree: string },
   ) =>
     spawnSync(
       process.execPath,
@@ -129,6 +130,7 @@ const fixture = () => {
           baseline,
           baselineMarkerPath,
           branchRef: "refs/heads/main",
+          expectedPreservedSource,
           fetchRemote: false,
           preserveSourceHead,
           publishedRelease,
@@ -384,6 +386,7 @@ describe("owned planning source reconciliation", () => {
         f.proof,
         true,
         true,
+        { sha: f.oldHead, tree: f.git("rev-parse", `${f.oldHead}^{tree}`) },
       );
       expect(result.stderr).toBe("");
       expect(result.status).toBe(0);
@@ -414,6 +417,32 @@ describe("owned planning source reconciliation", () => {
     }
   });
 
+  it("preserves the private schema when the connected checkout is not the proved source", () => {
+    const f = publishedFixture();
+    try {
+      const original = "Unpublished private CUE\n";
+      f.write(releasedCuePath, original);
+      const result = f.run(
+        planningSourceReconciliationProgram,
+        f.currentSource,
+        f.proof,
+        true,
+        true,
+        {
+          sha: f.currentSource,
+          tree: f.git("rev-parse", `${f.currentSource}^{tree}`),
+        },
+      );
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("connected checkout changed");
+      expect(readFileSync(path.join(f.root, releasedCuePath), "utf-8")).toBe(original);
+      expect(f.git("rev-parse", "HEAD")).toBe(f.oldHead);
+    } finally {
+      rmSync(f.root, { force: true, recursive: true });
+      rmSync(f.stateRoot, { force: true, recursive: true });
+    }
+  });
+
   it("resumes an interrupted CUE adoption only with the same published proof", () => {
     const f = publishedFixture();
     try {
@@ -424,7 +453,8 @@ describe("owned planning source reconciliation", () => {
         "    writeFileSync(destination, bytes);",
         `    if (file === ${JSON.stringify(releasedCuePath)}) throw Error("fixture interruption");\n    writeFileSync(destination, bytes);`,
       );
-      const failure = f.run(interrupted, f.currentSource, f.proof, true, true);
+      const expected = { sha: f.currentSource, tree: f.git("rev-parse", "HEAD^{tree}") };
+      const failure = f.run(interrupted, f.currentSource, f.proof, true, true, expected);
       expect(failure.stderr).toContain("fixture interruption");
 
       const ordinary = f.run(planningSourceReconciliationProgram, f.currentSource, f.proof);
@@ -436,6 +466,18 @@ describe("owned planning source reconciliation", () => {
         true,
       );
       expect(differentTarget.stderr).toContain("Resume the pending source reconciliation");
+      const wrongSource = f.run(
+        planningSourceReconciliationProgram,
+        f.currentSource,
+        f.proof,
+        true,
+        true,
+        {
+          sha: f.oldHead,
+          tree: f.git("rev-parse", `${f.oldHead}^{tree}`),
+        },
+      );
+      expect(wrongSource.stderr).toContain("connected checkout changed");
       expect(readFileSync(path.join(f.root, releasedCuePath), "utf-8")).toBe(local);
 
       const retry = f.run(
@@ -444,6 +486,7 @@ describe("owned planning source reconciliation", () => {
         f.proof,
         true,
         true,
+        expected,
       );
       expect(retry.status).toBe(0);
       expect(readFileSync(path.join(f.root, releasedCuePath), "utf-8")).toBe(releasedCue);

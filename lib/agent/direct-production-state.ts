@@ -1433,16 +1433,23 @@ export const currentPlannedDirectProductionAuthoring = (ctx: OwnerContext): stri
 };
 
 /** A completed delivery is the predecessor for a new change, not a fresh approval subject. */
-export const currentDirectProductionProposalIsDelivered = (ctx: OwnerContext): boolean => {
+export const settledDirectProductionDelivery = (
+  ctx: OwnerContext,
+): ReturnType<typeof currentDirectProductionDeliveryAuthorization> => {
   const state = appBuilderWorkflowState.get();
   const progress = directProductionProgressState.get();
   const delivered = directProductionDeliverySettled(progress?.stage);
   if (!delivered || !("proposal" in state)) {
-    return false;
+    return undefined;
   }
   const current = currentDirectProductionDeliveryAuthorization(ctx, { appId: state.appSpec.appId });
-  return current !== undefined && progress?.grantDigest === current.effectDigest;
+  return current !== undefined && progress?.grantDigest === current.effectDigest
+    ? current
+    : undefined;
 };
+
+export const currentDirectProductionProposalIsDelivered = (ctx: OwnerContext): boolean =>
+  settledDirectProductionDelivery(ctx) !== undefined;
 
 export const requestDirectProductionGrant = (
   ctx: OwnerContext,

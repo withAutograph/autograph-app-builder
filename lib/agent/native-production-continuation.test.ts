@@ -44,7 +44,7 @@ vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: mocks.githubRuntime,
 }));
 vi.mock("./github-pr-delivery-subject", () => ({
-  resolveGitHubPrDeliverySubject: mocks.reviewedSubject,
+  resolveSavedGitHubPrObservationSubject: mocks.reviewedSubject,
 }));
 vi.mock(import("./repository-production-client"), async (importOriginal) => ({
   ...(await importOriginal()),

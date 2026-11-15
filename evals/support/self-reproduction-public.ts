@@ -27,6 +27,8 @@ interface BuildApprovalObservation {
   response?: { decision: "approve" | "deny"; acknowledgedAt: string };
 }
 
+type DeliveryTimingObservation = Omit<DeliveryProgress, "appUrl"> & { eventIndex?: number };
+
 export interface PublicState {
   version: 1;
   endpoint: string;
@@ -43,7 +45,7 @@ export interface PublicState {
   awaitingMessageProgressAfterCursor?: number;
   answered: string[];
   buildApprovals?: BuildApprovalObservation[];
-  deliveryTiming?: Omit<DeliveryProgress, "appUrl">[];
+  deliveryTiming?: DeliveryTimingObservation[];
   outcome: string;
   error?: string;
   promptSha256?: string;
@@ -147,6 +149,12 @@ export const publicObservationReport = (state: PublicState, nowMs = Date.now()) 
       firstObservedAt,
       response,
     })),
+    deliveryTiming: state.deliveryTiming?.map(({ phase, startedAt, observedAt, disposition }) => ({
+      phase,
+      startedAt,
+      observedAt,
+      disposition,
+    })),
     comparison: "unassessed",
     elapsedMs: nowMs - Date.parse(state.startedAt),
     note: "A completed Builder session or HTTP-ready preview does not prove a working independent replica. Compare user-visible behavior separately.",
@@ -220,14 +228,28 @@ const deliveryStageKey = ({ phase, startedAt }: Omit<DeliveryProgress, "appUrl">
 /** Keep delivery stage times when a later public page advances past those events. */
 const observeDeliveryTiming = (state: PublicState, result: EveSessionResult): void => {
   const stages = new Map(state.deliveryTiming?.map((stage) => [deliveryStageKey(stage), stage]));
+  const cursor = state.session?.cursor ?? 0;
+  let latest: DeliveryTimingObservation | undefined;
+  for (const stage of stages.values()) {
+    if (latest === undefined || (stage.eventIndex ?? -1) >= (latest.eventIndex ?? -1)) {
+      latest = stage;
+    }
+  }
   for (const event of result.events) {
-    if (event.type === "progress" && event.delivery !== undefined) {
-      const { phase, startedAt, observedAt, disposition } = event.delivery;
-      const observation = { phase, startedAt, observedAt, disposition };
+    if (event.type === "progress" && event.delivery !== undefined && event.index >= cursor) {
+      const { phase, observedAt, disposition } = event.delivery;
+      // Until the next delivery phase starts, further Live events recheck the same delivery.
+      const startedAt =
+        phase === "live" && latest?.phase === "live" ? latest.startedAt : event.delivery.startedAt;
+      const observation = { phase, startedAt, observedAt, disposition, eventIndex: event.index };
       const key = deliveryStageKey(observation);
       const previous = stages.get(key);
-      if (previous === undefined || Date.parse(observedAt) > Date.parse(previous.observedAt)) {
+      const elapsed =
+        previous === undefined ? 0 : Date.parse(observedAt) - Date.parse(previous.observedAt);
+      const previousIndex = previous?.eventIndex ?? cursor - 1;
+      if (previous === undefined || elapsed > 0 || (elapsed === 0 && event.index > previousIndex)) {
         stages.set(key, observation);
+        latest = observation;
       }
     }
   }

@@ -16,10 +16,13 @@ import {
   PlanningReleaseConflictError,
   reconcilePlanningSource,
 } from "../repository/planning-source-reconciliation";
+import { settledDirectProductionDelivery } from "./direct-production-state";
+import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
+import { assertExactImmutableGitHubSourceReceipt } from "../repository/github-publication";
 import {
-  currentDirectProductionGrant,
-  currentDirectProductionProposalIsDelivered,
-} from "./direct-production-state";
+  assertApprovedPrivateApplySession,
+  assertNoPendingPrivateApplyApproval,
+} from "./private-apply-authority";
 import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import { readConnectedSchemaSavedPredecessor } from "./connected-schema-saved-predecessor";
 import type { PublishedPlanningRelease } from "../repository/planning-source-reconciliation";
@@ -32,6 +35,8 @@ import { readAppBaselineMarker } from "../repository/app-baseline";
 import { resolveVercelSessionGitSource } from "../sandbox/vercel-session-source";
 
 const schemaCompilation = "schema-compilation";
+
+type SettledSourcePlanningProof = () => void;
 
 type RefreshableSourceState = Extract<AppBuilderWorkflowState, { appSpec: AcceptedAppSpec }>;
 const canRefreshSource = (
@@ -51,7 +56,11 @@ const canRefreshSource = (
 export const refreshPlanningSource = async (
   ctx: ToolContext,
   purpose: "planning" | "schema-compilation" = "planning",
-  options: { approvedSchemaCueSha256?: string | undefined; optionalFieldPlanning?: true } = {},
+  options: {
+    approvedSchemaCueSha256?: string | undefined;
+    optionalFieldPlanning?: true;
+    recordSettledSourcePlanningProof?: (proof: SettledSourcePlanningProof) => void;
+  } = {},
 ) => {
   if (purpose === "planning") {
     const local = await refreshLocalPlanningSource(ctx);
@@ -62,10 +71,8 @@ export const refreshPlanningSource = async (
   const current = appBuilderWorkflowState.get();
   const sandbox = await getSourceBoundSandbox(ctx);
   const currentDelivery =
-    options.optionalFieldPlanning === true &&
-    "applyReceipt" in current &&
-    currentDirectProductionProposalIsDelivered(ctx)
-      ? currentDirectProductionGrant(ctx, current.appSpec)
+    options.optionalFieldPlanning === true && "applyReceipt" in current
+      ? settledDirectProductionDelivery(ctx)
       : undefined;
   const reconciliationAnchor = currentDelivery?.subject.revision?.reconciliation;
   const preserveSourceHead = reconciliationAnchor !== undefined && "applyReceipt" in current;
@@ -101,7 +108,67 @@ export const refreshPlanningSource = async (
     owner: selected.repository.owner,
     repositoryId: selected.repository.repositoryId,
   });
-  if (preserveSourceHead) {
+  if (preserveSourceHead && currentDelivery !== undefined) {
+    const { applyReceipt, proposal, workspace, sourceReceipt } = current;
+    const refreshedAfterApply =
+      current.phase === "reviewed" &&
+      (applyReceipt.sourceReceiptDigest !== sourceReceipt.digest ||
+        applyReceipt.workspaceDigest !== workspace.workspaceDigest);
+    const assertPlanningScope = () => {
+      ctx.abortSignal.throwIfAborted();
+      assertExactWorkflowState(
+        appBuilderWorkflowState.get(),
+        current,
+        "plan the next app revision",
+      );
+      if (
+        settledDirectProductionDelivery(ctx)?.effectDigest !== currentDelivery.effectDigest ||
+        getBuilderSandboxId(sandbox) !== workspace.workspaceId
+      ) {
+        throw new Error(
+          "The settled app or its private checkout changed during revision planning.",
+        );
+      }
+      assertNoPendingPrivateApplyApproval();
+      assertApprovedPrivateApplySession({
+        appId: current.appSpec.appId,
+        appSpecDigest: current.appSpec.digest,
+        proposalDigest: proposal.digest,
+        sessionId: ctx.session.id,
+        workspaceId: workspace.workspaceId,
+      });
+    };
+    if (refreshedAfterApply) {
+      assertExactImmutableGitHubSourceReceipt(selected);
+      // The original Build remains immutable. Only the next plan uses the
+      // connected checkout that was refreshed during its schema compilation.
+      const approvedBuildMatches = [
+        applyReceipt.proposalDigest === proposal.digest,
+        applyReceipt.appSpecDigest === proposal.appSpecDigest,
+        proposal.appSpecDigest === current.appSpec.digest,
+        applyReceipt.appSpecPath === current.appSpec.artifactPath,
+        applyReceipt.artifactRevision === current.appSpec.artifactRevision,
+        applyReceipt.targetReceipt.appId === current.appSpec.appId,
+        applyReceipt.sourceReceiptDigest === proposal.sourceReceiptDigest,
+        applyReceipt.workspaceDigest === proposal.workspaceDigest,
+        applyReceipt.eligibilityDigest === proposal.eligibilityDigest,
+        applyReceipt.sourceSha === proposal.sourceSha,
+        applyReceipt.sourceTree === proposal.sourceTree,
+        applyReceipt.applyRoot === workspace.workspacePath,
+        sourceReceipt.sourceKind === "existing-repository",
+        sourceReceipt.sourcePath === workspace.sourcePath,
+        sourceReceipt.sourceSha === workspace.sourceSha,
+        sourceReceipt.sourceTree === workspace.sourceTree,
+        selected.resolvedSha === workspace.sourceSha,
+        selected.resolvedTree === workspace.sourceTree,
+      ].every(Boolean);
+      if (!approvedBuildMatches) {
+        throw new Error(
+          "The original Build and the settled app's connected checkout could not be verified.",
+        );
+      }
+      assertPlanningScope();
+    }
     const releaseId = retainedMergedSchemaReleaseId(
       current.proposal.digest,
       current.appSpec.appId,
@@ -134,7 +201,7 @@ export const refreshPlanningSource = async (
       current,
       "restore published schema before planning the approved app’s next revision",
     );
-    await reconcilePlanningSource({
+    const recovery: Parameters<typeof reconcilePlanningSource>[0] = {
       adoptPublishedSchemaCue: true,
       appId: current.appSpec.appId,
       baseline: baseline?.selection,
@@ -146,7 +213,16 @@ export const refreshPlanningSource = async (
       sessionId: ctx.session.id,
       targetSha: revision.headSha,
       token: credential.token,
-    });
+    };
+    if (refreshedAfterApply) {
+      assertPlanningScope();
+      recovery.expectedPreservedSource = { sha: workspace.sourceSha, tree: workspace.sourceTree };
+    }
+    await reconcilePlanningSource(recovery);
+    if (refreshedAfterApply) {
+      assertPlanningScope();
+      options.recordSettledSourcePlanningProof?.(assertPlanningScope);
+    }
     return sandbox;
   }
   const prepared = await runtime.prepareExistingSource({

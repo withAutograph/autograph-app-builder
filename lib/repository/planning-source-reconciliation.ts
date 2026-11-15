@@ -210,6 +210,13 @@ const complete = plan => {
 try {
   if (adoptPublishedSchemaCue && !publishedRelease) throw Error("Adopting a published schema requires its verified merged release.");
   if (preserveSourceHead && !adoptPublishedSchemaCue) throw Error("Preserving the approved source requires its selected published schema.");
+  if (input.expectedPreservedSource !== undefined) {
+    const { sha, tree } = input.expectedPreservedSource;
+    if (!preserveSourceHead || git(["rev-parse", "HEAD"]).trim() !== sha ||
+        git(["rev-parse", "HEAD^{tree}"]).trim() !== tree) {
+      throw Error("The connected checkout changed before its published schema could be restored.");
+    }
+  }
   if (existsSync(planPath)) {
     const pending = JSON.parse(readFileSync(planPath, "utf8"));
     if (pending.sessionId !== input.sessionId || JSON.stringify(pending.baseline) !== JSON.stringify(input.baseline ?? null)) throw Error("Source reconciliation belongs to another session or app baseline.");
@@ -376,6 +383,7 @@ export const reconcilePlanningSource = async (input: {
   appId: string;
   adoptPublishedSchemaCue?: true;
   baseline?: AppBaselineSelection;
+  expectedPreservedSource?: { sha: string; tree: string };
   branchRef: string;
   repository: string;
   sandbox: Pick<SandboxSession, "run">;
@@ -397,6 +405,13 @@ export const reconcilePlanningSource = async (input: {
         ? undefined
         : `/workspace/${appBaselineMarkerPath(input.baseline.appId)}`,
     branchRef: input.branchRef,
+    expectedPreservedSource:
+      input.expectedPreservedSource === undefined
+        ? undefined
+        : {
+            sha: objectId.parse(input.expectedPreservedSource.sha),
+            tree: objectId.parse(input.expectedPreservedSource.tree),
+          },
     fetchRemote: true,
     preserveSourceHead: input.preserveSourceHead,
     publishedRelease:

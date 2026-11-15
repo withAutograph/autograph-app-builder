@@ -14,7 +14,7 @@ vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: mocks.publicationRuntime,
 }));
 vi.mock("./github-pr-delivery-subject", () => ({
-  resolveGitHubPrDeliverySubject: mocks.reviewedDelivery,
+  resolveSavedGitHubPrObservationSubject: mocks.reviewedDelivery,
 }));
 vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: vi.fn() } }));
 vi.mock("./draft-reconciliation-state", () => ({

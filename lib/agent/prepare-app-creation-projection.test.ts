@@ -39,12 +39,22 @@ const ports = vi.hoisted(() => ({
   execute: vi.fn(),
   readBinary: vi.fn(),
   run: vi.fn(),
+  settledSourceProof: vi.fn<() => (() => void) | undefined>(),
   emitProjection: vi.fn(),
 }));
 const repairSandbox = { id: "workspace", readBinaryFile: ports.readBinary, run: ports.run };
 vi.mock("./refresh-planning-source", () => ({
-  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
-  refreshPlanningSource: () => Promise.resolve(repairSandbox),
+  refreshPlanningSource: async (
+    _ctx: Parameters<typeof prepareAppCreation>[1],
+    _purpose?: "planning" | "schema-compilation",
+    options?: { recordSettledSourcePlanningProof?: (proof: () => void) => void },
+  ) => {
+    const proof = ports.settledSourceProof();
+    if (proof !== undefined) {
+      options?.recordSettledSourcePlanningProof?.(proof);
+    }
+    return await Promise.resolve(repairSandbox);
+  },
 }));
 vi.mock("./approved-build-continuation-runtime", () => ({
   emitCurrentBuildWorkflowProjection: ports.emitProjection,
@@ -338,6 +348,73 @@ describe("ordinary same-app Build publication continuity", () => {
       const { planned } = await prepareRecoveryFixture("reviewed", "verified-publication");
       expect(planned.publishedGitHubDraftProposalDigest).toBe("verified-publication");
       expect(planned).not.toHaveProperty("githubDraftProposal");
+    });
+  });
+
+  it("prepares the next field from settled source without reusing the previous Build approval", async () => {
+    await run(async () => {
+      const applied = appliedRepairFixture();
+      if (applied.phase !== "applied") {
+        throw new Error("fixture");
+      }
+      // SAFETY: Only the consumed historical and current checkout bindings are represented.
+      const settled = {
+        ...applied,
+        phase: "reviewed",
+        sourceReceipt: { ...applied.sourceReceipt, digest: "refreshed-source" },
+        workspace: { ...applied.workspace, workspaceDigest: "refreshed-workspace" },
+      } as AppBuilderWorkflowState;
+      appBuilderWorkflowState.update(() => settled);
+      approveRepairFixture(settled);
+      const previousGrant = readPrivateApplyAuthority().grant;
+      ports.readBinary.mockResolvedValue(
+        Buffer.from(
+          `package schema
+manifest: #AppManifest & {
+  app_id: "example"
+  version: "2026-11-16.v7"
+  models: [{id: "entry", kind: "entity", fields: [{id: "label", label: "Label", type: "text", required: true}]}]
+  change_types: [{id: "save", model: "entry", touches: ["label"], required: ["label"]}]
+}
+`,
+        ),
+      );
+      const input = {
+        optionalTextField: {
+          modelId: "entry",
+          fieldId: "reference",
+          label: "Reference",
+          changeTypeIds: ["save"],
+        },
+      };
+      await expect(prepareAppCreation(input, context)).rejects.toThrow("source binding changed");
+      expect(ports.execute).not.toHaveBeenCalled();
+      const assertCurrent = vi.fn<() => void>();
+      ports.settledSourceProof.mockReturnValueOnce(assertCurrent);
+      await expect(prepareAppCreation(input, context)).resolves.toMatchObject({ reused: false });
+      const next = appBuilderWorkflowState.get();
+      if (next.phase !== "planned") {
+        throw new Error("fixture");
+      }
+      expect(assertCurrent).toHaveBeenCalled();
+      expect(next.proposal.sourceReceiptDigest).toBe("refreshed-source");
+      expect(next.proposal.digest).not.toBe(previousGrant?.proposalDigest);
+      expect(readPrivateApplyAuthority().grant).toEqual(previousGrant);
+      await expect(
+        prepareAppCreationTool.execute({ resumeApprovedBuild: true }, hostedRecoveryContext),
+      ).rejects.toThrow("no retained approved predecessor");
+      expect(
+        requestPrivateApplyApproval(
+          {
+            appId: "example",
+            appSpecDigest: "spec",
+            proposalDigest: next.proposal.digest,
+            sessionId: "session",
+            workspaceId: "workspace",
+          },
+          "successor-build",
+        ),
+      ).toBe("user-approval");
     });
   });
 });

@@ -248,11 +248,15 @@ for the remaining compatibility boundaries.
 Production progress events can include a `delivery` object with the phase,
 its start and latest observation timestamps, and whether Builder
 is continuing, retrying, or needs intervention. The same saved events drive the
-Builder web and MCP views across reconnects. The timestamps mark observations
-in the delivery workflow. The optional app link is the verified Production
-entry and can remain available while a revision deploys or updates its data.
-Builder reports the new revision live after native activation and any required
-schema settlement.
+Builder web and MCP views across reconnects. The timestamps mark Builder
+observations. The optional app link is the verified Production entry and can
+remain available while a revision deploys or updates its data. Builder reports
+the new revision live after native activation and any required schema
+settlement. A later saved-session Production check can record that live
+observation when the original delivery workflow ended before it could confirm
+activation. The recheck binds the exact current sealed publication or
+published reconciliation before confirming the merge. An availability-only or
+inconclusive recheck leaves the previous delivery phase intact.
 
 Hosted authorization advertises the matching `autograph:*` scopes. A caller
 must hold `autograph:session` before the request-scoped tenant service is
