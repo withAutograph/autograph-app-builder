@@ -729,6 +729,23 @@ describe("target validation", () => {
     expect(validationOutputExcerpt(raw, "").truncated).toBe(true);
   });
 
+  it("retains column-one CUE errors and redacts their assignments", () => {
+    const excerpt = validationOutputExcerpt(
+      "",
+      [
+        "schema-compiler: `cue export` failed with exit status: 1:",
+        "manifest.models.0: conflicting values token=private-value",
+        "    ./schema/notes.cue:12:4",
+        "ordinary build progress",
+      ].join("\n"),
+    );
+
+    expect(excerpt.stderr).toContain("manifest.models.0: conflicting values token=[REDACTED]");
+    expect(excerpt.stderr).toContain("./schema/notes.cue:12:4");
+    expect(excerpt.stderr).not.toContain("private-value");
+    expect(excerpt.stderr).not.toContain("ordinary build progress");
+  });
+
   it("retains schema compiler failures and their repair guidance", () => {
     const excerpt = validationOutputExcerpt(
       "",

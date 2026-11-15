@@ -171,7 +171,7 @@ const formatterFailureSummaryPattern = /\bformat(?:ting)? issues found\b/iu;
 const formatterTimingLinePattern =
   /^\s*(?:HK\s+)?(?:[^\s:|]+\s*[:|]\s*)?(?<filename>.+?)\s+\(\d+(?:\.\d+)?\s*ms\)\s*$/u;
 const repairLinePattern =
-  /(?:^|\s)(?:apps\/|error(?:\s+TS\d+|:)|typescript\(TS\d+\)|FAIL\s|Build failed|Failed to compile|Module not found|Cannot find (?:module|name)|Script not found|Formatting issues found|stale iteration preimage|schema-compiler:|Schema compilation failed|Schema release generation failed|The schema compiler produced invalid JSON|Compiler output excerpt:|ToolNotFound:|linker\s+[`"']?cc|cue:|cargo:|rustc:|mise(?:\s+ERROR|:)|The compiler produced no diagnostic output|The compiler returned no output|No CUE source location was reported|Install a native C compiler|Install the repository's locked mise tools|Read the compiler error and its CUE file location|Retry:)/iu;
+  /(?:^|\s)(?:apps\/|error(?:\s+TS\d+|:)|typescript\(TS\d+\)|FAIL\s|Build failed|Failed to compile|Module not found|Cannot find (?:module|name)|Script not found|Formatting issues found|stale iteration preimage|schema-compiler:|`cue export` failed|Schema compilation failed|Schema release generation failed|The schema compiler produced invalid JSON|Compiler output excerpt:|ToolNotFound:|linker\s+[`"']?cc|cue:|cargo:|rustc:|mise(?:\s+ERROR|:)|The compiler produced no diagnostic output|The compiler returned no output|No CUE source location was reported|Install a native C compiler|Install the repository's locked mise tools|Read the compiler error and its CUE file location|Retry:)/iu;
 const diagnosticContinuationPattern = /^(?:\s+\S|\s*\^|\s*\||\s*(?:caused by|help|note|retry):)/iu;
 
 // Keep enough compiler/build output for an agent to repair its own candidate,
@@ -205,10 +205,15 @@ export const validationOutputExcerpt = (
       if (!isRepairLine || isFormatterSummary || isFormatterFileTiming) {
         continue;
       }
+      if (/`cue export` failed[^\n]*:\s*$/u.test(line)) {
+        // CUE starts its diagnostic at column one, followed by indented source locations.
+        const detail = lines[index + 1];
+        if (detail && /^[^:]{1,240}:\s*\S/u.test(detail)) retained.add(index + 1);
+      }
       // CUE and Rust often put the source excerpt or the underlying cause on
       // following lines that do not repeat the error prefix.
       for (let next = index + 1; next < Math.min(index + 4, lines.length); next += 1) {
-        if (!diagnosticContinuationPattern.test(lines[next] ?? "")) {
+        if (!retained.has(next) && !diagnosticContinuationPattern.test(lines[next] ?? "")) {
           break;
         }
         retained.add(next);

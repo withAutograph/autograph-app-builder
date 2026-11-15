@@ -774,9 +774,10 @@ describe("private app browser tests", () => {
       });
       expect(result).toMatchObject({
         status: "failed",
-        diagnostic: { categories, stages },
+        diagnostic: { categories, stages, locations: ["tests/notes.spec.ts:12"] },
       });
       expect(result.problem).toContain(instruction);
+      expect(result.problem).toContain("Failing test locations: tests/notes.spec.ts:12.");
       expect(result.stdout).toContain("tests/notes.spec.ts:12");
       expect(JSON.stringify(result)).not.toContain("private-token");
       expect(JSON.stringify(result)).not.toContain("private.example");
