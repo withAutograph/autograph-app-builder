@@ -372,8 +372,8 @@ describe("GitHub delivery authority across workflow child contexts", () => {
           reason: "captured-call-mismatch",
         });
         if (regenerated) {
-          const revision = correctionInput.correctedSubject.revision;
-          if (revision?.schemaChange === undefined) {
+          const { revision: correctedRevision } = correctionInput.correctedSubject;
+          if (correctedRevision?.schemaChange === undefined) {
             throw new Error("Expected the exact approved schema change.");
           }
           const changedCue = createDirectProductionCorrection({
@@ -381,8 +381,11 @@ describe("GitHub delivery authority across workflow child contexts", () => {
             correctedSubject: {
               ...correctionInput.correctedSubject,
               revision: {
-                ...revision,
-                schemaChange: { ...revision.schemaChange, candidateCueSha256: "f".repeat(64) },
+                ...correctedRevision,
+                schemaChange: {
+                  ...correctedRevision.schemaChange,
+                  candidateCueSha256: "f".repeat(64),
+                },
               },
             },
           });
