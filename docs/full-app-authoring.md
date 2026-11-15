@@ -161,7 +161,8 @@ submission, concurrent decisions and paged audit history when those behaviors
 apply. Report only scenarios actually run; source inspection and mock tests do
 not establish database or identity behavior.
 
-Author browser coverage alongside a durable UI workflow. Replace the generated
+Author and run app-specific tests when the user requests them or they help verify
+the app. When authoring browser coverage for a durable workflow, replace the generated
 heading smoke test if it is still a scaffold, or extend existing app-owned
 coverage. Use the selected catalog entry path and repository actor fixtures.
 Submit through the UI and verify the saved outcome on a fresh load. Where the
@@ -187,7 +188,7 @@ emits it with the selected release, while `app.workspacePath` supplies the
 delivery root directory. An absent declaration remains valid for older source.
 Use `app:runtime prepare` for isolated authenticated validation;
 its protected environment and session files are injected by Builder into app
-validation and Preview startup. Author `test-e2e` to consume `APP_TEST_IDENTITIES_FILE`
+validation and Preview startup. When an app uses `test-e2e`, have it consume `APP_TEST_IDENTITIES_FILE`
 and exercise real browser submissions with those sessions. Selected browser
 validation runs this task after repository checks and reports unavailable
 coverage separately.
