@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { addOptionalTextField, optionalTextFieldSchema } from "./optional-text-field";
+import {
+  addOptionalTextField,
+  optionalTextFieldSchema,
+  readGeneratedSchemaReleaseId,
+} from "./optional-text-field";
 
 const schema = `package schema
 
@@ -25,6 +29,17 @@ const field = optionalTextFieldSchema.parse({
 });
 
 describe("planning a generated optional text field", () => {
+  it("identifies a single literal release cut without guessing a computed or ambiguous version", () => {
+    expect(readGeneratedSchemaReleaseId(schema)).toBe("2026-11-16.v7");
+    expect(
+      readGeneratedSchemaReleaseId(
+        schema.replace('"2026-11-16.v7"', '"2026-11-16.v7" | "2026-11-16.v8"'),
+      ),
+    ).toBeNull();
+    expect(
+      readGeneratedSchemaReleaseId(schema.replace('"2026-11-16.v7"', '"v7"\n  version: "v8"')),
+    ).toBeNull();
+  });
   it("preserves source bytes and changes only the new field, selected writes and release cut", () => {
     const { content, releaseId } = addOptionalTextField(schema, field);
     expect(releaseId).toBe("2026-11-16.v8");

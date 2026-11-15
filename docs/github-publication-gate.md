@@ -673,6 +673,12 @@ Production approval can locate the same sealed publication when a legacy
 completion lacks its origin metadata. Builder preserves
 the new proposal and leaves an unverified conflict for reconciliation.
 
+Before opening a draft PR, a connected approved schema build can restore
+conflicting historical release files from the prior owned, reviewed merge.
+Builder verifies that merge against the original approval and the checked
+history on the selected branch. It checkpoints the private copy and preserves
+the current approved CUE and its release version before continuing compilation.
+
 When planning a new optional field after a settled Production correction,
 Builder restores the verified merged schema in the same connected checkout.
 If schema compilation refreshed the checkout during the previous Build,

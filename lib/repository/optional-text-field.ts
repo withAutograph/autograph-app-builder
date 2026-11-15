@@ -195,15 +195,35 @@ const changeTypeEdits = (
   });
 };
 
-/** Plan one compatible optional text addition for the generated Arrusted literal CUE layout. */
-export const addOptionalTextField = (source: string, input: OptionalTextField) => {
-  const tokens = sourceTokens(source);
+const appManifest = (tokens: Token[]) => {
   const full = { start: 0, end: tokens.length };
   const expression = property(tokens, full, "manifest");
   if (tokens[expression]?.text !== "#AppManifest" || tokens[expression + 1]?.text !== "&") {
     throw unsupported();
   }
-  const manifest = literalRange(tokens, expression + 2, "{", tokens.length);
+  return literalRange(tokens, expression + 2, "{", tokens.length);
+};
+
+/** Identify the literal release cut in the same generated layout used by optional-field authoring. */
+export const readGeneratedSchemaReleaseId = (source: string): string | null => {
+  try {
+    const tokens = sourceTokens(source);
+    const manifest = appManifest(tokens);
+    const index = property(tokens, manifest, "version");
+    const releaseId = quotedValue(tokens[index]);
+    const next = index + 1;
+    const standalone =
+      next === manifest.end || tokens[next]?.text === "," || tokens[next + 1]?.text === ":";
+    return standalone && /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u.test(releaseId) ? releaseId : null;
+  } catch {
+    return null;
+  }
+};
+
+/** Plan one compatible optional text addition for the generated Arrusted literal CUE layout. */
+export const addOptionalTextField = (source: string, input: OptionalTextField) => {
+  const tokens = sourceTokens(source);
+  const manifest = appManifest(tokens);
   const models = literalRange(tokens, property(tokens, manifest, "models"), "[", manifest.end);
   const model = uniqueLiteral(tokens, structList(tokens, models), input.modelId);
   if (quotedValue(tokens[property(tokens, model, "kind")]) !== "entity") {
