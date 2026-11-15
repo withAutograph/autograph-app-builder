@@ -2343,7 +2343,7 @@ describe("native app availability progress", () => {
   });
 
   it("keeps confirmed delivery when a later availability check is inconclusive", () => {
-    const observedAt = nativeProduction.observedAt;
+    const { observedAt } = nativeProduction;
     const live = complete("finish-github-pr-delivery", {
       ...merged,
       nativeProduction: { ...nativeProduction, requestedRevision: "live" },
@@ -2365,10 +2365,10 @@ describe("native app availability progress", () => {
     expect(
       events.filter((event) => event.type === "progress" && event.delivery !== undefined),
     ).toMatchObject([{ delivery: { phase: "live", appUrl } }]);
-    expect(events.at(-1)).toMatchObject({
-      type: "assistant_message",
-      text: expect.stringContaining("This check could not verify the latest revision"),
-    });
+    const last = events.at(-1);
+    expect(last?.type === "assistant_message" ? last.text : undefined).toContain(
+      "This check could not verify the latest revision",
+    );
   });
 
   it("records an exact live recheck after the saved delivery ended pending", () => {
