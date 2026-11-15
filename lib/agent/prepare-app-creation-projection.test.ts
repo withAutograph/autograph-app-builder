@@ -9,6 +9,7 @@ import {
   contextStorage,
 } from "../../node_modules/eve/dist/src/context/container.js";
 import { prepareAppCreation } from "./prepare-app-creation";
+import type { SettledSourcePlanningOutcome } from "./refresh-planning-source";
 import { currentInitialBuildAuthoring } from "./initial-build-authoring";
 import prepareAppCreationTool from "../../agent/tools/prepare_app_creation";
 import {
@@ -40,6 +41,7 @@ const ports = vi.hoisted(() => ({
   readBinary: vi.fn(),
   run: vi.fn(),
   settledSourceProof: vi.fn<() => (() => void) | undefined>(),
+  settledSourceOutcome: vi.fn<() => SettledSourcePlanningOutcome | undefined>(),
   emitProjection: vi.fn(),
 }));
 const repairSandbox = { id: "workspace", readBinaryFile: ports.readBinary, run: ports.run };
@@ -47,11 +49,18 @@ vi.mock("./refresh-planning-source", () => ({
   refreshPlanningSource: async (
     _ctx: Parameters<typeof prepareAppCreation>[1],
     _purpose?: "planning" | "schema-compilation",
-    options?: { recordSettledSourcePlanningProof?: (proof: () => void) => void },
+    options?: {
+      recordSettledSourcePlanningProof?: (proof: () => void) => void;
+      recordSettledSourcePlanningOutcome?: (outcome: SettledSourcePlanningOutcome) => void;
+    },
   ) => {
     const proof = ports.settledSourceProof();
     if (proof !== undefined) {
       options?.recordSettledSourcePlanningProof?.(proof);
+    }
+    const outcome = ports.settledSourceOutcome();
+    if (outcome !== undefined) {
+      options?.recordSettledSourcePlanningOutcome?.(outcome);
     }
     return await Promise.resolve(repairSandbox);
   },
@@ -387,7 +396,44 @@ manifest: #AppManifest & {
           changeTypeIds: ["save"],
         },
       };
-      await expect(prepareAppCreation(input, context)).rejects.toThrow("source binding changed");
+      ports.settledSourceOutcome.mockReturnValueOnce("effective-authorization-unavailable");
+      const info = vi.spyOn(console, "info");
+      try {
+        await expect(prepareAppCreation(input, context)).rejects.toThrow("source binding changed");
+        await expect(
+          prepareAppCreation({ existingAppChanges: repairFiles }, context),
+        ).rejects.toThrow("source binding changed");
+        const refusals = info.mock.calls.map(([line]) => {
+          const event: unknown = JSON.parse(String(line));
+          return event;
+        });
+        expect(refusals).toEqual([
+          {
+            event: "app_builder.private_repair_binding_refused",
+            callId: context.callId,
+            entryPhase: "reviewed",
+            phase: "reviewed",
+            mismatch: "saved-workspace",
+            proofOutcome: "effective-authorization-unavailable",
+            requestMode: "optional-field",
+          },
+          {
+            event: "app_builder.private_repair_binding_refused",
+            callId: context.callId,
+            entryPhase: "reviewed",
+            phase: "reviewed",
+            mismatch: "saved-workspace",
+            proofOutcome: "not-requested",
+            requestMode: "existing-files",
+          },
+        ]);
+        info.mockImplementationOnce(() => {
+          throw new Error("fixture diagnostic unavailable");
+        });
+        await expect(prepareAppCreation(input, context)).rejects.toThrow("source binding changed");
+      } finally {
+        info.mockRestore();
+      }
       expect(ports.execute).not.toHaveBeenCalled();
       const assertCurrent = vi.fn<() => void>();
       ports.settledSourceProof.mockReturnValueOnce(assertCurrent);

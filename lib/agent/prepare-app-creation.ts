@@ -8,6 +8,7 @@ import type { PRIVATE_COMPUTE_PROFILE_ID } from "../sandbox/private-compute-prof
 import { localSourceReconciliationForPlanning } from "./refresh-local-planning-source";
 import { resolveLatestFrameworkVersions } from "../repository/framework-upgrade";
 import { refreshPlanningSource } from "./refresh-planning-source";
+import type { SettledSourcePlanningOutcome } from "./refresh-planning-source";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { implementationRouteContext } from "./implementation-route-context";
 import { recordInitialBuildAuthoring } from "./initial-build-authoring";
@@ -72,6 +73,8 @@ export const prepareAppCreation = async (
     );
   }
   let assertSettledSourcePlanning: (() => void) | undefined;
+  let proofOutcome: SettledSourcePlanningOutcome | "not-requested" | "unobserved" =
+    optionalTextField === undefined ? "not-requested" : "unobserved";
   const sandboxForPlanning =
     optionalTextField === undefined
       ? await refreshPlanningSource(ctx)
@@ -79,6 +82,9 @@ export const prepareAppCreation = async (
           optionalFieldPlanning: true,
           recordSettledSourcePlanningProof(proof) {
             assertSettledSourcePlanning = proof;
+          },
+          recordSettledSourcePlanningOutcome(outcome) {
+            proofOutcome = outcome;
           },
         });
   const planningState = appBuilderWorkflowState.get();
@@ -109,6 +115,11 @@ export const prepareAppCreation = async (
   }
   const repair = await inspectExistingAppRepair({
     assertSettledSourcePlanning,
+    diagnostic: {
+      entryPhase: state.phase,
+      proofOutcome,
+      requestMode: optionalTextField === undefined ? "existing-files" : "optional-field",
+    },
     current: planningState,
     changes: existingAppChanges,
     sandbox: sandboxForPlanning,
