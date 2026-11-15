@@ -521,7 +521,7 @@ const directDraftReconciliationScope = (
   subject: DirectProductionSubject,
   failedGrant: DirectProductionGrant,
   onFailure?: (reason: ReconciliationCandidateFailure) => void,
-  options?: { proveCorrectedPredecessor?: true },
+  options?: { allowBoundCorrectionProof?: true },
 ) => {
   const reviewBinding = reviewedDraftReconciliation(state);
   const { revision } = subject;
@@ -616,7 +616,7 @@ const directDraftReconciliationScope = (
   const priorCueSha256 = cue?.before?.digest;
   const priorCueChanged = priorCueSha256 !== revision.schemaChange.priorCueSha256;
   const allowCorrectedPredecessor =
-    options?.proveCorrectedPredecessor === true && previous.reconciliation === undefined;
+    options?.allowBoundCorrectionProof === true && previous.reconciliation === undefined;
   const correctBase =
     priorCueSha256 !== undefined &&
     cue?.before?.mode === cue?.after?.mode &&
@@ -632,10 +632,23 @@ const directDraftReconciliationScope = (
       change === cue || generated.has(change.path) || isSourceOnlyRevisionEdit(change, appPath)
     );
   });
+  const sameApprovedCues =
+    priorCueSha256 === previous.schemaChange.priorCueSha256 &&
+    candidateCueSha256 === previous.schemaChange.candidateCueSha256;
+  const generatedOnly =
+    options?.allowBoundCorrectionProof === true &&
+    sameApprovedCues &&
+    review.headChanges.length > 0 &&
+    review.headChanges.every(
+      (change) =>
+        change.path.startsWith(`${releasePath}/`) &&
+        generated.has(change.path) &&
+        change.kind === "modified",
+    );
   const correctedBytes =
     candidateCueSha256 !== undefined &&
-    candidateCueSha256 !== revision.schemaChange.candidateCueSha256 &&
-    candidateCueSha256 !== priorCueSha256;
+    candidateCueSha256 !== priorCueSha256 &&
+    (candidateCueSha256 !== revision.schemaChange.candidateCueSha256 || generatedOnly);
   if (!correctBase) {
     onFailure?.(schemaPredecessorMismatch);
     return null;
@@ -676,6 +689,7 @@ const directDraftReconciliationScope = (
     originPublicationDigest,
     schemaChange,
     selection,
+    generatedOnly,
   };
 };
 
@@ -948,17 +962,26 @@ export const currentDirectProductionDeliveryAuthorization = (
     ["repositoryId", "repositoryFullName", "baseBranch", "installationId"] as const
   ).every((key) => match[key] === undefined || match[key] === grant.subject[key]);
   const original = subjectForProposal(ctx, state, [], revisionPredecessor(state.proposal.digest));
-  if (!matchesDestination || !sameSubject(original, grant.subject) || original === undefined) {
+  const retainedDraft = draftReconciliationState.get();
+  const matchesGrant =
+    sameSubject(original, grant.subject) ||
+    (correction.regeneratedFrom !== undefined &&
+      retainedDraft !== null &&
+      retainedPrivateDraftSchemaGrant(ctx, retainedDraft)?.grant.digest === grant.digest);
+  if (!matchesDestination || !matchesGrant || original === undefined) {
     return undefined;
   }
   const candidate = directDraftReconciliationScope(state, original, grant, undefined, {
-    proveCorrectedPredecessor: true,
+    allowBoundCorrectionProof: true,
   });
   const matchesCandidate = [
     sameSubject(candidate?.subject, correction.correctedSubject),
     candidate?.selection.releaseId === correction.candidate.releaseId,
     candidate?.selection.schemaSha256 === correction.candidate.artifactSha256,
     candidate?.selection.manifestSha256 === correction.candidate.manifestSha256,
+    correction.regeneratedFrom === undefined ||
+      (candidate?.generatedOnly === true &&
+        candidate.proposal.expectedHeadTree === correction.regeneratedFrom.headTree),
   ].every(Boolean);
   return matchesCandidate
     ? {
@@ -1036,7 +1059,7 @@ export const prepareDirectProductionDraftReconciliation = async (
     return approvedReleaseMismatch;
   }
   let candidateFailure: ReconciliationCandidateFailure = candidateReviewMismatch;
-  const proofOptions = { proveCorrectedPredecessor: true } as const;
+  const proofOptions = { allowBoundCorrectionProof: true } as const;
   const corrected = directDraftReconciliationScope(
     state,
     subject,
@@ -1190,7 +1213,7 @@ export const prepareDirectProductionDraftReconciliation = async (
   }
   const priorCueChanged =
     corrected.schemaChange.priorCueSha256 !== grant.subject.revision.schemaChange.priorCueSha256;
-  if (priorCueChanged) {
+  if (priorCueChanged || corrected.generatedOnly) {
     const result = await ports.verifyEquivalentCorrection?.({
       ctx,
       current: state,
@@ -1212,13 +1235,20 @@ export const prepareDirectProductionDraftReconciliation = async (
       return result.reason;
     }
     const { proof } = result;
-    const correction = createDirectProductionCorrection({
+    const correctionInput: Parameters<typeof createDirectProductionCorrection>[0] = {
       version: 1,
       originalGrantDigest: grant.digest,
       correctedSubject: corrected.subject,
       installed: proof.installed,
       candidate: proof.candidate,
-    });
+    };
+    if (corrected.generatedOnly) {
+      correctionInput.regeneratedFrom = {
+        headTree: corrected.proposal.expectedHeadTree,
+        manifestSha256: proof.originalReleaseManifestSha256,
+      };
+    }
+    const correction = createDirectProductionCorrection(correctionInput);
     if (readDirectProductionCorrection(grant, correction) === undefined) {
       return approvedReleaseMismatch;
     }

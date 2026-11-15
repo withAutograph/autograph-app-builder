@@ -21,6 +21,12 @@ const correctionBody = z.strictObject({
   correctedSubject: directProductionSubjectSchema,
   installed: releaseIdentity.extend({ cueSha256: digest }),
   candidate: releaseIdentity,
+  regeneratedFrom: z
+    .strictObject({
+      headTree: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u),
+      manifestSha256: digest,
+    })
+    .optional(),
 });
 
 const hash = (body: z.input<typeof correctionBody>) =>
@@ -45,24 +51,43 @@ export const readDirectProductionCorrection = (
   if (grant === undefined || correction?.originalGrantDigest !== grant.digest) {
     return undefined;
   }
-  const { correctedSubject, installed, candidate } = correction;
+  const { correctedSubject, installed, candidate, regeneratedFrom } = correction;
   const prior = grant.subject.revision;
   const corrected = correctedSubject.revision;
   if (
     prior?.schemaChange === undefined ||
-    prior.reconciliation !== undefined ||
     corrected?.reconciliation === undefined ||
     corrected.schemaChange === undefined
   ) {
     return undefined;
   }
-  const matchesDigests = [
-    installed.cueSha256 === corrected.schemaChange.priorCueSha256,
-    corrected.schemaChange.priorCueSha256 !== prior.schemaChange.priorCueSha256,
-    corrected.schemaChange.candidateCueSha256 !== prior.schemaChange.candidateCueSha256,
-    installed.releaseId !== candidate.releaseId,
-  ].every(Boolean);
-  if (!matchesDigests) {
+  if (
+    installed.cueSha256 !== corrected.schemaChange.priorCueSha256 ||
+    installed.releaseId === candidate.releaseId
+  ) {
+    return undefined;
+  }
+  const { reconciliation: previousDraft } = prior;
+  const { reconciliation: nextDraft } = corrected;
+  if (regeneratedFrom === undefined) {
+    if (
+      previousDraft !== undefined ||
+      corrected.schemaChange.priorCueSha256 === prior.schemaChange.priorCueSha256 ||
+      corrected.schemaChange.candidateCueSha256 === prior.schemaChange.candidateCueSha256
+    ) {
+      return undefined;
+    }
+  } else if (
+    !isDeepStrictEqual(corrected.schemaChange, prior.schemaChange) ||
+    regeneratedFrom.manifestSha256 === candidate.manifestSha256 ||
+    (previousDraft !== undefined &&
+      ![
+        regeneratedFrom.headTree === previousDraft.resolvedTree,
+        previousDraft.pullRequestNumber === nextDraft.pullRequestNumber,
+        previousDraft.originPublicationDigest === nextDraft.originPublicationDigest,
+        previousDraft.originPublicationReceiptDigest === nextDraft.originPublicationReceiptDigest,
+      ].every(Boolean))
+  ) {
     return undefined;
   }
   const originalSubject: DirectProductionSubject = {
@@ -73,6 +98,9 @@ export const readDirectProductionCorrection = (
       schemaChange: prior.schemaChange,
     },
   };
+  if (previousDraft !== undefined && originalSubject.revision !== undefined) {
+    originalSubject.revision.reconciliation = previousDraft;
+  }
   return isDeepStrictEqual(originalSubject, grant.subject) ? correction : undefined;
 };
 

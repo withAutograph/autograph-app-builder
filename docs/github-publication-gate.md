@@ -709,6 +709,15 @@ the reviewed draft and the corrected release. Draft update, Ready, merge, and
 schema settlement use that same binding. If any comparison is unavailable,
 Builder preserves the draft and the live app.
 
+An unissued cut can also be regenerated under the original consent with the
+approved CUE unchanged. Builder verifies the same app artifact, unchanged
+compiler inputs, and matching installed and previous merged release. The
+corrected compiler output must prove the complete optional field transition.
+The reviewed difference from the owned draft must contain only the exact
+checked release members that changed. The correction digest retains the
+original draft tree and release manifest, and the new release and review.
+Unverified or changed source stays outside this continuation.
+
 If the original draft's stale predecessor archive is unavailable, Builder can
 verify the same narrow correction from the authentic original draft release,
 the installed and merged predecessor, and the exact approved CUE inputs.

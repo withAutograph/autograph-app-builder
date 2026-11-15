@@ -254,7 +254,13 @@ const delivery = (snapshot: GitHubPrDeliveryOwnerSnapshot, alreadyReady = false)
 };
 
 describe("GitHub delivery authority across workflow child contexts", () => {
-  it.each(["first", "presentation", "additive", "corrected-additive"] as const)(
+  it.each([
+    "first",
+    "presentation",
+    "additive",
+    "corrected-additive",
+    "regenerated-additive",
+  ] as const)(
     "rechecks the retained %s Production grant before a delegated delivery workflow wakes",
     async (releaseKind) => {
       const input = { ...approval, owner: "withAutograph", name: "arrusted-development" };
@@ -262,16 +268,16 @@ describe("GitHub delivery authority across workflow child contexts", () => {
         priorGrantDigest: "a".repeat(64),
         priorProposalDigest: "b".repeat(64),
       };
+      const regenerated = releaseKind === "regenerated-additive";
+      const corrected = releaseKind === "corrected-additive" || regenerated;
+      const originalSchemaChange = {
+        kind: "add-optional-text-field" as const,
+        priorCueSha256: "c".repeat(64),
+        candidateCueSha256: "d".repeat(64),
+      };
       const revision =
-        releaseKind === "additive" || releaseKind === "corrected-additive"
-          ? {
-              ...predecessor,
-              schemaChange: {
-                kind: "add-optional-text-field" as const,
-                priorCueSha256: "c".repeat(64),
-                candidateCueSha256: "d".repeat(64),
-              },
-            }
+        releaseKind === "additive" || corrected
+          ? { ...predecessor, schemaChange: originalSchemaChange }
           : predecessor;
       const original = createDirectProductionGrant({
         callId: "original-approved-build",
@@ -300,7 +306,7 @@ describe("GitHub delivery authority across workflow child contexts", () => {
       const { ctx, snapshot } = capturedParent(input, false, original);
       const readOwner = async () => await Promise.resolve(snapshot);
       const deliveryInput = { ...input };
-      if (releaseKind === "corrected-additive") {
+      if (corrected) {
         const reconciliation = {
           digest: "e".repeat(64),
           originPublicationDigest: input.proposalDigest,
@@ -311,7 +317,14 @@ describe("GitHub delivery authority across workflow child contexts", () => {
           resolvedTree: "3".repeat(40),
           reviewDigest: "3".repeat(64),
         };
-        const correction = createDirectProductionCorrection({
+        const correctedSchema = regenerated
+          ? originalSchemaChange
+          : {
+              kind: "add-optional-text-field" as const,
+              priorCueSha256: "5".repeat(64),
+              candidateCueSha256: "6".repeat(64),
+            };
+        const correctionInput: Parameters<typeof createDirectProductionCorrection>[0] = {
           version: 1,
           originalGrantDigest: original.digest,
           correctedSubject: {
@@ -319,25 +332,28 @@ describe("GitHub delivery authority across workflow child contexts", () => {
             revision: {
               ...predecessor,
               reconciliation,
-              schemaChange: {
-                kind: "add-optional-text-field",
-                priorCueSha256: "5".repeat(64),
-                candidateCueSha256: "6".repeat(64),
-              },
+              schemaChange: correctedSchema,
             },
           },
           installed: {
             releaseId: "v8",
             artifactSha256: "7".repeat(64),
             manifestSha256: "8".repeat(64),
-            cueSha256: "5".repeat(64),
+            cueSha256: correctedSchema.priorCueSha256,
           },
           candidate: {
             releaseId: "v9",
             artifactSha256: "9".repeat(64),
             manifestSha256: "a".repeat(64),
           },
-        });
+        };
+        if (regenerated) {
+          correctionInput.regeneratedFrom = {
+            headTree: "1".repeat(40),
+            manifestSha256: "b".repeat(64),
+          };
+        }
+        const correction = createDirectProductionCorrection(correctionInput);
         const projection = snapshot.decision.githubDelivery;
         const call = projection?.calls[0];
         if (projection === undefined || projection.current === null || call === undefined) {
@@ -355,11 +371,34 @@ describe("GitHub delivery authority across workflow child contexts", () => {
         ).rejects.toMatchObject({
           reason: "captured-call-mismatch",
         });
+        if (regenerated) {
+          const revision = correctionInput.correctedSubject.revision;
+          if (revision?.schemaChange === undefined) {
+            throw new Error("Expected the exact approved schema change.");
+          }
+          const changedCue = createDirectProductionCorrection({
+            ...correctionInput,
+            correctedSubject: {
+              ...correctionInput.correctedSubject,
+              revision: {
+                ...revision,
+                schemaChange: { ...revision.schemaChange, candidateCueSha256: "f".repeat(64) },
+              },
+            },
+          });
+          snapshot.decision.schemaCorrection = changedCue;
+          call.directProductionCorrectionDigest = changedCue.digest;
+          await expect(
+            readGitHubPrDeliveryAuthority(deliveryInput, ctx, readOwner),
+          ).rejects.toMatchObject({ reason: "captured-call-mismatch" });
+          call.directProductionCorrectionDigest = correction.digest;
+        }
         snapshot.decision.schemaCorrection = correction;
         await expect(
           readGitHubPrDeliveryAuthority(deliveryInput, ctx, readOwner),
         ).resolves.toMatchObject({
           productionSchemaApprovalCallId: original.callId,
+          productionSchemaGrantDigest: correction.digest,
         });
         await expect(
           readGitHubPrDeliveryAuthority(

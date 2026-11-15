@@ -154,6 +154,25 @@ const readRelease = (appId: string, release: SchemaRelease, cueSha256: string) =
   return { artifact, manifest, sources };
 };
 
+/** Verify the checked compiler inputs and runtime files retained for a published draft. */
+export const assertCheckedOptionalFieldReleaseSource = (input: {
+  appId: string;
+  release: SchemaRelease;
+  cueSha256: string;
+}): void => {
+  const { appId, release, cueSha256 } = input;
+  const { files } = release;
+  const { manifest } = readRelease(appId, release, cueSha256);
+  const hashes = runtimeHashes.parse(manifest.hashes);
+  if (
+    hashes.operations !== sha256(files["operation-manifest.json"]) ||
+    hashes.bindings !== sha256(files["data-operations.ts"]) ||
+    hashes.server_bindings !== sha256(files["data-server.ts"])
+  ) {
+    throw unavailable();
+  }
+};
+
 type Artifact = z.infer<typeof artifactSchema>;
 const projectOptionalTextAddition = (prior: Artifact, next: Artifact) => {
   const additions = next.schema.models.flatMap((model) => {

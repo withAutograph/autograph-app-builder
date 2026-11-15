@@ -620,7 +620,10 @@ const retainPriorPublication = (grant: ReturnType<typeof installPriorProduction>
 
 const correctedCue = `${afterNotesCue}\n`;
 
-const retainSealedSchemaCorrection = (drift: "none" | "predecessor" | "outside-app" = "none") => {
+const retainSealedSchemaCorrection = (
+  drift: "none" | "predecessor" | "outside-app" = "none",
+  generated: "only" | "with-app" | null = null,
+) => {
   const prior = installPriorProduction();
   const publication = retainPriorPublication(prior);
   installPlan("kernel");
@@ -656,13 +659,28 @@ const retainSealedSchemaCorrection = (drift: "none" | "predecessor" | "outside-a
   const correction = revisionEdit(
     appliedCuePath,
     drift === "predecessor" ? "other live schema" : beforeNotesCue,
-    correctedCue,
+    generated === null ? correctedCue : afterNotesCue,
   );
   const appSourceEdit = revisionEdit(
     drift === "outside-app" ? `apps/${appId}/app/data/context.ts` : revisionPage,
     "before",
     "after",
   );
+  const generatedChange = {
+    ...revisionEdit(
+      `apps/${appId}/schema/release/${releaseId}/operation-manifest.json`,
+      "old generated operations",
+      "verified new operations",
+    ),
+    kind: "modified" as const,
+  };
+  const headChanges = [{ ...correction, kind: "modified" as const }];
+  if (generated !== null) {
+    headChanges.splice(0, 1, generatedChange);
+  }
+  if (generated === "with-app") {
+    headChanges.push({ ...appSourceEdit, kind: "modified" });
+  }
   const review = createReconciliationReviewReceipt({
     appId,
     baseSha: repo.headSha,
@@ -671,7 +689,7 @@ const retainSealedSchemaCorrection = (drift: "none" | "predecessor" | "outside-a
     headTree,
     resolvedTree,
     version: 1,
-    headChanges: [{ ...correction, kind: "modified" }],
+    headChanges,
     baseChanges: [
       { ...correction, kind: "modified" },
       { ...appSourceEdit, kind: "modified" },
@@ -1611,6 +1629,95 @@ describe("direct Production Build authority", () => {
       );
       expect(
         currentDirectProductionDeliveryAuthorization(releaseContext, failed.subject),
+      ).toBeUndefined();
+    });
+  });
+
+  it("continues the same approved draft for a verified generated-only repair and repeats the saved authority", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const fixture = retainSealedSchemaCorrection("none", "only");
+      const { failed, compilation, priorMerge } = fixture;
+      const schema = failed.subject.revision?.schemaChange;
+      if (schema === undefined || compilation.release.status !== "published") {
+        throw new Error("Expected a sealed approved schema release.");
+      }
+      const { selection } = compilation.release;
+      const originalManifestSha256 = sha256("published stale manifest");
+      const verifyEquivalentCorrection = vi.fn().mockResolvedValue({
+        proof: {
+          originalReleaseManifestSha256: originalManifestSha256,
+          installed: {
+            releaseId: "fixture-release-v1",
+            artifactSha256: sha256("live schema"),
+            manifestSha256: sha256("live manifest"),
+            cueSha256: schema.priorCueSha256,
+          },
+          candidate: {
+            releaseId: selection.releaseId,
+            artifactSha256: selection.schemaSha256,
+            manifestSha256: selection.manifestSha256,
+          },
+        },
+      });
+      const ports = { ...fixture.ports, verifyEquivalentCorrection };
+      await expect(
+        prepareDirectProductionDraftReconciliation(releaseContext, ports),
+      ).resolves.toBeNull();
+      expect(verifyEquivalentCorrection).toHaveBeenCalledWith(
+        expect.objectContaining({
+          originalGrant: failed,
+          priorMergeSha: priorMerge.mergeCommitSha,
+        }),
+      );
+      const delivery = currentDirectProductionDeliveryAuthorization(releaseContext, failed.subject);
+      expect(delivery).toMatchObject({
+        grant: failed,
+        subject: {
+          revision: {
+            schemaChange: schema,
+            reconciliation: {
+              pullRequestNumber: fixture.proposal.pullRequestNumber,
+              expectedHeadSha: fixture.proposal.expectedHeadSha,
+            },
+          },
+        },
+        correction: { regeneratedFrom: { manifestSha256: originalManifestSha256 } },
+      });
+      expect(delivery?.effectDigest).not.toBe(failed.digest);
+      await expect(
+        prepareDirectProductionDraftReconciliation(releaseContext, ports),
+      ).resolves.toBeNull();
+      expect(verifyEquivalentCorrection).toHaveBeenCalledOnce();
+      expect(currentDirectProductionDeliveryAuthorization(releaseContext, failed.subject)).toEqual(
+        delivery,
+      );
+      draftReconciliationState.update((candidate) =>
+        candidate === null
+          ? null
+          : {
+              ...candidate,
+              headTree: "9".repeat(40),
+            },
+      );
+      expect(
+        currentDirectProductionDeliveryAuthorization(releaseContext, failed.subject),
+      ).toBeUndefined();
+    });
+  });
+
+  it("does not offer the original approval for a generated-only draft with another authored change", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const fixture = retainSealedSchemaCorrection("none", "with-app");
+      const verifyEquivalentCorrection = vi.fn();
+      await expect(
+        prepareDirectProductionDraftReconciliation(releaseContext, {
+          ...fixture.ports,
+          verifyEquivalentCorrection,
+        }),
+      ).resolves.toBe("candidate-schema-unchanged");
+      expect(verifyEquivalentCorrection).not.toHaveBeenCalled();
+      expect(
+        currentDirectProductionDeliveryAuthorization(releaseContext, fixture.failed.subject),
       ).toBeUndefined();
     });
   });

@@ -72,6 +72,8 @@ import type { ApprovalReceipt } from "./approval-receipt";
 import type { HostedGitHubTenantAuthority } from "../repository/postgres-github-installation-store";
 import type { GitHubDestinationReviewBinding } from "../repository/github-destination-review";
 import { assertGitHubDestinationReviewBinding } from "../repository/github-destination-review";
+import { GENERATED_RELEASE_MEMBERS } from "../provisioning/hosted-operator-sandbox-launcher";
+import type { PublishedPlanningRelease } from "../repository/planning-source-reconciliation";
 import type { OverlayFile } from "../repository/target-apply";
 import type {
   HistoricalAppSourceObservation,
@@ -80,6 +82,14 @@ import type {
 
 import { publishedAppSourceSchema } from "../provisioning/hosted-operator-artifact-selection";
 import type { PublishedAppSource } from "../provisioning/hosted-operator-artifact-selection";
+
+interface MergedAppSource {
+  repositoryId: string;
+  owner: string;
+  name: string;
+  baseBranch: string;
+  sha: string;
+}
 
 type PublishedSourceReader = (
   draft: ExistingDraftObservation,
@@ -105,6 +115,26 @@ const supportedOperations = [
 const DRAFT_PUBLICATION_OUTCOME = "publish-reviewed-change-set-as-draft-pull-request";
 const draftPublicationOperation = "publish-draft-pull-request" as const;
 const sourceReadOperation = "resolve-existing-source" as const;
+
+const inspectExactMergedAppSource = async (
+  adapter: GitHubPublicationAdapter,
+  merged: MergedAppSource,
+) => {
+  const repository = await adapter.inspectRepository({
+    operation: sourceReadOperation,
+    ref: merged.sha,
+    repositoryId: merged.repositoryId,
+  });
+  const matches = [
+    repository.repositoryId === merged.repositoryId,
+    repository.owner === merged.owner,
+    repository.name === merged.name,
+    repository.defaultBranch === merged.baseBranch,
+    repository.headSha === merged.sha,
+  ].every(Boolean);
+  return matches ? repository : null;
+};
+
 const draftReceiptKind = "draft-pull-request" as const;
 
 const readOwnedDraftPublication = async (input: {
@@ -492,8 +522,13 @@ export interface GitHubPublicationRuntime {
   }) => Promise<{ bytes: Uint8Array; mode: string; digest: string } | null>;
   readMergedAppSchemaCue?: (input: {
     appId: string;
-    merged: { repositoryId: string; owner: string; name: string; baseBranch: string; sha: string };
+    merged: MergedAppSource;
   }) => Promise<Uint8Array | null>;
+  readMergedAppSchemaRelease?: (input: {
+    appId: string;
+    releaseId: string;
+    merged: MergedAppSource;
+  }) => Promise<(PublishedPlanningRelease & { cueSha256: string }) | null>;
   status: () => Promise<GitHubPublicationRuntimeStatus>;
   resolveImmutableSource: (input: {
     expectedInstallationId: string;
@@ -1123,19 +1158,8 @@ export function composeGitHubPublicationRuntime(input: {
       if (!appIdValid || adapter.readDestinationFile === undefined) {
         return null;
       }
-      const repository = await adapter.inspectRepository({
-        operation: sourceReadOperation,
-        ref: merged.sha,
-        repositoryId: merged.repositoryId,
-      });
-      const matches = [
-        repository.repositoryId === merged.repositoryId,
-        repository.owner === merged.owner,
-        repository.name === merged.name,
-        repository.defaultBranch === merged.baseBranch,
-        repository.headSha === merged.sha,
-      ].every(Boolean);
-      if (!matches) {
+      const repository = await inspectExactMergedAppSource(adapter, merged);
+      if (repository === null) {
         return null;
       }
       const blob = await adapter.readDestinationFile({
@@ -1143,6 +1167,49 @@ export function composeGitHubPublicationRuntime(input: {
         path: `apps/${appId}/schema/${appId}.cue`,
       });
       return blob?.bytes ?? null;
+    },
+    async readMergedAppSchemaRelease({ appId, releaseId, merged }) {
+      if (
+        adapter.inspectDestinationFiles === undefined ||
+        !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId) ||
+        !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u.test(releaseId)
+      ) {
+        return null;
+      }
+      const repository = await inspectExactMergedAppSource(adapter, merged);
+      if (repository === null) {
+        return null;
+      }
+      const schemaPath = `apps/${appId}/schema`;
+      const cuePath = `${schemaPath}/${appId}.cue`;
+      const releasePath = `${schemaPath}/release/${releaseId}`;
+      const paths = [
+        cuePath,
+        ...GENERATED_RELEASE_MEMBERS.map((member) => `${releasePath}/${member}`),
+      ];
+      const preTree = await adapter.inspectDestinationFiles({ paths, repository });
+      const entries = new Map(preTree.map((entry) => [entry.path, entry]));
+      if (
+        paths.some((path) => !/^[a-f0-9]{64}$/u.test(entries.get(path)?.digest ?? "")) ||
+        entries.size !== paths.length
+      ) {
+        return null;
+      }
+      const cueSha256 = entries.get(cuePath)?.digest;
+      if (cueSha256 === undefined) {
+        return null;
+      }
+      return {
+        mergeSha: merged.sha,
+        releaseId,
+        cueSha256,
+        files: Object.fromEntries(
+          GENERATED_RELEASE_MEMBERS.map((member) => [
+            member,
+            entries.get(`${releasePath}/${member}`)?.digest ?? "",
+          ]),
+        ),
+      };
     },
     async inspectSourceBranch(request) {
       const observed = await adapter.inspectRepository({
