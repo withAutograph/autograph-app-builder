@@ -2337,9 +2337,38 @@ describe("native app availability progress", () => {
     ]);
     expect(events.find((event) => event.type === "assistant_message")?.text).toContain(appUrl);
     expect(events.find((event) => event.type === "assistant_message")?.text).toContain(
-      "Delivery of the latest update remains unconfirmed",
+      "This check could not verify the latest revision",
     );
     expect(JSON.stringify(events)).not.toContain("gateway-read");
+  });
+
+  it("keeps confirmed delivery when a later availability check is inconclusive", () => {
+    const observedAt = nativeProduction.observedAt;
+    const live = complete("finish-github-pr-delivery", {
+      ...merged,
+      nativeProduction: { ...nativeProduction, requestedRevision: "live" },
+      deliveryProgress: {
+        phase: "live",
+        disposition: "active",
+        startedAt: observedAt,
+        observedAt,
+        appUrl,
+      },
+    });
+    const unavailable = complete("observe-app-production", {
+      ...nativeProduction,
+      status: "service-unavailable",
+      requestedRevision: "unassessed",
+      serviceIssue: "provider-read",
+    });
+    const events = projectInstalledEveEvents([live, unavailable]);
+    expect(
+      events.filter((event) => event.type === "progress" && event.delivery !== undefined),
+    ).toMatchObject([{ delivery: { phase: "live", appUrl } }]);
+    expect(events.at(-1)).toMatchObject({
+      type: "assistant_message",
+      text: expect.stringContaining("This check could not verify the latest revision"),
+    });
   });
 
   it("records an exact live recheck after the saved delivery ended pending", () => {

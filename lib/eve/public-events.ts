@@ -1635,11 +1635,11 @@ const nativeProductionEvents = (
     const availability =
       observed.status === "available"
         ? "The live app is available."
-        : "Builder could not check the app’s current availability. Continue this session to check again.";
+        : "Builder could not check the app’s current availability.";
     text =
       observed.status === "available" && observed.requestedRevision === "live"
         ? `The latest revision is live in Production.${link}`
-        : `${availability}${link}\n\nDelivery of the latest update remains unconfirmed.`;
+        : `${availability}${link}\n\nThis check could not verify the latest revision.`;
   }
   return [
     progress,

@@ -69,6 +69,9 @@ the authoritative provider timestamps. Label a client
 observation as such. Missing stage timings stay unavailable, including before
 the historical instrumentation was deployed.
 
+The [November 15 hosted timing report](../reports/2026-11-15-builder-delivery-timings.md)
+records the first release, heading revision, and optional-field revision.
+
 Use `app_builder.source_review_input` to distinguish reuse of current completed
 evidence from preparation of a review. Group
 `app_builder.source_review_request_started` records by the session-scoped
