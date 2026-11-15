@@ -51,6 +51,8 @@ export const runAppBrowserTests = async (
     root: string;
     sandbox: Pick<SandboxSession, "run"> & Partial<Pick<SandboxSession, "writeTextFile">>;
     signal?: AbortSignal;
+    /** Server-owned state selected by technical validation after local setup. */
+    localRuntimeStateDirectory?: string;
     selection?: BrowserTestSelection;
     runtime?: PreparedRuntimeExecution | null;
     continuation?: {

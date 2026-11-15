@@ -15,7 +15,10 @@ import { z } from "zod";
 import type { SandboxSession } from "eve/sandbox";
 
 import type { TargetApplyReceipt } from "./target-apply";
-import { localRuntimeEnvironmentPath } from "./runtime-environment";
+import {
+  localRuntimeEnvironmentPath,
+  validationRuntimeStateDirectory,
+} from "./runtime-environment";
 import { repositoryDeliveryBuildCommand } from "./supported-template";
 import type { ValidationCommandExecutor } from "./target-validation";
 import type {
@@ -1095,19 +1098,37 @@ exit "$status"`,
     { streaming: true, reuseRetainedLocalRuntime: true },
     { streaming: false, reuseRetainedLocalRuntime: false },
     { streaming: true, reuseRetainedLocalRuntime: false },
-  ] as const)(
-    "runs app tests with streaming=$streaming and retained runtime reuse=$reuseRetainedLocalRuntime",
-    async ({ streaming, reuseRetainedLocalRuntime }) => {
+    { streaming: false, useExplicitRuntime: true },
+    { streaming: true, useExplicitRuntime: true },
+    { streaming: false, useExplicitRuntime: true, isolatedDataMissing: true },
+  ])(
+    "uses the selected runtime for repository app tests (case %#)",
+    async ({ streaming, reuseRetainedLocalRuntime, useExplicitRuntime, isolatedDataMissing }) => {
       const validationCommand = "mise run --no-deps --skip-tools app:test example 1/1";
       const directory = mkdtempSync(path.join(tmpdir(), "builder-runtime-handoff-"));
-      const environmentPath = localRuntimeEnvironmentPath(directory, "example");
-      const stateDirectory = path.posix.dirname(environmentPath);
-      const expectedStateDirectory = reuseRetainedLocalRuntime ? stateDirectory : "";
-      const expectedTask = reuseRetainedLocalRuntime
-        ? "run --no-deps app:runtime run example repository-test 1/1"
-        : validationCommand.slice("mise ".length);
-      mkdirSync(stateDirectory, { mode: 0o700, recursive: true });
-      writeFileSync(environmentPath, "{}", { mode: 0o600 });
+      const retainedEnvironment = localRuntimeEnvironmentPath(directory, "example");
+      const retainedDirectory = path.posix.dirname(retainedEnvironment);
+      const explicitDirectory = validationRuntimeStateDirectory(directory, "example", "apply", {
+        artifactHash: "current-schema",
+        id: "v10",
+      });
+      const defaultStateDirectory = reuseRetainedLocalRuntime === true ? retainedDirectory : "";
+      const expectedStateDirectory =
+        useExplicitRuntime === true ? explicitDirectory : defaultStateDirectory;
+      const expectedTask =
+        useExplicitRuntime === true || reuseRetainedLocalRuntime === true
+          ? "run --no-deps app:runtime run example repository-test 1/1"
+          : validationCommand.slice("mise ".length);
+      const selectedEnvironment =
+        useExplicitRuntime === true
+          ? path.join(explicitDirectory, "environment.json")
+          : retainedEnvironment;
+      mkdirSync(retainedDirectory, { mode: 0o700, recursive: true });
+      writeFileSync(retainedEnvironment, "{}", { mode: 0o600 });
+      if (useExplicitRuntime === true && isolatedDataMissing !== true) {
+        mkdirSync(explicitDirectory, { mode: 0o700, recursive: true });
+        writeFileSync(selectedEnvironment, "{}", { mode: 0o600 });
+      }
       mkdirSync(path.join(directory, ".config/mise"), { recursive: true });
       writeFileSync(path.join(directory, ".config/mise/config.toml"), "[tools]\n");
       writeFileSync(path.join(directory, "bun"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
@@ -1125,7 +1146,7 @@ if [ ! -f "$PWD/toolchain-ready" ]; then exit 25; fi
 if [ -n "$MISE_CONFIG_FILE" ]; then exit 26; fi
 if [ "$*" != '${expectedTask}' ]; then exit 21; fi
 if [ "$APP_RUNTIME_STATE_DIR" != '${expectedStateDirectory}' ]; then exit 22; fi
-if [ ! -f '${environmentPath}' ]; then exit 23; fi
+if [ ! -f '${selectedEnvironment}' ]; then exit 23; fi
 if [ "$APP_SCHEMA_TRANSITION_PREDECESSOR_FILES" != '["original.json"]' ]; then exit 24; fi
 printf '%s\\n' "$*"
 `,
@@ -1163,9 +1184,14 @@ printf '%s\\n' "$*"
       });
       const chunks: string[] = [];
       try {
-        const result = await sandboxValidationCommandExecutor(
-          reuseRetainedLocalRuntime ? {} : { reuseRetainedLocalRuntime },
-        )({
+        const existingRuntimeOptions =
+          reuseRetainedLocalRuntime === false ? { reuseRetainedLocalRuntime } : {};
+        const executor = sandboxValidationCommandExecutor(
+          useExplicitRuntime === true
+            ? { localRuntimeStateDirectory: explicitDirectory }
+            : existingRuntimeOptions,
+        );
+        const result = await executor({
           appId: "example",
           command: validationCommand,
           environment: {
@@ -1183,12 +1209,15 @@ printf '%s\\n' "$*"
           sandbox: createSandbox({ run, spawn }),
           validationRoot: directory,
         });
-        expect(result.exitCode).toBe(0);
-        expect(streaming ? chunks.join("") : result.stdout).toContain(expectedTask);
+        expect(result.exitCode).toBe(isolatedDataMissing === true ? 23 : 0);
+        if (isolatedDataMissing !== true) {
+          expect(streaming ? chunks.join("") : result.stdout).toContain(expectedTask);
+        }
         expect(streaming ? spawn : run).toHaveBeenCalledOnce();
         expect(streaming ? run : spawn).not.toHaveBeenCalled();
       } finally {
-        rmSync(stateDirectory, { force: true, recursive: true });
+        rmSync(explicitDirectory, { force: true, recursive: true });
+        rmSync(retainedDirectory, { force: true, recursive: true });
         rmSync(directory, { force: true, recursive: true });
       }
     },

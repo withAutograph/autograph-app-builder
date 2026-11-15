@@ -157,6 +157,15 @@ the app is usable, Ready, merged or deployed. Actual build or test command failu
 still requires repair, and exact reviewed-source approvals and required CI remain
 in force.
 
+An existing app's retained private local database may predate a checked
+schema release. If the repository installer reports that its active local
+schema is an unsupported predecessor, technical validation retries on an
+isolated local database for the approved applied revision and checked release.
+Repository tests and any requested local browser tests for that validation use
+that database. Builder preserves the retained private Preview data and checks
+the actual installed predecessor through the existing protected release
+workflow.
+
 A saved starter checkout adopts a needed shared test-tool repair through the
 ordinary open owned draft's current-base reconciliation and candidate validation.
 The original app edits, session, destination and resources remain retained. Builder

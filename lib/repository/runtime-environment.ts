@@ -13,3 +13,19 @@ export const localRuntimeEnvironmentPath = (root: string, appId: string): string
     appIdSchema.parse(appId),
     "environment.json",
   );
+
+/** Isolate disposable validation from the selected app's retained private Preview. */
+export const validationRuntimeStateDirectory = (
+  root: string,
+  appId: string,
+  applyDigest: string,
+  release: { artifactHash: string; id: string },
+): string => {
+  const selectedState = path.posix.dirname(localRuntimeEnvironmentPath(root, appId));
+  const revision = createHash("sha256")
+    .update(JSON.stringify([appId, applyDigest, release.id, release.artifactHash]))
+    .digest("hex")
+    .slice(0, 24);
+  // PostgreSQL places its Unix socket in this directory; keep the path independent of slug length.
+  return path.posix.join(path.posix.dirname(selectedState), `.validation-${revision}`);
+};

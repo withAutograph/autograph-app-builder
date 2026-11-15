@@ -1,13 +1,16 @@
 import { sourceDeclaredToolchainActivationCommand } from "../repository/source-toolchain";
 import { describe, expect, it, vi } from "vitest";
 import type { z } from "zod";
+import type { SandboxRunOptions } from "eve/sandbox";
 import type { appDescriptionSchema } from "../repository/app-description";
 import path from "node:path";
-import { localRuntimeEnvironmentPath } from "../repository/runtime-environment";
+import {
+  localRuntimeEnvironmentPath,
+  validationRuntimeStateDirectory,
+} from "../repository/runtime-environment";
 import { HostedTemplateFoundationUnavailableError } from "../repository/hosted-template-source-reconciliation";
 
 import {
-  appDeclaresLocalSetup,
   localPreviewExecutionCommand,
   localPreviewSetupCommand,
   prepareAppLocalPreview,
@@ -47,18 +50,18 @@ const stream = (chunks: string[]) =>
   });
 
 describe("private local preview setup", () => {
-  it("discovers the source-derived backend rather than a demo setup declaration", async () => {
-    const run = vi
-      .fn()
-      .mockResolvedValue({ exitCode: 0, stderr: "", stdout: descriptor(generated) });
+  it("skips local data preparation for a static app", async () => {
+    const run = vi.fn().mockResolvedValueOnce({
+      exitCode: 0,
+      stderr: "",
+      stdout: descriptor({ kind: "static" }),
+    });
     const input = { appId: "spend-review", root: "/workspace/repository", sandbox: { run } };
-    expect(await appDeclaresLocalSetup(input)).toBe(true);
-    expect(run).toHaveBeenCalledWith({
+    expect(await prepareValidationLocalData(input)).toBeNull();
+    expect(run).toHaveBeenCalledExactlyOnceWith({
       command: "mise run --no-deps app:describe spend-review",
       workingDirectory: input.root,
     });
-    run.mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor({ kind: "static" }) });
-    expect(await appDeclaresLocalSetup(input)).toBe(false);
   });
   it("prepares authenticated data before validation and preserves setup failures", async () => {
     const run = vi
@@ -73,6 +76,7 @@ describe("private local preview setup", () => {
     await expect(
       prepareValidationLocalData({
         appId: "spend-review",
+        approvedApplyDigest: "selected-applied-revision",
         root: "/workspace/repository",
         sandbox: { run },
       }),
@@ -87,6 +91,87 @@ describe("private local preview setup", () => {
       workingDirectory: "/workspace/repository",
     });
   });
+
+  it.each([{ retryExitCode: 0 }, { retryExitCode: 1 }])(
+    "retries a stale local schema in the same revision's validation runtime (exit $retryExitCode)",
+    async ({ retryExitCode }) => {
+      const appId = "spend-review";
+      const root = "/workspace/repository";
+      const approvedApplyDigest = "approved-revision";
+      const release = { ...generated.release, artifactHash: "checked-v10-artifact", id: "v10" };
+      const selected = path.posix.dirname(localRuntimeEnvironmentPath(root, appId));
+      const isolated = validationRuntimeStateDirectory(root, appId, approvedApplyDigest, release);
+      const stale = {
+        code: "schema_transition_conflict",
+        message: "Schema transition conflict",
+        details: [
+          {
+            code: "unsupported_predecessor",
+            message: `the active base schema is not an exact compiler-owned transition predecessor (version 2026-11-16.v9; canonical SHA-256 ${"a".repeat(64)})`,
+            path: "base_schema",
+          },
+        ],
+      };
+      const data = new Map([[selected, "prior private v9 data"]]);
+      const execute = ({ command, env, workingDirectory }: SandboxRunOptions) => {
+        expect(workingDirectory).toBe(root);
+        if (!command.includes(`app:runtime prepare ${appId} local`)) {
+          return {
+            exitCode: 0,
+            stderr: "",
+            stdout: descriptor({ ...generated, release }),
+          };
+        }
+        expect(env?.APP_RUNTIME_ROLES).toBe("member");
+        if (env?.APP_RUNTIME_STATE_DIR === selected) {
+          return {
+            exitCode: 1,
+            stderr: `[app:runtime] kernel_prepare_schema_revision: ${JSON.stringify(stale)}\n[app:runtime] ERROR task failed`,
+            stdout: "",
+          };
+        }
+        expect(env?.APP_RUNTIME_STATE_DIR).toBe(isolated);
+        if (retryExitCode !== 0) {
+          return {
+            exitCode: retryExitCode,
+            stderr: "pg_ctl: could not start server",
+            stdout: "",
+          };
+        }
+        data.set(isolated, "checked v10 data");
+        return { exitCode: 0, stderr: "", stdout: "prepared" };
+      };
+      // oxlint-disable-next-line eslint/require-await -- Adapt the in-memory repository fixture to the asynchronous sandbox port.
+      const run = vi.fn(async (options: SandboxRunOptions) => execute(options));
+      const input = { appId, approvedApplyDigest, root, sandbox: { run } };
+      if (retryExitCode === 0) {
+        await expect(prepareValidationLocalData(input)).resolves.toEqual({
+          localRuntimeStateDirectory: isolated,
+        });
+        await expect(prepareValidationLocalData(input)).resolves.toEqual({
+          localRuntimeStateDirectory: isolated,
+        });
+        expect(data.get(isolated)).toBe("checked v10 data");
+      } else {
+        await expect(prepareValidationLocalData(input)).rejects.toThrow(
+          "pg_ctl: could not start server",
+        );
+        expect(
+          run.mock.calls.filter(([request]) => request.env?.APP_RUNTIME_STATE_DIR === isolated),
+        ).toHaveLength(1);
+        expect(data.has(isolated)).toBe(false);
+      }
+      await expect(prepareAppLocalPreview(input)).resolves.toMatchObject({ status: "failed" });
+      expect(data.get(selected)).toBe("prior private v9 data");
+      expect(isolated).not.toBe(selected);
+      expect(
+        validationRuntimeStateDirectory(root, appId, approvedApplyDigest, {
+          ...release,
+          artifactHash: "different-captured-artifact",
+        }),
+      ).not.toBe(isolated);
+    },
+  );
 
   it("preserves an empty-role local runtime command failure", async () => {
     const stderr =
