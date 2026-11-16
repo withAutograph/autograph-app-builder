@@ -73,20 +73,21 @@ export const prepareAppCreation = async (
     );
   }
   let assertSettledSourcePlanning: (() => void) | undefined;
+  const requestMode = optionalTextField === undefined ? "existing-files" : "optional-field";
+  const hasExplicitChanges = optionalTextField !== undefined || (authoredChanges?.length ?? 0) > 0;
   let proofOutcome: SettledSourcePlanningOutcome | "not-requested" | "unobserved" =
-    optionalTextField === undefined ? "not-requested" : "unobserved";
-  const sandboxForPlanning =
-    optionalTextField === undefined
-      ? await refreshPlanningSource(ctx)
-      : await refreshPlanningSource(ctx, "planning", {
-          optionalFieldPlanning: true,
-          recordSettledSourcePlanningProof(proof) {
-            assertSettledSourcePlanning = proof;
-          },
-          recordSettledSourcePlanningOutcome(outcome) {
-            proofOutcome = outcome;
-          },
-        });
+    hasExplicitChanges ? "unobserved" : "not-requested";
+  const sandboxForPlanning = hasExplicitChanges
+    ? await refreshPlanningSource(ctx, "planning", {
+        settledRevisionPlanning: requestMode,
+        recordSettledSourcePlanningProof(proof) {
+          assertSettledSourcePlanning = proof;
+        },
+        recordSettledSourcePlanningOutcome(outcome) {
+          proofOutcome = outcome;
+        },
+      })
+    : await refreshPlanningSource(ctx);
   const planningState = appBuilderWorkflowState.get();
   let existingAppChanges = authoredChanges;
   let schemaPreimage: { digest: string; path: string } | undefined;
@@ -118,7 +119,7 @@ export const prepareAppCreation = async (
     diagnostic: {
       entryPhase: state.phase,
       proofOutcome,
-      requestMode: optionalTextField === undefined ? "existing-files" : "optional-field",
+      requestMode,
     },
     current: planningState,
     changes: existingAppChanges,

@@ -444,6 +444,22 @@ const inspectSelectedCheckout = (
   return { sourceSha, sourceTree };
 };
 
+/** Verify the already bound canonical checkout without moving or materializing it. */
+export const assertRetainedGitHubSourceCheckout = async (
+  sandbox: SandboxSession,
+  expected: { repository: string; sourceSha: string; sourceTree: string },
+): Promise<void> => {
+  const result = await runSourceSandboxCommand(
+    sandbox,
+    "inspect the retained GitHub checkout",
+    `test ! -L ${shellQuote(SANDBOX_WORKSPACE)} && ${checkoutInspectionCommand(SANDBOX_WORKSPACE)}`,
+  );
+  if (result.exitCode !== 0) {
+    throw new Error("Builder could not inspect the retained GitHub checkout.");
+  }
+  inspectSelectedCheckout(result.stdout, expected);
+};
+
 const findProviderCheckout = async (
   sandbox: SandboxSession,
   expected: { repository: string; sourceSha?: string; sourceTree?: string },

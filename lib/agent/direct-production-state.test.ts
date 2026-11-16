@@ -51,6 +51,7 @@ import {
   directProductionSubjectForPlan,
   prepareDirectProductionDraftReconciliation,
   readPriorApprovedMergedSchemaRelease,
+  readSettledDirectProductionPlanningMerge,
   recordDirectProductionGrant,
   requestDirectProductionGrant,
   retainedPrivateDraftSchemaGrant,
@@ -1561,6 +1562,53 @@ describe("direct Production Build authority", () => {
       });
       expect(currentDirectProductionGrant(releaseContext, { appId })).toEqual(approved);
       expect(appBuilderWorkflowState.get()).toEqual(applied);
+    });
+  });
+
+  it("reads the current settled reviewed merge for planning without an archived reconciliation", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const settled = installPriorProduction();
+      const { proposal, target } = retainPriorPublication(settled);
+      const mergeCommitSha = "d".repeat(40);
+      const reviewedMerge = {
+        state: "merged",
+        mergeCommitSha,
+        reviewedRevision: true,
+        reviewedTarget: target,
+      };
+      const inspectPublishedPullRequest = vi.fn().mockResolvedValue(reviewedMerge);
+      const publication = vi.fn().mockResolvedValue({ inspectPublishedPullRequest });
+      const ports = { publication };
+      await expect(
+        readSettledDirectProductionPlanningMerge(releaseContext, sha256("another grant"), ports),
+      ).resolves.toBeNull();
+      expect(publication).not.toHaveBeenCalled();
+      inspectPublishedPullRequest.mockResolvedValueOnce({
+        ...reviewedMerge,
+        reviewedRevision: false,
+      });
+      await expect(
+        readSettledDirectProductionPlanningMerge(releaseContext, settled.digest, ports),
+      ).resolves.toBeNull();
+      await expect(
+        readSettledDirectProductionPlanningMerge(releaseContext, settled.digest, ports),
+      ).resolves.toBe(mergeCommitSha);
+      expect(inspectPublishedPullRequest).toHaveBeenLastCalledWith(proposal.digest);
+      expect(settledDirectProductionDelivery(releaseContext)?.effectDigest).toBe(settled.digest);
+      invalidateGitHubPrDeliveryCallsForTurn(releaseContext.session.turn.id);
+      await expect(
+        readSettledDirectProductionPlanningMerge(releaseContext, settled.digest, ports),
+      ).resolves.toBe(mergeCommitSha);
+      inspectPublishedPullRequest.mockImplementationOnce(async () => {
+        directProductionProgressState.update(() => ({
+          grantDigest: settled.digest,
+          stage: "setup",
+        }));
+        return await Promise.resolve(reviewedMerge);
+      });
+      await expect(
+        readSettledDirectProductionPlanningMerge(releaseContext, settled.digest, ports),
+      ).resolves.toBeNull();
     });
   });
 

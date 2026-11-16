@@ -1551,6 +1551,58 @@ export const settledDirectProductionDelivery = (
   return current;
 };
 
+/** Verify a settled app's reviewed merge before using its checkout to plan another change. */
+export const readSettledDirectProductionPlanningMerge = async (
+  ctx: ToolContext,
+  expectedEffectDigest: string,
+  ports: RevisionObservationPorts = {},
+): Promise<string | null> => {
+  ctx.abortSignal.throwIfAborted();
+  const state = appBuilderWorkflowState.get();
+  const settled = settledDirectProductionDelivery(ctx);
+  if (state.phase !== "reviewed" || settled?.effectDigest !== expectedEffectDigest) {
+    return null;
+  }
+  const prior = priorRevisionDelivery(state, settled.grant, readAnchoredMerge);
+  if (prior === null) {
+    return null;
+  }
+  const { subject } = settled;
+  const isCurrent = () =>
+    [
+      isDeepStrictEqual(appBuilderWorkflowState.get(), state),
+      settledDirectProductionDelivery(ctx)?.effectDigest === expectedEffectDigest,
+      isDeepStrictEqual(priorRevisionDelivery(state, settled.grant, readAnchoredMerge), prior),
+    ].every(Boolean);
+  const runtime = await (ports.publication ?? githubPublicationRuntimeForSession)(
+    ctx.session.auth,
+    {
+      selectedInstallationId: subject.installationId,
+    },
+  );
+  ctx.abortSignal.throwIfAborted();
+  if (!isCurrent()) {
+    return null;
+  }
+  const observed = await observePriorRevisionPullRequest(runtime, prior);
+  ctx.abortSignal.throwIfAborted();
+  if (
+    observed?.state !== "merged" ||
+    !observed.reviewedRevision ||
+    observed.mergeCommitSha === undefined
+  ) {
+    return null;
+  }
+  const { reviewedTarget } = observed;
+  const sameDestination = [
+    reviewedTarget.repositoryId === subject.repositoryId,
+    reviewedTarget.owner === prior.owner,
+    reviewedTarget.name === prior.name,
+    reviewedTarget.baseBranch === subject.baseBranch,
+  ].every(Boolean);
+  return sameDestination && isCurrent() ? observed.mergeCommitSha : null;
+};
+
 export const currentDirectProductionProposalIsDelivered = (ctx: OwnerContext): boolean =>
   settledDirectProductionDelivery(ctx) !== undefined;
 

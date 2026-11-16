@@ -20,6 +20,7 @@ import {
 } from "../repository/planning-source-reconciliation";
 import {
   readPriorApprovedMergedSchemaRelease,
+  readSettledDirectProductionPlanningMerge,
   settledDirectProductionDelivery,
 } from "./direct-production-state";
 import type { UnsettledProductionDeliveryReason } from "./direct-production-state";
@@ -40,6 +41,7 @@ import {
 import { readAppBaselineMarker } from "../repository/app-baseline";
 import { resolveVercelSessionGitSource } from "../sandbox/vercel-session-source";
 import { readGeneratedSchemaReleaseId } from "../repository/optional-text-field";
+import { assertRetainedGitHubSourceCheckout } from "../repository/sandbox-github-source";
 
 const schemaCompilation = "schema-compilation";
 
@@ -107,7 +109,7 @@ export const refreshPlanningSource = async (
   purpose: "planning" | "schema-compilation" = "planning",
   options: {
     approvedSchemaCueSha256?: string | undefined;
-    optionalFieldPlanning?: true;
+    settledRevisionPlanning?: "existing-files" | "optional-field";
     recordSettledSourcePlanningProof?: (proof: SettledSourcePlanningProof) => void;
     recordSettledSourcePlanningOutcome?: (outcome: SettledSourcePlanningOutcome) => void;
   } = {},
@@ -126,19 +128,30 @@ export const refreshPlanningSource = async (
     recordOutcome?.("not-reviewed");
   }
   const recordOwnershipOutcome = current.phase === "reviewed" ? recordOutcome : undefined;
+  const refreshedAfterApply =
+    current.phase === "reviewed" &&
+    (current.applyReceipt.sourceReceiptDigest !== current.sourceReceipt.digest ||
+      current.applyReceipt.workspaceDigest !== current.workspace.workspaceDigest);
+  const planExistingFiles =
+    options.settledRevisionPlanning === "existing-files" && refreshedAfterApply;
+  const useSettledSource =
+    options.settledRevisionPlanning === "optional-field" || planExistingFiles;
   const currentDelivery =
-    options.optionalFieldPlanning === true && "applyReceipt" in current
+    useSettledSource && "applyReceipt" in current
       ? settledDirectProductionDelivery(ctx, recordOwnershipOutcome)
       : undefined;
   const reconciliationAnchor = currentDelivery?.subject.revision?.reconciliation;
   if (
     current.phase === "reviewed" &&
     currentDelivery !== undefined &&
-    reconciliationAnchor === undefined
+    reconciliationAnchor === undefined &&
+    !planExistingFiles
   ) {
     recordOutcome?.("reconciliation-anchor-missing");
   }
-  const preserveSourceHead = reconciliationAnchor !== undefined && "applyReceipt" in current;
+  const preserveSourceHead =
+    (reconciliationAnchor !== undefined || (planExistingFiles && currentDelivery !== undefined)) &&
+    "applyReceipt" in current;
   if (!preserveSourceHead && !canRefreshSource(current, purpose)) {
     return sandbox;
   }
@@ -165,19 +178,17 @@ export const refreshPlanningSource = async (
       "The selected repository's existing read access is unavailable. Reconnect it and continue this same app.",
     );
   }
-  const publication = await githubPublicationRuntimeForSession(ctx.session.auth);
-  const revision = await publication.inspectSourceBranch({
-    branch: selected.resolvedRef.slice("refs/heads/".length),
-    name: selected.repository.name,
-    owner: selected.repository.owner,
-    repositoryId: selected.repository.repositoryId,
-  });
+  const readSelectedBranch = async () => {
+    const publication = await githubPublicationRuntimeForSession(ctx.session.auth);
+    return await publication.inspectSourceBranch({
+      branch: selected.resolvedRef.slice("refs/heads/".length),
+      name: selected.repository.name,
+      owner: selected.repository.owner,
+      repositoryId: selected.repository.repositoryId,
+    });
+  };
   if (preserveSourceHead && currentDelivery !== undefined) {
     const { applyReceipt, proposal, workspace, sourceReceipt } = current;
-    const refreshedAfterApply =
-      current.phase === "reviewed" &&
-      (applyReceipt.sourceReceiptDigest !== sourceReceipt.digest ||
-        applyReceipt.workspaceDigest !== workspace.workspaceDigest);
     const assertPlanningScope = () => {
       ctx.abortSignal.throwIfAborted();
       assertExactWorkflowState(
@@ -233,6 +244,32 @@ export const refreshPlanningSource = async (
       }
       assertPlanningScope();
     }
+    if (planExistingFiles) {
+      const sameDestination =
+        currentDelivery.subject.repositoryId === selected.repository.repositoryId &&
+        currentDelivery.subject.repositoryFullName === repository &&
+        `refs/heads/${currentDelivery.subject.baseBranch}` === selected.resolvedRef &&
+        currentDelivery.subject.installationId === access.scope.installationId;
+      if (
+        !sameDestination ||
+        (await readSettledDirectProductionPlanningMerge(ctx, currentDelivery.effectDigest)) === null
+      ) {
+        throw new Error(
+          "Builder could not verify the saved app’s reviewed merge before planning the next revision.",
+        );
+      }
+      assertPlanningScope();
+      await assertRetainedGitHubSourceCheckout(sandbox, {
+        repository: `https://github.com/${repository}.git`,
+        sourceSha: workspace.sourceSha,
+        sourceTree: workspace.sourceTree,
+      });
+      assertPlanningScope();
+      options.recordSettledSourcePlanningProof?.(assertPlanningScope);
+      recordOutcome?.("proof-produced");
+      return sandbox;
+    }
+    const revision = await readSelectedBranch();
     const releaseId = retainedMergedSchemaReleaseId(
       current.proposal.digest,
       current.appSpec.appId,
@@ -240,7 +277,7 @@ export const refreshPlanningSource = async (
     );
     if (releaseId === undefined) {
       throw new Error(
-        "Builder could not verify the saved app’s published schema before planning the new field.",
+        "Builder could not verify the saved app’s published schema before planning the next revision.",
       );
     }
     const publishedRelease = await readMergedReleaseSourceRecovery({
@@ -292,6 +329,7 @@ export const refreshPlanningSource = async (
     }
     return sandbox;
   }
+  const revision = await readSelectedBranch();
   const prepared = await runtime.prepareExistingSource({
     access: observedAccess,
     callId: ctx.callId,
