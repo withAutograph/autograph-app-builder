@@ -36,6 +36,21 @@ const sample = {
   deployment: { state: "active" },
   app: { state: "sign-in-required", url: "https://example.com/socket-label-log" },
 };
+const proposalDigest = "proposal";
+const mergeSha = "a".repeat(40);
+const repositoryId = "1";
+const merged = {
+  state: "merged",
+  reviewedRevision: true,
+  mergeCommitSha: mergeSha,
+  reviewedTarget: { repositoryId, owner: "test-owner", name: "test-repo" },
+};
+const liveStatus = {
+  ...sample,
+  destination: { repositoryId, repositoryFullName: "test-owner/test-repo" },
+  requestedRevision: "live",
+  schemaSetupSettled: true,
+};
 
 // oxlint-disable-next-line typescript/promise-function-async -- Keep the tool's promise available to drive with the test clock.
 const observe = (abortSignal: AbortSignal = new AbortController().signal) =>
@@ -72,26 +87,14 @@ it.each([
 ])(
   "reports the saved schema revision as $expected with settlement $settled",
   async ({ binding, settled, expected }) => {
-    const repositoryId = "1";
-    const mergeSha = "a".repeat(40);
-    mocks.reviewedDelivery.mockReturnValue({ appId, proposalDigest: "proposal" });
+    mocks.reviewedDelivery.mockReturnValue({ appId, proposalDigest });
     mocks.savedSchemaBinding.mockReturnValue(binding);
     mocks.publicationRuntime.mockResolvedValue({
-      inspectPublishedPullRequest: vi.fn().mockResolvedValue({
-        state: "merged",
-        reviewedRevision: true,
-        mergeCommitSha: mergeSha,
-        reviewedTarget: { repositoryId, owner: "test-owner", name: "test-repo" },
-      }),
+      inspectPublishedPullRequest: vi.fn().mockResolvedValue(merged),
     });
-    const liveStatus = {
-      ...sample,
-      destination: { repositoryId, repositoryFullName: "test-owner/test-repo" },
-      requestedRevision: "live",
-    };
     const nativeStatus = vi
       .fn()
-      .mockResolvedValue(settled ? { ...liveStatus, schemaSetupSettled: true } : liveStatus);
+      .mockResolvedValue({ ...liveStatus, schemaSetupSettled: settled ? true : undefined });
     mocks.productionClient.mockResolvedValue({ nativeStatus });
     await expect(observe()).resolves.toMatchObject({
       status: "available",
@@ -103,36 +106,95 @@ it.each([
   },
 );
 
-it("bounds a stalled GitHub read and ignores late evidence", async () => {
-  const pullRequest = Promise.withResolvers<unknown>();
-  mocks.reviewedDelivery.mockReturnValue({ appId, proposalDigest: "proposal" });
+it("checks the current owned app after a stalled GitHub read and ignores late merge evidence", async () => {
+  const pullRequest = Promise.withResolvers<typeof merged>();
+  mocks.reviewedDelivery.mockReturnValue({ appId, proposalDigest });
   mocks.publicationRuntime.mockResolvedValue({
     inspectPublishedPullRequest: vi.fn().mockReturnValue(pullRequest.promise),
   });
+  const nativeStatus = vi.fn().mockResolvedValue(sample);
+  mocks.productionClient.mockResolvedValue({ nativeStatus });
   const reading = observe();
   await vi.advanceTimersByTimeAsync(15_000);
-  await expect(reading).resolves.toMatchObject({
-    appId,
-    status: "service-unavailable",
-    requestedRevision: "unassessed",
-    serviceIssue: "provider-read",
-  });
-  pullRequest.resolve({ state: "merged", reviewedRevision: true, mergeCommitSha: "merge" });
+  await expect(reading).resolves.toEqual(sample);
+  expect(mocks.productionClient.mock.calls).toMatchObject([[{ abortSignal: { aborted: false } }]]);
+  pullRequest.resolve(merged);
   await vi.advanceTimersByTimeAsync(0);
-  expect(mocks.productionClient).not.toHaveBeenCalled();
+  expect(nativeStatus.mock.calls).toEqual([[appId, undefined]]);
 });
 
-it("aborts the protected status read when the deadline passes", async () => {
+it("gives the native status read its own deadline while checking the exact merged revision once", async () => {
+  const pullRequest = Promise.withResolvers<typeof merged>();
+  const native = Promise.withResolvers<typeof liveStatus>();
+  mocks.reviewedDelivery.mockReturnValue({ appId, proposalDigest });
+  mocks.savedSchemaBinding.mockReturnValue({ kind: "verified", grantDigest: "b".repeat(64) });
+  mocks.publicationRuntime.mockResolvedValue({
+    inspectPublishedPullRequest: vi.fn().mockReturnValue(pullRequest.promise),
+  });
+  const nativeStatus = vi.fn().mockReturnValue(native.promise);
+  mocks.productionClient.mockResolvedValue({ nativeStatus });
+  const reading = observe();
+  await vi.advanceTimersByTimeAsync(10_000);
+  pullRequest.resolve(merged);
+  await vi.advanceTimersByTimeAsync(16_000);
+  native.resolve(liveStatus);
+  await expect(reading).resolves.toEqual(liveStatus);
+  expect(nativeStatus.mock.calls).toEqual([[appId, mergeSha, undefined, "b".repeat(64)]]);
+});
+
+it("falls back to current availability when the bound schema approval changes in flight", async () => {
+  const native = Promise.withResolvers<typeof liveStatus>();
+  mocks.reviewedDelivery.mockReturnValue({ appId, proposalDigest });
+  mocks.savedSchemaBinding.mockReturnValue({ kind: "verified", grantDigest: "b".repeat(64) });
+  mocks.publicationRuntime.mockResolvedValue({
+    inspectPublishedPullRequest: vi.fn().mockResolvedValue(merged),
+  });
+  const nativeStatus = vi.fn().mockReturnValueOnce(native.promise).mockResolvedValueOnce(sample);
+  mocks.productionClient.mockResolvedValue({ nativeStatus });
+  const reading = observe();
+  await vi.advanceTimersByTimeAsync(0);
+  mocks.savedSchemaBinding.mockReturnValue({ kind: "verified", grantDigest: "c".repeat(64) });
+  native.resolve(liveStatus);
+  await expect(reading).resolves.toEqual(sample);
+  expect(nativeStatus.mock.calls).toEqual([
+    [appId, mergeSha, undefined, "b".repeat(64)],
+    [appId, undefined],
+  ]);
+});
+
+it("aborts the protected status read when its own deadline passes", async () => {
   const pending = Promise.withResolvers<unknown>();
   const parent = new AbortController();
   mocks.productionClient.mockResolvedValue({
     nativeStatus: vi.fn().mockReturnValue(pending.promise),
   });
   const reading = observe(parent.signal);
-  await vi.advanceTimersByTimeAsync(15_000);
-  await expect(reading).resolves.toMatchObject({ status: "service-unavailable" });
+  await vi.advanceTimersByTimeAsync(30_000);
+  await expect(reading).resolves.toMatchObject({
+    appId,
+    status: "service-unavailable",
+    requestedRevision: "unassessed",
+    serviceIssue: "provider-read",
+  });
   expect(mocks.productionClient.mock.calls).toMatchObject([[{ abortSignal: { aborted: true } }]]);
   expect(parent.signal.aborted).toBe(false);
+});
+
+it("propagates cancellation during the saved GitHub read without starting a provider read", async () => {
+  const pullRequest = Promise.withResolvers<typeof merged>();
+  const owner = new AbortController();
+  mocks.reviewedDelivery.mockReturnValue({ appId, proposalDigest });
+  mocks.publicationRuntime.mockResolvedValue({
+    inspectPublishedPullRequest: vi.fn().mockReturnValue(pullRequest.promise),
+  });
+  const reading = observe(owner.signal);
+  const cancelled = expect(reading).rejects.toThrow("Stopped by the creator");
+  await vi.advanceTimersByTimeAsync(0);
+  owner.abort(new Error("Stopped by the creator"));
+  await cancelled;
+  pullRequest.resolve(merged);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(mocks.productionClient).not.toHaveBeenCalled();
 });
 
 it("propagates cancellation even when the status client does not return", async () => {

@@ -115,9 +115,12 @@ An app already acquired from its connected GitHub branch keeps that checkout.
 Builder refreshes the shared compiler during approved schema compilation. An
 explicit refresh returns `connected_source_retained`; the new revision can
 be planned immediately without checking live availability.
-The separate, read-only availability check returns after a short deadline when
-its provider does not respond. It does not stop planning, alter delivery, or
-report an unverified revision as live.
+The separate, read-only availability check gives optional GitHub merge history
+and the current owned app separate read deadlines. A slow or unavailable history
+still allows Builder to check the current app and show its link. Builder only
+confirms the latest revision after verifying its merge, exact deployment, and
+any required schema settlement. The check does not stop planning or alter
+delivery.
 
 For a starter-backed canonical Arrusted app, Builder derives the destination
 and installation from the saved session, revalidates connected read access and the tenant-owned

@@ -14,7 +14,8 @@ import { draftReconciliationState } from "./draft-reconciliation-state";
 
 const unassessed = "unassessed";
 const monitoringStoppedStatus = "monitoring-stopped";
-const savedObservationTimeoutMs = 15_000;
+const savedGitHubObservationTimeoutMs = 15_000;
+const ownedAppObservationTimeoutMs = 30_000;
 const providerRead = "provider-read";
 
 export type AppProductionObservation =
@@ -164,64 +165,74 @@ const currentReviewedDelivery = () =>
     draftReconciliationState.get(),
   );
 
-const readSavedAppProduction = async (
+const readSavedMergedRevision = async (
+  ctx: WorkflowStepToolContext,
+  subject: NonNullable<ReturnType<typeof currentReviewedDelivery>>,
+): Promise<{ target: AppProductionDeliveryTarget; mergeSha: string } | undefined> => {
+  const { appId, proposalDigest, reconciliation, installationId } = subject;
+  const runtime = await githubPublicationRuntimeForSession(
+    ctx.session.auth,
+    installationId === undefined ? undefined : { selectedInstallationId: installationId },
+  );
+  ctx.abortSignal.throwIfAborted();
+  const reconciledHead =
+    reconciliation === undefined
+      ? undefined
+      : ((await runtime.inspectPublishedReconciliationHead?.(proposalDigest, reconciliation)) ??
+        undefined);
+  ctx.abortSignal.throwIfAborted();
+  if (reconciliation !== undefined && reconciledHead === undefined) {
+    return undefined;
+  }
+  const observed = await runtime.inspectPublishedPullRequest?.(proposalDigest, reconciledHead);
+  ctx.abortSignal.throwIfAborted();
+  if (
+    observed?.state !== "merged" ||
+    !observed.reviewedRevision ||
+    observed.mergeCommitSha === undefined ||
+    !isDeepStrictEqual(currentReviewedDelivery(), subject)
+  ) {
+    return undefined;
+  }
+  const { repositoryId, owner, name } = observed.reviewedTarget;
+  return {
+    target: { appId, repositoryId, repositoryFullName: `${owner}/${name}` },
+    mergeSha: observed.mergeCommitSha,
+  };
+};
+
+const readOwnedAppProduction = async (
   appId: string,
   ctx: WorkflowStepToolContext,
+  subject: ReturnType<typeof currentReviewedDelivery>,
+  revision: Awaited<ReturnType<typeof readSavedMergedRevision>>,
   readSchemaBinding: ReadSavedSchemaBinding,
 ): Promise<AppProductionObservation> => {
   ctx.abortSignal.throwIfAborted();
   try {
-    const subject = currentReviewedDelivery();
-    if (subject?.appId === appId) {
-      const { proposalDigest, reconciliation, installationId } = subject;
-      const runtime = await githubPublicationRuntimeForSession(
-        ctx.session.auth,
-        installationId === undefined ? undefined : { selectedInstallationId: installationId },
+    if (revision !== undefined && isDeepStrictEqual(currentReviewedDelivery(), subject)) {
+      const { target, mergeSha } = revision;
+      const schemaBinding = readSchemaBinding(ctx, target);
+      const status = await observeMergedAppProduction(
+        target,
+        ctx,
+        mergeSha,
+        undefined,
+        schemaBinding?.kind === "verified" ? schemaBinding.grantDigest : undefined,
       );
-      ctx.abortSignal.throwIfAborted();
-      const reconciledHead =
-        reconciliation === undefined
-          ? undefined
-          : ((await runtime.inspectPublishedReconciliationHead?.(proposalDigest, reconciliation)) ??
-            undefined);
-      ctx.abortSignal.throwIfAborted();
-      if (reconciliation === undefined || reconciledHead !== undefined) {
-        const observed = await runtime.inspectPublishedPullRequest?.(
-          proposalDigest,
-          reconciledHead,
-        );
-        ctx.abortSignal.throwIfAborted();
-        if (
-          observed?.state === "merged" &&
-          observed.reviewedRevision &&
-          observed.mergeCommitSha !== undefined &&
-          isDeepStrictEqual(currentReviewedDelivery(), subject)
-        ) {
-          const { repositoryId, owner, name } = observed.reviewedTarget;
-          const target = { appId, repositoryId, repositoryFullName: `${owner}/${name}` };
-          const schemaBinding = readSchemaBinding(ctx, target);
-          const status = await observeMergedAppProduction(
-            target,
-            ctx,
-            observed.mergeCommitSha,
-            undefined,
-            schemaBinding?.kind === "verified" ? schemaBinding.grantDigest : undefined,
-          );
-          if (status.status === monitoringStoppedStatus) {
-            return status;
-          }
-          if (
-            isDeepStrictEqual(currentReviewedDelivery(), subject) &&
-            isDeepStrictEqual(readSchemaBinding(ctx, target), schemaBinding)
-          ) {
-            const schemaPending =
-              schemaBinding !== null &&
-              (schemaBinding.kind === "unverified" || status.schemaSetupSettled !== true);
-            return status.requestedRevision === "live" && schemaPending
-              ? { ...status, requestedRevision: "awaiting-activation" }
-              : status;
-          }
-        }
+      if (status.status === monitoringStoppedStatus) {
+        return status;
+      }
+      if (
+        isDeepStrictEqual(currentReviewedDelivery(), subject) &&
+        isDeepStrictEqual(readSchemaBinding(ctx, target), schemaBinding)
+      ) {
+        const schemaPending =
+          schemaBinding !== null &&
+          (schemaBinding.kind === "unverified" || status.schemaSetupSettled !== true);
+        return status.requestedRevision === "live" && schemaPending
+          ? { ...status, requestedRevision: "awaiting-activation" }
+          : status;
       }
     }
   } catch {
@@ -231,38 +242,79 @@ const readSavedAppProduction = async (
   return await observeAppProduction(appId, ctx);
 };
 
-/** Bound the optional saved-session read even if one upstream read ignores cancellation. */
-export const observeSavedAppProduction = async (
-  appId: string,
+/** Keep each read bounded even if an upstream read ignores cancellation. */
+const readBeforeDeadline = async <T>(
   ctx: WorkflowStepToolContext,
-  readSchemaBinding: ReadSavedSchemaBinding,
-): Promise<AppProductionObservation> => {
+  phase: "saved-github-revision" | "owned-app-status",
+  timeoutMs: number,
+  read: (scoped: WorkflowStepToolContext) => Promise<T>,
+): Promise<T | undefined> => {
   ctx.abortSignal.throwIfAborted();
+  const startedAt = performance.now();
   const deadline = new AbortController();
   const abortSignal = AbortSignal.any([ctx.abortSignal, deadline.signal]);
   const timer = setTimeout(() => {
     deadline.abort();
-  }, savedObservationTimeoutMs);
+  }, timeoutMs);
   const aborted = Promise.withResolvers<null>();
   const onAbort = () => {
     aborted.resolve(null);
   };
   abortSignal.addEventListener("abort", onAbort, { once: true });
   try {
-    const observed = await Promise.race([
-      readSavedAppProduction(appId, { ...ctx, abortSignal }, readSchemaBinding),
-      aborted.promise,
-    ]);
+    const observed = await Promise.race([read({ ...ctx, abortSignal }), aborted.promise]);
     ctx.abortSignal.throwIfAborted();
-    return observed ?? serviceUnavailable(appId, providerRead);
+    return observed ?? undefined;
   } catch (error) {
     ctx.abortSignal.throwIfAborted();
     if (deadline.signal.aborted) {
-      return serviceUnavailable(appId, providerRead);
+      return undefined;
     }
     throw error;
   } finally {
     clearTimeout(timer);
     abortSignal.removeEventListener("abort", onAbort);
+    console.info(
+      JSON.stringify({
+        event: "app_builder.saved_production_observation",
+        phase,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        timedOut: deadline.signal.aborted,
+      }),
+    );
   }
+};
+
+/** Optional GitHub history cannot consume the current owned app's read budget. */
+export const observeSavedAppProduction = async (
+  appId: string,
+  ctx: WorkflowStepToolContext,
+  readSchemaBinding: ReadSavedSchemaBinding,
+): Promise<AppProductionObservation> => {
+  ctx.abortSignal.throwIfAborted();
+  let subject: ReturnType<typeof currentReviewedDelivery> = null;
+  let revision: Awaited<ReturnType<typeof readSavedMergedRevision>>;
+  try {
+    const reviewed = currentReviewedDelivery();
+    subject = reviewed;
+    if (reviewed?.appId === appId) {
+      revision = await readBeforeDeadline(
+        ctx,
+        "saved-github-revision",
+        savedGitHubObservationTimeoutMs,
+        async (scoped) => await readSavedMergedRevision(scoped, reviewed),
+      );
+    }
+  } catch {
+    // Missing historical evidence still permits an independent owned app availability read.
+    ctx.abortSignal.throwIfAborted();
+  }
+  const observed = await readBeforeDeadline(
+    ctx,
+    "owned-app-status",
+    ownedAppObservationTimeoutMs,
+    async (scoped) =>
+      await readOwnedAppProduction(appId, scoped, subject, revision, readSchemaBinding),
+  );
+  return observed ?? serviceUnavailable(appId, providerRead);
 };
