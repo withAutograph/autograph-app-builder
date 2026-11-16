@@ -50,6 +50,8 @@ const mocks = vi.hoisted(() => ({
   reconcile: vi.fn(),
   recoverRelease: vi.fn(),
   readPriorRelease: vi.fn(),
+  readSettledMerge: vi.fn(),
+  inspectCheckout: vi.fn(),
   retainedReleaseId: vi.fn(),
   readSavedRelease: vi.fn(),
   preserve: vi.fn(),
@@ -63,7 +65,11 @@ vi.mock("./refresh-local-planning-source", () => ({
 }));
 vi.mock("./direct-production-state", () => ({
   readPriorApprovedMergedSchemaRelease: mocks.readPriorRelease,
+  readSettledDirectProductionPlanningMerge: mocks.readSettledMerge,
   settledDirectProductionDelivery: mocks.settledDelivery,
+}));
+vi.mock("../repository/sandbox-github-source", () => ({
+  assertRetainedGitHubSourceCheckout: mocks.inspectCheckout,
 }));
 vi.mock("../repository/github-publication", () => ({
   assertExactImmutableGitHubSourceReceipt: vi.fn(),
@@ -383,7 +389,9 @@ describe("shared source refresh before schema compilation", () => {
       mocks.recoverRelease.mockResolvedValueOnce(publishedRelease);
       mocks.credential.mockResolvedValueOnce({ token: "fixture-read-token" });
       await expect(
-        refreshPlanningSource(ctx as never, "planning", { optionalFieldPlanning: true }),
+        refreshPlanningSource(ctx as never, "planning", {
+          settledRevisionPlanning: "optional-field",
+        }),
       ).resolves.toBe(mocks.sandbox);
       expect(mocks.recoverRelease).toHaveBeenCalledWith({
         current: mocks.state,
@@ -476,7 +484,7 @@ describe("shared source refresh before schema compilation", () => {
       settledRefreshedCheckout();
     const proofs: (() => void)[] = [];
     await refreshPlanningSource(ctx as never, "planning", {
-      optionalFieldPlanning: true,
+      settledRevisionPlanning: "optional-field",
       recordSettledSourcePlanningProof: (proof) => {
         proofs.push(proof);
       },
@@ -511,12 +519,83 @@ describe("shared source refresh before schema compilation", () => {
     const recordSettledSourcePlanningProof = vi.fn<(proof: () => void) => void>();
     await expect(
       refreshPlanningSource(ctx as never, "planning", {
-        optionalFieldPlanning: true,
+        settledRevisionPlanning: "optional-field",
         recordSettledSourcePlanningProof,
       }),
     ).rejects.toThrow("original Build");
     expect(mocks.reconcile).not.toHaveBeenCalled();
     expect(recordSettledSourcePlanningProof).not.toHaveBeenCalled();
+  });
+  const directlyMergedRefreshedCheckout = () => {
+    const { currentFoundation, effect } = settledRefreshedCheckout();
+    mocks.settledDelivery.mockReturnValue({
+      ...effect,
+      subject: {
+        repositoryId: "owned-repo",
+        repositoryFullName: "owned/repo",
+        baseBranch: "main",
+        installationId: "owned-installation",
+      },
+    });
+    mocks.readSettledMerge.mockResolvedValue("f".repeat(40));
+    return { currentFoundation, effect };
+  };
+
+  it("proves a directly merged revision for copy edits without restoring generated schema files", async () => {
+    const { currentFoundation, effect } = directlyMergedRefreshedCheckout();
+    const recordSettledSourcePlanningProof = vi.fn<(proof: () => void) => void>();
+    await expect(
+      refreshPlanningSource(ctx as never, "planning", {
+        settledRevisionPlanning: "existing-files",
+        recordSettledSourcePlanningProof,
+      }),
+    ).resolves.toBe(mocks.sandbox);
+    expect(mocks.readSettledMerge).toHaveBeenCalledWith(ctx, effect.effectDigest);
+    expect(mocks.inspectCheckout).toHaveBeenCalledWith(mocks.sandbox, {
+      repository: "https://github.com/owned/repo.git",
+      sourceSha: currentFoundation.sourceSha,
+      sourceTree: currentFoundation.sourceTree,
+    });
+    expect(recordSettledSourcePlanningProof).toHaveBeenCalledOnce();
+    expect(mocks.inspect).not.toHaveBeenCalled();
+    expect(mocks.reconcile).not.toHaveBeenCalled();
+    expect(mocks.recoverRelease).not.toHaveBeenCalled();
+    expect(mocks.updateWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("withholds successor planning proof when the reviewed merge or connected checkout is unavailable", async () => {
+    directlyMergedRefreshedCheckout();
+    const recordSettledSourcePlanningProof = vi.fn<(proof: () => void) => void>();
+    const options = {
+      settledRevisionPlanning: "existing-files" as const,
+      recordSettledSourcePlanningProof,
+    };
+    mocks.readSettledMerge.mockResolvedValueOnce(null);
+    await expect(refreshPlanningSource(ctx as never, "planning", options)).rejects.toThrow(
+      "reviewed merge",
+    );
+    expect(mocks.inspectCheckout).not.toHaveBeenCalled();
+    mocks.inspectCheckout.mockRejectedValueOnce(new Error("Selected checkout changed"));
+    await expect(refreshPlanningSource(ctx as never, "planning", options)).rejects.toThrow(
+      "Selected checkout changed",
+    );
+    expect(recordSettledSourcePlanningProof).not.toHaveBeenCalled();
+    expect(mocks.reconcile).not.toHaveBeenCalled();
+  });
+
+  it("leaves an unsettled connected checkout on the ordinary repair path", async () => {
+    directlyMergedRefreshedCheckout();
+    mocks.settledDelivery.mockReset();
+    const recordSettledSourcePlanningProof = vi.fn<(proof: () => void) => void>();
+    await expect(
+      refreshPlanningSource(ctx as never, "planning", {
+        settledRevisionPlanning: "existing-files",
+        recordSettledSourcePlanningProof,
+      }),
+    ).resolves.toBe(mocks.sandbox);
+    expect(recordSettledSourcePlanningProof).not.toHaveBeenCalled();
+    expect(mocks.readSettledMerge).not.toHaveBeenCalled();
+    expect(mocks.inspectCheckout).not.toHaveBeenCalled();
   });
   it("keeps ordinary planning refresh out of already applied builds", async () => {
     await refreshPlanningSource(ctx as never);

@@ -682,8 +682,10 @@ the current approved CUE and its release version before continuing compilation.
 When planning a new optional field after a settled Production correction,
 Builder restores the verified merged schema in the same connected checkout.
 If schema compilation refreshed the checkout during the previous Build,
-Builder retains that Build's original source binding and uses the refreshed
-source for a new proposal. The new proposal receives its own Build approval.
+Builder also verifies that settled source before planning edits to the app's
+files, including copy and UI changes. Builder retains the original Build's
+source binding and uses the refreshed source for a new proposal with its own
+Build approval.
 
 If an earlier candidate failed before merge, Builder can prepare an ordinary
 reconciliation of its owned open draft and retains every checked release on

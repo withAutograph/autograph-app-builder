@@ -360,7 +360,8 @@ describe("ordinary same-app Build publication continuity", () => {
     });
   });
 
-  it("prepares the next field from settled source without reusing the previous Build approval", async () => {
+  const successorModes = ["optional-field", "existing-files"] as const;
+  it.each(successorModes)("starts a fresh Build for %s", async (requestMode) => {
     await run(async () => {
       const applied = appliedRepairFixture();
       if (applied.phase !== "applied") {
@@ -388,7 +389,7 @@ manifest: #AppManifest & {
 `,
         ),
       );
-      const input = {
+      const optionalFieldInput = {
         optionalTextField: {
           modelId: "entry",
           fieldId: "reference",
@@ -396,13 +397,12 @@ manifest: #AppManifest & {
           changeTypeIds: ["save"],
         },
       };
+      const input =
+        requestMode === "optional-field" ? optionalFieldInput : { existingAppChanges: repairFiles };
       ports.settledSourceOutcome.mockReturnValueOnce("effective-authorization-unavailable");
       const info = vi.spyOn(console, "info");
       try {
         await expect(prepareAppCreation(input, context)).rejects.toThrow("source binding changed");
-        await expect(
-          prepareAppCreation({ existingAppChanges: repairFiles }, context),
-        ).rejects.toThrow("source binding changed");
         const refusals = info.mock.calls.map(([line]) => {
           const event: unknown = JSON.parse(String(line));
           return event;
@@ -415,16 +415,7 @@ manifest: #AppManifest & {
             phase: "reviewed",
             mismatch: "saved-workspace",
             proofOutcome: "effective-authorization-unavailable",
-            requestMode: "optional-field",
-          },
-          {
-            event: "app_builder.private_repair_binding_refused",
-            callId: context.callId,
-            entryPhase: "reviewed",
-            phase: "reviewed",
-            mismatch: "saved-workspace",
-            proofOutcome: "not-requested",
-            requestMode: "existing-files",
+            requestMode,
           },
         ]);
         info.mockImplementationOnce(() => {
