@@ -33,6 +33,22 @@ receipts, digests, quotas, or other speculative conditions. See the
 [local-development lifecycle](docs/local-development-lifecycle.md) and
 [execution boundaries](docs/implementation-gates.md).
 
+To review the experience, run `mise run storybook:dev` and open
+`http://localhost:6006`. Select **Journey → Start to finish** and step through
+the numbered stories. The configuration, handoff, and request cards use
+representative fixture data. Client conversation text is explicitly marked as
+illustrative; generated prototypes, app results, provider setup, and delivery
+vary by session and are not executed by these stories. The other Storybook
+sections contain additional component, connection, and recovery states.
+For a direct client conversation, choose **Journey → Direct chat**. Its
+numbered stories show a cumulative example from the brief through review and an
+optional draft on GitHub. **Other situations** covers sign-in, GitHub connection,
+questions, waiting, cancellation, failures, and decisions that are pending or
+could not be confirmed. It also includes optional protected-preview setup,
+project and removal approvals, plus delayed-progress and uncertain-outcome
+examples. These are representative states, not an exhaustive
+catalog of every possible message or provider failure.
+
 Use `mise run eval:design -- --help` to score an existing preview on demand.
 [Design-quality evals](docs/design-quality-evals.md) report Arrusted token
 evidence, responsive/browser findings, and an advisory AI design score without

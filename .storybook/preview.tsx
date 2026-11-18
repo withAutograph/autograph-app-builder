@@ -77,6 +77,7 @@ const preview: Preview = {
     options: {
       storySort: {
         order: [
+          "Journey",
           "Create App",
           ["Flow", ["Anonymous Entry", "Page", "Handoff"], "Recovery"],
           "Components",

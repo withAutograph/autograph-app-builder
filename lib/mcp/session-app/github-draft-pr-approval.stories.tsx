@@ -29,7 +29,7 @@ const GitHubDraftPRApprovalDemo = ({
   const respond = async (responses: SessionResponse[]) => {
     await onRespond(responses);
     if (responseMode === "failure") {
-      throw new Error("The draft PR update was rejected.");
+      throw new Error("GitHub could not confirm the draft update.");
     }
     if (responseMode === "pending") {
       await Promise.withResolvers<undefined>().promise;
@@ -71,7 +71,7 @@ const meta = {
   },
   component: GitHubDraftPRApprovalDemo,
   parameters: { layout: "fullscreen" },
-  title: "MCP/Authorization/Approval Request/GitHub Draft PR",
+  title: "MCP/Authorization/Approval Request/GitHub Draft",
 } satisfies Meta<typeof GitHubDraftPRApprovalDemo>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -81,10 +81,12 @@ export const GitHubDraftPRApproval: Story = {};
 export const DraftPRSubmitted: Story = {
   play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole("heading", { name: "Update draft PR #1500?" })).toBeVisible();
+    await expect(
+      canvas.getByRole("heading", { name: "Update the draft on GitHub?" }),
+    ).toBeVisible();
     await expect(
       canvas.getByText(
-        "Update draft PR #1500 in withAutograph/arrusted-development with eight reviewed Spend Review files. The PR will remain a draft and will not be merged or deployed.",
+        "Update the draft on GitHub in withAutograph/arrusted-development with the reviewed changes. It will remain a draft for review and will not be merged or deployed.",
       ),
     ).toBeVisible();
     await expect(canvas.getByRole("button", { name: "Accept" })).toBeEnabled();
@@ -99,12 +101,11 @@ export const DraftPRSubmitted: Story = {
         response: {
           kind: "answer",
           optionId: "update-draft",
-          value: "Update draft PR",
+          value: "Update draft",
         },
       },
     ]);
-    await expect(await canvas.findByRole("status")).toHaveTextContent("Draft PR #1500 updated");
-    await expect(canvas.getByText(/remains a draft and will not merge or deploy/u)).toBeVisible();
+    await expect(await canvas.findByRole("status")).toHaveTextContent("Response received");
   },
 };
 
@@ -145,8 +146,10 @@ export const DraftPRFailed: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: "Accept" }));
     const alert = await canvas.findByRole("alert");
-    await expect(alert).toHaveTextContent("Draft PR #1500 could not be updated");
-    await expect(alert).toHaveTextContent("The draft PR update was rejected.");
+    await expect(alert).toHaveTextContent("We couldn’t confirm your response");
+    await expect(canvas.getByText("GitHub could not confirm the draft update.")).not.toBeVisible();
+    await userEvent.click(canvas.getByText("Details for support"));
+    await expect(canvas.getByText("GitHub could not confirm the draft update.")).toBeVisible();
     await expect(canvas.queryByRole("button", { name: "Accept" })).not.toBeInTheDocument();
     await expect(canvas.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
   },

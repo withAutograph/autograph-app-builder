@@ -124,6 +124,6 @@ describe("passive sign-in invitation", () => {
   it("does not render an expired link", () => {
     const html = render("2000-01-01T00:00:00Z");
     expect(html).not.toContain(invitation.url);
-    expect(html).toContain("Response received");
+    expect(html).toContain("Working on your app");
   });
 });

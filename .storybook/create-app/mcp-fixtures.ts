@@ -50,14 +50,14 @@ export const approvalRequest: PublicInputRequest = {
 export const draftPullRequestApprovalRequest: PublicInputRequest = {
   allowFreeform: false,
   description:
-    "Update draft PR #1500 in withAutograph/arrusted-development with eight reviewed Spend Review files. The PR will remain a draft and will not be merged or deployed.",
+    "Update the draft on GitHub in withAutograph/arrusted-development with the reviewed changes. It will remain a draft for review and will not be merged or deployed.",
   kind: "question",
   options: [
-    { id: "update-draft", label: "Update draft PR" },
+    { id: "update-draft", label: "Update draft" },
     { id: "cancel-update", label: "Do not update" },
   ],
   requestId: "publish-reviewed-changes",
-  title: "Update draft PR #1500?",
+  title: "Update the draft on GitHub?",
 };
 
 export const authorizationRequest: PublicInputRequest = {

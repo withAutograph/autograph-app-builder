@@ -17,6 +17,8 @@ import {
 import type { EveSessionListResult, EveSessionResult } from "./contracts";
 import { McpProviderUnavailableError, McpToolAuthenticationRequiredError } from "./errors";
 import { z } from "zod";
+import { userFacingErrorSummary } from "./public-error-copy";
+export { userFacingErrorSummary } from "./public-error-copy";
 
 export { McpProviderUnavailableError, McpToolAuthenticationRequiredError } from "./errors";
 
@@ -96,6 +98,22 @@ const safeUnexpectedCause = (error: unknown): string => {
     .trim();
 };
 
+/** Keep session recovery instructions available without rendering them as chat copy. */
+export function presentSessionError(result: EveSessionResult): EveSessionResult {
+  if (!result.error) return result;
+  const { code, message, diagnostic } = result.error;
+  const summary = userFacingErrorSummary(code);
+  const detail = safeUnexpectedCause(diagnostic ?? message);
+  return {
+    ...result,
+    error: {
+      code,
+      message: summary,
+      ...(detail && detail !== summary ? { diagnostic: detail } : {}),
+    },
+  };
+}
+
 const genericUnexpectedMessage = (safeCause: string): string => {
   const noDetail = safeCause.length === 0 ? "No further detail was provided. " : "";
   const recovery =
@@ -134,7 +152,7 @@ export function safeToolError(
     const message =
       "A connected provider is temporarily unavailable. Your prepared app and connections are saved. Try this same handoff again shortly; you don’t need to sign in again.";
     return {
-      ...toolResult(
+      ...toolResult<EveSessionResult>(
         {
           cursor: 0,
           error: { code: "provider_unavailable", message },
@@ -208,14 +226,36 @@ export function safeToolError(
     cursor: 0,
     error: {
       code,
-      message,
+      message:
+        [
+          "internal_error",
+          "submission_unknown",
+          "request_conflict",
+          "not_found",
+          "cancellation_unsettled",
+          "send_preflight_unavailable",
+          "operation_rejected",
+        ].includes(code) && !handoffUnavailable
+          ? userFacingErrorSummary(code)
+          : message,
+      ...([
+        "internal_error",
+        "submission_unknown",
+        "request_conflict",
+        "not_found",
+        "cancellation_unsettled",
+        "send_preflight_unavailable",
+        "operation_rejected",
+      ].includes(code) && !handoffUnavailable
+        ? { diagnostic: message }
+        : {}),
     },
     events: [],
     sessionId,
     status: "failed",
   };
   return {
-    ...toolResult(result, message),
+    ...toolResult(result, result.error!.message),
     ...(authenticationRequired ? { _meta: { "mcp/www_authenticate": [error.challenge] } } : {}),
     isError: true,
   };

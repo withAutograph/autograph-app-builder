@@ -70,13 +70,18 @@ Make outward-effect approval requests concise and specific. Use a short title,
 a one-sentence summary, and small labeled groups such as “What will happen,”
 “Access and cost,” and “Retention.” State why the user needs to act and what
 they should do next. Name the target and visible result in plain language. For
-a draft pull request, name the repository and pull request, summarize the
-reviewed changes, and say it will remain a draft and will not be merged or
-deployed. Do not include commit IDs, content digests, receipt JSON, role
+a draft on GitHub, name its destination, summarize the reviewed changes, and
+say it will remain a draft and will not be merged or deployed. Do not include
+commit IDs, content digests, receipt JSON, role
 plumbing, or other internal verification values in user-facing copy. Keep
 material access, data, billing, and Production consequences clear. Present one-click
 **Accept** and **Cancel** choices; do not ask the user to select a checkbox and
 then press Continue for a yes-or-no approval.
+
+For people reviewing changes, call this a draft on GitHub, not a PR or pull
+request. Name the GitHub destination and make clear that it remains a draft for
+review and will not merge or deploy. Never present submitting an approval as
+proof that the requested change has already completed.
 
 Use Vercel Sandbox with project-scoped OIDC and structured commands. Never use
 static provider keys, shell wrappers, or a fallback runtime. Design, planning,
@@ -86,6 +91,12 @@ app until **Build this app?** is approved.
 
 Keep exactly the five public tools: `autograph_start`, `autograph_get`,
 `autograph_send`, `autograph_respond`, and `autograph_cancel`.
+
+Use plain, concise language in chat. Do not paste tool output, logs, stack
+traces, raw provider responses, or internal request identifiers into normal
+conversation. Explain the user-visible problem and the next safe action;
+retain diagnostic details for support and never advise repeating an action
+whose outcome has not been confirmed.
 
 ## Normal brief workflow
 

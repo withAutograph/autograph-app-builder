@@ -32,9 +32,11 @@ import type { HostedAccessTokenVerifier, HostedMcpAuthConfig } from "./request-a
 import {
   McpToolAuthenticationRequiredError,
   McpProviderUnavailableError,
+  presentSessionError,
   safeToolError,
   SESSION_RESOURCE_URI,
   toolResult,
+  userFacingErrorSummary,
 } from "./result";
 import { MCP_APP_RESOURCE_MIME_TYPE, sessionUiHtml } from "./session-ui";
 
@@ -252,10 +254,13 @@ export function createAutographMcpHandler(
 
     return {};
   };
-  const present = (result: EveSessionListResult | EveSessionResult) =>
-    "kind" in result || options.requestUrl === undefined
-      ? result
-      : attachPrototypePreviewUrl(result, options.requestUrl);
+  const present = (result: EveSessionListResult | EveSessionResult) => {
+    if ("kind" in result) return result;
+    const safe = presentSessionError(result);
+    return options.requestUrl === undefined
+      ? safe
+      : attachPrototypePreviewUrl(safe, options.requestUrl);
+  };
   return createMcpHandler((server) => {
     server.registerResource(
       "autograph-session",
@@ -329,7 +334,9 @@ export function createAutographMcpHandler(
             present(result),
             "kind" in result
               ? "Autograph App Builder returned recent sessions."
-              : (result.error?.message ?? "Autograph App Builder returned the latest progress."),
+              : result.error
+                ? userFacingErrorSummary(result.error.code)
+                : "Autograph App Builder returned the latest progress.",
           );
         } catch (error) {
           return safeToolError(error, input.sessionId ?? "", "autograph_get");

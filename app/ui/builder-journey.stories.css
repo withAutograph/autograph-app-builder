@@ -1,0 +1,23 @@
+.journey-client {
+  max-width: 840px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+.journey-label {
+  color: #666;
+  font-size: 13px;
+  margin-bottom: 24px;
+}
+.journey-message {
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.journey-message p {
+  margin: 8px 0 0;
+}
+.journey-note {
+  color: #666;
+  font-size: 14px;
+}

@@ -112,6 +112,13 @@ say that explicitly and identify the operation and session needed for support.
 This failure report is separate from normal product progress and does not ask
 the user to solve Builder's internal implementation defect.
 
+Public error events and session errors keep a short, actionable `message` for
+conversation. A separate optional `diagnostic` carries sanitized technical
+detail or exact recovery instructions for clients and support; it is not normal
+chat copy. An event diagnostic may be an excerpt and is not proof that a full
+log is available. Unknown action outcomes must remain unknown, and a delayed
+read must not be treated as permission to use stale approval information.
+
 ## Follow these conversation patterns
 
 These examples define the intended public interaction. They describe product outcomes and visible effects.

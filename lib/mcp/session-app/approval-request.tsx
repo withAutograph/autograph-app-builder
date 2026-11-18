@@ -24,7 +24,8 @@ export function ApprovalRequest({
   title: string;
 }) {
   const readyToBuild = title === "Build this app?";
-  const publishDraft = title === "Publish the reviewed changes?";
+  const publishDraft =
+    title === "Publish the reviewed changes?" || title === "Save a draft on GitHub?";
   const previewApproval = title === "Do you approve creating a preview?";
   const renderApprovalDescription = (text: string) =>
     previewApproval ? renderPreviewApprovalDescription(text) : text;
@@ -38,7 +39,7 @@ export function ApprovalRequest({
   if (readyToBuild) {
     defaultPrimaryLabel = "Build app";
   } else if (publishDraft) {
-    defaultPrimaryLabel = "Publish draft PR";
+    defaultPrimaryLabel = "Save draft";
   }
   const primaryLabel = primaryLabelOverride ?? (previewApproval ? "Approve" : defaultPrimaryLabel);
   const secondaryLabel = secondaryLabelOverride ?? (readyToBuild ? "Make changes" : "Cancel");
@@ -72,7 +73,11 @@ export function ApprovalRequest({
             ) : (
               <p>{renderApprovalDescription(body.join(" "))}</p>
             );
-            const referenceSection = heading?.includes("(provider ") ?? false;
+            const referenceSection =
+              (heading?.includes("(provider ") ?? false) &&
+              !heading?.startsWith("Access details") &&
+              !heading?.startsWith("Test actor") &&
+              !heading?.startsWith("Customer reference");
             return referenceSection ? (
               <details key={section}>
                 <summary>{heading}</summary>

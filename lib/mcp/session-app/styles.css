@@ -509,6 +509,20 @@
   color: var(--muted);
 }
 
+.mcpApp.outcome details {
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.mcpApp.outcome details summary {
+  cursor: pointer;
+}
+
+.mcpApp.outcome details p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 html[data-theme="dark"] .mcpApp {
   --bg: #000;
   --surface: #0a0a0a;

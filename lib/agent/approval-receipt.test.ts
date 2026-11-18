@@ -110,10 +110,10 @@ describe("approval receipt", () => {
     ).toThrow("base commit");
     expect(
       publicApprovalDescription({ approvalReceipt: updateReceipt }, "update_github_draft_pr"),
-    ).toContain("Update the reviewed changes in the existing draft pull request");
+    ).toContain("Update the existing draft on GitHub");
     expect(
       publicApprovalDescription({ approvalReceipt: updateReceipt }, "reconcile_github_draft_pr"),
-    ).toContain("Update the reviewed changes in the existing draft pull request");
+    ).toContain("Update the existing draft on GitHub");
     expect(approvalTargetFromExistingDraftReconciliation(proposal)).toEqual(target);
     const generated = approvalReceiptForExistingDraftUpdate({
       ...proposal,
@@ -161,7 +161,7 @@ describe("approval receipt", () => {
     expect(
       publicApprovalDescription({ approvalReceipt: publicationReceipt }, "publish_github_draft_pr"),
     ).toBe(
-      "Publish the reviewed changes to a draft pull request in withAutograph/arrusted-development on main. It will remain a draft; this will not merge or deploy it.",
+      "Save the reviewed changes as a draft on GitHub in withAutograph/arrusted-development, based on main. The draft is for review; it will not merge or deploy the changes.",
     );
     expect(
       publicApprovalDescription({ approvalReceipt: receipt }, "publish_github_draft_pr"),

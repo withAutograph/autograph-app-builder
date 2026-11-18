@@ -4754,7 +4754,10 @@ describe("normal actor plan with retained installation scope", () => {
       },
       "prepare-app-hosted-runtime",
     );
-    expect(description).toBe("This approval may incur provider costs.");
+    expect(description).toContain("What will happen:");
+    expect(description).toContain("Access and cost:");
+    expect(description).toContain("Retention:");
+    expect(description).toContain("Production will not be deployed or activated.");
   });
 
   it("does not silently omit an unknown retained installation scope", async () => {

@@ -327,7 +327,8 @@ describe("installed Eve 0.68 projection", () => {
         code: "execution-error",
         index: 2,
         message:
-          "Builder could not finish the private build. Your progress is saved; resume this same session to continue.\n\nDetails: Private build failed: missing proposal. token=[REDACTED]",
+          "Builder couldn’t finish the private build. Check this conversation before trying the action again. If you need help, contact support with this conversation.",
+        diagnostic: "Private build failed: missing proposal. token=[REDACTED]",
         type: "error",
       },
     ]);
@@ -1366,9 +1367,7 @@ describe("installed Eve 0.68 projection", () => {
       "status",
     ]);
     expect(projected[3]).toMatchObject({ code: "failed" });
-    expect(projected[3]?.type === "error" ? projected[3].message : "").toContain(
-      "Details: Stopped",
-    );
+    expect(projected[3]?.type === "error" ? projected[3].diagnostic : "").toContain("Stopped");
   });
 
   it("explains a source failure with its safe cause", () => {
@@ -1387,7 +1386,9 @@ describe("installed Eve 0.68 projection", () => {
         code: "source_workspace_invalid",
         index: 0,
         message:
-          "Builder could not finish this Builder step. Your progress is saved; resume this same session to continue.\n\nDetails: The GitHub source workspace could not be verified after dependency cache validation of the AppSpec receipt digest.",
+          "Builder couldn’t finish this Builder step. Check this conversation before trying the action again. If you need help, contact support with this conversation.",
+        diagnostic:
+          "The GitHub source workspace could not be verified after dependency cache validation of the AppSpec receipt digest.",
         type: "error",
       },
       { index: 1, status: "failed", type: "status" },
@@ -1402,8 +1403,8 @@ describe("installed Eve 0.68 projection", () => {
       }),
     ]);
     const message = projected[0]?.type === "error" ? projected[0].message : "";
-    expect(message).toContain("No further detail was provided");
-    expect(message).toContain("error code");
+    expect(message).toContain("no further detail was provided");
+    expect(message).toContain("contact support");
     expect(message).not.toContain("addressing the reported issue");
   });
 
@@ -1435,7 +1436,7 @@ describe("installed Eve 0.68 projection", () => {
       code: "result_too_large",
       index: 0,
       message:
-        "Builder could not finish this Builder step because it could not transfer the preview content. Your progress is saved; resume this same session to continue.",
+        "Builder couldn’t finish this Builder step because the app preview could not be transferred. Check this conversation before trying the action again.",
       type: "error",
     });
     expect(JSON.stringify(projected)).not.toContain("private");
@@ -1454,7 +1455,7 @@ describe("installed Eve 0.68 projection", () => {
       }),
     ]);
     expect(projected[0]).toMatchObject({ code: "ProviderError" });
-    expect(projected[0]?.type === "error" ? projected[0].message : "").toContain(
+    expect(projected[0]?.type === "error" ? projected[0].diagnostic : "").toContain(
       "GitHub operation failed",
     );
     expect(JSON.stringify(projected)).not.toContain("github_pat_123456789");
@@ -1472,10 +1473,12 @@ describe("installed Eve 0.68 projection", () => {
         type: "session.failed",
       }),
     ]);
-    const message = projected[0]?.type === "error" ? projected[0].message : "";
+    const message = projected[0]?.type === "error" ? projected[0].diagnostic : "";
     expect(message).toContain("apps/review-app/schema/review-app.cue:12:4");
     expect(message).toContain("correct the named CUE field");
-    expect(message).toContain("Details:");
+    expect(projected[0]?.type === "error" ? projected[0].message : "").not.toContain(
+      "schema-compiler",
+    );
     expect(message).not.toContain("token=private");
   });
 });
@@ -1563,10 +1566,10 @@ describe("public draft pull request approval scope", () => {
     });
 
   it.each([
-    ["publish-github-draft-pr", "publication", "Publish the reviewed changes?"],
-    ["publish_github_draft_pr", "publication", "Publish the reviewed changes?"],
-    ["update_github_draft_pr", "draft_update", "Update the draft pull request?"],
-    ["reconcile_github_draft_pr", "draft_update", "Update the draft pull request?"],
+    ["publish-github-draft-pr", "publication", "Save a draft on GitHub?"],
+    ["publish_github_draft_pr", "publication", "Save a draft on GitHub?"],
+    ["update_github_draft_pr", "draft_update", "Update the draft on GitHub?"],
+    ["reconcile_github_draft_pr", "draft_update", "Update the draft on GitHub?"],
   ])("presents the receipt scope for %s", (toolName, phase, title) => {
     const event = requested(toolName, receipt(phase));
     const projected = projectInstalledEveEvent(event, 4).map(toPublicEvent);
@@ -1595,9 +1598,9 @@ describe("public draft pull request approval scope", () => {
     const [pending] = outstandingInstalledEveRequests([event]);
     expect(pending).toMatchObject({
       description:
-        "Update the reviewed changes in the existing draft pull request in example/reviewed-repository. It will remain a draft; this will not merge or deploy it.",
+        "Update the existing draft on GitHub in example/reviewed-repository with the reviewed changes. It will remain a draft for review; this will not merge or deploy the changes.",
       requestId: "req_draft_review",
-      title: "Update the draft pull request?",
+      title: "Update the draft on GitHub?",
     });
   });
 

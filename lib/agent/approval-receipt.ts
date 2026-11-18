@@ -201,10 +201,10 @@ function publicReceiptDescription(receipt: unknown, toolName?: string): string |
   }
   if (isDraftPullRequestTool(toolName)) {
     const baseBranch = parsed.data.baseRef.replace(/^refs\/heads\//u, "");
-    return `Publish the reviewed changes to a draft pull request in ${parsed.data.repository} on ${baseBranch}. It will remain a draft; this will not merge or deploy it.`;
+    return `Save the reviewed changes as a draft on GitHub in ${parsed.data.repository}, based on ${baseBranch}. The draft is for review; it will not merge or deploy the changes.`;
   }
   if (toolName === "update_github_draft_pr" || toolName === "reconcile_github_draft_pr") {
-    return `Update the reviewed changes in the existing draft pull request in ${parsed.data.repository}. It will remain a draft; this will not merge or deploy it.`;
+    return `Update the existing draft on GitHub in ${parsed.data.repository} with the reviewed changes. It will remain a draft for review; this will not merge or deploy the changes.`;
   }
   return undefined;
 }
@@ -468,9 +468,6 @@ const operatorApprovalDescription = (
     // oxlint-disable-next-line unicorn/no-useless-undefined -- Invalid plans have no public approval description.
     return undefined;
   }
-  if (plan.action === "prepare") {
-    return "This approval may incur provider costs.";
-  }
   const effectSummaries = operatorEffectSummaries(plan);
   const signupApproval = signupApprovalDescription(plan);
   const host = plan.hostProtection;
@@ -491,7 +488,7 @@ const operatorApprovalDescription = (
   const resourceSentence =
     plan.action === "cleanup"
       ? "Clean up this app's Preview resources and revoke access created for them. Shared Auth resources may remain under the approved retention policy."
-      : "Prepare this app's Preview resources and required service connections.";
+      : `Prepare Preview resources and service connections for ${plan.selection.appId}.`;
   const costOwner = "the owner recorded in this approved plan";
   const retentionSummary = operatorRetentionSummary(plan);
   return [
@@ -531,7 +528,8 @@ const continuityApprovalDescription = (input: unknown): string | undefined => {
   return [
     `Run the app's existing browser checks against its Preview environment. The checks may perform the actions written into the app and restart only this app's process.`,
     "What will happen:\n- Start the app's Preview environment and temporarily publish its test connection to the shared service.\n- Close the app environment and remove the temporary connection when the checks finish. The shared service may retain the target until its normal refresh or expiry.",
-    `Saved plan: ${intentId}\nPlan fingerprint: ${parsed.data.planDigest}\nThis confirmation applies only to this exact saved plan.`,
+    "This confirmation applies only to the saved plan for these checks.",
+    `Plan details (provider references):\n- Saved plan: ${intentId}\n- Plan fingerprint: ${parsed.data.planDigest}`,
     actorScope,
     "This does not change the app's main project or prove behavior after a later deployment.",
   ].join("\n\n");
@@ -562,7 +560,8 @@ const nativeTargetApprovalDescription = (input: unknown): string | undefined => 
       : ` (expires ${formatUtcExpiry(plan.retention.expiresAt)})`;
   return [
     `Create the Preview project ${plan.project.name} for app ${plan.appId}, then register its Preview branch.`,
-    `Resource selection:\n- ${plan.resourceProfileId === undefined ? "The configured resource" : `Approved profile ${plan.resourceProfileId}`} uses Neon project ${plan.nativeNeon.scope.projectId}, branch ${plan.nativeNeon.scope.branchId}, store ${plan.appDatabase.resourceId}.\n- Reserve database ${plan.appDatabase.database} and roles ${plan.appDatabase.migratorRole} / ${plan.appDatabase.runtimeRole}.`,
+    "What will happen:\n- Reserve a database and access roles for the app. This does not create the database or give anyone access yet.",
+    `Resource details (provider references):\n- ${plan.resourceProfileId === undefined ? "The configured resource" : `Approved profile ${plan.resourceProfileId}`} uses Neon project ${plan.nativeNeon.scope.projectId}, branch ${plan.nativeNeon.scope.branchId}, store ${plan.appDatabase.resourceId}.\n- Reserve database ${plan.appDatabase.database} and roles ${plan.appDatabase.migratorRole} / ${plan.appDatabase.runtimeRole}.`,
     ...((plan.resourceSelectionRevision ?? 0) > 0
       ? [
           "This revised resource selection needs a new approval. Earlier approvals do not authorize this plan; their audit remains retained.",

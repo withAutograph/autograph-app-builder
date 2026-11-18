@@ -120,6 +120,7 @@ export const publicEveEventSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     code: z.string(),
+    diagnostic: z.string().optional(),
     index: z.number().int().nonnegative(),
     message: z.string(),
     type: z.literal("error"),
@@ -229,7 +230,10 @@ export type PublicWorkingPreview = z.infer<typeof publicWorkingPreviewSchema>;
 export const eveSessionResultSchema = z
   .object({
     cursor: z.number().int().nonnegative(),
-    error: z.object({ code: z.string(), message: z.string() }).strict().optional(),
+    error: z
+      .object({ code: z.string(), message: z.string(), diagnostic: z.string().optional() })
+      .strict()
+      .optional(),
     events: z.array(publicEveEventSchema),
     inputRequests: z.array(publicInputRequestSchema).optional(),
     prototype: publicPrototypeSchema.optional(),

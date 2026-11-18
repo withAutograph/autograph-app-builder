@@ -9,6 +9,7 @@ import {
 } from "../../integrations/store-in-view-model";
 import type { EveSessionResult, PublicIdentityInvitation, PublicInputRequest } from "../contracts";
 import { ApprovalRequest } from "./approval-request";
+import { userFacingErrorSummary } from "../public-error-copy";
 import "./styles.css";
 
 export type SessionAnswer =
@@ -54,9 +55,6 @@ const answerForOption = (option: { id: string; label: string }): SessionAnswer =
   optionId: option.id,
   value: option.label,
 });
-
-const draftPullRequestNumber = (title: string) =>
-  /\bdraft PR (?<number>#\d+)/iu.exec(title)?.groups?.number;
 
 const isDecisionRequest = (request?: PublicInputRequest) =>
   request !== undefined && (request.kind === "approval" || binaryDecisionOptions(request) !== null);
@@ -327,33 +325,37 @@ function SessionOutcome({
   submitted: boolean;
 }) {
   if (decisionOutcome?.status === "failed") {
-    const pullRequestNumber = draftPullRequestNumber(decisionOutcome.request.title);
-    const heading = pullRequestNumber
-      ? `Draft PR ${pullRequestNumber} could not be updated`
-      : "Your response could not be submitted";
     return (
       <main className="mcpApp shell outcome outcome--failure" role="alert">
         <span aria-hidden="true">!</span>
         <div>
-          <strong>{heading}</strong>
-          <p>
-            {decisionOutcome.error ||
-              "Builder could not complete the update. Check chat for the specific diagnostic before retrying."}
-          </p>
+          <strong>We couldn’t confirm your response</strong>
+          <p>Check this conversation for the outcome before trying again.</p>
+          {decisionOutcome.error ? (
+            <details>
+              <summary>Details for support</summary>
+              <p>{decisionOutcome.error}</p>
+            </details>
+          ) : null}
         </div>
       </main>
     );
   }
 
   if (result.status === "failed") {
+    const guidance = userFacingErrorSummary(result.error?.code ?? "unknown_error");
     return (
       <main className="mcpApp shell outcome outcome--failure" role="alert">
         <span aria-hidden="true">!</span>
         <div>
           <strong>{authorizationOpened ? "GitHub connection failed" : "Request failed"}</strong>
-          <p>
-            {result.error?.message || "Autograph could not confirm repository access. Try again."}
-          </p>
+          <p>{guidance}</p>
+          {result.error?.diagnostic ? (
+            <details>
+              <summary>Details for support</summary>
+              <p>{result.error.diagnostic}</p>
+            </details>
+          ) : null}
         </div>
       </main>
     );
@@ -375,25 +377,9 @@ function SessionOutcome({
         </main>
       );
     }
-
-    const pullRequestNumber = draftPullRequestNumber(decisionOutcome.request.title);
-    if (pullRequestNumber) {
-      return (
-        <main className="mcpApp shell outcome outcome--success" role="status">
-          <span aria-hidden="true">✓</span>
-          <div>
-            <strong>Draft PR {pullRequestNumber} updated</strong>
-            <p>
-              The reviewed changes are in the draft PR. It remains a draft and will not merge or
-              deploy.
-            </p>
-          </div>
-        </main>
-      );
-    }
   }
 
-  if (submitted || result.status !== "input_required") {
+  if (submitted) {
     return (
       <main className="mcpApp shell outcome outcome--success" role="status">
         <span aria-hidden="true">✓</span>
@@ -405,6 +391,21 @@ function SessionOutcome({
               : "Autograph App Builder will continue in chat."}
           </p>
         </div>
+      </main>
+    );
+  }
+  if (result.status !== "input_required") {
+    const message =
+      result.status === "cancelled"
+        ? "This request was cancelled."
+        : result.status === "completed"
+          ? "This request is complete."
+          : result.status === "waiting"
+            ? "Continue in chat when you’re ready."
+            : "Working on your app…";
+    return (
+      <main className="mcpApp shell outcome outcome--neutral" role="status">
+        <strong>{message}</strong>
       </main>
     );
   }
@@ -608,6 +609,26 @@ export function SessionAppView({
             canOpen={canOpenLinks && Boolean(singleAuthorization.authorization?.url)}
             onOpenLink={openAuthorization}
           />
+        </div>
+      </main>
+    );
+  }
+
+  if (!canCallTools && respondable.length > 0) {
+    const authorizations = requests.filter((request) => request.kind === "authorization");
+    if (authorizations.length === 0 && invitations.length === 0) return null;
+    return (
+      <main className="mcpApp shell authorization-shell">
+        {invitations}
+        <div className="request-list">
+          {authorizations.map((request) => (
+            <AuthorizationControl
+              key={request.requestId}
+              request={request}
+              canOpen={canOpenLinks && Boolean(request.authorization?.url)}
+              onOpenLink={openAuthorization}
+            />
+          ))}
         </div>
       </main>
     );

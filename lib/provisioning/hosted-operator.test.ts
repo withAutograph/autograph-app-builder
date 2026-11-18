@@ -1190,7 +1190,10 @@ describe("protected hosted operator boundary", () => {
       { ...selection, plan, planDigest: operatorPlanDigest(plan) },
       "prepare-app-hosted-runtime",
     );
-    expect(description).toBe("This approval may incur provider costs.");
+    expect(description).toContain("What will happen:");
+    expect(description).toContain("Access and cost:");
+    expect(description).toContain("Retention:");
+    expect(description).toContain("Production will not be deployed or activated.");
   });
   it("carries explicit prepared Preview intent through normal owner-authorized planning", async () => {
     const f = fixture();

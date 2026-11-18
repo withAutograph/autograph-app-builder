@@ -35,6 +35,7 @@ export interface InternalEveEvent {
   request?: PublicInputRequest;
   frameworkSessionLimit?: boolean;
   code?: string;
+  diagnostic?: string;
   message?: string;
   status?: EveSessionStatus;
   requestIds?: string[];
@@ -75,8 +76,8 @@ const visibleOperations = new Map([
   ["start_app_preview", "Starting the app preview"],
   ["validate_app_creation", "Validating the app changes"],
   ["validate-app-creation", "Validating the app changes"],
-  ["validate_github_draft_pr_reconciliation", "Checking changes proposed for the draft PR"],
-  ["reconcile_github_draft_pr", "Updating the draft pull request"],
+  ["validate_github_draft_pr_reconciliation", "Checking changes for the draft"],
+  ["reconcile_github_draft_pr", "Updating the draft on GitHub"],
 ]);
 const visibleOperationLabels = new Set([
   ...visibleOperations.values(),
@@ -201,10 +202,10 @@ const publicBuilderFailure = (failure: { code: string; message: string }, operat
     validate_app_creation: "app validation",
     "validate-app-creation": "app validation",
     start_app_preview: "the app preview",
-    publish_github_draft_pr: "draft pull request publication",
-    "publish-github-draft-pr": "draft pull request publication",
-    reconcile_github_draft_pr: "draft pull request update",
-    validate_github_draft_pr_reconciliation: "draft pull request checks",
+    publish_github_draft_pr: "saving the draft on GitHub",
+    "publish-github-draft-pr": "saving the draft on GitHub",
+    reconcile_github_draft_pr: "updating the draft on GitHub",
+    validate_github_draft_pr_reconciliation: "checking the draft",
   } as const satisfies Record<string, string>;
   const name =
     operation !== undefined && Object.hasOwn(operationLabels, operation)
@@ -217,7 +218,8 @@ const publicBuilderFailure = (failure: { code: string; message: string }, operat
   if (size?.groups !== undefined) {
     return {
       code: "result_too_large",
-      message: `Builder could not finish ${name} because it could not transfer the preview content. Your progress is saved; resume this same session to continue.`,
+      diagnostic: undefined,
+      message: `Builder couldn’t finish ${name} because the app preview could not be transferred. Check this conversation before trying the action again.`,
     };
   }
   const code = publicErrorCode(failure.code);
@@ -225,12 +227,14 @@ const publicBuilderFailure = (failure: { code: string; message: string }, operat
   if (detail.length === 0) {
     return {
       code,
-      message: `Builder could not finish ${name}. No further detail was provided. Retry this saved session once; if the problem continues, contact support with the session ID and error code.`,
+      diagnostic: undefined,
+      message: `Builder couldn’t finish ${name}, and no further detail was provided. Check this conversation before trying the action again. If you need help, contact support with this conversation.`,
     };
   }
   return {
     code,
-    message: `Builder could not finish ${name}. Your progress is saved; resume this same session to continue.\n\nDetails: ${detail}`,
+    message: `Builder couldn’t finish ${name}. Check this conversation before trying the action again. If you need help, contact support with this conversation.`,
+    diagnostic: detail,
   };
 };
 // Browser projection accepts only HTML; Markdown AppSpec/decision artifacts never become previews.
@@ -1177,10 +1181,10 @@ const inputRequest = (request: {
     "prepare-app-native-target": "Create this app's Preview project?",
     "export-app-hosted-data": "Export this customer’s app data privately?",
     "run-app-continuity-tests": "Run this app continuity suite?",
-    "publish-github-draft-pr": "Publish the reviewed changes?",
-    publish_github_draft_pr: "Publish the reviewed changes?",
-    update_github_draft_pr: "Update the draft pull request?",
-    reconcile_github_draft_pr: "Update the draft pull request?",
+    "publish-github-draft-pr": "Save a draft on GitHub?",
+    publish_github_draft_pr: "Save a draft on GitHub?",
+    update_github_draft_pr: "Update the draft on GitHub?",
+    reconcile_github_draft_pr: "Update the draft on GitHub?",
   } as const;
   const toolName = request.action?.toolName;
   if (
@@ -1285,7 +1289,13 @@ export const projectInstalledEveEvent = (
         const failure = publicBuilderFailure(event.data, operation);
         return [
           progress,
-          { code: failure.code, index, message: failure.message, type: "error.public" },
+          {
+            code: failure.code,
+            diagnostic: failure.diagnostic,
+            index,
+            message: failure.message,
+            type: "error.public",
+          },
         ];
       }
       return [progress];
@@ -1489,13 +1499,22 @@ export const projectInstalledEveEvent = (
     }
     case "turn.failed": {
       const failure = publicBuilderFailure(event.data, operation);
-      return [{ code: failure.code, index, message: failure.message, type: "error.public" }];
+      return [
+        {
+          code: failure.code,
+          diagnostic: failure.diagnostic,
+          index,
+          message: failure.message,
+          type: "error.public",
+        },
+      ];
     }
     case "session.failed": {
       const failure = publicBuilderFailure(event.data, operation);
       return [
         {
           code: failure.code,
+          diagnostic: failure.diagnostic,
           index,
           message: failure.message,
           type: "error.public",
@@ -1681,6 +1700,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
       return event.code && event.message
         ? {
             code: event.code,
+            ...(event.diagnostic === undefined ? {} : { diagnostic: event.diagnostic }),
             index: event.index,
             message: event.message,
             type: "error",

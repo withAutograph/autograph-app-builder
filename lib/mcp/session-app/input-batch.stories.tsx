@@ -63,16 +63,18 @@ export const GitHubFailure: Story = {
       ...sessionResult([]),
       error: {
         code: "repository_access_missing",
-        message: "GitHub did not grant this repository.",
+        message: "GitHub access unavailable.",
+        diagnostic: "GitHub did not grant this repository.",
       },
       status: "failed",
     },
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole("alert")).toHaveTextContent(
-      "GitHub did not grant this repository.",
-    );
+    await expect(canvas.getByRole("alert")).toHaveTextContent("GitHub didn’t grant access.");
+    await expect(canvas.getByText("GitHub did not grant this repository.")).not.toBeVisible();
+    await userEvent.click(canvas.getByText("Details for support"));
+    await expect(canvas.getByText("GitHub did not grant this repository.")).toBeVisible();
   },
 };
 export const CompleteBatchAction: Story = {
@@ -108,7 +110,7 @@ export const DraftPullRequestApproval: Story = {
         response: {
           kind: "answer",
           optionId: "update-draft",
-          value: "Update draft PR",
+          value: "Update draft",
         },
       },
     ]);

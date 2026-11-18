@@ -75,6 +75,10 @@ const config: StorybookConfig = {
       ...viteConfig.resolve,
       alias: [
         {
+          find: "@/app/actions/handoff-renewal",
+          replacement: path.join(import.meta.dirname, "handoff-renewal.ts"),
+        },
+        {
           find: "@/app/actions/builder-drafts",
           replacement: storybookBuilderDraftActions,
         },
